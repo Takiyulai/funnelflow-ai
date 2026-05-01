@@ -12,6 +12,42 @@ import {
 import { TemplateCard } from "@/components/funnel/TemplateCard";
 import { funnelTemplates } from "@/lib/funnels/templates";
 
+// ── Scroll animation wrapper ──────────────────────────────────────────────────
+function FadeInWhenVisible({
+  children,
+  delay = 0,
+  direction = "up",
+  className = "",
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  direction?: "up" | "down" | "left" | "right" | "none";
+  className?: string;
+}) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-60px" });
+
+  const initialMap = {
+    up:    { opacity: 0, y: 32 },
+    down:  { opacity: 0, y: -32 },
+    left:  { opacity: 0, x: -32 },
+    right: { opacity: 0, x: 32 },
+    none:  { opacity: 0 },
+  };
+
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      initial={initialMap[direction]}
+      animate={isInView ? { opacity: 1, x: 0, y: 0 } : initialMap[direction]}
+      transition={{ duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 // Dictionnaire des traductions
 const translations = {
   fr: {
@@ -27,19 +63,19 @@ const translations = {
     heroTag: "GÉNÉRATEUR IA POUR SYSTEME.IO",
     heroTitle: "TRANSFORMEZ UNE OFFRE",
     heroTitleEnd: "EN TUNNEL QUI",
-    heroDesc: "FunnelFlow AI génère automatiquement votre page de vente, votre capture email et vos emails de relance pour obtenir un tunnel prêt à convertir en quelques minutes.",
+    heroDesc: "FunnelFlow AI génère automatiquement votre page de vente, votre capture email et vos emails de relance pour obtenir un tunnel prêt à convertir en quelques minutes",
     ctaPrimary: "Générer mon tunnel",
     ctaSecondary: "Voir la démo",
 
     // Problem section
     problemTag: "Le problème actuel",
     problemTitle: "SYSTEME.IO EST GÉNIAL POUR",
-    problemTitleHighlight: "L'AUTOMATISATION.",
-    problemTitleEnd: "MAIS CRÉER DES TUNNELS ? C'EST L'ENFER.",
+    problemTitleHighlight: "L'AUTOMATISATION",
+    problemTitleEnd: "MAIS CRÉER DES TUNNELS ? C'EST L'ENFER",
 
     // Problems cards
     problems: [
-      { title: "4 à 8h perdues", desc: "Créer manuellement sur Systeme.io est un calvaire répétitif qui épuise votre énergie créative." },
+      { title: "4 à 8h perdues", desc: "Créer manuellement sur Systeme.io est un calvaire répétitif qui épuise votre énergie créative" },
       { title: "Chargement lent", desc: "4-6 secondes en natif. Chaque seconde supplémentaire = 7% de conversions perdues." },
       { title: "Mobile non optimisé", desc: "70% de votre trafic vient du mobile — l'éditeur drag-and-drop casse tout le rendu." },
     ],
@@ -56,26 +92,26 @@ const translations = {
     // Agents section
     agentsTag: "Votre équipe IA",
     agentsTitle: "VOTRE ÉQUIPE IA",
-    agentsTitleHighlight: "AU TRAVAIL POUR VOUS.",
-    agentsDesc: "4 agents spécialisés interviennent dans l'ordre. Chacun expert dans son domaine.",
+    agentsTitleHighlight: "AU TRAVAIL POUR VOUS",
+    agentsDesc: "4 agents spécialisés interviennent dans l'ordre. Chacun expert dans son domaine",
     agents: [
-      { title: "Strategist", step: "01", desc: "Analyse votre marché, audience et structure l'approche de conversion." },
-      { title: "Copywriter", step: "02", desc: "Rédige accroches, blocs de contenu et CTA calibrés pour vendre." },
-      { title: "Designer", step: "03", desc: "Sélectionne pack visuel, palette et style adapté à votre offre." },
+      { title: "Strategist", step: "01", desc: "Analyse votre marché, audience et structure l'approche de conversion" },
+      { title: "Copywriter", step: "02", desc: "Rédige accroches, blocs de contenu et CTA calibrés pour vendre" },
+      { title: "Designer", step: "03", desc: "Sélectionne pack visuel, palette et style adapté à votre offre" },
       { title: "Builder", step: "04", desc: "Assemble et exporte le HTML prêt à coller dans Systeme.io." },
     ],
 
     // Benefits section
-    benefitsTag: "Un Aperçu de votre Arsenal.",
+    benefitsTag: "Un Aperçu de votre Arsenal",
     benefitsTitle: "TOUT CE QU'IL FAUT",
-    benefitsTitleHighlight: "POUR CONVERTIR.",
+    benefitsTitleHighlight: "POUR CONVERTIR",
     benefits: [
-      { title: "Génération < 1 seconde", desc: "Tunnel complet en moins d'une minute — aucune attente." },
-      { title: "Mobile-first parfait", desc: "Pixel-perfect sur tous les écrans. 70% de votre trafic est mobile." },
-      { title: "Copywriting CRO", desc: "Chaque mot est calibré pour convertir, pas juste impressionner." },
+      { title: "Génération < 1 seconde", desc: "Tunnel complet en moins d'une minute, aucune attente" },
+      { title: "Mobile-first parfait", desc: "Pixel-perfect sur tous les écrans. 70% de votre trafic est mobile" },
+      { title: "Copywriting CRO", desc: "Chaque mot est calibré pour convertir, pas juste impressionner" },
       { title: "Export Systeme.io", desc: "HTML/CSS prêt à coller dans votre espace en 1 clic." },
-      { title: "Séquences emails IA", desc: "6 emails inclus d'office : bienvenue, relance, nurturing." },
-      { title: "Garantie 30 jours", desc: "Satisfait ou remboursé. Sans engagement, sans risque." },
+      { title: "Séquences emails IA", desc: "6 emails inclus d'office : bienvenue, relance, nurturing" },
+      { title: "Garantie 30 jours", desc: "Satisfait ou remboursé. Sans engagement, sans risque" },
     ],
 
     // Features section
@@ -83,30 +119,30 @@ const translations = {
     featuresTitle: "POURQUOI FUNNELFORGE",
     featuresTitleHighlight: "DOMINE SYSTEME.IO",
     features: [
-      { title: "Export Systeme.io", desc: "Blocs HTML/CSS prêts à coller. Zéro config." },
+      { title: "Export Systeme.io", desc: "Blocs HTML/CSS prêts à coller. Zéro config" },
       { title: "Import URL", desc: "Analyse structurelle, reproduction fidèle." },
-      { title: "FR / EN natif", desc: "Générez dans les deux langues selon votre marché." },
-      { title: "100+ templates", desc: "Bibliothèque premium pour toutes les niches." },
-      { title: "Mode Reseller", desc: "Brief client auto + commissions sur reventes." },
-      { title: "Éditeur visuel", desc: "Modifiez en visuel ou directement dans le code." },
+      { title: "FR / EN natif", desc: "Générez dans les deux langues selon votre marché" },
+      { title: "100+ templates", desc: "Bibliothèque premium pour toutes les niches" },
+      { title: "Mode Reseller", desc: "Brief client auto + commissions sur reventes" },
+      { title: "Éditeur visuel", desc: "Modifiez en visuel ou directement dans le code" },
     ],
 
     // Testimonials section
     testimonialsTag: "Témoignages",
-    testimonialsTitle: "ILS ONT FORGÉ.",
-    testimonialsTitleHighlight: "ILS ONT CONVERTI.",
+    testimonialsTitle: "ILS ONT FORGÉ",
+    testimonialsTitleHighlight: "ILS ONT CONVERTI",
     rating: "4.9/5 · 247+ avis vérifiés",
     testimonials: [
-      { name: "Nadia Belkacem", role: "Coach développement personnel", quote: "Premier tunnel en 7 minutes. Mon taux de conversion a grimpé de 38% le premier mois.", stat: "+38% conv." },
-      { name: "Carlos Hernandez", role: "Formateur marketing digital", quote: "Je passais 8h sur une page. Maintenant 5 minutes, tunnel complet, mobile parfait.", stat: "5 min/tunnel" },
-      { name: "Léa Fournier", role: "Formatrice yoga & bien-être", quote: "Zéro compétences tech. C'est plus simple que l'éditeur natif Systeme.io, bluffant.", stat: "0 technique" },
+      { name: "Nadia Belkacem", role: "Coach développement personnel", quote: "Premier tunnel en 7 minutes. Mon taux de conversion a grimpé de 38% le premier mois", stat: "+38% conv" },
+      { name: "Carlos Hernandez", role: "Formateur marketing digital", quote: "Je passais 8h sur une page. Maintenant 5 minutes, tunnel complet, mobile parfait", stat: "5 min/tunnel" },
+      { name: "Léa Fournier", role: "Formatrice yoga & bien-être", quote: "Zéro compétences tech. C'est plus simple que l'éditeur natif Systeme.io, bluffant", stat: "0 technique" },
     ],
 
     // Pricing section
     pricingTag: "Tarifs",
-    pricingTitle: "UN INVESTISSEMENT.",
-    pricingTitleHighlight: "DES RÉSULTATS ILLIMITÉS.",
-    pricingDesc: "Choisissez votre plan. Commencez à forger dès aujourd'hui.",
+    pricingTitle: "UN INVESTISSEMENT",
+    pricingTitleHighlight: "DES RÉSULTATS ILLIMITÉS",
+    pricingDesc: "Choisissez votre plan. Commencez à forger dès aujourd'hui",
     pricingPopular: "Le plus utilisé",
     pricingGuarantee: "Garantie 30 jours satisfait ou remboursé · Sans engagement · Stripe sécurisé",
     pricing: [
@@ -114,7 +150,7 @@ const translations = {
         name: "Starter",
         price: "29€",
         period: "/mois",
-        desc: "Pour démarrer et valider votre offre.",
+        desc: "Pour démarrer et valider votre offre",
         features: ["3 tunnels IA / mois", "Export HTML", "Templates de base", "CRM simple", "Support email"],
         cta: "Lancer mon premier tunnel",
       },
@@ -122,7 +158,7 @@ const translations = {
         name: "Pro",
         price: "49€",
         period: "/mois",
-        desc: "Pour les pros qui veulent scaler.",
+        desc: "Pour les pros qui veulent scaler",
         features: ["10 tunnels IA / mois", "Export Systeme.io", "Régénération IA", "Emails automatiques", "100+ templates", "Support prioritaire"],
         cta: "Dominer avec le Pro",
       },
@@ -130,7 +166,7 @@ const translations = {
         name: "Agency",
         price: "97€",
         period: "/mois",
-        desc: "Pour les agences et freelances.",
+        desc: "Pour les agences et freelances",
         features: ["Tunnels illimités", "Import URL illimité", "Workflows simples", "Branding client", "Dashboard équipe", "Support dédié 4h"],
         cta: "Scaler mon agence",
       },
@@ -145,23 +181,23 @@ const translations = {
     // FAQ section
     faqTag: "FAQ",
     faqTitle: "VOS QUESTIONS.",
-    faqTitleHighlight: "NOS RÉPONSES.",
+    faqTitleHighlight: "NOS RÉPONSES",
     faqCta: "Créer mon compte",
     faqs: [
       { q: "Pourquoi FunnelFlow AI plutôt que l'éditeur natif Systeme.io ?", a: "Gagnez 4 à 8h par tunnel. HTML chargeant en <1s (vs 4-6s natif), mobile-first pixel-perfect, copywriting CRO généré par IA. L'éditeur drag-and-drop devient optionnel — vous collez juste le code généré." },
-      { q: "Comment fonctionne la génération IA ?", a: "Répondez à 9 questions sur votre offre, audience et objectif. Vos 4 agents IA (Strategist, Copywriter, Designer, Builder) forgent un tunnel complet en <1 minute. Vous éditez si besoin, puis exportez." },
-      { q: "Ai-je besoin de compétences techniques ?", a: "Aucune. FunnelFlow AI génère 100% du code. Copiez-collez dans un bloc HTML personnalisé Systeme.io — déploiement en 30 secondes. L'éditeur visuel permet aussi de modifier sans toucher au code." },
-      { q: "Puis-je modifier le tunnel après génération ?", a: "Oui, liberté totale : éditeur visuel intégré, accès direct au HTML/CSS, régénération section par section via IA. Vous n'êtes jamais bloqué par le résultat initial." },
-      { q: "L'import URL copie-t-il un site tiers ?", a: "Non. FunnelFlow AI analyse uniquement la structure (sections, hiérarchie, intentions) pour vous inspirer. Textes, images et branding sont entièrement originaux et générés pour vous." },
-      { q: "Puis-je créer des tunnels pour mes clients (agence) ?", a: "Le plan Agency inclut brief client automatique, dashboard équipe multi-comptes, branding client dédié et commissions sur reventes. Idéal pour facturer vos tunnels entre 500€ et 2 000€ pièce." },
+      { q: "Comment fonctionne la génération IA ?", a: "Répondez à 9 questions sur votre offre, audience et objectif. Vos 4 agents IA (Strategist, Copywriter, Designer, Builder) forgent un tunnel complet en <1 minute. Vous éditez si besoin, puis exportez" },
+      { q: "Ai-je besoin de compétences techniques ?", a: "Aucune. FunnelFlow AI génère 100% du code. Copiez-collez dans un bloc HTML personnalisé Systeme.io , déploiement en 30 secondes. L'éditeur visuel permet aussi de modifier sans toucher au code" },
+      { q: "Puis-je modifier le tunnel après génération ?", a: "Oui, liberté totale : éditeur visuel intégré, accès direct au HTML/CSS, régénération section par section via IA. Vous n'êtes jamais bloqué par le résultat initial" },
+      { q: "L'import URL copie-t-il un site tiers ?", a: "Non. FunnelFlow AI analyse uniquement la structure (sections, hiérarchie, intentions) pour vous inspirer. Textes, images et branding sont entièrement originaux et générés pour vous" },
+      { q: "Puis-je créer des tunnels pour mes clients (agence) ?", a: "Le plan Agency inclut brief client automatique, dashboard équipe multi-comptes, branding client dédié et commissions sur reventes. Idéal pour facturer vos tunnels entre 500€ et 2 000€ pièce" },
       { q: "Quelles garanties si je ne suis pas satisfait ?", a: "Garantie 30 jours satisfait ou remboursé, sans conditions, sans engagement. Annulation en 1 clic depuis votre tableau de bord. Zéro risque." },
-      { q: "FunnelFlow AI fonctionne-t-il avec d'autres outils que Systeme.io ?", a: "L'export HTML standard est compatible avec tout CMS ou page builder. L'export Systeme.io (blocs natifs) est optimisé pour cette plateforme, mais le code fonctionne aussi sur Webflow, Carrd, WordPress, etc." },
+      { q: "FunnelFlow AI fonctionne-t-il avec d'autres outils que Systeme.io ?", a: "L'export HTML standard est compatible avec tout CMS ou page builder. L'export Systeme.io (blocs natifs) est optimisé pour cette plateforme, mais le code fonctionne aussi sur Webflow, Carrd, WordPress, etc..." },
     ],
 
     // CTA Final
     ctaFinalTitle: "PRÊT À FORGER DES TUNNELS",
     ctaFinalTitleHighlight: "QUI CONVERTISSENT ?",
-    ctaFinalDesc: "Rejoignez 1 247+ entrepreneurs qui ont remplacé des heures de galère par 5 minutes de génération IA.",
+    ctaFinalDesc: "Rejoignez 1 247+ entrepreneurs qui ont remplacé des heures de galère par 5 minutes de génération IA",
     ctaFinalPrimary: "Commencer maintenant",
     ctaFinalSecondary: "Voir la démo",
     ctaFinalSetup: "Setup en 5 minutes",
@@ -174,13 +210,13 @@ const translations = {
 
     // Preview card
     previewTitle: "APERCU DU RESULTAT FINAL",
-    previewDesc: "Aperçu desktop et mobile, publication et exports.",
+    previewDesc: "Aperçu desktop et mobile, publication et exports",
     previewModify: "Modifier",
     previewPublish: "Publier",
     previewExportHtml: "Export HTML/CSS",
     previewExportSysteme: "Export Systeme.io",
     previewProductName: "Ebook premium conversion",
-    previewProductDesc: "Une page premium prête à convertir vos visiteurs en clients.",
+    previewProductDesc: "Une page premium prête à convertir vos visiteurs en clients",
     previewExportBtn: "Export Systeme.io",
     previewPlanTitle: "PLAN DU TUNNEL",
     previewPlanItems: ["Page vente", "Lead form", "Page merci", "Emails", "Export"],
@@ -196,19 +232,19 @@ const translations = {
     heroTag: "AI GENERATOR FOR SYSTEME.IO",
     heroTitle: "TURN YOUR OFFER",
     heroTitleEnd: "INTO A FUNNEL THAT",
-    heroDesc: "FunnelFlow AI automatically generates your sales page, email capture, and follow-up emails to get a conversion-ready funnel in minutes.",
+    heroDesc: "FunnelFlow AI automatically generates your sales page, email capture, and follow-up emails to get a conversion-ready funnel in minutes",
     ctaPrimary: "Generate my funnel",
     ctaSecondary: "Live demo",
 
     problemTag: "The problem",
     problemTitle: "SYSTEME.IO IS GREAT FOR",
-    problemTitleHighlight: "AUTOMATION.",
-    problemTitleEnd: "BUT CREATING FUNNELS? IT'S A NIGHTMARE.",
+    problemTitleHighlight: "AUTOMATION",
+    problemTitleEnd: "BUT CREATING FUNNELS? IT'S A NIGHTMARE",
 
     problems: [
       { title: "4 to 8 hours wasted", desc: "Building manually on Systeme.io is a repetitive ordeal that drains your creative energy." },
       { title: "Slow loading", desc: "4-6 seconds natively. Every extra second = 7% of conversions lost." },
-      { title: "Not mobile optimized", desc: "70% of your traffic comes from mobile — the drag-and-drop editor breaks everything." },
+      { title: "Not mobile optimized", desc: "70% of your traffic comes from mobile, the drag-and-drop editor breaks everything." },
     ],
 
     solutionTag: "The solution",
@@ -221,53 +257,53 @@ const translations = {
 
     agentsTag: "Your AI team",
     agentsTitle: "YOUR AI TEAM",
-    agentsTitleHighlight: "WORKING FOR YOU.",
-    agentsDesc: "4 specialized agents work in sequence. Each an expert in their field.",
+    agentsTitleHighlight: "WORKING FOR YOU",
+    agentsDesc: "4 specialized agents work in sequence. Each an expert in their field",
     agents: [
       { title: "Strategist", step: "01", desc: "Analyzes your market, audience and structures the conversion approach." },
-      { title: "Copywriter", step: "02", desc: "Writes hooks, content blocks and CTAs calibrated to sell." },
-      { title: "Designer", step: "03", desc: "Selects visual pack, palette and style suited to your offer." },
-      { title: "Builder", step: "04", desc: "Assembles and exports the HTML ready to paste into Systeme.io." },
+      { title: "Copywriter", step: "02", desc: "Writes hooks, content blocks and CTAs calibrated to sell" },
+      { title: "Designer", step: "03", desc: "Selects visual pack, palette and style suited to your offer" },
+      { title: "Builder", step: "04", desc: "Assembles and exports the HTML ready to paste into Systeme.io" },
     ],
 
-    benefitsTag: "A Glimpse of Your Arsenal.",
+    benefitsTag: "A Glimpse of Your Arsenal",
     benefitsTitle: "EVERYTHING YOU NEED",
-    benefitsTitleHighlight: "TO CONVERT.",
+    benefitsTitleHighlight: "TO CONVERT",
     benefits: [
-      { title: "Generation < 1 second", desc: "Complete funnel in under a minute — no waiting." },
-      { title: "Perfect mobile-first", desc: "Pixel-perfect on all screens. 70% of your traffic is mobile." },
-      { title: "CRO Copywriting", desc: "Every word is calibrated to convert, not just impress." },
-      { title: "Systeme.io Export", desc: "HTML/CSS ready to paste into your space in 1 click." },
-      { title: "AI email sequences", desc: "6 emails included by default: welcome, follow-up, nurturing." },
-      { title: "30-day guarantee", desc: "Money-back guarantee. No commitment, no risk." },
+      { title: "Generation < 1 second", desc: "Complete funnel in under a minute, no waiting" },
+      { title: "Perfect mobile-first", desc: "Pixel-perfect on all screens. 70% of your traffic is mobile" },
+      { title: "CRO Copywriting", desc: "Every word is calibrated to convert, not just impress" },
+      { title: "Systeme.io Export", desc: "HTML/CSS ready to paste into your space in 1 click" },
+      { title: "AI email sequences", desc: "6 emails included by default: welcome, follow-up, nurturing" },
+      { title: "30-day guarantee", desc: "Money-back guarantee. No commitment, no risk" },
     ],
 
     featuresTag: "Premium features",
     featuresTitle: "WHY FUNNELFORGE",
     featuresTitleHighlight: "DOMINATES SYSTEME.IO",
     features: [
-      { title: "Systeme.io Export", desc: "HTML/CSS blocks ready to paste. Zero config." },
-      { title: "URL Import", desc: "Structural analysis, faithful reproduction." },
-      { title: "FR / EN native", desc: "Generate in both languages for your market." },
-      { title: "100+ templates", desc: "Premium library for all niches." },
-      { title: "Reseller Mode", desc: "Auto client brief + commissions on resales." },
-      { title: "Visual editor", desc: "Edit visually or directly in the code." },
+      { title: "Systeme.io Export", desc: "HTML/CSS blocks ready to paste. Zero config" },
+      { title: "URL Import", desc: "Structural analysis, faithful reproduction" },
+      { title: "FR / EN native", desc: "Generate in both languages for your market" },
+      { title: "100+ templates", desc: "Premium library for all niches" },
+      { title: "Reseller Mode", desc: "Auto client brief + commissions on resales" },
+      { title: "Visual editor", desc: "Edit visually or directly in the code" },
     ],
 
     testimonialsTag: "Testimonials",
-    testimonialsTitle: "THEY FORGED.",
-    testimonialsTitleHighlight: "THEY CONVERTED.",
+    testimonialsTitle: "THEY FORGED",
+    testimonialsTitleHighlight: "THEY CONVERTED",
     rating: "4.9/5 · 247+ verified reviews",
     testimonials: [
-      { name: "Nadia Belkacem", role: "Personal development coach", quote: "First funnel in 7 minutes. My conversion rate jumped 38% in the first month.", stat: "+38% conv." },
+      { name: "Nadia Belkacem", role: "Personal development coach", quote: "First funnel in 7 minutes. My conversion rate jumped 38% in the first month.", stat: "+38% conv" },
       { name: "Carlos Hernandez", role: "Digital marketing trainer", quote: "I used to spend 8h on a page. Now 5 minutes, complete funnel, perfect mobile.", stat: "5 min/funnel" },
       { name: "Léa Fournier", role: "Yoga & wellness trainer", quote: "Zero technical skills. It's simpler than the native Systeme.io editor, stunning.", stat: "0 technical" },
     ],
 
     pricingTag: "Pricing",
-    pricingTitle: "AN INVESTMENT.",
-    pricingTitleHighlight: "UNLIMITED RESULTS.",
-    pricingDesc: "Choose your plan. Start forging high-converting tunnels today.",
+    pricingTitle: "AN INVESTMENT",
+    pricingTitleHighlight: "UNLIMITED RESULTS",
+    pricingDesc: "Choose your plan. Start forging high-converting tunnels today",
     pricingPopular: "Most popular",
     pricingGuarantee: "30-day money-back guarantee · No commitment · Secure Stripe payment",
     pricing: [
@@ -275,7 +311,7 @@ const translations = {
         name: "Starter",
         price: "$29",
         period: "/mo",
-        desc: "To get started and validate your offer.",
+        desc: "To get started and validate your offer",
         features: ["3 AI funnels / month", "HTML export", "Basic templates", "Simple CRM", "Email support"],
         cta: "Launch my first funnel",
       },
@@ -291,7 +327,7 @@ const translations = {
         name: "Agency",
         price: "$97",
         period: "/mo",
-        desc: "For agencies and freelancers.",
+        desc: "For agencies and freelancers",
         features: ["Unlimited funnels", "Unlimited URL import", "Simple workflows", "Client branding", "Team dashboard", "Dedicated 4h support"],
         cta: "Scale my agency",
       },
@@ -303,23 +339,23 @@ const translations = {
     templatesDesc: "8 models for ebooks, coaching, courses and services",
 
     faqTag: "FAQ",
-    faqTitle: "YOUR QUESTIONS.",
-    faqTitleHighlight: "OUR ANSWERS.",
+    faqTitle: "YOUR QUESTIONS",
+    faqTitleHighlight: "OUR ANSWERS",
     faqCta: "Create my account",
     faqs: [
-      { q: "Why FunnelFlow AI over the native Systeme.io editor?", a: "Save 4 to 8 hours per funnel. HTML loading in <1s (vs 4-6s native), mobile-first pixel-perfect, AI-generated CRO copywriting. The drag-and-drop editor becomes optional — you just paste the generated code." },
-      { q: "How does AI generation work?", a: "Answer 9 questions about your offer, audience and goal. Your 4 AI agents (Strategist, Copywriter, Designer, Builder) forge a complete funnel in <1 minute. Edit if needed, then export." },
-      { q: "Do I need technical skills?", a: "None. FunnelFlow AI generates 100% of the code. Copy-paste into a custom HTML block in Systeme.io — deployment in 30 seconds. The visual editor also lets you modify without touching the code." },
+      { q: "Why FunnelFlow AI over the native Systeme.io editor?", a: "Save 4 to 8 hours per funnel. HTML loading in <1s (vs 4-6s native), mobile-first pixel-perfect, AI-generated CRO copywriting. The drag-and-drop editor becomes optional , you just paste the generated code" },
+      { q: "How does AI generation work?", a: "Answer 9 questions about your offer, audience and goal. Your 4 AI agents (Strategist, Copywriter, Designer, Builder) forge a complete funnel in <1 minute. Edit if needed, then export" },
+      { q: "Do I need technical skills?", a: "None. FunnelFlow AI generates 100% of the code. Copy-paste into a custom HTML block in Systeme.io — deployment in 30 seconds. The visual editor also lets you modify without touching the code" },
       { q: "Can I modify the funnel after generation?", a: "Yes, total freedom: integrated visual editor, direct HTML/CSS access, section-by-section AI regeneration. You're never locked into the initial result." },
-      { q: "Does the URL import copy a third-party site?", a: "No. FunnelFlow AI only analyzes the structure (sections, hierarchy, intentions) for inspiration. Texts, images and branding are entirely original and generated for you." },
-      { q: "Can I create funnels for my clients (agency)?", a: "The Agency plan includes automatic client brief, multi-account team dashboard, dedicated client branding and commissions on resales. Ideal for billing your funnels between $500 and $2,000 each." },
-      { q: "What guarantees if I'm not satisfied?", a: "30-day money-back guarantee, no conditions, no commitment. Cancel in 1 click from your dashboard. Zero risk." },
-      { q: "Does FunnelFlow AI work with tools other than Systeme.io?", a: "The standard HTML export is compatible with any CMS or page builder. The Systeme.io export (native blocks) is optimized for this platform, but the code also works on Webflow, Carrd, WordPress, etc." },
+      { q: "Does the URL import copy a third-party site?", a: "No. FunnelFlow AI only analyzes the structure (sections, hierarchy, intentions) for inspiration. Texts, images and branding are entirely original and generated for you" },
+      { q: "Can I create funnels for my clients (agency)?", a: "The Agency plan includes automatic client brief, multi-account team dashboard, dedicated client branding and commissions on resales. Ideal for billing your funnels between $500 and $2,000 each" },
+      { q: "What guarantees if I'm not satisfied?", a: "30-day money-back guarantee, no conditions, no commitment. Cancel in 1 click from your dashboard. Zero risk" },
+      { q: "Does FunnelFlow AI work with tools other than Systeme.io?", a: "The standard HTML export is compatible with any CMS or page builder. The Systeme.io export (native blocks) is optimized for this platform, but the code also works on Webflow, Carrd, WordPress, etc" },
     ],
 
     ctaFinalTitle: "READY TO FORGE FUNNELS",
     ctaFinalTitleHighlight: "THAT CONVERT?",
-    ctaFinalDesc: "Join 1,247+ entrepreneurs who replaced hours of struggle with 5 minutes of AI generation.",
+    ctaFinalDesc: "Join 1,247+ entrepreneurs who replaced hours of struggle with 5 minutes of AI generation",
     ctaFinalPrimary: "Start now",
     ctaFinalSecondary: "Live demo",
     ctaFinalSetup: "5 min setup",
@@ -330,13 +366,13 @@ const translations = {
     footerPrivacy: "Privacy",
 
     previewTitle: "RESULT PREVIEW",
-    previewDesc: "Desktop & mobile preview, publishing & exports.",
+    previewDesc: "Desktop & mobile preview, publishing & exports",
     previewModify: "Edit",
     previewPublish: "Publish",
     previewExportHtml: "Export HTML/CSS",
     previewExportSysteme: "Export to Systeme.io",
     previewProductName: "Premium ebook conversion",
-    previewProductDesc: "A premium page ready to convert your visitors into customers.",
+    previewProductDesc: "A premium page ready to convert your visitors into customers",
     previewExportBtn: "Export to Systeme.io",
     previewPlanTitle: "FUNNEL PLAN",
     previewPlanItems: ["Sales page", "Lead form", "Thank you page", "Emails", "Export"],
@@ -617,25 +653,29 @@ export default function LandingPage() {
       {/* PROBLEM SECTION */}
       <section className="py-20" style={{ background: CARD }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#C7A436"><Clock size={11} /> {t.problemTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.problemTitle}<br />
-            <span style={{ color: "#C7A436" }}>{t.problemTitleHighlight}</span><br />
-            {t.problemTitleEnd}
-          </h2>
-          <AccentLine />
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#C7A436"><Clock size={11} /> {t.problemTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.problemTitle}<br />
+              <span style={{ color: "#C7A436" }}>{t.problemTitleHighlight}</span><br />
+              {t.problemTitleEnd}
+            </h2>
+            <AccentLine />
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 problems-grid grid gap-5" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
           {t.problems.map((p, i) => {
             const Icon = PROBLEM_ICONS[i];
             return (
-              <div key={i} className="card-hover rounded-2xl p-6" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "rgba(220,38,38,0.12)" }}>
-                  <Icon size={20} style={{ color: "#EF4444" }} />
+              <FadeInWhenVisible key={i} direction="up" delay={i * 0.1}>
+                <div className="card-hover rounded-2xl p-6 h-full" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "rgba(220,38,38,0.12)" }}>
+                    <Icon size={20} style={{ color: "#EF4444" }} />
+                  </div>
+                  <h3 className="ff-body font-bold mb-2" style={{ fontSize: 16, color: "#fff" }}>{p.title}</h3>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>{p.desc}</p>
                 </div>
-                <h3 className="ff-body font-bold mb-2" style={{ fontSize: 16, color: "#fff" }}>{p.title}</h3>
-                <p className="ff-body leading-relaxed" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>{p.desc}</p>
-              </div>
+              </FadeInWhenVisible>
             );
           })}
         </div>
@@ -644,59 +684,69 @@ export default function LandingPage() {
       {/* SOLUTION / BEFORE AFTER */}
       <section className="py-20" style={{ background: BG }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#31845C"><Sparkles size={11} /> {t.solutionTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.solutionTitle}<br />
-            <span style={{ color: "#31845C" }}>{t.solutionTitleHighlight}</span>
-          </h2>
-          <AccentLine />
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#31845C"><Sparkles size={11} /> {t.solutionTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.solutionTitle}<br />
+              <span style={{ color: "#31845C" }}>{t.solutionTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-4xl px-4 sm:px-6 lg:px-8 before-after grid gap-5" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <div className="rounded-2xl p-7" style={{ background: "rgba(239,68,68,0.06)", border: "1.5px solid rgba(239,68,68,0.2)" }}>
-            <p className="ff-body mb-5" style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#EF4444", textTransform: "uppercase" }}>{t.before}</p>
-            <ul className="space-y-3.5">
-              {t.beforeItems.map((item, i) => (
-                <li key={i} className="flex items-start gap-2.5 ff-body" style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>
-                  <span style={{ color: "#EF4444", fontWeight: 700, marginTop: 1 }}>✕</span>{item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-2xl p-7" style={{ background: "rgba(49,132,92,0.06)", border: "1.5px solid rgba(49,132,92,0.25)" }}>
-            <p className="ff-body mb-5" style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#31845C", textTransform: "uppercase" }}>{t.after}</p>
-            <ul className="space-y-3.5">
-              {t.afterItems.map((item, i) => (
-                <li key={i} className="flex items-start gap-2.5 ff-body" style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>
-                  <CheckCircle2 size={16} style={{ color: "#31845C" }} className="mt-0.5 shrink-0" />{item}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <FadeInWhenVisible direction="left" delay={0.1}>
+            <div className="rounded-2xl p-7 h-full" style={{ background: "rgba(239,68,68,0.06)", border: "1.5px solid rgba(239,68,68,0.2)" }}>
+              <p className="ff-body mb-5" style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#EF4444", textTransform: "uppercase" }}>{t.before}</p>
+              <ul className="space-y-3.5">
+                {t.beforeItems.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 ff-body" style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>
+                    <span style={{ color: "#EF4444", fontWeight: 700, marginTop: 1 }}>✕</span>{item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </FadeInWhenVisible>
+          <FadeInWhenVisible direction="right" delay={0.2}>
+            <div className="rounded-2xl p-7 h-full" style={{ background: "rgba(49,132,92,0.06)", border: "1.5px solid rgba(49,132,92,0.25)" }}>
+              <p className="ff-body mb-5" style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.15em", color: "#31845C", textTransform: "uppercase" }}>{t.after}</p>
+              <ul className="space-y-3.5">
+                {t.afterItems.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 ff-body" style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>
+                    <CheckCircle2 size={16} style={{ color: "#31845C" }} className="mt-0.5 shrink-0" />{item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </FadeInWhenVisible>
         </div>
       </section>
 
       {/* AGENTS */}
       <section className="py-20" style={{ background: CARD }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#C7A436"><Cpu size={11} /> {t.agentsTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.agentsTitle}<br /><span style={{ color: "#C7A436" }}>{t.agentsTitleHighlight}</span>
-          </h2>
-          <AccentLine />
-          <p className="ff-body mt-4 max-w-md mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>{t.agentsDesc}</p>
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#C7A436"><Cpu size={11} /> {t.agentsTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.agentsTitle}<br /><span style={{ color: "#C7A436" }}>{t.agentsTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+            <p className="ff-body mt-4 max-w-md mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>{t.agentsDesc}</p>
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 agents-grid grid gap-4" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
           {t.agents.map((a, i) => {
             const Icon = AGENT_ICONS[i];
             return (
-              <div key={i} className="card-hover rounded-2xl p-6 text-center" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: "linear-gradient(135deg,rgba(8,73,141,0.2),rgba(49,132,92,0.2))", border: `1px solid ${BORDER}` }}>
-                  <Icon size={22} style={{ color: "#C7A436" }} />
+              <FadeInWhenVisible key={i} direction="up" delay={i * 0.1}>
+                <div className="card-hover rounded-2xl p-6 text-center h-full" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: "linear-gradient(135deg,rgba(8,73,141,0.2),rgba(49,132,92,0.2))", border: `1px solid ${BORDER}` }}>
+                    <Icon size={22} style={{ color: "#C7A436" }} />
+                  </div>
+                  <p className="ff-title" style={{ fontSize: 13, color: "rgba(199,164,54,0.6)", letterSpacing: "0.05em" }}>{a.step}</p>
+                  <h3 className="ff-body font-bold mt-1" style={{ fontSize: 15, color: "#fff" }}>{a.title}</h3>
+                  <p className="ff-body mt-2 leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{a.desc}</p>
                 </div>
-                <p className="ff-title" style={{ fontSize: 13, color: "rgba(199,164,54,0.6)", letterSpacing: "0.05em" }}>{a.step}</p>
-                <h3 className="ff-body font-bold mt-1" style={{ fontSize: 15, color: "#fff" }}>{a.title}</h3>
-                <p className="ff-body mt-2 leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{a.desc}</p>
-              </div>
+              </FadeInWhenVisible>
             );
           })}
         </div>
@@ -705,23 +755,27 @@ export default function LandingPage() {
       {/* BENEFITS */}
       <section id="features" className="py-20" style={{ background: BG }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#08498D"><Award size={11} /> {t.benefitsTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.benefitsTitle}<br /><span style={{ color: "#08498D" }}>{t.benefitsTitleHighlight}</span>
-          </h2>
-          <AccentLine />
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#08498D"><Award size={11} /> {t.benefitsTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.benefitsTitle}<br /><span style={{ color: "#08498D" }}>{t.benefitsTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 benefits-grid grid gap-4" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
           {t.benefits.map(({ title, desc }, i) => {
             const Icon = BENEFIT_ICONS[i];
             return (
-              <div key={i} className="card-hover rounded-xl p-5" style={{ background: CARD, border: `1px solid ${BORDER}`, borderLeft: "3px solid #C7A436" }}>
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: "rgba(49,132,92,0.12)" }}>
-                  <Icon size={18} style={{ color: "#31845C" }} />
+              <FadeInWhenVisible key={i} direction="up" delay={(i % 3) * 0.1}>
+                <div className="card-hover rounded-xl p-5 h-full" style={{ background: CARD, border: `1px solid ${BORDER}`, borderLeft: "3px solid #C7A436" }}>
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: "rgba(49,132,92,0.12)" }}>
+                    <Icon size={18} style={{ color: "#31845C" }} />
+                  </div>
+                  <h3 className="ff-body font-bold mb-1.5" style={{ fontSize: 14, color: "#fff" }}>{title}</h3>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{desc}</p>
                 </div>
-                <h3 className="ff-body font-bold mb-1.5" style={{ fontSize: 14, color: "#fff" }}>{title}</h3>
-                <p className="ff-body leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{desc}</p>
-              </div>
+              </FadeInWhenVisible>
             );
           })}
         </div>
@@ -730,23 +784,27 @@ export default function LandingPage() {
       {/* FEATURES */}
       <section className="py-20" style={{ background: CARD }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#31845C"><Layers size={11} /> {t.featuresTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.featuresTitle}<br /><span style={{ color: "#31845C" }}>{t.featuresTitleHighlight}</span>
-          </h2>
-          <AccentLine />
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#31845C"><Layers size={11} /> {t.featuresTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.featuresTitle}<br /><span style={{ color: "#31845C" }}>{t.featuresTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 features-grid grid gap-4" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
           {t.features.map(({ title, desc }, i) => {
             const Icon = FEATURE_ICONS[i];
             return (
-              <div key={i} className="card-hover rounded-2xl p-6 text-center" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "rgba(49,132,92,0.1)", border: "1px solid rgba(49,132,92,0.2)" }}>
-                  <Icon size={19} style={{ color: "#31845C" }} />
+              <FadeInWhenVisible key={i} direction="up" delay={(i % 3) * 0.1}>
+                <div className="card-hover rounded-2xl p-6 text-center h-full" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                  <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "rgba(49,132,92,0.1)", border: "1px solid rgba(49,132,92,0.2)" }}>
+                    <Icon size={19} style={{ color: "#31845C" }} />
+                  </div>
+                  <h3 className="ff-body font-bold mb-1.5" style={{ fontSize: 14, color: "#fff" }}>{title}</h3>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{desc}</p>
                 </div>
-                <h3 className="ff-body font-bold mb-1.5" style={{ fontSize: 14, color: "#fff" }}>{title}</h3>
-                <p className="ff-body leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{desc}</p>
-              </div>
+              </FadeInWhenVisible>
             );
           })}
         </div>
@@ -755,45 +813,53 @@ export default function LandingPage() {
       {/* TESTIMONIALS */}
       <section className="py-20" style={{ background: BG }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#C7A436"><Users size={11} /> {t.testimonialsTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.testimonialsTitle}<br /><span style={{ color: "#C7A436" }}>{t.testimonialsTitleHighlight}</span>
-          </h2>
-          <AccentLine />
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#C7A436"><Users size={11} /> {t.testimonialsTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.testimonialsTitle}<br /><span style={{ color: "#C7A436" }}>{t.testimonialsTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+          </FadeInWhenVisible>
         </div>
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 testi-grid grid gap-5" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
           {t.testimonials.map((testimonial, i) => (
-            <div key={i} className="card-hover rounded-2xl p-6" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
-              <div className="flex gap-0.5 mb-4">
-                {[...Array(5)].map((_, k) => <Star key={k} size={13} fill="#C7A436" style={{ color: "#C7A436" }} />)}
-              </div>
-              <p className="ff-body italic leading-relaxed mb-5" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>"{testimonial.quote}"</p>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="ff-body font-bold" style={{ fontSize: 14, color: "#fff" }}>{testimonial.name}</p>
-                  <p className="ff-body mt-0.5" style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{testimonial.role}</p>
+            <FadeInWhenVisible key={i} direction="up" delay={i * 0.12}>
+              <div className="card-hover rounded-2xl p-6 h-full" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+                <div className="flex gap-0.5 mb-4">
+                  {[...Array(5)].map((_, k) => <Star key={k} size={13} fill="#C7A436" style={{ color: "#C7A436" }} />)}
                 </div>
-                <span className="rounded-full px-3 py-1 ff-body" style={{ fontSize: 11, fontWeight: 700, background: `${TESTIMONIAL_COLORS[i]}18`, color: TESTIMONIAL_COLORS[i], border: `1px solid ${TESTIMONIAL_COLORS[i]}30` }}>{testimonial.stat}</span>
+                <p className="ff-body italic leading-relaxed mb-5" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>"{testimonial.quote}"</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="ff-body font-bold" style={{ fontSize: 14, color: "#fff" }}>{testimonial.name}</p>
+                    <p className="ff-body mt-0.5" style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{testimonial.role}</p>
+                  </div>
+                  <span className="rounded-full px-3 py-1 ff-body" style={{ fontSize: 11, fontWeight: 700, background: `${TESTIMONIAL_COLORS[i]}18`, color: TESTIMONIAL_COLORS[i], border: `1px solid ${TESTIMONIAL_COLORS[i]}30` }}>{testimonial.stat}</span>
+                </div>
               </div>
-            </div>
+            </FadeInWhenVisible>
           ))}
         </div>
-        <div className="text-center mt-8">
-          <span className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 ff-body" style={{ fontSize: 11, fontWeight: 700, background: "rgba(199,164,54,0.12)", color: "#C7A436", border: "1px solid rgba(199,164,54,0.25)" }}>
-            <Star size={11} fill="#C7A436" /> {t.rating}
-          </span>
-        </div>
+        <FadeInWhenVisible direction="up" delay={0.2}>
+          <div className="text-center mt-8">
+            <span className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 ff-body" style={{ fontSize: 11, fontWeight: 700, background: "rgba(199,164,54,0.12)", color: "#C7A436", border: "1px solid rgba(199,164,54,0.25)" }}>
+              <Star size={11} fill="#C7A436" /> {t.rating}
+            </span>
+          </div>
+        </FadeInWhenVisible>
       </section>
 
       {/* PRICING */}
       <section id="pricing" className="py-20" style={{ background: CARD }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#C7A436"><BarChart3 size={11} /> {t.pricingTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.pricingTitle}<br /><span style={{ color: "#C7A436" }}>{t.pricingTitleHighlight}</span>
-          </h2>
-          <AccentLine />
-          <p className="ff-body mt-4 max-w-sm mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{t.pricingDesc}</p>
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#C7A436"><BarChart3 size={11} /> {t.pricingTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.pricingTitle}<br /><span style={{ color: "#C7A436" }}>{t.pricingTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+            <p className="ff-body mt-4 max-w-sm mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{t.pricingDesc}</p>
+          </FadeInWhenVisible>
         </div>
 
         <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 pricing-grid grid gap-5 items-stretch" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
@@ -801,77 +867,85 @@ export default function LandingPage() {
             const color = PRICING_COLORS[i];
             const popular = PRICING_POPULAR[i];
             return (
-              <div key={i} className={`flex ${popular ? 'relative' : ''}`}>
-                {popular ? (
-                  <div className="relative rounded-2xl overflow-hidden flex flex-col w-full glow-green" style={{ background: "linear-gradient(160deg,#0D2E1E 0%,#08192E 100%)", border: "1.5px solid rgba(49,132,92,0.45)" }}>
-                    <div className="flex items-center justify-center gap-1.5 py-2.5 ff-body" style={{ background: "linear-gradient(90deg,#31845C,#1E6644)" }}>
-                      <Rocket size={12} style={{ color: "#fff" }} />
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", letterSpacing: "0.1em", textTransform: "uppercase" }}>{t.pricingPopular}</span>
-                    </div>
-                    <div className="p-7 flex flex-col flex-1">
-                      <p className="ff-body" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#31845C", marginBottom: 4 }}>{plan.name}</p>
-                      <div className="flex items-end gap-1 mb-1">
-                        <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
-                        <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.4)" }}>{plan.period}</span>
+              <FadeInWhenVisible key={i} direction="up" delay={i * 0.1}>
+                <div className={`flex ${popular ? 'relative' : ''} h-full`}>
+                  {popular ? (
+                    <div className="relative rounded-2xl overflow-hidden flex flex-col w-full glow-green" style={{ background: "linear-gradient(160deg,#0D2E1E 0%,#08192E 100%)", border: "1.5px solid rgba(49,132,92,0.45)" }}>
+                      <div className="flex items-center justify-center gap-1.5 py-2.5 ff-body" style={{ background: "linear-gradient(90deg,#31845C,#1E6644)" }}>
+                        <Rocket size={12} style={{ color: "#fff" }} />
+                        <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", letterSpacing: "0.1em", textTransform: "uppercase" }}>{t.pricingPopular}</span>
                       </div>
-                      <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{plan.desc}</p>
-                      <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.08)" }} />
-                      <ul className="space-y-3 flex-1 mb-8">
-                        {plan.features.map((f, idx) => (
-                          <li key={idx} className="flex items-start gap-2.5">
-                            <CheckCircle2 size={14} style={{ color: "#31845C" }} className="mt-0.5 shrink-0" />
-                            <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl flex flex-col w-full card-hover" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                    <div className="p-7 flex flex-col flex-1">
-                      <p className="ff-body" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color, marginBottom: 4 }}>{plan.name}</p>
-                      <div className="flex items-end gap-1 mb-1">
-                        <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
-                        <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>{plan.period}</span>
+                      <div className="p-7 flex flex-col flex-1">
+                        <p className="ff-body" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#31845C", marginBottom: 4 }}>{plan.name}</p>
+                        <div className="flex items-end gap-1 mb-1">
+                          <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
+                          <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.4)" }}>{plan.period}</span>
+                        </div>
+                        <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{plan.desc}</p>
+                        <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.08)" }} />
+                        <ul className="space-y-3 flex-1 mb-8">
+                          {plan.features.map((f, idx) => (
+                            <li key={idx} className="flex items-start gap-2.5">
+                              <CheckCircle2 size={14} style={{ color: "#31845C" }} className="mt-0.5 shrink-0" />
+                              <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{f}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
                       </div>
-                      <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{plan.desc}</p>
-                      <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.06)" }} />
-                      <ul className="space-y-3 flex-1 mb-8">
-                        {plan.features.map((f, idx) => (
-                          <li key={idx} className="flex items-start gap-2.5">
-                            <CheckCircle2 size={14} style={{ color }} className="mt-0.5 shrink-0" />
-                            <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
                     </div>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div className="rounded-2xl flex flex-col w-full card-hover" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                      <div className="p-7 flex flex-col flex-1">
+                        <p className="ff-body" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color, marginBottom: 4 }}>{plan.name}</p>
+                        <div className="flex items-end gap-1 mb-1">
+                          <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
+                          <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>{plan.period}</span>
+                        </div>
+                        <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{plan.desc}</p>
+                        <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.06)" }} />
+                        <ul className="space-y-3 flex-1 mb-8">
+                          {plan.features.map((f, idx) => (
+                            <li key={idx} className="flex items-start gap-2.5">
+                              <CheckCircle2 size={14} style={{ color }} className="mt-0.5 shrink-0" />
+                              <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{f}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </FadeInWhenVisible>
             );
           })}
         </div>
-        <p className="ff-body mt-7 flex items-center justify-center gap-2 text-center" style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-          <Shield size={12} /> {t.pricingGuarantee}
-        </p>
+        <FadeInWhenVisible direction="up" delay={0.3}>
+          <p className="ff-body mt-7 flex items-center justify-center gap-2 text-center" style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+            <Shield size={12} /> {t.pricingGuarantee}
+          </p>
+        </FadeInWhenVisible>
       </section>
 
       {/* TEMPLATES */}
       <section id="templates" className="py-20" style={{ background: BG }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionTag color="#08498D"><Layers size={11} /> {t.templatesTag}</SectionTag>
-          <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-            {t.templatesTitle}<br /><span style={{ color: "#08498D" }}>{t.templatesTitleHighlight}</span>
-          </h2>
-          <AccentLine />
-          <p className="ff-body mt-4 max-w-sm mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{t.templatesDesc}</p>
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#08498D"><Layers size={11} /> {t.templatesTag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+              {t.templatesTitle}<br /><span style={{ color: "#08498D" }}>{t.templatesTitleHighlight}</span>
+            </h2>
+            <AccentLine />
+            <p className="ff-body mt-4 max-w-sm mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{t.templatesDesc}</p>
+          </FadeInWhenVisible>
         </div>
 
         <div className="mx-auto mt-10 max-w-7xl px-4 sm:px-6 lg:px-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {funnelTemplates.slice(0, 4).map((template) => (
-            <TemplateCard key={template.id} template={template} />
+          {funnelTemplates.slice(0, 4).map((template, i) => (
+            <FadeInWhenVisible key={template.id} direction="up" delay={i * 0.1}>
+              <TemplateCard template={template} />
+            </FadeInWhenVisible>
           ))}
         </div>
       </section>
@@ -880,22 +954,28 @@ export default function LandingPage() {
       <section id="faq" className="py-20" style={{ background: CARD }}>
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <SectionTag color="#C7A436"><MessageCircle size={11} /> {t.faqTag}</SectionTag>
-            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
-              {t.faqTitle}<br /><span style={{ color: "#C7A436" }}>{t.faqTitleHighlight}</span>
-            </h2>
-            <AccentLine />
+            <FadeInWhenVisible direction="up">
+              <SectionTag color="#C7A436"><MessageCircle size={11} /> {t.faqTag}</SectionTag>
+              <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(2rem,5vw,3.6rem)", color: "#fff" }}>
+                {t.faqTitle}<br /><span style={{ color: "#C7A436" }}>{t.faqTitleHighlight}</span>
+              </h2>
+              <AccentLine />
+            </FadeInWhenVisible>
           </div>
-          <div className="rounded-2xl px-6 py-2" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-            {t.faqs.map((faq, i) => (
-              <FaqItem key={i} q={faq.q} a={faq.a} />
-            ))}
-          </div>
-          <div className="text-center mt-10">
-            <a href="/signup" className="inline-flex items-center gap-2 rounded-xl px-8 py-3.5 ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg,#31845C,#08498D)", fontSize: 14 }}>
-              {t.faqCta} <ArrowRight size={15} />
-            </a>
-          </div>
+          <FadeInWhenVisible direction="up" delay={0.15}>
+            <div className="rounded-2xl px-6 py-2" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+              {t.faqs.map((faq, i) => (
+                <FaqItem key={i} q={faq.q} a={faq.a} />
+              ))}
+            </div>
+          </FadeInWhenVisible>
+          <FadeInWhenVisible direction="up" delay={0.25}>
+            <div className="text-center mt-10">
+              <a href="/signup" className="inline-flex items-center gap-2 rounded-xl px-8 py-3.5 ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg,#31845C,#08498D)", fontSize: 14 }}>
+                {t.faqCta} <ArrowRight size={15} />
+              </a>
+            </div>
+          </FadeInWhenVisible>
         </div>
       </section>
 
@@ -906,23 +986,25 @@ export default function LandingPage() {
           <div className="absolute left-0 bottom-0 h-80 w-80 -translate-x-1/3 translate-y-1/4 rounded-full opacity-10" style={{ background: "radial-gradient(circle,#31845C,transparent)" }} />
         </div>
         <div className="relative mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="ff-title section-title font-black text-white" style={{ fontSize: "clamp(2rem,5vw,3.8rem)", lineHeight: 1.05 }}>
-            {t.ctaFinalTitle}<br /><span style={{ color: "#C7A436" }}>{t.ctaFinalTitleHighlight}</span>
-          </h2>
-          <p className="ff-body mt-5" style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>{t.ctaFinalDesc}</p>
-          <div className="mt-8 flex flex-wrap gap-3 justify-center">
-            <a href="#pricing" className="group inline-flex items-center gap-2 rounded-xl px-8 py-4 ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#C7A436", color: "#080E1A", fontSize: 15 }}>
-              <Sparkles size={16} /> {t.ctaFinalPrimary} <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
-            </a>
-            <a href="/login" className="inline-flex items-center gap-2 rounded-xl px-8 py-4 ff-body font-bold transition hover:bg-white/10" style={{ background: "rgba(255,255,255,0.07)", color: "#fff", border: "1px solid rgba(255,255,255,0.14)", fontSize: 15 }}>
-              {t.ctaFinalSecondary}
-            </a>
-          </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-6 ff-body" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
-            <span className="flex items-center gap-1.5"><Clock size={12} /> {t.ctaFinalSetup}</span>
-            <span className="flex items-center gap-1.5"><Shield size={12} /> {t.ctaFinalGuarantee}</span>
-            <span className="flex items-center gap-1.5"><Layers size={12} /> {t.ctaFinalUnlimited}</span>
-          </div>
+          <FadeInWhenVisible direction="up">
+            <h2 className="ff-title section-title font-black text-white" style={{ fontSize: "clamp(2rem,5vw,3.8rem)", lineHeight: 1.05 }}>
+              {t.ctaFinalTitle}<br /><span style={{ color: "#C7A436" }}>{t.ctaFinalTitleHighlight}</span>
+            </h2>
+            <p className="ff-body mt-5" style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>{t.ctaFinalDesc}</p>
+            <div className="mt-8 flex flex-wrap gap-3 justify-center">
+              <a href="#pricing" className="group inline-flex items-center gap-2 rounded-xl px-8 py-4 ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#C7A436", color: "#080E1A", fontSize: 15 }}>
+                <Sparkles size={16} /> {t.ctaFinalPrimary} <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+              </a>
+              <a href="/login" className="inline-flex items-center gap-2 rounded-xl px-8 py-4 ff-body font-bold transition hover:bg-white/10" style={{ background: "rgba(255,255,255,0.07)", color: "#fff", border: "1px solid rgba(255,255,255,0.14)", fontSize: 15 }}>
+                {t.ctaFinalSecondary}
+              </a>
+            </div>
+            <div className="mt-8 flex flex-wrap justify-center gap-6 ff-body" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+              <span className="flex items-center gap-1.5"><Clock size={12} /> {t.ctaFinalSetup}</span>
+              <span className="flex items-center gap-1.5"><Shield size={12} /> {t.ctaFinalGuarantee}</span>
+              <span className="flex items-center gap-1.5"><Layers size={12} /> {t.ctaFinalUnlimited}</span>
+            </div>
+          </FadeInWhenVisible>
         </div>
       </section>
 

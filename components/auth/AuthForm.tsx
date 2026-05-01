@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function friendlyAuthMessage(message: string) {
@@ -28,6 +29,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,7 +108,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
             Continuer avec Google
           </button>
 
-          <div className="relative my-6">
+          <div className="relative my-5">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" style={{ borderColor: "rgba(255,255,255,0.1)" }} />
             </div>
@@ -120,10 +122,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
       )}
 
       {/* Formulaire classique */}
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="space-y-4">
         {isSignup && (
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: "rgba(255,255,255,0.8)" }}>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>
               Nom complet
             </label>
             <input
@@ -132,7 +134,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
               onChange={(e) => setName(e.target.value)}
               placeholder="Jean Dupont"
               required={isSignup}
-              className="w-full rounded-xl border px-4 py-3 text-sm transition-all focus:outline-none"
+              className="w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:outline-none"
               style={{
                 background: "rgba(255,255,255,0.05)",
                 borderColor: "rgba(255,255,255,0.12)",
@@ -151,7 +153,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
         )}
 
         <div>
-          <label className="block text-sm font-semibold mb-2" style={{ color: "rgba(255,255,255,0.8)" }}>
+          <label className="block text-xs font-semibold mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>
             Email
           </label>
           <input
@@ -160,7 +162,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="bonjour@exemple.com"
             required
-            className="w-full rounded-xl border px-4 py-3 text-sm transition-all focus:outline-none"
+            className="w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:outline-none"
             style={{
               background: "rgba(255,255,255,0.05)",
               borderColor: "rgba(255,255,255,0.12)",
@@ -179,36 +181,46 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
 
         {!isForgot && (
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: "rgba(255,255,255,0.8)" }}>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>
               Mot de passe
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isSignup ? "Minimum 8 caractères" : "Votre mot de passe"}
-              required
-              className="w-full rounded-xl border px-4 py-3 text-sm transition-all focus:outline-none"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                borderColor: "rgba(255,255,255,0.12)",
-                color: "#fff",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "#C7A436";
-                e.target.style.boxShadow = "0 0 0 2px rgba(199,164,54,0.2)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255,255,255,0.12)";
-                e.target.style.boxShadow = "none";
-              }}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSignup ? "Minimum 8 caractères" : "Votre mot de passe"}
+                required
+                className="w-full rounded-xl border px-4 py-2.5 pr-11 text-sm transition-all focus:outline-none"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  borderColor: "rgba(255,255,255,0.12)",
+                  color: "#fff",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#C7A436";
+                  e.target.style.boxShadow = "0 0 0 2px rgba(199,164,54,0.2)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "rgba(255,255,255,0.12)";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-70"
+                style={{ color: "rgba(255,255,255,0.5)" }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
         )}
 
         {/* Message d'erreur */}
         {message && (
-          <div className="rounded-xl p-3 text-sm" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171" }}>
+          <div className="rounded-xl p-2.5 text-xs" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171" }}>
             {message}
           </div>
         )}
@@ -217,11 +229,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-xl py-3.5 font-bold transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
+          className="w-full rounded-xl py-2.5 font-bold transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
           style={{
             background: "#C7A436",
             color: "#0B2B5E",
-            fontSize: 15,
+            fontSize: 14,
           }}
         >
           {isLoading ? "Chargement..." : isSignup ? "Commencer" : isLogin ? "Se connecter" : "Envoyer le lien"}
@@ -229,42 +241,40 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
 
         {/* Micro-copy rassurant */}
         {isSignup && (
-          <p className="text-center text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <p className="text-center text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>
             Aucun engagement • Accès immédiat
           </p>
         )}
 
         {/* Bouton secondaire Accès démo (sauf pour forgot) */}
         {!isForgot && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="w-full rounded-xl border py-3 text-sm font-semibold transition-all hover:bg-white/5"
-              style={{
-                background: "transparent",
-                borderColor: "rgba(255,255,255,0.15)",
-                color: "rgba(255,255,255,0.6)",
-              }}
-            >
-              Accès démo local
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="w-full rounded-xl border py-2.5 text-xs font-semibold transition-all hover:bg-white/5"
+            style={{
+              background: "transparent",
+              borderColor: "rgba(255,255,255,0.15)",
+              color: "rgba(255,255,255,0.5)",
+            }}
+          >
+            Accès démo local
+          </button>
         )}
       </form>
 
       {/* Liens de bas de formulaire */}
       {isLogin && (
-        <div className="mt-6 text-center">
-          <a href="/forgot-password" className="text-sm transition-colors hover:opacity-70" style={{ color: "rgba(255,255,255,0.5)" }}>
+        <div className="mt-5 text-center">
+          <a href="/forgot-password" className="text-xs transition-colors hover:opacity-70" style={{ color: "rgba(255,255,255,0.5)" }}>
             Mot de passe oublié ?
           </a>
         </div>
       )}
 
       {isSignup && (
-        <div className="mt-6 text-center">
-          <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
+        <div className="mt-5 text-center">
+          <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
             Déjà inscrit ?{" "}
             <a href="/login" className="font-semibold transition-colors hover:opacity-70" style={{ color: "#C7A436" }}>
               Se connecter
@@ -274,8 +284,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
       )}
 
       {isLogin && (
-        <div className="mt-6 text-center">
-          <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
+        <div className="mt-5 text-center">
+          <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
             Pas encore de compte ?{" "}
             <a href="/signup" className="font-semibold transition-colors hover:opacity-70" style={{ color: "#C7A436" }}>
               Créer un compte
@@ -285,8 +295,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
       )}
 
       {/* Texte de confiance */}
-      <div className="mt-8 text-center">
-        <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+      <div className="mt-6 text-center">
+        <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>
           🔒 Vos données sont sécurisées. Aucun spam.
         </p>
       </div>
