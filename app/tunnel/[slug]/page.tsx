@@ -1,7 +1,7 @@
 // app/tunnel/[slug]/page.tsx
 import { notFound } from "next/navigation";
 import { demoFunnel } from "@/lib/funnels/demo";
-import type { Funnel, FunnelSection, CtaConfig } from "@/lib/funnels/types";
+import type { Funnel, CtaConfig } from "@/lib/funnels/types";
 
 // Map des slugs vers les funnels disponibles
 // Pour le MVP : un seul tunnel "demo". Plus tard on lira en base.
@@ -9,12 +9,14 @@ const FUNNELS: Record<string, Funnel> = {
   demo: demoFunnel,
 };
 
+// Next.js 15 : params est une Promise
 type PageProps = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
-export default function TunnelPublicPage({ params }: PageProps) {
-  const funnel = FUNNELS[params.slug];
+export default async function TunnelPublicPage({ params }: PageProps) {
+  const { slug } = await params;
+  const funnel = FUNNELS[slug];
   if (!funnel) notFound();
 
   const visibleSections = funnel.sections.filter((s) => s.visible !== false);
@@ -93,10 +95,7 @@ export default function TunnelPublicPage({ params }: PageProps) {
       >
         <div className="mx-auto max-w-md">
           <h2 className="text-3xl font-black">Recevoir les détails</h2>
-          <form
-            className="mt-6 grid gap-3"
-            onSubmit={(e) => e.preventDefault()}
-          >
+          <form className="mt-6 grid gap-3">
             <input
               type="text"
               name="name"
@@ -125,7 +124,7 @@ export default function TunnelPublicPage({ params }: PageProps) {
   );
 }
 
-// Construit l'URL et le comportement du CTA selon son mode (redirect / anchor / popup)
+// Construit l'URL et le comportement du CTA selon son mode
 function ctaHref(cta: CtaConfig): string {
   if (cta.mode === "anchor") {
     const id = (cta.anchorId ?? "lead-form").replace(/^#/, "");
