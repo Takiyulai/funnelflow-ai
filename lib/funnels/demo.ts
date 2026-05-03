@@ -1,4 +1,6 @@
+// lib/funnels/demo.ts
 import { createDemoFunnel } from "@/lib/ai/generate";
+import { makeAnchorCta } from "@/lib/funnels/types";
 
 export const demoFunnel = createDemoFunnel({
   brandName: "FunnelFlow AI",
@@ -10,5 +12,7 @@ export const demoFunnel = createDemoFunnel({
   tone: "premium",
   funnelType: "Tunnel vente ebook premium",
   designStyle: "premium",
-  language: "fr"
+  language: "fr",
+  primaryCta: makeAnchorCta("Recevoir l'ebook", "lead-form"),
+  defaultImageMode: "none",
 });

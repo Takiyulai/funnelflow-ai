@@ -1,85 +1,362 @@
-import { Badge } from "@/components/ui/Badge";
-import type { Funnel } from "@/lib/funnels/types";
+"use client";
 
-export function FunnelPreview({ funnel, mode = "desktop", logoSrc }: { funnel: Funnel; mode?: "desktop" | "mobile"; logoSrc?: string }) {
-  const primary = funnel.design.primaryColor || "#082B4C";
-  const gold = funnel.design.secondaryColor || "#F4C542";
-  const green = funnel.design.accentColor || "#35B779";
-  const hero = funnel.sections[0];
-  const rest = funnel.sections.slice(1);
+import { useState, useMemo } from "react";
+import { Monitor, Smartphone } from "lucide-react";
+import type { Funnel, FunnelSection } from "@/lib/funnels/types";
+
+type PreviewMode = "desktop" | "mobile";
+
+interface FunnelPreviewProps {
+  funnel: Funnel;
+  defaultMode?: PreviewMode;
+  forcedMode?: PreviewMode;
+  showToolbar?: boolean;
+  viewportHeight?: number | string;
+  logoSrc?: string;
+  className?: string;
+}
+
+export function FunnelPreview({
+  funnel,
+  defaultMode = "desktop",
+  forcedMode,
+  showToolbar = true,
+  viewportHeight = 720,
+  logoSrc,
+  className = ""
+}: FunnelPreviewProps) {
+  const [mode, setMode] = useState<PreviewMode>(forcedMode ?? defaultMode);
+  const activeMode = forcedMode ?? mode;
+
+  const visibleSections = useMemo(
+    () => funnel.sections.filter((s) => s.visible !== false),
+    [funnel.sections]
+  );
+
+  const heroSection = visibleSections.find((s) => s.type === "hero");
+  const otherSections = visibleSections.filter((s) => s.type !== "hero");
 
   return (
-    <div className={`mx-auto overflow-hidden rounded-lg border border-line bg-white shadow-premium ${mode === "mobile" ? "max-w-[360px]" : "w-full"}`}>
-      <div className="flex items-center gap-2 border-b border-line bg-canvas px-4 py-3">
-        <span className="h-3 w-3 rounded-full bg-red-300" />
-        <span className="h-3 w-3 rounded-full bg-gold" />
-        <span className="h-3 w-3 rounded-full bg-green" />
-      </div>
-      <div className="bg-[#F8FAFC]">
-        <section className={`grid gap-8 px-6 py-10 ${mode === "mobile" ? "" : "md:grid-cols-[1.08fr_.92fr] md:px-10 md:py-14"}`} style={{ background: primary, color: "white" }}>
-          <div>
-            <div className="mb-8 flex items-center gap-3">
-              {logoSrc ? <img src={logoSrc} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg text-sm font-black" style={{ background: gold, color: primary }}>FF</span>}
-              <span className="text-sm font-black">{funnel.funnelName.split(" - ")[0]}</span>
-            </div>
-            {hero?.eyebrow ? <Badge tone="gold">{hero.eyebrow}</Badge> : null}
-            <h2 className={`mt-4 font-black leading-tight ${mode === "mobile" ? "text-3xl" : "text-6xl"}`}>{hero?.headline}</h2>
-            {hero?.subheadline ? <p className="mt-5 max-w-2xl text-base leading-7 text-white/75">{hero.subheadline}</p> : null}
-            {hero?.cta ? <button className="mt-7 min-h-12 rounded-lg px-5 text-sm font-black shadow-lg" style={{ background: gold, color: primary }}>{hero.cta}</button> : null}
-            <div className="mt-7 flex flex-wrap gap-2 text-xs font-bold text-white/80">
-              <span className="rounded-full bg-white/10 px-3 py-1">Mobile-first</span>
-              <span className="rounded-full bg-white/10 px-3 py-1">Systeme.io ready</span>
-              <span className="rounded-full bg-white/10 px-3 py-1">Email sequence</span>
-            </div>
-          </div>
-          <div className="rounded-lg bg-white p-4 text-ink shadow-premium">
-            <div className="rounded-lg border border-line p-4">
-              <p className="text-xs font-black uppercase" style={{ color: green }}>Plan du tunnel</p>
-              <div className="mt-4 grid gap-3">
-                {["Page de vente", "Formulaire lead", "Page merci", "3 emails", "Export HTML"].map((item, index) => (
-                  <div key={item} className="flex items-center gap-3 rounded-lg bg-canvas p-3 text-sm font-bold">
-                    <span className="grid h-7 w-7 place-items-center rounded-full text-xs" style={{ background: index === 0 ? gold : "#EAF3FF", color: primary }}>{index + 1}</span>
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+    <div
+      className={`rounded-2xl border border-line bg-white shadow-sm overflow-hidden transition-shadow ${className}`}
+    >
+      {showToolbar && !forcedMode && (
+        <PreviewToolbar mode={activeMode} onChange={setMode} />
+      )}
 
-        {rest.map((section, index) => (
-          <section key={section.id} className={`px-6 py-10 ${index % 2 === 0 ? "bg-white" : "bg-canvas"}`}>
-            <div className={`${mode === "mobile" ? "" : "mx-auto grid max-w-5xl grid-cols-[.8fr_1.2fr] gap-8"}`}>
-              <div>
-                {section.eyebrow ? <p className="text-xs font-black uppercase" style={{ color: green }}>{section.eyebrow}</p> : null}
-                <h2 className={`mt-2 font-black leading-tight text-ink ${mode === "mobile" ? "text-2xl" : "text-4xl"}`}>{section.headline}</h2>
-              </div>
-              <div>
-                {section.subheadline ? <p className="text-base leading-7 text-muted">{section.subheadline}</p> : null}
-                {section.body ? <p className="text-base leading-7 text-muted">{section.body}</p> : null}
-                {section.type === "form" ? (
-                  <div className="mt-5 grid gap-3 rounded-lg border border-line bg-white p-4">
-                    <input className="min-h-11 rounded-lg border border-line px-3 text-sm" placeholder="Nom" />
-                    <input className="min-h-11 rounded-lg border border-line px-3 text-sm" placeholder="Email" />
-                    <button className="min-h-11 rounded-lg text-sm font-black" style={{ background: gold, color: primary }}>{section.cta ?? "Continuer"}</button>
-                  </div>
-                ) : null}
-                {section.bullets?.length ? (
-                  <div className="mt-5 grid gap-3">
-                    {section.bullets.map((item) => (
-                      <div key={item} className="flex gap-3 rounded-lg border border-line bg-white p-3 text-sm font-semibold text-ink">
-                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: green }} />
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {section.cta && section.type !== "form" ? <button className="mt-6 min-h-11 rounded-lg px-5 text-sm font-black" style={{ background: gold, color: primary }}>{section.cta}</button> : null}
-              </div>
-            </div>
-          </section>
-        ))}
+      <div
+        className="bg-[#F4F5F8] flex items-start justify-center overflow-y-auto"
+        style={{ height: viewportHeight }}
+      >
+        {activeMode === "desktop" ? (
+          <DesktopFrame
+            funnel={funnel}
+            heroSection={heroSection}
+            otherSections={otherSections}
+            logoSrc={logoSrc}
+          />
+        ) : (
+          <MobileFrame
+            funnel={funnel}
+            heroSection={heroSection}
+            otherSections={otherSections}
+            logoSrc={logoSrc}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function PreviewToolbar({
+  mode,
+  onChange
+}: {
+  mode: PreviewMode;
+  onChange: (m: PreviewMode) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-line">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+        <span className="ml-3 text-[11px] uppercase tracking-[0.18em] text-muted font-semibold">
+          Aperçu {mode === "desktop" ? "desktop" : "mobile"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-[#F4F5F8] border border-line">
+        <button
+          type="button"
+          aria-label="Aperçu desktop"
+          onClick={() => onChange("desktop")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+            mode === "desktop"
+              ? "bg-[#08498D] text-white shadow-sm"
+              : "text-muted hover:text-ink"
+          }`}
+        >
+          <Monitor className="h-3.5 w-3.5" />
+          Desktop
+        </button>
+        <button
+          type="button"
+          aria-label="Aperçu mobile"
+          onClick={() => onChange("mobile")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+            mode === "mobile"
+              ? "bg-[#08498D] text-white shadow-sm"
+              : "text-muted hover:text-ink"
+          }`}
+        >
+          <Smartphone className="h-3.5 w-3.5" />
+          Mobile
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DesktopFrame({
+  funnel,
+  heroSection,
+  otherSections,
+  logoSrc
+}: {
+  funnel: Funnel;
+  heroSection: FunnelSection | undefined;
+  otherSections: FunnelSection[];
+  logoSrc?: string;
+}) {
+  return (
+    <div className="w-full p-5 animate-[ffFade_0.25s_ease-out]">
+      <div className="mx-auto max-w-[1100px] bg-white rounded-xl border border-line shadow-sm overflow-hidden">
+        <PreviewBody
+          funnel={funnel}
+          heroSection={heroSection}
+          otherSections={otherSections}
+          logoSrc={logoSrc}
+          compact={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MobileFrame({
+  funnel,
+  heroSection,
+  otherSections,
+  logoSrc
+}: {
+  funnel: Funnel;
+  heroSection: FunnelSection | undefined;
+  otherSections: FunnelSection[];
+  logoSrc?: string;
+}) {
+  return (
+    <div className="py-6 animate-[ffFade_0.25s_ease-out]">
+      <div className="w-[380px] bg-black rounded-[36px] p-3 shadow-xl">
+        <div className="bg-white rounded-[28px] overflow-hidden">
+          <div className="h-6 bg-black flex items-center justify-center">
+            <span className="h-1 w-12 rounded-full bg-white/30" />
+          </div>
+          <div className="max-h-[640px] overflow-y-auto">
+            <PreviewBody
+              funnel={funnel}
+              heroSection={heroSection}
+              otherSections={otherSections}
+              logoSrc={logoSrc}
+              compact
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewBody({
+  funnel,
+  heroSection,
+  otherSections,
+  logoSrc,
+  compact
+}: {
+  funnel: Funnel;
+  heroSection: FunnelSection | undefined;
+  otherSections: FunnelSection[];
+  logoSrc?: string;
+  compact: boolean;
+}) {
+  const padX = compact ? "px-5" : "px-10";
+  const padY = compact ? "py-6" : "py-10";
+  const titleSize = compact ? "text-[26px] leading-[1.15]" : "text-4xl leading-tight";
+  const bodySize = compact ? "text-sm" : "text-base";
+  const accent = funnel.design?.secondaryColor ?? "#C7A436";
+  const dark = funnel.design?.primaryColor ?? "#080E1A";
+
+  return (
+    <div className="bg-white">
+      {heroSection && (
+        <section className={`${padX} ${padY} text-white`} style={{ background: dark }}>
+          <div className="flex items-center gap-2 mb-4">
+            {logoSrc ? (
+              <img src={logoSrc} alt="" className="h-8 w-8 rounded-lg object-cover" />
+            ) : (
+              <div
+                className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-sm"
+                style={{ background: accent, color: dark }}
+              >
+                FF
+              </div>
+            )}
+            <span className="font-semibold">{funnel.funnelName || "FunnelFlow AI"}</span>
+          </div>
+
+          {heroSection.eyebrow && (
+            <span
+              className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
+              style={{ background: `${accent}26`, color: accent }}
+            >
+              {heroSection.eyebrow}
+            </span>
+          )}
+
+          {heroSection.headline && (
+            <h1 className={`font-black text-white ${titleSize} mb-4`}>
+              {heroSection.headline}
+            </h1>
+          )}
+
+          {heroSection.subheadline && (
+            <p className={`text-white/80 ${bodySize} mb-5`}>
+              {heroSection.subheadline}
+            </p>
+          )}
+
+          {heroSection.cta?.label && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:opacity-90 transition"
+              style={{ background: accent, color: dark }}
+            >
+              {heroSection.cta.label}
+            </button>
+          )}
+        </section>
+      )}
+
+      {otherSections.map((section) => (
+        <SectionBlock
+          key={section.id}
+          section={section}
+          padX={padX}
+          padY={padY}
+          bodySize={bodySize}
+          compact={compact}
+          accent={accent}
+          dark={dark}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SectionBlock({
+  section,
+  padX,
+  padY,
+  bodySize,
+  compact,
+  accent,
+  dark
+}: {
+  section: FunnelSection;
+  padX: string;
+  padY: string;
+  bodySize: string;
+  compact: boolean;
+  accent: string;
+  dark: string;
+}) {
+  const titleSize = compact ? "text-xl" : "text-2xl";
+  const isForm = section.type === "form";
+
+  return (
+    <section className={`${padX} ${padY} border-t border-line`}>
+      {section.eyebrow && (
+        <span className="inline-block px-2.5 py-1 rounded-full bg-[#08498D]/10 text-[#08498D] text-[10px] font-bold uppercase tracking-wider mb-3">
+          {section.eyebrow}
+        </span>
+      )}
+
+      {section.headline && (
+        <h2 className={`font-black text-ink ${titleSize} mb-3`}>
+          {section.headline}
+        </h2>
+      )}
+
+      {section.subheadline && (
+        <p className={`text-muted ${bodySize} mb-4`}>{section.subheadline}</p>
+      )}
+
+      {section.body && (
+        <p className={`text-ink/80 ${bodySize} mb-4 whitespace-pre-line`}>
+          {section.body}
+        </p>
+      )}
+
+      {Array.isArray(section.bullets) && section.bullets.length > 0 && (
+        <ul className="space-y-2 mb-4">
+          {section.bullets.map((bullet, i) => (
+            <li key={i} className={`flex gap-2 text-ink/85 ${bodySize}`}>
+              <span
+                className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
+                style={{ background: "#31845C" }}
+              />
+              <span>{bullet}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isForm && (
+        <form
+          id="lead-form"
+          onSubmit={(e) => e.preventDefault()}
+          className="space-y-3 mt-4 max-w-md"
+        >
+          <input
+            type="text"
+            placeholder="Votre prénom"
+            className="w-full px-3 py-2.5 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D] transition-colors"
+          />
+          <input
+            type="email"
+            placeholder="Votre email"
+            className="w-full px-3 py-2.5 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D] transition-colors"
+          />
+          <button
+            type="submit"
+            className="w-full px-4 py-2.5 rounded-lg font-bold text-sm hover:opacity-90 transition"
+            style={{ background: accent, color: dark }}
+          >
+            {section.cta?.label || "Envoyer"}
+          </button>
+        </form>
+      )}
+
+      {!isForm && section.cta?.label && (
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-bold text-sm hover:opacity-90 transition mt-2"
+          style={{ background: dark }}
+        >
+          {section.cta.label}
+        </button>
+      )}
+    </section>
   );
 }

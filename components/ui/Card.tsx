@@ -1,5 +1,21 @@
+// components/ui/Card.tsx
 import type { ReactNode, HTMLAttributes } from "react";
 
-export function Card({ children, className = "", style, ...props }: { children: ReactNode; className?: string; style?: React.CSSProperties } & HTMLAttributes<HTMLDivElement>) {
-  return <div className={`rounded-lg border border-line bg-white shadow-sm ${className}`} style={style} {...props}>{children}</div>;
+type Props = {
+  children: ReactNode;
+  className?: string;
+  interactive?: boolean;
+} & HTMLAttributes<HTMLDivElement>;
+
+export function Card({ children, className = "", interactive, ...props }: Props) {
+  return (
+    <div
+      className={`rounded-xl border border-line bg-white shadow-card ${
+        interactive ? "ff-card-hover cursor-pointer" : ""
+      } ${className}`}
+      {...props}
+    >
+      {children}
+    </div>
+  );
 }

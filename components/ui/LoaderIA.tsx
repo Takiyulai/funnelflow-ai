@@ -1,36 +1,72 @@
+// components/ui/LoaderIA.tsx
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 
-const steps = [
-  "Analyse de l’offre",
-  "Création du copywriting",
-  "Création des sections",
-  "Création du design",
-  "Optimisation mobile",
-  "Préparation export Systeme.io"
+const STEPS = [
+  "Analyse du brief",
+  "Structure du tunnel",
+  "Rédaction du copywriting",
+  "Composition des sections",
+  "Adaptation mobile",
+  "Préparation de l'export",
 ];
 
 export function LoaderIA() {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setActive((value) => (value + 1) % steps.length), 900);
+    const interval = window.setInterval(() => {
+      setActive((value) => Math.min(STEPS.length - 1, value + 1));
+    }, 900);
     return () => window.clearInterval(interval);
   }, []);
 
+  const progress = ((active + 1) / STEPS.length) * 100;
+
   return (
-    <div className="rounded-lg border border-line bg-white p-6 shadow-premium">
-      <div className="mb-5 h-2 overflow-hidden rounded-full bg-softBlue">
-        <div className="h-full w-2/3 animate-pulse rounded-full bg-green" />
+    <div className="rounded-xl border border-line bg-white p-5 shadow-card">
+      <div className="mb-4 flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-navy" />
+        <p className="text-xs font-bold uppercase tracking-wider text-muted">
+          Génération en cours
+        </p>
       </div>
-      <div className="grid gap-3">
-        {steps.map((step, index) => (
-          <div key={step} className={`flex items-center gap-3 text-sm font-semibold ${index <= active ? "text-navy" : "text-muted"}`}>
-            <span className={`h-2.5 w-2.5 rounded-full ${index <= active ? "bg-green" : "bg-line"}`} />
-            {step}
-          </div>
-        ))}
+
+      <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-canvas">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-green to-navy transition-all duration-700"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="grid gap-2.5">
+        {STEPS.map((step, index) => {
+          const done = index < active;
+          const current = index === active;
+          return (
+            <div
+              key={step}
+              className={`flex items-center gap-2.5 text-sm transition ${
+                done
+                  ? "text-ink"
+                  : current
+                  ? "text-navy font-bold"
+                  : "text-muted"
+              }`}
+            >
+              {done ? (
+                <CheckCircle2 size={14} className="text-green" />
+              ) : current ? (
+                <Loader2 size={14} className="animate-spin text-navy" />
+              ) : (
+                <span className="h-2 w-2 rounded-full bg-line" />
+              )}
+              <span>{step}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
