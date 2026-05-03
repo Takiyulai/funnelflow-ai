@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -18,7 +19,7 @@ import type {
   Funnel, FunnelSection, FunnelSectionType, ImageMode,
 } from "@/lib/funnels/types";
 
-const STORAGE_KEY = "ff:editor:funnel";
+const STORAGE_KEY_PREFIX = "ff:editor:funnel:";
 
 const AVAILABLE_SECTION_TYPES: FunnelSectionType[] = [
   "hero", "about", "problem", "solution", "benefits", "proof",
@@ -27,6 +28,11 @@ const AVAILABLE_SECTION_TYPES: FunnelSectionType[] = [
 ];
 
 export default function EditorPage() {
+  // Next.js 15 : useParams renvoie déjà un objet synchrone côté client
+  const params = useParams<{ id: string }>();
+  const funnelId = params?.id ?? "demo";
+  const storageKey = `${STORAGE_KEY_PREFIX}${funnelId}`;
+
   const history = useHistory<Funnel>(demoFunnel, { limit: 30 });
   const funnel = history.state;
 
@@ -37,10 +43,10 @@ export default function EditorPage() {
   const [askDelete, setAskDelete] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  // Charge un funnel sauvegardé en localStorage
+  // Charge un funnel sauvegardé en localStorage (clé par id)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.sections)) {
@@ -50,9 +56,9 @@ export default function EditorPage() {
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [storageKey]);
 
-  // Raccourcis clavier undo/redo
+  // Raccourcis clavier undo / redo / save
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
@@ -133,7 +139,7 @@ export default function EditorPage() {
   async function save() {
     setSaving(true);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(funnel));
+      localStorage.setItem(storageKey, JSON.stringify(funnel));
       await new Promise((r) => setTimeout(r, 350));
       setSavedAt(new Date());
     } finally {
@@ -163,7 +169,7 @@ export default function EditorPage() {
           <Button variant="ghost" size="sm" onClick={() => history.redo()} disabled={!history.canRedo}>
             <Redo2 className="h-4 w-4" /> Rétablir
           </Button>
-          <Button variant="ghost" href="/funnels/demo">
+          <Button variant="ghost" href={`/funnels/${funnelId}`}>
             <Eye className="h-4 w-4" />
             Aperçu
           </Button>
