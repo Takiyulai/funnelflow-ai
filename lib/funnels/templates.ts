@@ -1,6 +1,14 @@
 // lib/funnels/templates.ts
-import type { FunnelTemplate } from "./types";
+import type {
+  FunnelTemplate,
+  TemplateDefinition,
+} from "./types";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Anciens templates simples (rétrocompatibilité)
+// Conservés pour ne pas casser le wizard, l'éditeur et FunnelRowMenu
+// qui les consomment encore directement
+// ─────────────────────────────────────────────────────────────────────────────
 export const funnelTemplates: FunnelTemplate[] = [
   {
     id: "ebook-lead-magnet",
@@ -67,3 +75,443 @@ export const funnelTemplates: FunnelTemplate[] = [
     sections: ["hero", "problem", "solution", "proof", "process", "qualification", "cta"],
   },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Templates premium (Phase B)
+// Chaque template a une personnalité distincte, des layouts riches
+// et des animations par défaut adaptées au mood
+// ─────────────────────────────────────────────────────────────────────────────
+export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1. Sharp Launch — Direct, dense, conversion immédiate
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "sharp-launch",
+    name: "Sharp Launch",
+    personality: {
+      fr: "Direct et orienté action, pour offres claires à prix fixe qui veulent convertir vite",
+      en: "Direct and action-driven, for clear offers at fixed price that want to convert fast",
+      es: "Directo y orientado a la acción, para ofertas claras a precio fijo que quieren convertir rápido",
+    },
+    bestFor: ["digital-product", "lead-magnet", "service"],
+    defaultMoodId: "energetic",
+    badge: "Punchy",
+    previewColors: ["#0A1020", "#FFB020", "#1ECB83"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "wide-banner",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "zoom-in" },
+      },
+      {
+        type: "problem", id: "problem", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "zap",
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "pulse" },
+      },
+      {
+        type: "guarantee", id: "guarantee", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "zoom-in" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+      { when: { sectionMissing: "bullets" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "balanced",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2. Story Sell — Narratif long, pour VSL et formations
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "story-sell",
+    name: "Story Sell",
+    personality: {
+      fr: "Narratif et pédagogique, idéal pour VSL et formations qui demandent de la profondeur",
+      en: "Narrative and educational, ideal for VSLs and courses that require depth",
+      es: "Narrativo y pedagógico, ideal para VSLs y formaciones que requieren profundidad",
+    },
+    bestFor: ["vsl", "formation", "webinar"],
+    defaultMoodId: "premium-calm",
+    badge: "Story",
+    previewColors: ["#080E1A", "#C7A436", "#31845C"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "video", id: "video", required: false,
+        includeIf: { has: "video" },
+        layoutVariant: "wide-banner",
+        animations: { headline: "fade-up", video: "zoom-in" },
+      },
+      {
+        type: "about", id: "about", required: false,
+        includeIf: { has: "about" },
+        layoutVariant: "split-image-text",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "problem", id: "problem", required: true,
+        layoutVariant: "split-text-image",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "solution", id: "solution", required: true,
+        layoutVariant: "split-image-text",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "sparkles",
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "thumbs-up",
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "zoom-in" },
+      },
+      {
+        type: "bonus", id: "bonus", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "gift",
+      },
+      {
+        type: "guarantee", id: "guarantee", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "faq", id: "faq", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "zoom-in" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+      { when: { sectionMissing: "video" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "airy",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3. Premium Minimal — Espace blanc, typo éditoriale, haut de gamme
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "premium-minimal",
+    name: "Premium Minimal",
+    personality: {
+      fr: "Espace blanc généreux et typographie éditoriale, pour offres haut de gamme et marques sobres",
+      en: "Generous white space and editorial typography, for high-end offers and sober brands",
+      es: "Espacio en blanco generoso y tipografía editorial, para ofertas premium y marcas sobrias",
+    },
+    bestFor: ["service", "digital-product", "saas"],
+    defaultMoodId: "premium-calm",
+    badge: "Premium",
+    previewColors: ["#080E1A", "#C7A436", "#FFFFFF"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "about", id: "about", required: false,
+        includeIf: { has: "about" },
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "star",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "guarantee", id: "guarantee", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "uniform",
+    density: "airy",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 4. Trust Pro — Institutionnel, B2B, preuves mises en avant
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "trust-pro",
+    name: "Trust Pro",
+    personality: {
+      fr: "Ton institutionnel et rassurant, preuves sociales fortes, idéal pour B2B et services premium",
+      en: "Institutional and reassuring tone, strong social proof, ideal for B2B and premium services",
+      es: "Tono institucional y tranquilizador, pruebas sociales fuertes, ideal para B2B y servicios premium",
+    },
+    bestFor: ["service", "saas", "booking"],
+    defaultMoodId: "institutional-trust",
+    badge: "B2B",
+    previewColors: ["#061B36", "#08498D", "#28D6D6"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "split-text-image",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", image: "fade-in", cta: "fade-up" },
+      },
+      {
+        type: "proof", id: "proof", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "shield",
+      },
+      {
+        type: "problem", id: "problem", required: true,
+        layoutVariant: "split-text-image",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "target",
+      },
+      {
+        type: "solution", id: "solution", required: true,
+        layoutVariant: "split-image-text",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "process", id: "process", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "settings",
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "qualification", id: "qualification", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "cta", id: "cta", required: true,
+        layoutVariant: "wide-banner",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "uniform",
+    density: "balanced",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 5. Bold Energy — Saturé, animations marquées, audiences jeunes
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "bold-energy",
+    name: "Bold Energy",
+    personality: {
+      fr: "Couleurs saturées et animations marquées, pour audiences jeunes, lifestyle et créateurs",
+      en: "Saturated colors and bold animations, for young audiences, lifestyle and creators",
+      es: "Colores saturados y animaciones marcadas, para audiencias jóvenes, lifestyle y creadores",
+    },
+    bestFor: ["digital-product", "formation", "webinar"],
+    defaultMoodId: "creative-warm",
+    badge: "Bold",
+    previewColors: ["#1E1208", "#E07A3E", "#FFB020"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "wide-banner",
+        animations: { eyebrow: "zoom-in", headline: "fade-up", subheadline: "fade-up", cta: "pulse" },
+      },
+      {
+        type: "video", id: "video", required: false,
+        includeIf: { has: "video" },
+        layoutVariant: "wide-banner",
+        animations: { headline: "fade-up", video: "zoom-in" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "zoom-in" },
+        defaultBulletIcon: "rocket",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "stacked-card",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "zoom-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "pulse" },
+      },
+      {
+        type: "bonus", id: "bonus", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "zoom-in" },
+        defaultBulletIcon: "gift",
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "pulse" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "wide-banner" },
+      { when: { sectionMissing: "video" }, fallbackLayout: "wide-banner" },
+    ],
+    bulletAnimation: "stagger",
+    density: "balanced",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 6. Lead Snap — Ultra-court, une page, capture rapide
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "lead-snap",
+    name: "Lead Snap",
+    personality: {
+      fr: "Ultra-court et focalisé, une page faite pour capter un email contre un lead-magnet",
+      en: "Ultra-short and focused, one page built to capture an email for a lead magnet",
+      es: "Ultra-corto y enfocado, una página hecha para capturar un email a cambio de un lead magnet",
+    },
+    bestFor: ["lead-magnet", "thank-you"],
+    defaultMoodId: "energetic",
+    badge: "Snap",
+    previewColors: ["#0A1020", "#FFB020", "#FFFFFF"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "split-text-image",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", image: "fade-in", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "stacked-card",
+        animations: { headline: "fade-up", cta: "zoom-in" },
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "uniform",
+    density: "dense",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers d'accès
+// ─────────────────────────────────────────────────────────────────────────────
+export function getPremiumTemplate(id?: string): TemplateDefinition | undefined {
+  if (!id) return undefined;
+  return PREMIUM_TEMPLATES.find((t) => t.id === id);
+}
+
+// Retourne les templates premium recommandés pour un funnelKind donné
+export function getRecommendedTemplates(funnelKind?: string): TemplateDefinition[] {
+  if (!funnelKind) return PREMIUM_TEMPLATES;
+  const recommended = PREMIUM_TEMPLATES.filter((t) =>
+    t.bestFor.includes(funnelKind as never)
+  );
+  // Si aucun match strict, on retourne tous les templates (l'utilisateur choisit)
+  return recommended.length > 0 ? recommended : PREMIUM_TEMPLATES;
+}
+/**
+ * Animation de bouton par défaut associée à chaque template.
+ * Utilisé par TemplateThemeProvider pour piloter l'attribut data-ff-btn-anim.
+ */
+export const TEMPLATE_BUTTON_ANIMATION: Record<
+  string,
+  "lift" | "glow" | "pulse" | "shine"
+> = {
+  "story-sell": "shine",
+  "bold-energy": "pulse",
+  "premium-minimal": "lift",
+  "sharp-launch": "glow",
+  "trust-pro": "lift",
+  "lead-snap": "pulse",
+};
+
+export function getTemplateButtonAnim(
+  templateId?: string
+): "lift" | "glow" | "pulse" | "shine" {
+  if (!templateId) return "lift";
+  return TEMPLATE_BUTTON_ANIMATION[templateId] ?? "lift";
+}
+
+// Template par défaut si l'utilisateur ne choisit pas explicitement
+export const DEFAULT_PREMIUM_TEMPLATE_ID = "story-sell";

@@ -1,647 +1,522 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, Save, Undo2, Redo2, Eye, Loader2 } from "lucide-react";
+
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Field, Input, Textarea, Select } from "@/components/ui/Field";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { useHistory } from "@/hooks/useHistory";
-import { demoFunnel } from "@/lib/funnels/demo";
+import { EditorSidebar } from "@/components/editor/EditorSidebar";
+import { SectionEditor } from "@/components/editor/SectionEditor";
+import { GlobalStylePanel } from "@/components/editor/GlobalStylePanel";
+import { useToast } from "@/components/ui/Toast";
 import {
-  ArrowDown, ArrowUp, Check, Copy, Eye, EyeOff, Image as ImageIcon,
-  ImageOff, Palette, Plus, RefreshCw, Save, Sparkles, Trash2, Type,
-  Undo2, Redo2, Wand2,
-} from "lucide-react";
-import type {
-  Funnel, FunnelSection, FunnelSectionType, ImageMode,
-} from "@/lib/funnels/types";
+  useFunnel,
+  saveFunnel,
+  publishFunnel,
+  loadFunnelBySlug,
+  type StoredFunnel,
+} from "@/lib/store/funnelStore";
+import type { Funnel, FunnelSection } from "@/lib/funnels/types";
 
-const STORAGE_KEY_PREFIX = "ff:editor:funnel:";
+type HistoryState = {
+  past: Funnel[];
+  present: Funnel | null;
+  future: Funnel[];
+};
 
-const AVAILABLE_SECTION_TYPES: FunnelSectionType[] = [
-  "hero", "about", "problem", "solution", "benefits", "proof",
-  "offer", "bonus", "guarantee", "faq", "cta", "form",
-  "program", "pricing", "process", "video", "qualification",
-];
+const HISTORY_LIMIT = 50;
+const AUTO_SAVE_DEBOUNCE_MS = 600;
 
 export default function EditorPage() {
-  // Next.js 15 : useParams renvoie déjà un objet synchrone côté client
   const params = useParams<{ id: string }>();
-  const funnelId = params?.id ?? "demo";
-  const storageKey = `${STORAGE_KEY_PREFIX}${funnelId}`;
+  const router = useRouter();
+  const toast = useToast();
+  const funnelId = params?.id ?? "";
 
-  const history = useHistory<Funnel>(demoFunnel, { limit: 30 });
-  const funnel = history.state;
+  // Le hook retourne directement StoredFunnel | null
+  const stored = useFunnel(funnelId);
 
-  const [selectedId, setSelectedId] = useState<string>(demoFunnel.sections[0]?.id ?? "");
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"content" | "cta" | "image" | "style">("content");
-  const [askDelete, setAskDelete] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-
-  // Charge un funnel sauvegardé en localStorage (clé par id)
+  // Petit délai d'hydratation pour éviter de rediriger avant le 1er rendu localStorage
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.sections)) {
-          history.reset(parsed);
-          setSelectedId(parsed.sections[0]?.id ?? "");
-        }
+    const t = setTimeout(() => setHydrated(true), 80);
+    return () => clearTimeout(t);
+  }, []);
+  const loading = !hydrated;
+
+  const [history, setHistory] = useState<HistoryState>({
+    past: [],
+    present: null,
+    future: [],
+  });
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [showGlobalStyle, setShowGlobalStyle] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoadRef = useRef(true);
+
+  // ─── Initial load from store ─────────────────────────────────────
+  useEffect(() => {
+    if (loading) return;
+    if (!stored) {
+      toast.show({ title: "Tunnel introuvable", variant: "error" });
+      router.replace("/dashboard");
+      return;
+    }
+    if (isInitialLoadRef.current) {
+      setHistory({ past: [], present: stored.funnel, future: [] });
+      setSelectedSectionId(stored.funnel.sections[0]?.id ?? null);
+      setLastSavedAt(new Date(stored.updatedAt).getTime());
+      isInitialLoadRef.current = false;
+    }
+  }, [loading, stored, router, toast]);
+
+  const funnel = history.present;
+
+  // ─── Auto-save (debounced) ───────────────────────────────────────
+  useEffect(() => {
+    if (!funnel || !stored || isInitialLoadRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+    setSaveState("saving");
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        const updated: StoredFunnel = {
+          ...stored,
+          funnel,
+          updatedAt: new Date().toISOString(),
+        };
+        saveFunnel(updated);
+        setSaveState("saved");
+        setLastSavedAt(Date.now());
+      } catch (err) {
+        console.error("[editor] auto-save failed", err);
+        setSaveState("idle");
+        toast.show({ title: "Erreur d'enregistrement", variant: "error" });
       }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey]);
+    }, AUTO_SAVE_DEBOUNCE_MS);
 
-  // Raccourcis clavier undo / redo / save
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
-      const key = e.key.toLowerCase();
-      if (key === "z" && !e.shiftKey) { e.preventDefault(); history.undo(); }
-      else if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); history.redo(); }
-      else if (key === "s") { e.preventDefault(); save(); }
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history.undo, history.redo]);
+  }, [funnel]);
 
-  const selectedSection = useMemo(
-    () => funnel.sections.find((s) => s.id === selectedId) ?? funnel.sections[0],
-    [funnel.sections, selectedId]
+  // ─── History helpers ─────────────────────────────────────────────
+  const pushHistory = useCallback((next: Funnel) => {
+    setHistory((h) => {
+      if (!h.present) return { past: [], present: next, future: [] };
+      const past = [...h.past, h.present].slice(-HISTORY_LIMIT);
+      return { past, present: next, future: [] };
+    });
+  }, []);
+
+  const undo = useCallback(() => {
+    setHistory((h) => {
+      if (h.past.length === 0 || !h.present) return h;
+      const previous = h.past[h.past.length - 1];
+      return {
+        past: h.past.slice(0, -1),
+        present: previous,
+        future: [h.present, ...h.future],
+      };
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setHistory((h) => {
+      if (h.future.length === 0 || !h.present) return h;
+      const next = h.future[0];
+      return {
+        past: [...h.past, h.present],
+        present: next,
+        future: h.future.slice(1),
+      };
+    });
+  }, []);
+
+  // ─── Manual save ─────────────────────────────────────────────────
+  const handleManualSave = useCallback(() => {
+    if (!funnel || !stored) return;
+    try {
+      const updated: StoredFunnel = {
+        ...stored,
+        funnel,
+        updatedAt: new Date().toISOString(),
+      };
+      saveFunnel(updated);
+      setSaveState("saved");
+      setLastSavedAt(Date.now());
+      toast.show({ title: "Tunnel enregistré", variant: "success" });
+    } catch {
+      toast.show({ title: "Erreur d'enregistrement", variant: "error" });
+    }
+  }, [funnel, stored, toast]);
+
+  // ─── Keyboard shortcuts ──────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      const meta = e.ctrlKey || e.metaKey;
+      if (!meta) return;
+
+      if (e.key === "s") {
+        e.preventDefault();
+        handleManualSave();
+      } else if (e.key === "z" && !e.shiftKey && !isInInput) {
+        e.preventDefault();
+        undo();
+      } else if ((e.key === "y" || (e.key === "z" && e.shiftKey)) && !isInInput) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo, handleManualSave]);
+
+  // ─── Section CRUD ────────────────────────────────────────────────
+  const updateSection = useCallback(
+    (sectionId: string, patch: Partial<FunnelSection>) => {
+      if (!funnel) return;
+      const next: Funnel = {
+        ...funnel,
+        sections: funnel.sections.map((s) =>
+          s.id === sectionId ? { ...s, ...patch } : s,
+        ),
+      };
+      pushHistory(next);
+    },
+    [funnel, pushHistory],
   );
 
-  function updateSection(id: string, patch: Partial<FunnelSection>) {
-    history.commit((f) => ({
-      ...f,
-      sections: f.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-    }));
-  }
+  const reorderSections = useCallback(
+    (orderedIds: string[]) => {
+      if (!funnel) return;
+      const map = new Map(funnel.sections.map((s) => [s.id, s]));
+      const reordered = orderedIds
+        .map((id) => map.get(id))
+        .filter((s): s is FunnelSection => Boolean(s));
+      if (reordered.length !== funnel.sections.length) return;
+      pushHistory({ ...funnel, sections: reordered });
+    },
+    [funnel, pushHistory],
+  );
 
-  function moveSection(id: string, direction: -1 | 1) {
-    history.commit((f) => {
-      const idx = f.sections.findIndex((s) => s.id === id);
-      const target = idx + direction;
-      if (idx < 0 || target < 0 || target >= f.sections.length) return f;
-      const next = [...f.sections];
-      [next[idx], next[target]] = [next[target], next[idx]];
-      return { ...f, sections: next };
-    });
-  }
+  const toggleVisibility = useCallback(
+    (sectionId: string) => {
+      if (!funnel) return;
+      const next: Funnel = {
+        ...funnel,
+        sections: funnel.sections.map((s) =>
+          s.id === sectionId
+            ? { ...s, visible: s.visible === false ? true : false }
+            : s,
+        ),
+      };
+      pushHistory(next);
+    },
+    [funnel, pushHistory],
+  );
 
-  function duplicateSection(id: string) {
-    history.commit((f) => {
-      const idx = f.sections.findIndex((s) => s.id === id);
-      if (idx < 0) return f;
-      const original = f.sections[idx];
-      const copy: FunnelSection = { ...original, id: `${original.id}-copy-${Date.now()}` };
-      const next = [...f.sections];
-      next.splice(idx + 1, 0, copy);
-      return { ...f, sections: next };
-    });
-  }
+  const duplicateSection = useCallback(
+    (sectionId: string) => {
+      if (!funnel) return;
+      const idx = funnel.sections.findIndex((s) => s.id === sectionId);
+      if (idx < 0) return;
+      const original = funnel.sections[idx];
+      const copy: FunnelSection = {
+        ...original,
+        id: `${original.id}-copy-${Date.now().toString(36)}`,
+      };
+      const sections = [...funnel.sections];
+      sections.splice(idx + 1, 0, copy);
+      pushHistory({ ...funnel, sections });
+      setSelectedSectionId(copy.id);
+    },
+    [funnel, pushHistory],
+  );
 
-  function confirmDeleteSection(id: string) {
-    history.commit((f) => ({ ...f, sections: f.sections.filter((s) => s.id !== id) }));
-    setAskDelete(null);
-  }
+  const deleteSection = useCallback(
+    (sectionId: string) => {
+      if (!funnel) return;
+      const sections = funnel.sections.filter((s) => s.id !== sectionId);
+      pushHistory({ ...funnel, sections });
+      if (selectedSectionId === sectionId) {
+        setSelectedSectionId(sections[0]?.id ?? null);
+      }
+    },
+    [funnel, pushHistory, selectedSectionId],
+  );
 
-  function toggleVisibility(id: string) {
-    history.commit((f) => ({
-      ...f,
-      sections: f.sections.map((s) =>
-        s.id === id ? { ...s, visible: s.visible === false ? true : false } : s
-      ),
-    }));
-  }
+  const addSection = useCallback(
+    (newSection: FunnelSection) => {
+      if (!funnel) return;
+      const sections = [...funnel.sections, newSection];
+      pushHistory({ ...funnel, sections });
+      setSelectedSectionId(newSection.id);
+    },
+    [funnel, pushHistory],
+  );
 
-  function addSection(type: FunnelSectionType) {
-    const id = `${type}-${Date.now().toString(36)}`;
-    const newSection: FunnelSection = {
-      id,
-      type,
-      headline: defaultHeadline(type),
-      visible: true,
-      image: { mode: "none" },
-    };
-    history.commit((f) => ({ ...f, sections: [...f.sections, newSection] }));
-    setSelectedId(id);
-    setShowAdd(false);
-  }
+  const updateSlug = useCallback(
+    (rawSlug: string) => {
+      if (!stored) return;
+      const cleaned = rawSlug
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60);
+      if (!cleaned || cleaned === stored.slug) return;
+      const conflict = loadFunnelBySlug(cleaned);
+      if (conflict && conflict.id !== stored.id) {
+        toast.show({
+          title: "Slug déjà utilisé",
+          description: "Choisis-en un autre",
+          variant: "error",
+        });
+        return;
+      }
+      const updated: StoredFunnel = {
+        ...stored,
+        slug: cleaned,
+        updatedAt: new Date().toISOString(),
+      };
+      saveFunnel(updated);
+      toast.show({ title: "Slug mis à jour", variant: "success" });
+    },
+    [stored, toast],
+  );
 
-  async function save() {
-    setSaving(true);
+  const updateFunnelMeta = useCallback(
+    (patch: Partial<Funnel>) => {
+      if (!funnel) return;
+      pushHistory({ ...funnel, ...patch });
+    },
+    [funnel, pushHistory],
+  );
+
+  // ─── Publish ─────────────────────────────────────────────────────
+  const handlePublish = useCallback(() => {
+    if (!funnel || !stored) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(funnel));
-      await new Promise((r) => setTimeout(r, 350));
-      setSavedAt(new Date());
-    } finally {
-      setSaving(false);
+      const updated: StoredFunnel = {
+        ...stored,
+        funnel,
+        updatedAt: new Date().toISOString(),
+      };
+      saveFunnel(updated);
+      publishFunnel(updated.id);
+      toast.show({
+        title: "Tunnel publié",
+        description: `Disponible sur /tunnel/${updated.slug}`,
+        variant: "success",
+      });
+    } catch {
+      toast.show({ title: "Erreur de publication", variant: "error" });
     }
+  }, [funnel, stored, toast]);
+
+  // ─── Render guards ───────────────────────────────────────────────
+  if (loading || !funnel || !stored) {
+    return (
+      <AppShell>
+        <div className="flex h-[60vh] items-center justify-center text-white/60">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Chargement du tunnel…
+        </div>
+      </AppShell>
+    );
   }
+
+  const selectedSection =
+    funnel.sections.find((s) => s.id === selectedSectionId) ?? null;
 
   return (
     <AppShell>
-      {/* Barre haute */}
-      <div className="flex items-start justify-between gap-4 mb-5 animate-[fadeIn_0.4s_ease-out]">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-black text-ink truncate">Éditeur du tunnel</h1>
-          <p className="mt-2 text-sm text-muted">
-            Modifiez chaque section, gérez les visuels, ajustez les CTA et régénérez ce qui doit l'être
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {savedAt && (
-            <span className="text-[11px] text-muted">
-              Sauvegardé à {savedAt.toLocaleTimeString()}
-            </span>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => history.undo()} disabled={!history.canUndo}>
-            <Undo2 className="h-4 w-4" /> Annuler
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => history.redo()} disabled={!history.canRedo}>
-            <Redo2 className="h-4 w-4" /> Rétablir
-          </Button>
-          <Button variant="ghost" href={`/funnels/${funnelId}`}>
-            <Eye className="h-4 w-4" />
-            Aperçu
-          </Button>
-          <Button variant="secondary" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4" />
-            {saving ? "Enregistrement..." : "Enregistrer"}
-          </Button>
-          <Button variant="primary" href="/export-systeme">
-            <Sparkles className="h-4 w-4" />
-            Exporter
-          </Button>
-        </div>
-      </div>
-
-      {/* 3 colonnes : 220 / centre fluide / 420 */}
-      <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_420px] items-start">
-        {/* Colonne 1 : sections */}
-        <Card className="p-3 min-w-0">
-          <div className="flex items-center justify-between px-1 mb-2">
-            <p className="text-[10px] uppercase tracking-wider font-bold text-muted">
-              Sections
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowAdd((v) => !v)}
-              className="grid h-6 w-6 place-items-center rounded-md border border-line bg-white text-muted transition hover:border-[#08498D]/40 hover:text-ink"
-              aria-label="Ajouter une section"
+      {/* Toolbar */}
+      <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-white/10 bg-black/60 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1 text-sm text-white/60 hover:text-white"
             >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+              <ArrowLeft className="h-4 w-4" />
+              Dashboard
+            </Link>
+            <div className="h-4 w-px bg-white/10" />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h1 className="truncate text-sm font-semibold text-white">
+                {funnel.funnelName}
+              </h1>
+              <div className="flex items-center gap-1 text-[10px] text-white/40">
+                <span>/tunnel/</span>
+                <input
+                  type="text"
+                  defaultValue={stored.slug}
+                  onBlur={(e) => updateSlug(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter")
+                      (e.target as HTMLInputElement).blur();
+                  }}
+                  className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-white/60 outline-none hover:border-white/10 focus:border-amber-300/40 focus:text-white"
+                />
+                {stored.publishedAt && (
+                  <span className="ml-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
+                    Publié
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
           </div>
 
-          {showAdd && (
-            <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg border border-line bg-canvas p-1 animate-[fadeIn_0.15s_ease-out]">
-              {AVAILABLE_SECTION_TYPES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => addSection(t)}
-                  className="rounded-md bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted transition hover:bg-[#08498D]/10 hover:text-[#08498D]"
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <ul className="space-y-1.5">
-            {funnel.sections.map((section, index) => {
-              const active = section.id === selectedId;
-              const hidden = section.visible === false;
-              return (
-                <li key={section.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(section.id)}
-                    className={`w-full text-left rounded-lg p-2.5 border transition-all duration-150 ${
-                      active
-                        ? "border-[#08498D] bg-[#08498D]/5 ring-1 ring-[#08498D]/30"
-                        : "border-line bg-white hover:border-[#08498D]/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-[10px] font-black text-muted shrink-0">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`text-xs font-bold truncate ${
-                            hidden ? "text-muted line-through" : "text-ink"
-                          }`}
-                        >
-                          {section.headline || section.eyebrow || section.type}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted">
-                          {section.type}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-
-                  <div className="flex items-center gap-1 mt-1 px-1">
-                    <IconBtn label="Monter" onClick={() => moveSection(section.id, -1)}>
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </IconBtn>
-                    <IconBtn label="Descendre" onClick={() => moveSection(section.id, 1)}>
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </IconBtn>
-                    <IconBtn
-                      label={hidden ? "Afficher" : "Masquer"}
-                      onClick={() => toggleVisibility(section.id)}
-                    >
-                      {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </IconBtn>
-                    <IconBtn label="Dupliquer" onClick={() => duplicateSection(section.id)}>
-                      <Copy className="h-3.5 w-3.5" />
-                    </IconBtn>
-                    <IconBtn
-                      label="Supprimer"
-                      onClick={() => setAskDelete(section.id)}
-                      danger
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </IconBtn>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-
-        {/* Colonne 2 : éditeur */}
-        <Card className="p-5 min-w-0">
-          {selectedSection ? (
-            <div className="min-w-0">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted">
-                    {selectedSection.type}
-                  </p>
-                  <h2 className="text-xl font-black text-ink truncate">
-                    {selectedSection.headline || "Section sans titre"}
-                  </h2>
-                </div>
-                <Button variant="secondary" size="sm">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Régénérer
-                </Button>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-canvas border border-line mb-5 overflow-x-auto">
-                {[
-                  { value: "content", label: "Contenu", icon: Type },
-                  { value: "cta", label: "Bouton", icon: Wand2 },
-                  { value: "image", label: "Image", icon: ImageIcon },
-                  { value: "style", label: "Style", icon: Palette }
-                ].map(({ value, label, icon: Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setTab(value as typeof tab)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
-                      tab === value ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="min-w-0 animate-[fadeIn_0.2s_ease-out]" key={tab}>
-                {tab === "content" && (
-                  <ContentTab
-                    section={selectedSection}
-                    onChange={(patch) => updateSection(selectedSection.id, patch)}
-                  />
-                )}
-                {tab === "cta" && (
-                  <CtaTab
-                    section={selectedSection}
-                    onChange={(patch) => updateSection(selectedSection.id, patch)}
-                  />
-                )}
-                {tab === "image" && (
-                  <ImageTab
-                    section={selectedSection}
-                    onChange={(patch) => updateSection(selectedSection.id, patch)}
-                  />
-                )}
-                {tab === "style" && (
-                  <StyleTab
-                    section={selectedSection}
-                    onChange={(patch) => updateSection(selectedSection.id, patch)}
-                  />
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted">Aucune section sélectionnée</p>
-          )}
-        </Card>
-
-        {/* Colonne 3 : preview */}
-        <div className="min-w-0 xl:sticky xl:top-4">
-          <FunnelPreview funnel={funnel} viewportHeight={680} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={history.past.length === 0}
+              title="Annuler (Ctrl+Z)"
+              className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={history.future.length === 0}
+              title="Rétablir (Ctrl+Y)"
+              className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleManualSave}
+              title="Enregistrer (Ctrl+S)"
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
+            >
+              <Save className="h-4 w-4" />
+              Enregistrer
+            </button>
+            <Link
+              href={`/tunnel/${stored.slug}`}
+              target="_blank"
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
+            >
+              <Eye className="h-4 w-4" />
+              Aperçu public
+            </Link>
+            <Button onClick={handlePublish} className="text-xs">
+              Publier
+            </Button>
+          </div>
         </div>
       </div>
 
-      <ConfirmDialog
-        open={!!askDelete}
-        tone="danger"
-        title="Supprimer cette section ?"
-        description="Vous pouvez annuler avec Ctrl/Cmd + Z juste après si nécessaire"
-        confirmLabel="Supprimer"
-        onConfirm={() => askDelete && confirmDeleteSection(askDelete)}
-        onCancel={() => setAskDelete(null)}
-      />
+      {/* 3-column layout */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]">
+        {/* Sidebar */}
+        <EditorSidebar
+          sections={funnel.sections}
+          selectedId={selectedSectionId}
+          onSelect={setSelectedSectionId}
+          onReorder={reorderSections}
+          onToggleVisibility={toggleVisibility}
+          onDuplicate={duplicateSection}
+          onDelete={deleteSection}
+          onAdd={addSection}
+          onOpenGlobalStyle={() => setShowGlobalStyle(true)}
+        />
+
+        {/* Center: editor */}
+        <div className="min-w-0">
+          {selectedSection ? (
+            <SectionEditor
+              key={selectedSection.id}
+              section={selectedSection}
+              language={funnel.language}
+              onChange={(patch: Partial<FunnelSection>) =>
+                updateSection(selectedSection.id, patch)
+              }
+            />
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
+              Sélectionne une section dans la barre latérale pour l'éditer.
+            </div>
+          )}
+        </div>
+
+        {/* Right: live preview */}
+        <div className="min-w-0">
+          <div className="sticky top-20">
+            <FunnelPreview funnel={funnel} />
+          </div>
+        </div>
+      </div>
+
+      {/* Global style modal */}
+      {showGlobalStyle && (
+        <GlobalStylePanel
+          funnel={funnel}
+          onChange={updateFunnelMeta}
+          onClose={() => setShowGlobalStyle(false)}
+        />
+      )}
     </AppShell>
   );
 }
 
-function defaultHeadline(type: FunnelSectionType): string {
-  const map: Record<FunnelSectionType, string> = {
-    hero: "Titre principal de la page",
-    about: "À propos de nous",
-    problem: "Le problème que vous rencontrez",
-    solution: "Notre approche",
-    benefits: "Ce que vous obtenez",
-    proof: "Ce qu'ils en disent",
-    offer: "Notre offre",
-    bonus: "Vos bonus",
-    guarantee: "Notre garantie",
-    faq: "Questions fréquentes",
-    cta: "Passez à l'action",
-    form: "Recevoir les détails",
-    thank_you: "Merci",
-    program: "Le programme",
-    pricing: "Tarifs",
-    process: "Notre processus",
-    webinar: "Inscrivez-vous au webinaire",
-    video: "Présentation en vidéo",
-    qualification: "Êtes-vous éligible ?",
-  };
-  return map[type] ?? "Nouvelle section";
-}
-
-function IconBtn({
-  children, onClick, label, danger,
+// ─── Save indicator ────────────────────────────────────────────────
+function SaveIndicator({
+  state,
+  lastSavedAt,
 }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  label: string;
-  danger?: boolean;
+  state: "idle" | "saving" | "saved";
+  lastSavedAt: number | null;
 }) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={`p-1.5 rounded-md border border-line bg-white hover:bg-canvas transition ${
-        danger ? "text-[#B42318] hover:bg-[#B42318]/5 hover:border-[#B42318]/30" : "text-muted"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(i);
+  }, []);
 
-/* ── Tabs ───────────────────────────────────────────── */
-
-function ContentTab({
-  section, onChange,
-}: {
-  section: FunnelSection;
-  onChange: (patch: Partial<FunnelSection>) => void;
-}) {
-  return (
-    <div className="grid gap-4 min-w-0">
-      <Field label="Étiquette courte (optionnel)">
-        <Input value={section.eyebrow ?? ""} onChange={(e) => onChange({ eyebrow: e.target.value })} />
-      </Field>
-      <Field label="Titre principal">
-        <Textarea value={section.headline ?? ""} onChange={(e) => onChange({ headline: e.target.value })} rows={2} />
-      </Field>
-      <Field label="Sous-titre (optionnel)">
-        <Textarea value={section.subheadline ?? ""} onChange={(e) => onChange({ subheadline: e.target.value })} rows={3} />
-      </Field>
-      <Field label="Texte (optionnel)">
-        <Textarea value={section.body ?? ""} onChange={(e) => onChange({ body: e.target.value })} rows={4} />
-      </Field>
-      {Array.isArray(section.bullets) && (
-        <Field label="Points clés">
-          <div className="grid gap-2">
-            {section.bullets.map((b, i) => (
-              <div key={i} className="flex gap-2">
-                <Input
-                  value={b}
-                  onChange={(e) => {
-                    const next = [...(section.bullets ?? [])];
-                    next[i] = e.target.value;
-                    onChange({ bullets: next });
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => onChange({ bullets: section.bullets?.filter((_, j) => j !== i) })}
-                  className="px-2 rounded-lg border border-line text-muted hover:text-[#B42318] hover:border-[#B42318]/30 transition shrink-0"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => onChange({ bullets: [...(section.bullets ?? []), "Nouveau point"] })}
-              className="text-xs font-bold text-[#08498D] hover:underline self-start"
-            >
-              + Ajouter un point
-            </button>
-          </div>
-        </Field>
-      )}
-    </div>
-  );
-}
-
-function CtaTab({
-  section, onChange,
-}: {
-  section: FunnelSection;
-  onChange: (patch: Partial<FunnelSection>) => void;
-}) {
-  const cta = section.cta ?? { label: "", mode: "anchor" as const, anchorId: "lead-form" };
-  return (
-    <div className="grid gap-4 min-w-0">
-      <Field label="Texte du bouton">
-        <Input value={cta.label} onChange={(e) => onChange({ cta: { ...cta, label: e.target.value } })} />
-      </Field>
-      <Field label="Comportement">
-        <Select value={cta.mode} onChange={(e) => onChange({ cta: { ...cta, mode: e.target.value as any } })}>
-          <option value="redirect">Redirection</option>
-          <option value="anchor">Ancre interne</option>
-          <option value="popup">Popup (à venir)</option>
-        </Select>
-      </Field>
-      {cta.mode === "redirect" && (
-        <>
-          <Field label="URL">
-            <Input type="url" value={cta.url ?? ""} onChange={(e) => onChange({ cta: { ...cta, url: e.target.value } })} placeholder="https://..." />
-          </Field>
-          <Field label="Ouverture">
-            <Select value={cta.target ?? "_blank"} onChange={(e) => onChange({ cta: { ...cta, target: e.target.value as any } })}>
-              <option value="_blank">Nouvel onglet</option>
-              <option value="_self">Même onglet</option>
-            </Select>
-          </Field>
-        </>
-      )}
-      {cta.mode === "anchor" && (
-        <Field label="Ancre cible">
-          <Input value={cta.anchorId ?? "lead-form"} onChange={(e) => onChange({ cta: { ...cta, anchorId: e.target.value.replace(/^#/, "") } })} />
-        </Field>
-      )}
-    </div>
-  );
-}
-
-function ImageTab({
-  section, onChange,
-}: {
-  section: FunnelSection;
-  onChange: (patch: Partial<FunnelSection>) => void;
-}) {
-  const image = section.image ?? { mode: "none" as ImageMode };
-
-  function setMode(mode: ImageMode) {
-    if (mode === "ai-suggested") {
-      onChange({
-        image: {
-          mode,
-          url: `https://picsum.photos/seed/${section.type}-${section.id}/960/540`,
-          alt: section.headline ?? section.type,
-        },
-      });
-    } else if (mode === "none") {
-      onChange({ image: { mode: "none" } });
-    } else {
-      onChange({ image: { mode: "upload", url: image.url, alt: image.alt } });
-    }
+  if (state === "saving") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-white/40">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Enregistrement…
+      </span>
+    );
   }
-
-  return (
-    <div className="grid gap-4 min-w-0">
-      <div className="grid grid-cols-3 gap-2">
-        <ModeBtn active={image.mode === "none"} icon={ImageOff} label="Aucune" onClick={() => setMode("none")} />
-        <ModeBtn active={image.mode === "ai-suggested"} icon={Wand2} label="IA" onClick={() => setMode("ai-suggested")} />
-        <ModeBtn active={image.mode === "upload"} icon={ImageIcon} label="Upload" onClick={() => setMode("upload")} />
-      </div>
-
-      {image.mode !== "none" && image.url && (
-        <div className="rounded-lg overflow-hidden border border-line max-w-full">
-          <img src={image.url} alt={image.alt ?? ""} className="w-full h-44 object-cover" />
-        </div>
-      )}
-
-      {image.mode === "upload" && (
-        <Field label="URL de l'image">
-          <Input value={image.url ?? ""} onChange={(e) => onChange({ image: { ...image, url: e.target.value } })} placeholder="https://..." />
-        </Field>
-      )}
-
-      {image.mode !== "none" && (
-        <Field label="Texte alternatif">
-          <Input value={image.alt ?? ""} onChange={(e) => onChange({ image: { ...image, alt: e.target.value } })} />
-        </Field>
-      )}
-    </div>
-  );
-}
-
-function ModeBtn({
-  active, icon: Icon, label, onClick,
-}: {
-  active: boolean;
-  icon: any;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs font-bold transition-all duration-200 ${
-        active ? "border-[#31845C] bg-[#31845C]/10 text-ink" : "border-line bg-white text-muted hover:border-[#08498D]/30"
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
-  );
-}
-
-function StyleTab({
-  section, onChange,
-}: {
-  section: FunnelSection;
-  onChange: (patch: Partial<FunnelSection>) => void;
-}) {
-  const style = section.style ?? {};
-  return (
-    <div className="grid gap-4 min-w-0">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Couleur du texte">
-          <Input type="color" value={style.textColor ?? "#080E1A"} onChange={(e) => onChange({ style: { ...style, textColor: e.target.value } })} />
-        </Field>
-        <Field label="Couleur d'accent">
-          <Input type="color" value={style.accentColor ?? "#C7A436"} onChange={(e) => onChange({ style: { ...style, accentColor: e.target.value } })} />
-        </Field>
-      </div>
-      <Field label="Espacement vertical">
-        <Select value={style.spacing ?? "default"} onChange={(e) => onChange({ style: { ...style, spacing: e.target.value as any } })}>
-          <option value="compact">Compact</option>
-          <option value="default">Standard</option>
-          <option value="large">Aéré</option>
-        </Select>
-      </Field>
-      <Field label="Alignement">
-        <Select value={style.align ?? "left"} onChange={(e) => onChange({ style: { ...style, align: e.target.value as any } })}>
-          <option value="left">À gauche</option>
-          <option value="center">Centré</option>
-          <option value="right">À droite</option>
-        </Select>
-      </Field>
-      <Field label="Disposition">
-        <Select value={style.layout ?? "text-only"} onChange={(e) => onChange({ style: { ...style, layout: e.target.value as any } })}>
-          <option value="text-only">Texte seul</option>
-          <option value="image-only">Image seule</option>
-          <option value="text-image">Texte puis image</option>
-          <option value="image-text">Image puis texte</option>
-        </Select>
-      </Field>
-      <button
-        type="button"
-        onClick={() => onChange({ style: {} })}
-        className="text-xs font-bold text-muted hover:text-ink self-start inline-flex items-center gap-1"
-      >
-        <Check className="h-3.5 w-3.5" /> Réinitialiser le style
-      </button>
-    </div>
-  );
+  if (state === "saved" && lastSavedAt) {
+    const diff = Date.now() - lastSavedAt;
+    const label =
+      diff < 5_000
+        ? "À l'instant"
+        : diff < 60_000
+          ? `Il y a ${Math.floor(diff / 1000)}s`
+          : diff < 3_600_000
+            ? `Il y a ${Math.floor(diff / 60_000)} min`
+            : "Il y a > 1 h";
+    return (
+      <span className="text-xs text-white/40" data-tick={tick}>
+        Enregistré · {label}
+      </span>
+    );
+  }
+  return null;
 }

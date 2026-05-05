@@ -8,8 +8,6 @@ export type Language = "fr" | "en" | "es";
 // ─────────────────────────────────────────────────────────────────────────────
 // Types de tunnel (formats)
 // ─────────────────────────────────────────────────────────────────────────────
-// Sélection en première étape du wizard, influence les étapes suivantes
-// Exemple : un tunnel "vsl" ou "webinar" déclenche l'étape vidéo
 export type FunnelKind =
   | "vsl"
   | "lead-magnet"
@@ -24,8 +22,6 @@ export type FunnelKind =
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode de création
 // ─────────────────────────────────────────────────────────────────────────────
-// "guided" : choix d'un template recommandé
-// "free"   : structure générée librement par l'IA
 export type CreationMode = "guided" | "free";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +43,7 @@ export type MoodPreset = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Source vidéo (étape conditionnelle pour VSL / Webinar)
+// Source vidéo
 // ─────────────────────────────────────────────────────────────────────────────
 export type VideoSource = {
   provider: "youtube" | "vimeo" | "url" | "upload";
@@ -56,7 +52,7 @@ export type VideoSource = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types de sections d'un tunnel
+// Types de sections
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelSectionType =
   | "hero"
@@ -80,21 +76,28 @@ export type FunnelSectionType =
   | "qualification";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Configuration des CTA
+// CTA
 // ─────────────────────────────────────────────────────────────────────────────
-export type CtaMode = "redirect" | "anchor" | "popup";
+export type CtaMode = "anchor" | "redirect" | "popup";
 
 export type CtaConfig = {
-  label: string;
   mode: CtaMode;
+  label: string;
+  // mode === "redirect"
   url?: string;
   target?: "_self" | "_blank";
+  // mode === "anchor"
   anchorId?: string;
+  // mode === "popup"
   popupId?: string;
+  popupTitle?: string;        // ← NOUVEAU
+  popupBody?: string;         // ← NOUVEAU (texte court d'intro dans le popup)
+  popupEmbed?: string;        // ← NOUVEAU (code d'embed formulaire systeme.io collé par l'utilisateur)
 };
 
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Configuration d'image par section
+// Image par section
 // ─────────────────────────────────────────────────────────────────────────────
 export type ImageMode = "none" | "upload" | "ai-suggested";
 
@@ -108,37 +111,15 @@ export type SectionImage = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Icônes professionnelles (jamais d'emojis)
+// Icônes
 // ─────────────────────────────────────────────────────────────────────────────
 export type IconName =
-  | "check"
-  | "star"
-  | "shield"
-  | "zap"
-  | "target"
-  | "rocket"
-  | "trending-up"
-  | "trending-down"
-  | "clock"
-  | "calendar"
-  | "mail"
-  | "user"
-  | "users"
-  | "briefcase"
-  | "award"
-  | "gift"
-  | "lock"
-  | "settings"
-  | "sparkles"
-  | "lightbulb"
-  | "flag"
-  | "bar-chart"
-  | "play"
-  | "download"
-  | "file-text"
-  | "thumbs-up"
-  | "heart"
-  | "globe";
+  | "check" | "star" | "shield" | "zap" | "target" | "rocket"
+  | "trending-up" | "trending-down" | "clock" | "calendar"
+  | "mail" | "user" | "users" | "briefcase" | "award" | "gift"
+  | "lock" | "settings" | "sparkles" | "lightbulb" | "flag"
+  | "bar-chart" | "play" | "download" | "file-text"
+  | "thumbs-up" | "heart" | "globe";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Style et layout d'une section
@@ -151,17 +132,58 @@ export type SectionLayout =
   | "text-image"
   | "image-text";
 
+// Variante de mise en page utilisée par les templates premium
+// (plus riche que SectionLayout, applique des règles conditionnelles au rendu)
+export type SectionLayoutVariant =
+  | "centered"           // tout centré, espace généreux (premium par défaut)
+  | "left-aligned"       // texte aligné à gauche
+  | "split-text-image"   // texte gauche / image droite (desktop)
+  | "split-image-text"   // image gauche / texte droite (desktop)
+  | "stacked-card"       // carte centrée avec ombre
+  | "wide-banner"        // bannière pleine largeur
+  | "feature-grid"       // grille 3 colonnes (pour benefits)
+  | "dense-list";        // liste compacte (pour FAQ ou pricing)
+
 export type SectionStyle = {
   textColor?: string;
   accentColor?: string;
   spacing?: "compact" | "default" | "large";
-  // Note : on accepte "right" pour ne pas casser les types côté éditeur
   align?: SectionAlign;
   layout?: SectionLayout;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section d'un tunnel
+// Animations
+// ─────────────────────────────────────────────────────────────────────────────
+// Animations CSS appliquées au scroll via IntersectionObserver
+// Chaque preset correspond à une keyframe définie dans globals.css
+export type AnimationPreset =
+  | "none"
+  | "fade-in"
+  | "fade-up"
+  | "fade-down"
+  | "slide-left"
+  | "slide-right"
+  | "zoom-in"
+  | "zoom-out"
+  | "pulse";
+
+// Cibles d'animation au sein d'une section
+export type AnimationTarget =
+  | "eyebrow"
+  | "headline"
+  | "subheadline"
+  | "body"
+  | "bullets"
+  | "image"
+  | "video"
+  | "cta";
+
+// Mapping target → preset, défini par le template ou surchargé par l'utilisateur
+export type SectionAnimations = Partial<Record<AnimationTarget, AnimationPreset>>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section d'un tunnel (avec animations et layoutVariant optionnels)
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelSection = {
   id: string;
@@ -184,11 +206,15 @@ export type FunnelSection = {
   visible?: boolean;
   style?: SectionStyle;
 
+  // Nouveautés Phase B : layout riche et animations
+  layoutVariant?: SectionLayoutVariant;
+  animations?: SectionAnimations;
+
   visualDirection?: string;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Séquence email
+// Email
 // ─────────────────────────────────────────────────────────────────────────────
 export type EmailSequenceItem = {
   subject: string;
@@ -198,7 +224,7 @@ export type EmailSequenceItem = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tunnel complet
+// Tunnel complet (= 1 page)
 // ─────────────────────────────────────────────────────────────────────────────
 export type Funnel = {
   funnelName: string;
@@ -227,21 +253,21 @@ export type Funnel = {
 
   defaultCta?: CtaConfig;
 
-  // Métadonnées du brief associé (optionnelles, utilisées par l'éditeur)
   meta?: {
     funnelKind?: FunnelKind;
     moodId?: MoodId;
     creationMode?: CreationMode;
     templateId?: string;
     logoUrl?: string;
+    tunnelGroupId?: string;
+    pageRole?: string;
   };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Brief utilisateur (entrée du wizard)
+// Brief utilisateur
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelBrief = {
-  // Champs historiques (inchangés)
   brandName: string;
   offerName: string;
   price: string;
@@ -256,7 +282,6 @@ export type FunnelBrief = {
   primaryCta?: CtaConfig;
   defaultImageMode?: ImageMode;
 
-  // Nouveaux champs optionnels (rétrocompatibles)
   funnelKind?: FunnelKind;
   creationMode?: CreationMode;
   templateId?: string;
@@ -272,7 +297,7 @@ export type FunnelBrief = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Template de référence
+// Template (ancien type, conservé pour rétrocompat avec funnelTemplates simples)
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelTemplate = {
   id: string;
@@ -284,7 +309,115 @@ export type FunnelTemplate = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers de construction
+// NOUVEAU : Template premium avec personnalité, layouts et animations
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Personnalité visuelle d'un template (description courte différenciante)
+export type TemplatePersonality = {
+  fr: string;
+  en: string;
+  es: string;
+};
+
+// Slot de section dans un template premium
+// Définit la structure attendue + le layout + les animations par défaut
+export type TemplateSectionSlot = {
+  type: FunnelSectionType;
+  // Identifiant stable de la section (slug-case)
+  id: string;
+  // Si true, la section est obligatoire (le template ne marche pas sans)
+  required: boolean;
+  // Layout principal (peut être ajusté par les règles conditionnelles)
+  layoutVariant: SectionLayoutVariant;
+  // Animations par défaut pour chaque cible de cette section
+  animations: SectionAnimations;
+  // Suggestion d'icône lucide pour les bullets, si applicable
+  defaultBulletIcon?: IconName;
+  // Conditions à vérifier pour que la section soit incluse
+  // Ex : "video.required" inclut la section seulement si l'utilisateur a fourni videoUrl
+  includeIf?: TemplateCondition;
+};
+
+// Condition simple évaluée contre le brief utilisateur
+export type TemplateCondition =
+  | { has: "video" }       // brief.videoUrl est rempli
+  | { has: "about" }       // brief.aboutText est rempli
+  | { has: "logo" }        // brief.logoUrl est rempli
+  | { funnelKindIn: FunnelKind[] }
+  | { moodIn: MoodId[] }
+  | { always: true };
+
+// Règle conditionnelle de fallback de layout
+// Ex : "si la section n'a pas d'image, bascule split-text-image en centered"
+export type TemplateLayoutRule = {
+  // Condition qui déclenche la règle
+  when:
+    | { sectionMissing: "image" }
+    | { sectionMissing: "video" }
+    | { sectionMissing: "bullets" };
+  // Layout de remplacement
+  fallbackLayout: SectionLayoutVariant;
+};
+
+// Définition complète d'un template premium
+export type TemplateDefinition = {
+  id: string;
+  // Nom commercial court (affiché dans la galerie)
+  name: string;
+  // Personnalité différenciante (1 phrase)
+  personality: TemplatePersonality;
+  // Catégorie/usage type, pour filtrage
+  bestFor: FunnelKind[];
+  // Mood par défaut suggéré (l'utilisateur peut le surcharger)
+  defaultMoodId: MoodId;
+  // Badge court affiché sur la card (ex : "Premium", "Punchy", "Story")
+  badge: string;
+  // Trois couleurs d'aperçu pour la card de galerie
+  previewColors: [string, string, string];
+  // Sections du template, dans l'ordre
+  sections: TemplateSectionSlot[];
+  // Règles de layout conditionnelles globales appliquées à toutes les sections
+  layoutRules: TemplateLayoutRule[];
+  // Animation des bullets (au scroll en cascade ou non)
+  bulletAnimation: "stagger" | "uniform" | "none";
+  // Densité visuelle générale (impacte spacing par défaut)
+  density: "airy" | "balanced" | "dense";
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TunnelGroup (préparation Phase B Message 4 : multi-pages)
+// ─────────────────────────────────────────────────────────────────────────────
+export type TunnelGroupKind =
+  | "lead-magnet"
+  | "vsl"
+  | "formation"
+  | "webinar"
+  | "service-booking"
+  | "digital-product"
+  | "custom";
+
+export type TunnelStepStatus = "pending" | "in-progress" | "generated";
+
+export type TunnelStep = {
+  id: string;
+  role: FunnelKind | "checkout-redirect" | "delivery";
+  name: string;
+  status: TunnelStepStatus;
+  funnelId?: string;
+};
+
+export type TunnelGroup = {
+  id: string;
+  name: string;
+  language: Language;
+  kind: TunnelGroupKind;
+  plannedSteps: TunnelStep[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 export const DEFAULT_CTA: CtaConfig = {
   label: "En savoir plus",

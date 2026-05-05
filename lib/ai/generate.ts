@@ -9,6 +9,41 @@ import type {
 import { makeAnchorCta } from "@/lib/funnels/types";
 import { completeFunnelPrompt } from "./prompts";
 import { getMood } from "@/lib/funnels/moods";
+import {
+  PREMIUM_TEMPLATES,
+  DEFAULT_PREMIUM_TEMPLATE_ID,
+  getPremiumTemplate,
+} from "@/lib/funnels/templates";
+import {
+  applyTemplateToFunnel,
+  getTemplateSectionTypes,
+} from "@/lib/funnels/applyTemplate";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Erreur typée pour distinguer les modes d'échec côté API route
+// ─────────────────────────────────────────────────────────────────────────────
+export type AiErrorReason =
+  | "missing-key"
+  | "invalid-key"
+  | "rate-limit"
+  | "insufficient-quota"
+  | "network-error"
+  | "empty-response"
+  | "invalid-json"
+  | "schema-mismatch"
+  | "unknown";
+
+export class AiGenerationError extends Error {
+  reason: AiErrorReason;
+  details?: string;
+
+  constructor(reason: AiErrorReason, message: string, details?: string) {
+    super(message);
+    this.name = "AiGenerationError";
+    this.reason = reason;
+    this.details = details;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schémas zod
@@ -119,17 +154,73 @@ function normalizeCta(raw: unknown, fallback: CtaConfig): CtaConfig {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Extraction tolérante du JSON dans la réponse IA
+// (parfois le modèle entoure le JSON de markdown ou de texte explicatif)
+// ─────────────────────────────────────────────────────────────────────────────
+function extractJsonPayload(raw: string): string {
+  if (!raw) return "";
+  let s = raw.trim();
+
+  // Supprime balises markdown de code
+  s = s.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+
+  // Si le texte contient autre chose, isole le premier objet JSON équilibré
+  if (!s.startsWith("{")) {
+    const start = s.indexOf("{");
+    if (start === -1) return s;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < s.length; i++) {
+      const ch = s[i];
+      if (escape) { escape = false; continue; }
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) return s.slice(start, i + 1);
+      }
+    }
+    return s.slice(start);
+  }
+
+  return s;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Parseur principal
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
-  const clean = raw.trim().replace(/^```json\s*/i, "").replace(/```$/i, "");
-  const parsed = funnelSchema.parse(JSON.parse(clean));
+  const clean = extractJsonPayload(raw);
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(clean);
+  } catch (err) {
+    throw new AiGenerationError(
+      "invalid-json",
+      "La réponse de l'IA n'est pas un JSON valide",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+
+  const result = funnelSchema.safeParse(parsedJson);
+  if (!result.success) {
+    throw new AiGenerationError(
+      "schema-mismatch",
+      "La réponse de l'IA ne respecte pas la structure attendue",
+      JSON.stringify(result.error.flatten().fieldErrors).slice(0, 500)
+    );
+  }
+  const parsed = result.data;
 
   const fallbackCta: CtaConfig =
     brief.primaryCta ?? makeAnchorCta(
       brief.language === "fr" ? "Recevoir les détails" :
-      brief.language === "es" ? "Recibir los detalles" :
-      "Get the details",
+        brief.language === "es" ? "Recibir los detalles" :
+          "Get the details",
       "lead-form"
     );
 
@@ -180,31 +271,159 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Génération via OpenAI avec fallback démo
+// Helper : construit une instruction additionnelle au prompt qui force l'IA
+// à respecter exactement les sections attendues par le template choisi.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> {
-  if (!process.env.OPENAI_API_KEY) {
-    return createDemoFunnel(brief);
-  }
+function buildTemplateInstruction(
+  template: ReturnType<typeof getPremiumTemplate>,
+  brief: FunnelBrief
+): string {
+  if (!template) return "";
 
-  try {
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-      input: completeFunnelPrompt(brief),
-      text: { format: { type: "text" } },
-    });
+  const lang = brief.language ?? "fr";
+  const personality =
+    template.personality[lang] ?? template.personality.fr;
 
-    return parseFunnelJson(response.output_text, brief);
-  } catch (error) {
-    console.error("OpenAI generation failed, using demo funnel fallback", error);
-    return createDemoFunnel(brief);
-  }
+  const expectedSections = getTemplateSectionTypes(template, brief);
+
+  const header =
+    lang === "fr"
+      ? "CONTRAINTES DE TEMPLATE (à respecter strictement) :"
+      : lang === "es"
+        ? "RESTRICCIONES DE PLANTILLA (a respetar estrictamente):"
+        : "TEMPLATE CONSTRAINTS (must be strictly respected):";
+
+  const lines = [
+    header,
+    `- Template: "${template.name}" — ${personality}`,
+    `- Densité: ${template.density} (airy = textes courts/aérés, balanced = équilibré, dense = textes plus riches)`,
+    lang === "fr"
+      ? `- Génère EXACTEMENT ces sections, dans cet ordre, en utilisant ces "type" dans le JSON :`
+      : lang === "es"
+        ? `- Genera EXACTAMENTE estas secciones, en este orden, usando estos "type" en el JSON:`
+        : `- Generate EXACTLY these sections, in this order, using these "type" values in the JSON:`,
+    ...expectedSections.map((t, i) => `  ${i + 1}. "${t}"`),
+    lang === "fr"
+      ? `- N'ajoute pas d'autres sections. N'omet aucune section listée.`
+      : lang === "es"
+        ? `- No añadas otras secciones. No omitas ninguna sección listada.`
+        : `- Do not add other sections. Do not omit any listed section.`,
+  ];
+
+  return "\n\n" + lines.join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tunnel de démo (utilisé en fallback et pour la route /api/export/systeme)
+// Génération via OpenAI Chat Completions API
+// ─────────────────────────────────────────────────────────────────────────────
+export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new AiGenerationError(
+      "missing-key",
+      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez"
+    );
+  }
+
+  // 1) Sélection du template premium (story-sell par défaut)
+  const template =
+    getPremiumTemplate(brief.templateId) ??
+    getPremiumTemplate(DEFAULT_PREMIUM_TEMPLATE_ID) ??
+    PREMIUM_TEMPLATES[0];
+
+  // 2) Construction du prompt enrichi (prompt existant + contrainte de template)
+  const basePrompt = completeFunnelPrompt(brief);
+  const templateInstruction = buildTemplateInstruction(template, brief);
+  const finalPrompt = basePrompt + templateInstruction;
+
+  // 3) Appel OpenAI
+  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+  let rawText: string;
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert funnel copywriter and conversion specialist. " +
+            "You MUST respond with a single JSON object that strictly matches the requested schema. " +
+            "Do not wrap the JSON in markdown code fences. Do not add any prose before or after the JSON. " +
+            "Write all copy in the language specified in the brief, with the requested tone and target audience in mind.",
+        },
+        {
+          role: "user",
+          content: finalPrompt,
+        },
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      max_tokens: 8000,
+    });
+
+    rawText = response.choices?.[0]?.message?.content?.trim() ?? "";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = (error as { status?: number; code?: string })?.status;
+    const code = (error as { status?: number; code?: string })?.code;
+
+    if (status === 401 || status === 403 || code === "invalid_api_key") {
+      throw new AiGenerationError(
+        "invalid-key",
+        "La clé OpenAI a été refusée. Vérifiez sa validité sur platform.openai.com",
+        message
+      );
+    }
+    if (status === 429 || code === "insufficient_quota") {
+      const insufficient = /insufficient_quota|exceeded your current quota/i.test(message);
+      throw new AiGenerationError(
+        insufficient ? "insufficient-quota" : "rate-limit",
+        insufficient
+          ? "Quota OpenAI épuisé. Ajoutez du crédit sur platform.openai.com/account/billing"
+          : "Trop de requêtes en peu de temps. Réessayez dans une minute",
+        message
+      );
+    }
+
+    throw new AiGenerationError(
+      "network-error",
+      "Impossible de joindre OpenAI. Vérifiez votre connexion ou réessayez dans un instant",
+      message
+    );
+  }
+
+  if (!rawText || rawText.length < 20) {
+    throw new AiGenerationError(
+      "empty-response",
+      "L'IA a retourné une réponse vide. Réessayez la génération"
+    );
+  }
+
+  // 4) Parsing strict du JSON retourné par l'IA
+  const aiFunnel = parseFunnelJson(rawText, brief);
+
+  // 5) Application du template : layouts, animations, injection user data
+  const finalFunnel = applyTemplateToFunnel(template, aiFunnel, brief);
+
+  // 6) On s'assure que meta.templateId reflète le template effectivement appliqué
+  return {
+    ...finalFunnel,
+    meta: {
+      ...(finalFunnel.meta ?? {}),
+      templateId: template.id,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tunnel de démo (utilisé UNIQUEMENT pour /tunnel/demo, /api/export/systeme
+// quand l'utilisateur demande explicitement la démo, et lib/funnels/demo.ts)
+// JAMAIS utilisé comme fallback caché de generateFunnelWithAI
 // ─────────────────────────────────────────────────────────────────────────────
 export function createDemoFunnel(brief: FunnelBrief): Funnel {
   const isFr = brief.language === "fr";
@@ -213,15 +432,14 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
   const ctaLabel = isFr
     ? "Obtenir l'accès"
     : isEs
-    ? "Obtener el acceso"
-    : "Get access";
+      ? "Obtener el acceso"
+      : "Get access";
 
   const primaryCta: CtaConfig = brief.primaryCta ?? makeAnchorCta(ctaLabel, "lead-form");
 
   const t = (fr: string, en: string, es: string) =>
     isFr ? fr : isEs ? es : en;
 
-  // Palette : ambiance > couleurs custom > défaut
   const mood = getMood(brief.moodId);
   const primaryColor = brief.mainColor ?? mood?.primary ?? "#080E1A";
   const secondaryColor = brief.secondaryColor ?? mood?.secondary ?? "#C7A436";
@@ -249,7 +467,6 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
     },
   ];
 
-  // Section About si fournie via le brief
   if (brief.aboutText && brief.aboutText.trim().length > 0) {
     sections.push({
       id: "about",
@@ -266,7 +483,6 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
     });
   }
 
-  // Section vidéo si URL fournie
   if (brief.videoUrl) {
     sections.push({
       id: "video",

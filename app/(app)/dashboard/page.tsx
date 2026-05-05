@@ -1,7 +1,6 @@
-// app/(dashboard)/dashboard/page.tsx
+// app/(app)/dashboard/page.tsx
 "use client";
 
-import { useState } from "react";
 import {
   Download, FileText, Globe2, Users, ArrowRight,
   Sparkles, Upload, CheckCircle2, BookOpen,
@@ -12,41 +11,60 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FunnelRowMenu } from "@/components/dashboard/FunnelRowMenu";
+import {
+  useFunnelList,
+  deleteFunnel,
+  saveFunnel,
+  type StoredFunnel,
+} from "@/lib/store/funnelStore";
 
-type DemoFunnelRow = {
-  id: string;
-  name: string;
-  status: "published" | "draft";
-  date: string;
-};
-
-const INITIAL_FUNNELS: DemoFunnelRow[] = [
-  { id: "demo", name: "Ebook leadership premium", status: "published", date: "Il y a 2 jours" },
-  { id: "consulting", name: "Consultation stratégie", status: "draft", date: "Il y a 4 jours" },
-  { id: "webinar", name: "Webinaire acquisition", status: "published", date: "La semaine dernière" },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [funnels, setFunnels] = useState<DemoFunnelRow[]>(INITIAL_FUNNELS);
+  const stored = useFunnelList();
 
   function handleDelete(id: string) {
-    setFunnels((list) => list.filter((f) => f.id !== id));
+    deleteFunnel(id);
   }
 
   function handleDuplicate(id: string) {
-    setFunnels((list) => {
-      const found = list.find((f) => f.id === id);
-      if (!found) return list;
-      const copy: DemoFunnelRow = {
-        ...found,
-        id: `${found.id}-copy-${Date.now().toString(36)}`,
-        name: `${found.name} (copie)`,
-        status: "draft",
-        date: "À l'instant",
-      };
-      return [copy, ...list];
-    });
+    const found = stored.find((f) => f.id === id);
+    if (!found) return;
+
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `ff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const existingSlugs = new Set(stored.map((f) => f.slug));
+    let newSlug = `${found.slug}-copy`;
+    let i = 2;
+    while (existingSlugs.has(newSlug)) {
+      newSlug = `${found.slug}-copy-${i}`;
+      i++;
+    }
+
+    const now = new Date().toISOString();
+    const copy: StoredFunnel = {
+      id: newId,
+      slug: newSlug,
+      funnel: {
+        ...found.funnel,
+        funnelName: `${found.funnel.funnelName} (copie)`,
+      },
+      brief: found.brief,
+      createdAt: now,
+      updatedAt: now,
+      // pas de publishedAt : la copie est en brouillon
+    };
+    saveFunnel(copy);
   }
+
+  // Stats dérivées du store
+  const totalFunnels = stored.length;
+  const publishedCount = stored.filter((f) => f.publishedAt).length;
 
   return (
     <AppShell>
@@ -70,10 +88,31 @@ export default function DashboardPage() {
 
       {/* KPI */}
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <DashboardCard label="Tunnels créés" value={String(funnels.length)} icon={<FileText size={18} />} accent="blue" trend={{ value: 12 }} />
-        <DashboardCard label="Leads collectés" value="246" icon={<Users size={18} />} accent="green" trend={{ value: 8 }} />
-        <DashboardCard label="Tunnels publiés" value={String(funnels.filter((f) => f.status === "published").length)} icon={<Globe2 size={18} />} accent="gold" />
-        <DashboardCard label="Exports réalisés" value="14" icon={<Download size={18} />} accent="blue" />
+        <DashboardCard
+          label="Tunnels créés"
+          value={String(totalFunnels)}
+          icon={<FileText size={18} />}
+          accent="blue"
+          trend={totalFunnels > 0 ? { value: 12 } : undefined}
+        />
+        <DashboardCard
+          label="Leads collectés"
+          value="0"
+          icon={<Users size={18} />}
+          accent="green"
+        />
+        <DashboardCard
+          label="Tunnels publiés"
+          value={String(publishedCount)}
+          icon={<Globe2 size={18} />}
+          accent="gold"
+        />
+        <DashboardCard
+          label="Exports réalisés"
+          value="0"
+          icon={<Download size={18} />}
+          accent="blue"
+        />
       </div>
 
       {/* Contenu */}
@@ -91,31 +130,16 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-2">
-            {funnels.map((funnel) => (
-              <div
-                key={funnel.id}
-                className="ff-card-hover flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-3.5"
-              >
-                <a href={`/funnels/${funnel.id}`} className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink">{funnel.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">{funnel.date}</p>
-                </a>
-                <div className="flex items-center gap-2 shrink-0">
-                  {funnel.status === "published" ? (
-                    <Badge tone="green">Publié</Badge>
-                  ) : (
-                    <Badge tone="neutral">Brouillon</Badge>
-                  )}
-                  <FunnelRowMenu
-                    funnel={{ id: funnel.id, name: funnel.name }}
-                    onDelete={handleDelete}
-                    onDuplicate={handleDuplicate}
-                  />
-                </div>
-              </div>
+            {stored.map((item) => (
+              <FunnelRow
+                key={item.id}
+                stored={item}
+                onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
+              />
             ))}
 
-            {funnels.length === 0 && (
+            {stored.length === 0 && (
               <p className="rounded-lg border border-dashed border-line bg-canvas p-6 text-center text-xs text-muted">
                 Aucun tunnel pour le moment. Créez votre premier tunnel pour commencer
               </p>
@@ -168,4 +192,72 @@ export default function DashboardPage() {
       </div>
     </AppShell>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ligne de tunnel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FunnelRow({
+  stored,
+  onDelete,
+  onDuplicate,
+}: {
+  stored: StoredFunnel;
+  onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
+}) {
+  const { id, slug, funnel, updatedAt, publishedAt } = stored;
+  const dateLabel = formatRelativeDate(updatedAt);
+
+  return (
+    <div className="ff-card-hover flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-3.5">
+      {/* Lien principal vers l'éditeur (cohérent avec le flux : on édite avant de voir) */}
+      <a href={`/editor/${id}`} className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-ink">{funnel.funnelName}</p>
+        <p className="mt-0.5 text-xs text-muted">
+          {funnel.sections.length} sections · {funnel.language.toUpperCase()} · {dateLabel}
+        </p>
+      </a>
+      <div className="flex items-center gap-2 shrink-0">
+        {publishedAt ? (
+          <Badge tone="green">Publié</Badge>
+        ) : (
+          <Badge tone="neutral">Brouillon</Badge>
+        )}
+        <FunnelRowMenu
+          funnel={{ id, name: funnel.funnelName, slug }}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "À l'instant";
+  if (diffMin < 60) return `Il y a ${diffMin} min`;
+  if (diffHours < 24) return `Il y a ${diffHours} h`;
+  if (diffDays < 7) return `Il y a ${diffDays} jour${diffDays > 1 ? "s" : ""}`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `Il y a ${weeks} semaine${weeks > 1 ? "s" : ""}`;
+  }
+  return date.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }

@@ -1,8 +1,18 @@
 // lib/ai/health.ts
 
+export type AiHealthReason =
+  | "ok"
+  | "missing-key"
+  | "invalid-key"
+  | "header-error"
+  | "network-error"
+  | "rate-limit"
+  | "insufficient-quota"
+  | "unknown";
+
 export type AiHealth = {
   ok: boolean;
-  reason: "ok" | "missing-key" | "invalid-key" | "network-error" | "unknown";
+  reason: AiHealthReason;
   message: string;
 };
 
@@ -10,19 +20,33 @@ export type AiHealth = {
 // Appelé côté serveur uniquement
 export async function checkAiHealth(): Promise<AiHealth> {
   const key = process.env.OPENAI_API_KEY;
+
+  // Cas 1 : clé absente ou trop courte
   if (!key || key.trim().length < 10) {
     return {
       ok: false,
       reason: "missing-key",
-      message: "Clé OpenAI absente. Le tunnel sera généré en mode démo local",
+      message:
+        "Aucune clé OpenAI détectée. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez le serveur",
     };
   }
 
+  // Cas 2 : clé contient des caractères non-ASCII qui casseraient le header Authorization
+  // (cela arrive si l'utilisateur a collé une clé avec des accents, guillemets typographiques, etc.)
+  if (!/^[\x20-\x7E]+$/.test(key)) {
+    return {
+      ok: false,
+      reason: "header-error",
+      message:
+        "La clé OpenAI contient des caractères invalides (accents, guillemets typographiques ou espaces). Recopiez-la proprement depuis platform.openai.com",
+    };
+  }
+
+  // Cas 3 : appel léger pour vérifier la validité auprès d'OpenAI
   try {
     const res = await fetch("https://api.openai.com/v1/models", {
       method: "GET",
-      headers: { Authorization: `Bearer ${key}` },
-      // 5 secondes max pour ne pas bloquer le wizard
+      headers: { Authorization: `Bearer ${key.trim()}` },
       signal: AbortSignal.timeout(5000),
     });
 
@@ -30,15 +54,34 @@ export async function checkAiHealth(): Promise<AiHealth> {
       return {
         ok: false,
         reason: "invalid-key",
-        message: "La clé OpenAI a été refusée. Vérifiez votre clé dans les variables d'environnement",
+        message:
+          "Clé OpenAI refusée par l'API. Vérifiez qu'elle est active sur platform.openai.com",
+      };
+    }
+
+    if (res.status === 429) {
+      // Différencie quota épuisé vs rate-limit ponctuel
+      let bodyText = "";
+      try {
+        bodyText = await res.text();
+      } catch {
+        // ignore
+      }
+      const insufficient = /insufficient_quota|exceeded your current quota/i.test(bodyText);
+      return {
+        ok: false,
+        reason: insufficient ? "insufficient-quota" : "rate-limit",
+        message: insufficient
+          ? "Quota OpenAI épuisé. Ajoutez du crédit sur platform.openai.com pour générer des tunnels"
+          : "Trop de requêtes vers OpenAI en peu de temps. Réessayez dans une minute",
       };
     }
 
     if (!res.ok) {
       return {
         ok: false,
-        reason: "network-error",
-        message: `Réponse inattendue (${res.status}). La génération démo sera utilisée si l'erreur persiste`,
+        reason: "unknown",
+        message: `Réponse inattendue d'OpenAI (${res.status}). Réessayez dans quelques instants`,
       };
     }
 
@@ -48,10 +91,16 @@ export async function checkAiHealth(): Promise<AiHealth> {
       message: "Clé OpenAI valide, prête pour la génération",
     };
   } catch (error) {
+    const isTimeout =
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
+
     return {
       ok: false,
       reason: "network-error",
-      message: "Impossible de joindre l'API OpenAI. La génération démo sera utilisée si nécessaire",
+      message: isTimeout
+        ? "OpenAI met trop de temps à répondre. Vérifiez votre connexion ou un éventuel pare-feu"
+        : "Impossible de joindre OpenAI. Vérifiez votre connexion internet, antivirus ou pare-feu",
     };
   }
 }

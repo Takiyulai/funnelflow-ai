@@ -1,35 +1,62 @@
-// app/tunnel/[slug]/page.tsx
-import { demoFunnel } from "@/lib/funnels/demo";
+"use client";
+
+import { useEffect, useState } from "react";
 import type { Funnel } from "@/lib/funnels/types";
+import { loadPublishedFunnel, loadFunnelBySlug } from "@/lib/store/funnelStore";
 import { FunnelSectionsAnimated } from "@/components/funnel/FunnelSectionsAnimated";
-import { PublicFunnelClient } from "@/components/funnel/PublicFunnelClient";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 
-// Slugs résolus côté serveur (statiques / démo)
-const SERVER_FUNNELS: Record<string, Funnel> = {
-  demo: demoFunnel,
-};
+type State =
+  | { status: "loading" }
+  | { status: "found"; funnel: Funnel }
+  | { status: "not-found" };
 
-type PageProps = {
-  params: Promise<{ slug: string }>;
-};
+type Props = { slug: string };
 
-export default async function TunnelPublicPage({ params }: PageProps) {
-  const { slug } = await params;
-  const funnel = SERVER_FUNNELS[slug];
+export function PublicFunnelClient({ slug }: Props) {
+  const [state, setState] = useState<State>({ status: "loading" });
 
-  // Slug serveur (demo) : on rend tout côté serveur
-  if (funnel) {
-    return <PublicFunnelView funnel={funnel} />;
+  useEffect(() => {
+    // 1. Funnel publié explicitement (ff:public:<slug>)
+    const published = loadPublishedFunnel(slug);
+    if (published) {
+      setState({ status: "found", funnel: published.funnel });
+      return;
+    }
+    // 2. Fallback : funnel non publié mais existant en local (preview live)
+    const local = loadFunnelBySlug(slug);
+    if (local) {
+      setState({ status: "found", funnel: local.funnel });
+      return;
+    }
+    setState({ status: "not-found" });
+  }, [slug]);
+
+  if (state.status === "loading") {
+    return (
+      <main className="grid min-h-screen place-items-center bg-white">
+        <p className="text-sm text-slate-500">Chargement du tunnel...</p>
+      </main>
+    );
   }
 
-  // Slug inconnu côté serveur : on délègue au client qui lira localStorage
-  return <PublicFunnelClient slug={slug} />;
-}
+  if (state.status === "not-found") {
+    return (
+      <main className="grid min-h-screen place-items-center bg-white px-6 text-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">
+            Tunnel introuvable
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Ce tunnel n'existe pas ou n'a pas encore été publié sur cet appareil
+          </p>
+        </div>
+      </main>
+    );
+  }
 
-// Vue partagée serveur (demo) — extraite pour clarté
-function PublicFunnelView({ funnel }: { funnel: Funnel }) {
+  const { funnel } = state;
   const visibleSections = funnel.sections.filter((s) => s.visible !== false);
   const templateId =
     (funnel.meta as { templateId?: string } | undefined)?.templateId ??
@@ -39,18 +66,18 @@ function PublicFunnelView({ funnel }: { funnel: Funnel }) {
   const animationsEnabled =
     (funnel.design as { animationsEnabled?: boolean } | undefined)
       ?.animationsEnabled !== false;
-  const userButtonAnim = (funnel.design as { buttonAnim?: "lift" | "glow" | "pulse" | "shine" } | undefined)?.buttonAnim;
-const buttonAnim = userButtonAnim ?? getTemplateButtonAnim(templateId);
+  const buttonAnim = getTemplateButtonAnim(templateId);
+
   return (
     <TemplateThemeProvider
-  templateId={templateId}
-  buttonAnim={buttonAnim}
-  animationsEnabled={animationsEnabled}
-  overrides={{
-    accent: accent || undefined,
-    primary: primary || undefined,
-  }}
->
+      templateId={templateId}
+      buttonAnim={buttonAnim}
+      animationsEnabled={animationsEnabled}
+      overrides={{
+        accent: accent || undefined,
+        primary: primary || undefined,
+      }}
+    >
       <main
         className="min-h-screen"
         id="top"
@@ -68,7 +95,6 @@ const buttonAnim = userButtonAnim ?? getTemplateButtonAnim(templateId);
   );
 }
 
-// Formulaire de lead intégré, pleinement thémé
 function PublicLeadForm({ language }: { language: Funnel["language"] }) {
   const labels = {
     fr: {
@@ -86,10 +112,7 @@ function PublicLeadForm({ language }: { language: Funnel["language"] }) {
   const l = labels[language] ?? labels.fr;
 
   return (
-    <section
-      id="lead-form"
-      className="ff-section px-6 py-20 sm:px-10"
-    >
+    <section id="lead-form" className="ff-section px-6 py-20 sm:px-10">
       <div className="mx-auto max-w-md">
         <h2 className="ff-headline text-3xl">{l.title}</h2>
         <form className="mt-6 grid gap-3">

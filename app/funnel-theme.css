@@ -1,0 +1,660 @@
+/* ============================================================================
+ * FunnelForge — Thème de tunnel (animations + variables par template)
+ * ----------------------------------------------------------------------------
+ * Ce fichier est importé une seule fois dans app/layout.tsx.
+ * Tous les sélecteurs sont scopés sous [data-ff-template] pour ne jamais
+ * fuiter sur le reste de l'app (dashboard, éditeur, wizard).
+ * ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+ * 1. Variables par défaut (template fallback)
+ * ------------------------------------------------------------------------- */
+[data-ff-template] {
+  /* Couleurs */
+  --ff-bg: #ffffff;
+  --ff-surface: #f8fafc;
+  --ff-ink: #0f172a;
+  --ff-ink-soft: #475569;
+  --ff-muted: #94a3b8;
+  --ff-border: rgba(15, 23, 42, 0.1);
+  --ff-accent: #c7a436;
+  --ff-accent-ink: #0f172a;
+  --ff-primary: #080e1a;
+
+  /* Typographie */
+  --ff-font-heading: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ff-font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ff-font-eyebrow: "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.02em;
+  --ff-heading-leading: 1.1;
+  --ff-body-leading: 1.65;
+
+  /* Espacement section */
+  --ff-section-py: 4rem;
+  --ff-section-py-md: 6rem;
+
+  /* Bouton */
+  --ff-btn-radius: 0.625rem;
+  --ff-btn-bg: var(--ff-accent);
+  --ff-btn-ink: var(--ff-accent-ink);
+  --ff-btn-shadow: 0 6px 18px rgba(8, 43, 76, 0.12);
+  --ff-btn-anim: ff-btn-lift; /* lift | glow | pulse | shine */
+
+  /* Effets visuels */
+  --ff-bg-overlay: none;
+  --ff-card-bg: rgba(15, 23, 42, 0.03);
+  --ff-card-border: rgba(15, 23, 42, 0.08);
+
+  /* Vitesses d'animation */
+  --ff-anim-duration: 600ms;
+  --ff-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------------------
+ * 2. Animations d'entrée (déclenchées par .ff-in)
+ *    L'IntersectionObserver côté client ajoute la classe .ff-in
+ *    quand l'élément entre dans le viewport.
+ * ------------------------------------------------------------------------- */
+
+[data-ff-template] [data-ff-anim] {
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* fade-up */
+[data-ff-template] [data-ff-anim="fade-up"] {
+  transform: translateY(24px);
+  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
+              transform var(--ff-anim-duration) var(--ff-anim-easing);
+}
+[data-ff-template] [data-ff-anim="fade-up"].ff-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* fade-in */
+[data-ff-template] [data-ff-anim="fade-in"] {
+  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing);
+}
+[data-ff-template] [data-ff-anim="fade-in"].ff-in {
+  opacity: 1;
+}
+
+/* zoom-in */
+[data-ff-template] [data-ff-anim="zoom-in"] {
+  transform: scale(0.94);
+  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
+              transform var(--ff-anim-duration) var(--ff-anim-easing);
+}
+[data-ff-template] [data-ff-anim="zoom-in"].ff-in {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* pulse — animation continue après apparition */
+[data-ff-template] [data-ff-anim="pulse"] {
+  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing);
+}
+[data-ff-template] [data-ff-anim="pulse"].ff-in {
+  opacity: 1;
+  animation: ffPulseSubtle 2.6s ease-in-out 0.4s infinite;
+}
+
+/* none — pas d'animation, juste rendre visible */
+[data-ff-template] [data-ff-anim="none"] {
+  opacity: 1;
+}
+
+/* Stagger pour bullets (s'applique au parent [data-ff-bullets="stagger"]) */
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(1)  { transition-delay: 0ms;   animation-delay: 0ms;   }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(2)  { transition-delay: 80ms;  animation-delay: 80ms;  }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(3)  { transition-delay: 160ms; animation-delay: 160ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(4)  { transition-delay: 240ms; animation-delay: 240ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(5)  { transition-delay: 320ms; animation-delay: 320ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(6)  { transition-delay: 400ms; animation-delay: 400ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(7)  { transition-delay: 480ms; animation-delay: 480ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(8)  { transition-delay: 560ms; animation-delay: 560ms; }
+
+@keyframes ffPulseSubtle {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.025); }
+}
+
+/* ---------------------------------------------------------------------------
+ * 3. Animations de bouton (au survol / focus)
+ *    La variable --ff-btn-anim est définie par chaque template.
+ * ------------------------------------------------------------------------- */
+
+[data-ff-template] .ff-btn,
+[data-ff-template] [data-ff-cta] {
+  position: relative;
+  overflow: hidden;
+  transition: transform 220ms ease, box-shadow 220ms ease, opacity 220ms ease, background-color 220ms ease;
+}
+
+/* Animation : lift (par défaut) — léger soulèvement au hover */
+[data-ff-template][data-ff-btn-anim="lift"] .ff-btn:hover,
+[data-ff-template][data-ff-btn-anim="lift"] [data-ff-cta]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ff-btn-shadow);
+}
+
+/* Animation : glow — lueur autour du bouton */
+[data-ff-template][data-ff-btn-anim="glow"] .ff-btn,
+[data-ff-template][data-ff-btn-anim="glow"] [data-ff-cta] {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent) 40%, transparent);
+}
+[data-ff-template][data-ff-btn-anim="glow"] .ff-btn:hover,
+[data-ff-template][data-ff-btn-anim="glow"] [data-ff-cta]:hover {
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--ff-accent) 25%, transparent),
+              0 8px 24px color-mix(in srgb, var(--ff-accent) 35%, transparent);
+}
+
+/* Animation : pulse-btn — battement continu */
+[data-ff-template][data-ff-btn-anim="pulse"] .ff-btn,
+[data-ff-template][data-ff-btn-anim="pulse"] [data-ff-cta] {
+  animation: ffBtnPulse 2.2s ease-in-out infinite;
+}
+@keyframes ffBtnPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent) 50%, transparent); }
+  50%      { box-shadow: 0 0 0 12px color-mix(in srgb, var(--ff-accent) 0%, transparent); }
+}
+
+/* Animation : shine — reflet qui balaie au hover */
+[data-ff-template][data-ff-btn-anim="shine"] .ff-btn::before,
+[data-ff-template][data-ff-btn-anim="shine"] [data-ff-cta]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 700ms ease;
+  pointer-events: none;
+}
+[data-ff-template][data-ff-btn-anim="shine"] .ff-btn:hover::before,
+[data-ff-template][data-ff-btn-anim="shine"] [data-ff-cta]:hover::before {
+  transform: translateX(100%);
+}
+
+/* ---------------------------------------------------------------------------
+ * 4. Désactivation globale des animations
+ *    Posée par le toggle dans GlobalStylePanel (Message 3/4)
+ * ------------------------------------------------------------------------- */
+[data-ff-template][data-ff-animations="off"] [data-ff-anim],
+[data-ff-template][data-ff-animations="off"] .ff-btn,
+[data-ff-template][data-ff-animations="off"] [data-ff-cta] {
+  animation: none !important;
+  transition: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+[data-ff-template][data-ff-animations="off"] .ff-btn::before,
+[data-ff-template][data-ff-animations="off"] [data-ff-cta]::before {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * 5. Respect des préférences système
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  [data-ff-template] [data-ff-anim],
+  [data-ff-template] .ff-btn,
+  [data-ff-template] [data-ff-cta] {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 6. Réservation pour les styles par template
+ *    Les templates eux-mêmes seront ajoutés dans les Messages 2/4 et 3/4.
+ *    Pour l'instant, tous héritent des valeurs par défaut.
+ * ------------------------------------------------------------------------- */
+/* [data-ff-template="story-sell"]    → Message 2/4 */
+/* [data-ff-template="bold-energy"]   → Message 2/4 */
+/* [data-ff-template="premium-minimal"] → Message 2/4 */
+/* [data-ff-template="sharp-launch"]  → Message 3/4 */
+/* [data-ff-template="trust-pro"]     → Message 3/4 */
+/* [data-ff-template="lead-snap"]     → Message 3/4 */
+/* ===========================================================================
+ * Styles partagés (s'appliquent à tous les templates, surchargeables ensuite)
+ * ======================================================================== */
+
+[data-ff-template] .ff-section {
+  background: var(--ff-bg);
+  background-image: var(--ff-bg-overlay, none);
+  color: var(--ff-ink);
+}
+
+[data-ff-template] .ff-eyebrow {
+  color: var(--ff-accent);
+  font-family: var(--ff-font-eyebrow);
+}
+
+[data-ff-template] .ff-headline {
+  color: var(--ff-ink);
+  font-family: var(--ff-font-heading);
+  font-weight: var(--ff-heading-weight);
+  letter-spacing: var(--ff-heading-tracking);
+  line-height: var(--ff-heading-leading);
+}
+
+[data-ff-template] .ff-subheadline {
+  color: var(--ff-ink-soft);
+  font-family: var(--ff-font-body);
+  line-height: var(--ff-body-leading);
+}
+
+[data-ff-template] .ff-body {
+  color: var(--ff-ink-soft);
+  font-family: var(--ff-font-body);
+  line-height: var(--ff-body-leading);
+}
+
+[data-ff-template] .ff-card {
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
+}
+
+[data-ff-template] .ff-card-elevated {
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+[data-ff-template] .ff-divide-list > li {
+  border-bottom: 1px solid var(--ff-border);
+}
+[data-ff-template] .ff-divide-list > li:last-child {
+  border-bottom: none;
+}
+
+[data-ff-template] .ff-image {
+  border: 1px solid var(--ff-border);
+}
+
+[data-ff-template] .ff-image-placeholder {
+  background: var(--ff-card-bg);
+  border: 1px dashed var(--ff-border);
+  color: var(--ff-muted);
+}
+
+[data-ff-template] .ff-video {
+  border: 1px solid var(--ff-border);
+}
+
+[data-ff-template] .ff-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 24px;
+  border-radius: var(--ff-btn-radius);
+  background: var(--ff-btn-bg);
+  color: var(--ff-btn-ink);
+  font-family: var(--ff-font-body);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+}
+
+/* ===========================================================================
+ * TEMPLATE 1 — STORY SELL
+ * Sombre cinématique, Playfair serif, gold profond, gradients radiaux
+ * ======================================================================== */
+[data-ff-template="story-sell"] {
+  --ff-bg: #080e1a;
+  --ff-surface: #0f172a;
+  --ff-ink: #f8fafc;
+  --ff-ink-soft: #cbd5e1;
+  --ff-muted: #94a3b8;
+  --ff-border: rgba(199, 164, 54, 0.18);
+  --ff-accent: #c7a436;
+  --ff-accent-ink: #080e1a;
+  --ff-primary: #080e1a;
+
+  --ff-font-heading: var(--ff-font-playfair), Georgia, serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-heading-weight: 700;
+  --ff-heading-tracking: -0.015em;
+  --ff-heading-leading: 1.08;
+  --ff-body-leading: 1.7;
+
+  --ff-section-py: 5rem;
+  --ff-section-py-md: 8rem;
+
+  --ff-bg-overlay: radial-gradient(
+      ellipse at top,
+      rgba(199, 164, 54, 0.12) 0%,
+      transparent 50%
+    ),
+    radial-gradient(ellipse at bottom right, rgba(49, 132, 92, 0.08) 0%, transparent 60%);
+
+  --ff-card-bg: rgba(199, 164, 54, 0.04);
+  --ff-card-border: rgba(199, 164, 54, 0.18);
+
+  --ff-btn-radius: 0.5rem;
+  --ff-btn-bg: linear-gradient(180deg, #d4b04a 0%, #c7a436 100%);
+  --ff-btn-ink: #080e1a;
+  --ff-btn-shadow: 0 12px 32px rgba(199, 164, 54, 0.35);
+}
+
+/* Headline en italique très subtil pour souligner le côté narratif */
+[data-ff-template="story-sell"] .ff-headline em {
+  font-style: italic;
+  color: var(--ff-accent);
+}
+
+/* ===========================================================================
+ * TEMPLATE 2 — BOLD ENERGY
+ * Saturé, Bricolage Grotesque XXL, orange/jaune punchy, animations marquées
+ * ======================================================================== */
+[data-ff-template="bold-energy"] {
+  --ff-bg: #0a0604;
+  --ff-surface: #1e1208;
+  --ff-ink: #ffffff;
+  --ff-ink-soft: #fde9d4;
+  --ff-muted: #b89579;
+  --ff-border: rgba(255, 176, 32, 0.25);
+  --ff-accent: #ffb020;
+  --ff-accent-ink: #0a0604;
+  --ff-primary: #1e1208;
+
+  --ff-font-heading: var(--ff-font-bricolage), system-ui, sans-serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-bricolage), system-ui, sans-serif;
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.035em;
+  --ff-heading-leading: 0.95;
+  --ff-body-leading: 1.6;
+
+  --ff-section-py: 4.5rem;
+  --ff-section-py-md: 7rem;
+
+  --ff-bg-overlay: radial-gradient(
+      circle at 20% 0%,
+      rgba(224, 122, 62, 0.18) 0%,
+      transparent 50%
+    ),
+    radial-gradient(circle at 80% 100%, rgba(255, 176, 32, 0.12) 0%, transparent 50%);
+
+  --ff-card-bg: rgba(255, 176, 32, 0.06);
+  --ff-card-border: rgba(255, 176, 32, 0.22);
+
+  --ff-btn-radius: 999px;
+  --ff-btn-bg: linear-gradient(135deg, #ffb020 0%, #e07a3e 100%);
+  --ff-btn-ink: #0a0604;
+  --ff-btn-shadow: 0 16px 40px rgba(224, 122, 62, 0.5);
+}
+
+/* Headlines en taille extra-extra-large pour Bold Energy */
+[data-ff-template="bold-energy"] .ff-headline {
+  font-size: clamp(2rem, 6vw, 4.5rem);
+  text-transform: none;
+}
+[data-ff-template="bold-energy"] [data-ff-layout="wide-banner"] .ff-headline {
+  font-size: clamp(2.5rem, 8vw, 6rem);
+}
+
+/* Eyebrow plus impactant */
+[data-ff-template="bold-energy"] .ff-eyebrow {
+  background: var(--ff-accent);
+  color: var(--ff-accent-ink);
+  padding: 4px 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* ===========================================================================
+ * TEMPLATE 3 — PREMIUM MINIMAL
+ * Espace blanc généreux, Playfair éditorial, gold subtil, peu d'animations
+ * ======================================================================== */
+[data-ff-template="premium-minimal"] {
+  --ff-bg: #fbfaf7;
+  --ff-surface: #ffffff;
+  --ff-ink: #0f172a;
+  --ff-ink-soft: #475569;
+  --ff-muted: #94a3b8;
+  --ff-border: rgba(15, 23, 42, 0.08);
+  --ff-accent: #b89043;
+  --ff-accent-ink: #ffffff;
+  --ff-primary: #0f172a;
+
+  --ff-font-heading: var(--ff-font-playfair), Georgia, serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-heading-weight: 500;
+  --ff-heading-tracking: -0.02em;
+  --ff-heading-leading: 1.15;
+  --ff-body-leading: 1.75;
+
+  --ff-section-py: 6rem;
+  --ff-section-py-md: 10rem;
+
+  --ff-bg-overlay: none;
+
+  --ff-card-bg: #ffffff;
+  --ff-card-border: rgba(15, 23, 42, 0.06);
+
+  --ff-btn-radius: 0;
+  --ff-btn-bg: #0f172a;
+  --ff-btn-ink: #fbfaf7;
+  --ff-btn-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
+/* Eyebrow ultra discret en lettres espacées */
+[data-ff-template="premium-minimal"] .ff-eyebrow {
+  letter-spacing: 0.3em;
+  font-size: 10px;
+  color: var(--ff-accent);
+}
+
+/* Headlines en weight medium (500) pour le côté éditorial */
+[data-ff-template="premium-minimal"] .ff-headline {
+  font-weight: 500;
+}
+
+/* Cards très épurées */
+[data-ff-template="premium-minimal"] .ff-card,
+[data-ff-template="premium-minimal"] .ff-card-elevated {
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+/* Bouton angulaire (pas de border-radius) caractéristique du luxe */
+[data-ff-template="premium-minimal"] .ff-btn {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 32px;
+  min-height: 56px;
+}
+/* ===========================================================================
+ * TEMPLATE 4 — SHARP LAUNCH
+ * Punchy, contrasté, jaune/vert action, animations rapides, style "tech bold"
+ * ======================================================================== */
+[data-ff-template="sharp-launch"] {
+  --ff-bg: #0a1020;
+  --ff-surface: #111a30;
+  --ff-ink: #f8fafc;
+  --ff-ink-soft: #cbd5e1;
+  --ff-muted: #64748b;
+  --ff-border: rgba(255, 176, 32, 0.2);
+  --ff-accent: #ffb020;
+  --ff-accent-ink: #0a1020;
+  --ff-primary: #1ecb83;
+
+  --ff-font-heading: var(--ff-font-space), var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-space), system-ui, sans-serif;
+  --ff-heading-weight: 700;
+  --ff-heading-tracking: -0.025em;
+  --ff-heading-leading: 1.05;
+  --ff-body-leading: 1.6;
+
+  --ff-section-py: 4rem;
+  --ff-section-py-md: 6rem;
+
+  --ff-bg-overlay: linear-gradient(
+      180deg,
+      rgba(255, 176, 32, 0.04) 0%,
+      transparent 30%,
+      rgba(30, 203, 131, 0.04) 100%
+    );
+
+  --ff-card-bg: rgba(255, 255, 255, 0.03);
+  --ff-card-border: rgba(255, 255, 255, 0.08);
+
+  --ff-btn-radius: 0.5rem;
+  --ff-btn-bg: linear-gradient(180deg, #ffc347 0%, #ffb020 100%);
+  --ff-btn-ink: #0a1020;
+  --ff-btn-shadow: 0 8px 24px rgba(255, 176, 32, 0.4);
+
+  --ff-anim-duration: 400ms;
+}
+
+/* Eyebrow tech : monospace style avec dot */
+[data-ff-template="sharp-launch"] .ff-eyebrow {
+  font-family: var(--ff-font-space);
+  font-weight: 600;
+  font-size: 11px;
+}
+[data-ff-template="sharp-launch"] .ff-eyebrow::before {
+  content: "● ";
+  color: #1ecb83;
+}
+
+/* Cards avec liseré accent */
+[data-ff-template="sharp-launch"] .ff-card {
+  border-left: 2px solid var(--ff-accent);
+}
+
+/* ===========================================================================
+ * TEMPLATE 5 — TRUST PRO
+ * B2B institutionnel, bleu marine + cyan, sérieux, peu d'animations
+ * ======================================================================== */
+[data-ff-template="trust-pro"] {
+  --ff-bg: #f8fafc;
+  --ff-surface: #ffffff;
+  --ff-ink: #061b36;
+  --ff-ink-soft: #2c4a70;
+  --ff-muted: #6b8aaf;
+  --ff-border: rgba(8, 73, 141, 0.14);
+  --ff-accent: #08498d;
+  --ff-accent-ink: #ffffff;
+  --ff-primary: #061b36;
+
+  --ff-font-heading: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-heading-weight: 700;
+  --ff-heading-tracking: -0.015em;
+  --ff-heading-leading: 1.15;
+  --ff-body-leading: 1.65;
+
+  --ff-section-py: 5rem;
+  --ff-section-py-md: 7rem;
+
+  --ff-bg-overlay: none;
+
+  --ff-card-bg: #ffffff;
+  --ff-card-border: rgba(8, 73, 141, 0.1);
+
+  --ff-btn-radius: 0.375rem;
+  --ff-btn-bg: #08498d;
+  --ff-btn-ink: #ffffff;
+  --ff-btn-shadow: 0 6px 16px rgba(8, 73, 141, 0.22);
+
+  --ff-anim-duration: 800ms;
+}
+
+/* Eyebrow : pill cyan caractéristique du B2B */
+[data-ff-template="trust-pro"] .ff-eyebrow {
+  background: rgba(40, 214, 214, 0.12);
+  color: #0e7490;
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+}
+
+/* Cards solides avec ombre douce */
+[data-ff-template="trust-pro"] .ff-card,
+[data-ff-template="trust-pro"] .ff-card-elevated {
+  box-shadow: 0 1px 3px rgba(8, 73, 141, 0.06),
+              0 8px 24px rgba(8, 73, 141, 0.04);
+}
+
+/* Headlines plus serrées (institutionnel) */
+[data-ff-template="trust-pro"] .ff-headline {
+  font-weight: 700;
+}
+
+/* ===========================================================================
+ * TEMPLATE 6 — LEAD SNAP
+ * Court, mobile-first, vif, fond clair, conversion rapide
+ * ======================================================================== */
+[data-ff-template="lead-snap"] {
+  --ff-bg: #ffffff;
+  --ff-surface: #fafbfc;
+  --ff-ink: #0a1020;
+  --ff-ink-soft: #475569;
+  --ff-muted: #94a3b8;
+  --ff-border: rgba(10, 16, 32, 0.08);
+  --ff-accent: #ffb020;
+  --ff-accent-ink: #0a1020;
+  --ff-primary: #0a1020;
+
+  --ff-font-heading: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.03em;
+  --ff-heading-leading: 1.05;
+  --ff-body-leading: 1.55;
+
+  --ff-section-py: 3rem;
+  --ff-section-py-md: 5rem;
+
+  --ff-bg-overlay: none;
+
+  --ff-card-bg: #fafbfc;
+  --ff-card-border: rgba(10, 16, 32, 0.08);
+
+  --ff-btn-radius: 999px;
+  --ff-btn-bg: #ffb020;
+  --ff-btn-ink: #0a1020;
+  --ff-btn-shadow: 0 8px 20px rgba(255, 176, 32, 0.45);
+
+  --ff-anim-duration: 350ms;
+}
+
+/* Eyebrow ultra simple */
+[data-ff-template="lead-snap"] .ff-eyebrow {
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--ff-accent);
+}
+
+/* Headlines très impactantes mais compactes */
+[data-ff-template="lead-snap"] .ff-headline {
+  font-size: clamp(1.75rem, 5vw, 3.25rem);
+}
+
+/* Bullets denses */
+[data-ff-template="lead-snap"] .ff-divide-list > li {
+  padding: 10px 0;
+  font-weight: 500;
+}
+
+/* Cards avec accent latéral jaune */
+[data-ff-template="lead-snap"] .ff-card {
+  border-left: 3px solid var(--ff-accent);
+  background: #fafbfc;
+}

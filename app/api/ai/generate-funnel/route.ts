@@ -1,7 +1,9 @@
 // app/api/ai/generate-funnel/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateFunnelWithAI } from "@/lib/ai/generate";
+import { generateFunnelWithAI, AiGenerationError } from "@/lib/ai/generate";
+
+export const dynamic = "force-dynamic";
 
 const ctaConfigSchema = z.object({
   label: z.string().min(1),
@@ -29,7 +31,17 @@ const briefSchema = z.object({
 
   // Nouveaux champs optionnels
   funnelKind: z
-    .enum(["vsl", "lead-magnet", "webinar", "formation", "service", "digital-product", "booking", "saas", "thank-you"])
+    .enum([
+      "vsl",
+      "lead-magnet",
+      "webinar",
+      "formation",
+      "service",
+      "digital-product",
+      "booking",
+      "saas",
+      "thank-you",
+    ])
     .optional(),
   creationMode: z.enum(["guided", "free"]).optional(),
   templateId: z.string().optional(),
@@ -43,6 +55,27 @@ const briefSchema = z.object({
   aboutText: z.string().optional(),
 });
 
+// Mappe AiErrorReason vers un statut HTTP cohérent
+function statusForReason(reason: string): number {
+  switch (reason) {
+    case "missing-key":
+    case "invalid-key":
+      return 503; // service indisponible côté config
+    case "insufficient-quota":
+      return 402; // payment required
+    case "rate-limit":
+      return 429;
+    case "network-error":
+      return 504;
+    case "empty-response":
+    case "invalid-json":
+    case "schema-mismatch":
+      return 502; // upstream a renvoyé du contenu inutilisable
+    default:
+      return 500;
+  }
+}
+
 export async function POST(request: Request) {
   let json: unknown;
   try {
@@ -55,7 +88,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json(
       {
-        error: "Invalid brief",
+        error: "invalid-brief",
+        message: "Le brief envoyé est incomplet ou invalide",
         details: parsed.error.flatten().fieldErrors,
       },
       { status: 400 }
@@ -66,7 +100,29 @@ export async function POST(request: Request) {
     const funnel = await generateFunnelWithAI(parsed.data);
     return NextResponse.json({ funnel });
   } catch (error) {
-    console.error("generate-funnel route failed", error);
-    return NextResponse.json({ error: "Generation failed" }, { status: 500 });
+    if (error instanceof AiGenerationError) {
+      console.warn(
+        `[generate-funnel] AI error reason=${error.reason} details=${error.details ?? "none"}`
+      );
+      return NextResponse.json(
+        {
+          error: "ai-generation-failed",
+          reason: error.reason,
+          message: error.message,
+        },
+        { status: statusForReason(error.reason) }
+      );
+    }
+
+    console.error("[generate-funnel] unexpected error", error);
+    return NextResponse.json(
+      {
+        error: "ai-generation-failed",
+        reason: "unknown",
+        message:
+          "Une erreur inattendue est survenue pendant la génération. Réessayez dans un instant",
+      },
+      { status: 500 }
+    );
   }
 }

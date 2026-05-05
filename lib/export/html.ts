@@ -6,6 +6,7 @@ import type {
   CtaConfig,
   SectionImage,
 } from "@/lib/funnels/types";
+import { createReadme } from "./readme";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -37,13 +38,18 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-function ctaHref(cta: CtaConfig): string {
+function safeId(value: string, fallback: string): string {
+  const cleaned = (value || "").toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  return cleaned || fallback;
+}
+
+function ctaHref(cta: CtaConfig, popupDomId?: string): string {
   if (cta.mode === "anchor") {
-    const id = (cta.anchorId ?? "lead-form").replace(/^#/, "");
+    const id = safeId(cta.anchorId ?? "lead-form", "lead-form");
     return `#${id}`;
   }
   if (cta.mode === "popup") {
-    return `#${cta.popupId ?? "popup"}`;
+    return `#${popupDomId ?? safeId(cta.popupId ?? "popup", "popup")}`;
   }
   if (cta.mode === "redirect" && cta.url && isSafeUrl(cta.url)) {
     return cta.url;
@@ -51,11 +57,22 @@ function ctaHref(cta: CtaConfig): string {
   return "#lead-form";
 }
 
-function ctaAttrs(cta: CtaConfig): string {
-  const href = ctaHref(cta);
-  const target = cta.mode === "redirect" && cta.target === "_blank" ? "_blank" : "_self";
-  const rel = target === "_blank" ? ' rel="noopener"' : "";
-  return ` href="${escapeAttr(href)}" target="${target}"${rel}`;
+/**
+ * Construit les attributs <a> pour un CTA selon son mode.
+ * @param cta            La configuration du CTA
+ * @param popupDomId     L'ID DOM réel du popup (préfixé) si mode popup
+ */
+function ctaAttrs(cta: CtaConfig, popupDomId?: string): string {
+  const href = ctaHref(cta, popupDomId);
+  const isExternal =
+    cta.mode === "redirect" && cta.target === "_blank" && isSafeUrl(cta.url ?? "");
+  const target = isExternal ? "_blank" : "_self";
+  const rel = isExternal ? ' rel="noopener noreferrer"' : "";
+  const dataPopup =
+    cta.mode === "popup" && popupDomId
+      ? ` data-ff-popup-target="${escapeAttr(popupDomId)}"`
+      : "";
+  return ` href="${escapeAttr(href)}" target="${target}"${rel}${dataPopup}`;
 }
 
 function renderImage(image?: SectionImage): string {
@@ -81,9 +98,120 @@ function sectionSpacingClass(section: FunnelSection): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Popup embarqué (HTML + CSS + JS scopés)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderPopupFallbackForm(language: Funnel["language"]): string {
+  const labels = {
+    fr: { name: "Votre nom", email: "Votre email", submit: "Recevoir l'accès" },
+    en: { name: "Your name", email: "Your email", submit: "Get access" },
+    es: { name: "Tu nombre", email: "Tu email", submit: "Recibir acceso" },
+  } as const;
+  const l = labels[language] ?? labels.fr;
+  return `<form class="ff-popup-form" onsubmit="event.preventDefault(); alert('Démonstration : remplacez ce formulaire par votre code d\\'embed systeme.io.');">
+  <input type="text" name="name" placeholder="${escapeAttr(l.name)}" required />
+  <input type="email" name="email" placeholder="${escapeAttr(l.email)}" required />
+  <button type="submit">${escapeHtml(l.submit)}</button>
+</form>`;
+}
+
+/**
+ * Rend un popup autonome (overlay + contenu + script de gestion).
+ * @param domId      ID DOM unique (préfixé par le scope du bloc)
+ * @param cta        La config CTA contenant titre, texte, embed
+ * @param language   Langue pour le formulaire de fallback
+ * @param scopeCls   Classe CSS racine du bloc (pour scoper le CSS du popup)
+ */
+function renderPopupMarkup(
+  domId: string,
+  cta: CtaConfig,
+  language: Funnel["language"],
+  scopeCls: string
+): { css: string; html: string } {
+  const title = escapeHtml(cta.popupTitle ?? "Recevez votre accès");
+  const body = cta.popupBody
+    ? `<p class="ff-popup-body">${escapeHtml(cta.popupBody)}</p>`
+    : "";
+  // L'embed est inséré tel quel (l'utilisateur colle son propre HTML systeme.io).
+  // S'il est vide, on met un formulaire de démonstration.
+  const embed = (cta.popupEmbed ?? "").trim();
+  const formMarkup = embed
+    ? `<div class="ff-popup-embed">${embed}</div>`
+    : renderPopupFallbackForm(language);
+
+  const css = `.${scopeCls} .ff-popup-overlay { position: fixed; inset: 0; background: rgba(8, 18, 36, 0.72); display: none; align-items: center; justify-content: center; z-index: 99999; padding: 16px; opacity: 0; transition: opacity 0.18s ease; }
+.${scopeCls} .ff-popup-overlay[data-ff-open="true"] { display: flex; opacity: 1; }
+.${scopeCls} .ff-popup-card { position: relative; width: 100%; max-width: 460px; background: #fff; color: #101828; border-radius: 14px; padding: 28px 24px 24px; box-shadow: 0 30px 80px rgba(8, 18, 36, 0.35); transform: translateY(8px); transition: transform 0.22s ease; max-height: 90vh; overflow-y: auto; }
+.${scopeCls} .ff-popup-overlay[data-ff-open="true"] .ff-popup-card { transform: translateY(0); }
+.${scopeCls} .ff-popup-close { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border: none; background: transparent; color: #98A2B3; font-size: 22px; line-height: 1; cursor: pointer; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
+.${scopeCls} .ff-popup-close:hover { background: #F3F4F6; color: #101828; }
+.${scopeCls} .ff-popup-title { margin: 0 0 8px; font-size: 22px; font-weight: 700; line-height: 1.25; padding-right: 28px; }
+.${scopeCls} .ff-popup-body { margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #475467; }
+.${scopeCls} .ff-popup-embed { display: block; }
+.${scopeCls} .ff-popup-embed form, .${scopeCls} .ff-popup-form { display: grid; gap: 10px; }
+.${scopeCls} .ff-popup-embed input, .${scopeCls} .ff-popup-form input { min-height: 44px; border: 1px solid #E5E7EB; border-radius: 8px; padding: 0 12px; font: inherit; width: 100%; box-sizing: border-box; }
+.${scopeCls} .ff-popup-embed button, .${scopeCls} .ff-popup-form button { min-height: 46px; border: none; border-radius: 8px; background: var(--ff-gold, #D4A537); color: #082B4C; font-weight: 700; font-size: 15px; cursor: pointer; transition: opacity 0.15s ease, transform 0.15s ease; }
+.${scopeCls} .ff-popup-embed button:hover, .${scopeCls} .ff-popup-form button:hover { opacity: 0.92; transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) {
+  .${scopeCls} .ff-popup-overlay, .${scopeCls} .ff-popup-card, .${scopeCls} .ff-popup-embed button, .${scopeCls} .ff-popup-form button { transition: none !important; }
+}`;
+
+  // Le script est délibérément autonome et défensif (pas de framework, pas de globals).
+  // Il s'attache aux liens portant data-ff-popup-target="${domId}" dans le DOM
+  // (peut être plusieurs CTA ouvrant le même popup).
+  const html = `<div class="ff-popup-overlay" id="${escapeAttr(domId)}" role="dialog" aria-modal="true" aria-labelledby="${escapeAttr(domId)}-title" data-ff-open="false">
+  <div class="ff-popup-card">
+    <button type="button" class="ff-popup-close" aria-label="Fermer" data-ff-popup-close>&times;</button>
+    <h3 class="ff-popup-title" id="${escapeAttr(domId)}-title">${title}</h3>
+    ${body}
+    ${formMarkup}
+  </div>
+</div>
+<script>
+(function(){
+  var id = ${JSON.stringify(domId)};
+  var overlay = document.getElementById(id);
+  if (!overlay || overlay.dataset.ffBound === "1") return;
+  overlay.dataset.ffBound = "1";
+  var lastFocus = null;
+  function open(e){
+    if (e && e.preventDefault) e.preventDefault();
+    lastFocus = document.activeElement;
+    overlay.setAttribute("data-ff-open", "true");
+    document.body.style.overflow = "hidden";
+    var firstInput = overlay.querySelector("input, button:not([data-ff-popup-close]), select, textarea");
+    if (firstInput) { try { firstInput.focus(); } catch(_) {} }
+  }
+  function close(){
+    overlay.setAttribute("data-ff-open", "false");
+    document.body.style.overflow = "";
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch(_) {} }
+  }
+  // Triggers : tout élément avec data-ff-popup-target = id
+  document.querySelectorAll('[data-ff-popup-target="' + id + '"]').forEach(function(el){
+    el.addEventListener("click", open);
+  });
+  // Fermeture : bouton croix
+  overlay.querySelectorAll("[data-ff-popup-close]").forEach(function(el){
+    el.addEventListener("click", close);
+  });
+  // Fermeture : clic sur le backdrop (overlay lui-même, pas la carte)
+  overlay.addEventListener("click", function(ev){
+    if (ev.target === overlay) close();
+  });
+  // Fermeture : touche Échap
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape" && overlay.getAttribute("data-ff-open") === "true") close();
+  });
+})();
+</script>`;
+
+  return { css, html };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Rendu d'une section
 // ─────────────────────────────────────────────────────────────────────────────
-function renderSectionInner(section: FunnelSection): string {
+function renderSectionInner(section: FunnelSection, popupDomId?: string): string {
   const eyebrow = section.eyebrow
     ? `<span class="ff-eyebrow">${escapeHtml(section.eyebrow)}</span>`
     : "";
@@ -100,7 +228,7 @@ function renderSectionInner(section: FunnelSection): string {
         .join("")}</ul>`
     : "";
   const cta = section.cta
-    ? `<a class="ff-button ff-cta"${ctaAttrs(section.cta)}>${escapeHtml(section.cta.label)}</a>`
+    ? `<a class="ff-button ff-cta"${ctaAttrs(section.cta, popupDomId)}>${escapeHtml(section.cta.label)}</a>`
     : "";
   const image = renderImage(section.image);
 
@@ -108,7 +236,7 @@ function renderSectionInner(section: FunnelSection): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Formulaire intégré (toujours autonome, pas de rechargement)
+// Formulaire intégré (toujours autonome)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderLeadForm(funnel: Funnel): string {
   const labels = {
@@ -129,27 +257,47 @@ function renderLeadForm(funnel: Funnel): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODE 1 — One-shot complet
+// MODE 1 — One-shot complet (aperçu)
 // ─────────────────────────────────────────────────────────────────────────────
 export function renderFunnelHtml(funnel: Funnel): string {
   const css = renderFunnelCss(funnel);
 
+  // Collecte des popups uniques utilisés dans le funnel
+  const popupSections = funnel.sections.filter(
+    (s) => s.visible !== false && s.cta?.mode === "popup"
+  );
+  const popups = popupSections
+    .map((s) => {
+      const domId = `ff-popup-${s.id}`;
+      return { section: s, domId, markup: renderPopupMarkup(domId, s.cta!, funnel.language, "ff-page") };
+    });
+
+  const popupCss = popups.map((p) => p.markup.css).join("\n");
+  const popupHtml = popups.map((p) => p.markup.html).join("\n");
+  const popupIdBySection: Record<string, string> = {};
+  popups.forEach((p) => {
+    popupIdBySection[p.section.id] = p.domId;
+  });
+
   const sections = funnel.sections
     .filter((s) => s.visible !== false)
     .map((section) => {
+      const popupDomId = section.cta?.mode === "popup" ? popupIdBySection[section.id] : undefined;
       return `  <section class="ff-section ff-${section.type}${sectionSpacingClass(section)}"${sectionStyleAttrs(section)}>
-    ${renderSectionInner(section)}
+    ${renderSectionInner(section, popupDomId)}
   </section>`;
     })
     .join("\n");
 
   return `<style>
 ${css}
+${popupCss}
 </style>
 
 <div class="ff-page" data-ff-lang="${escapeAttr(funnel.language)}">
 ${sections}
 ${renderLeadForm(funnel)}
+${popupHtml}
 </div>`;
 }
 
@@ -172,7 +320,7 @@ export function renderFunnelCss(funnel: Funnel): string {
 .ff-page .ff-body { font-size: 16px; line-height: 1.7; color: var(--ff-muted); max-width: 720px; margin: 0 0 16px; }
 .ff-page .ff-bullets { display: grid; gap: 10px; padding-left: 20px; margin: 0 0 20px; color: var(--ff-ink); }
 .ff-page .ff-bullets li::marker { color: var(--ff-green); }
-.ff-page .ff-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px; margin-top: 18px; border-radius: 8px; color: #082B4C; background: var(--ff-gold); text-decoration: none; font-weight: 700; font-size: 15px; transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; }
+.ff-page .ff-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px; margin-top: 18px; border-radius: 8px; color: #082B4C; background: var(--ff-gold); text-decoration: none; font-weight: 700; font-size: 15px; transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; cursor: pointer; }
 .ff-page .ff-button:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(8, 43, 76, 0.12); }
 .ff-page .ff-image { margin: 24px 0 0; }
 .ff-page .ff-image img { width: 100%; height: auto; border-radius: 12px; display: block; transition: transform 0.3s ease; }
@@ -206,12 +354,25 @@ export function createSystemeBlocks(funnel: Funnel): SystemeBlock[] {
   return funnel.sections
     .filter((s) => s.visible !== false)
     .map((section) => {
-      const cls = `ff-${section.type}-${section.id}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      const cls = `ff-${section.type}-${section.id}`
+        .replace(/[^a-z0-9-]/gi, "-")
+        .toLowerCase();
       const accent = section.style?.accentColor ?? funnel.design.accentColor;
       const gold = funnel.design.secondaryColor;
       const ink = section.style?.textColor ?? "#101828";
 
-      const css = `.${cls} { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: ${ink}; padding: 56px 20px; max-width: 1040px; margin: 0 auto; box-sizing: border-box; }
+      // Popup éventuel embarqué dans CE bloc (si la section utilise le mode popup)
+      let popupCss = "";
+      let popupHtml = "";
+      let popupDomId: string | undefined;
+      if (section.cta?.mode === "popup") {
+        popupDomId = `${cls}-popup`;
+        const p = renderPopupMarkup(popupDomId, section.cta, funnel.language, cls);
+        popupCss = "\n" + p.css;
+        popupHtml = "\n" + p.html;
+      }
+
+      const css = `.${cls} { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: ${ink}; padding: 56px 20px; max-width: 1040px; margin: 0 auto; box-sizing: border-box; --ff-gold: ${gold}; }
 .${cls} *, .${cls} *::before, .${cls} *::after { box-sizing: border-box; }
 .${cls} .ff-eyebrow { display: inline-block; color: ${accent}; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 0.1em; margin-bottom: 10px; }
 .${cls} .ff-headline { margin: 0 0 14px; font-size: clamp(26px, 4.5vw, 44px); line-height: 1.15; }
@@ -219,7 +380,7 @@ export function createSystemeBlocks(funnel: Funnel): SystemeBlock[] {
 .${cls} .ff-body { font-size: 16px; line-height: 1.7; color: #667085; max-width: 720px; margin: 0 0 14px; }
 .${cls} .ff-bullets { display: grid; gap: 8px; padding-left: 20px; margin: 0 0 18px; }
 .${cls} .ff-bullets li::marker { color: ${accent}; }
-.${cls} .ff-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px; margin-top: 14px; border-radius: 8px; color: #082B4C; background: ${gold}; text-decoration: none; font-weight: 700; font-size: 15px; transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; }
+.${cls} .ff-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px; margin-top: 14px; border-radius: 8px; color: #082B4C; background: ${gold}; text-decoration: none; font-weight: 700; font-size: 15px; transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; cursor: pointer; }
 .${cls} .ff-button:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(8, 43, 76, 0.12); }
 .${cls} .ff-image { margin: 20px 0 0; }
 .${cls} .ff-image img { width: 100%; height: auto; border-radius: 12px; display: block; transition: transform 0.3s ease; }
@@ -232,12 +393,12 @@ export function createSystemeBlocks(funnel: Funnel): SystemeBlock[] {
 }`;
 
       const html = `<style>
-${css}
+${css}${popupCss}
 </style>
 
 <section class="${cls}"${sectionStyleAttrs(section)}>
-${renderSectionInner(section)}
-</section>`;
+${renderSectionInner(section, popupDomId)}
+</section>${popupHtml}`;
 
       return {
         id: section.id,
@@ -283,7 +444,7 @@ ${css}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Guide d'import
+// Guide d'import (legacy, conservé pour rétro-compat)
 // ─────────────────────────────────────────────────────────────────────────────
 export function createImportGuide(language: Funnel["language"] = "fr"): string {
   const guides = {
@@ -349,6 +510,74 @@ export function createHtmlZipBase64(funnel: Funnel): string {
     files[`blocs/${safe}.html`] = strToU8(b.html);
   });
   files[`blocs/99-form-${formBlock.id}.html`] = strToU8(formBlock.html);
+
+  const zipped = zipSync(files);
+  return Buffer.from(zipped).toString("base64");
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Export ZIP v2 — structure améliorée pour systeme.io
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function createSystemeIoZipBase64(funnel: Funnel): string {
+  const fullHtml = renderFunnelHtml(funnel);
+  const blocks = createSystemeBlocks(funnel);
+  const formBlock = createSystemeFormBlock(funnel);
+
+  const previewName = {
+    fr: "apercu-complet.html",
+    en: "funnel-complete.html",
+    es: "embudo-completo.html",
+  } as const;
+
+  // Construit la liste des entrées de blocs pour le README
+  const blockEntries = blocks.map((b, i) => {
+    const safe = `${String(i + 1).padStart(2, "0")}-${b.type}-${b.id}`
+      .replace(/[^a-z0-9-]/gi, "-")
+      .toLowerCase();
+    const fileName = `${safe}.html`;
+    const section = funnel.sections.find((s) => s.id === b.id);
+    const hasPopup = section?.cta?.mode === "popup";
+    return {
+      fileName: `blocs-systeme-io/${fileName}`,
+      type: b.type,
+      label: b.label,
+      hasPopup,
+      _zipPath: `blocs-systeme-io/${fileName}`,
+      _html: b.html,
+    };
+  });
+
+  // Bloc formulaire final
+  const formFileName = `99-form-${formBlock.id}.html`
+    .replace(/[^a-z0-9-]/gi, "-")
+    .toLowerCase();
+  blockEntries.push({
+    fileName: `blocs-systeme-io/${formFileName}`,
+    type: "form",
+    label: formBlock.label,
+    hasPopup: false,
+    _zipPath: `blocs-systeme-io/${formFileName}`,
+    _html: formBlock.html,
+  });
+
+  const readme = createReadme(
+    funnel,
+    blockEntries.map((b) => ({
+      fileName: b.fileName.replace("blocs-systeme-io/", ""),
+      type: b.type,
+      label: b.label,
+      hasPopup: b.hasPopup,
+    }))
+  );
+
+  const files: Record<string, Uint8Array> = {
+    "README.md": strToU8(readme),
+    [previewName[funnel.language] ?? "apercu-complet.html"]: strToU8(fullHtml),
+  };
+
+  blockEntries.forEach((b) => {
+    files[b._zipPath] = strToU8(b._html);
+  });
 
   const zipped = zipSync(files);
   return Buffer.from(zipped).toString("base64");

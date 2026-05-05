@@ -8,10 +8,12 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
-export type FunnelRowItem = {
+type FunnelRowItem = {
   id: string;
   name: string;
+  slug?: string;
 };
+
 
 type Props = {
   funnel: FunnelRowItem;

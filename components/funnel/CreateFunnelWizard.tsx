@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, Palette,
+  ArrowLeft, ArrowRight, CheckCircle2,
   Sparkles, Target, Upload, Link as LinkIcon, AnchorIcon,
   ImageOff, Image as ImageIcon, Wand2, AlertCircle,
 } from "lucide-react";
@@ -16,16 +16,24 @@ import { FunnelKindStep } from "@/components/funnel/wizard/FunnelKindStep";
 import { MoodStep } from "@/components/funnel/wizard/MoodStep";
 import { AboutStep } from "@/components/funnel/wizard/AboutStep";
 import { VideoStep } from "@/components/funnel/wizard/VideoStep";
-import { funnelTemplates } from "@/lib/funnels/templates";
+import TemplateGalleryStep from "@/components/funnel/TemplateGalleryStep";
+import {
+  funnelTemplates,
+  PREMIUM_TEMPLATES,
+  DEFAULT_PREMIUM_TEMPLATE_ID,
+  getPremiumTemplate,
+} from "@/lib/funnels/templates";
 import { getFunnelKind } from "@/lib/funnels/kinds";
 import type {
   Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind,
 } from "@/lib/funnels/types";
 import { makeAnchorCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
+import { useRouter } from "next/navigation";
+import { createFunnelFromAi } from "@/lib/store/funnelStore";
 
 const ALL_STEPS = [
-  "Format", "Objectif", "Marque", "Offre", "Audience",
+  "Format", "Template", "Objectif", "Marque", "Offre", "Audience",
   "À propos", "Vidéo", "CTA", "Visuels", "Ambiance", "Génération",
 ] as const;
 type StepLabel = typeof ALL_STEPS[number];
@@ -45,6 +53,7 @@ const initialBrief: FunnelBrief = {
   defaultImageMode: "none",
   funnelKind: undefined,
   creationMode: "guided",
+  templateId: DEFAULT_PREMIUM_TEMPLATE_ID,
   moodId: "premium-calm",
   mainColor: "#080E1A",
   secondaryColor: "#C7A436",
@@ -57,15 +66,24 @@ const FUNNEL_GOALS = [
   { label: "Réserver des appels", value: "Consultation gratuite", hint: "Qualification, CTA calendrier" },
 ];
 
+type ApiError = {
+  reason?: string;
+  message?: string;
+};
+
 export function CreateFunnelWizard() {
   const [step, setStep] = useState(0);
   const [brief, setBrief] = useState<FunnelBrief>(initialBrief);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
-  const [message, setMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [errorReason, setErrorReason] = useState<string>("");
   const [aiHealth, setAiHealth] = useState<AiHealth | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
+  const router = useRouter();
+
 
   const steps = useMemo<StepLabel[]>(() => {
     const kind = getFunnelKind(brief.funnelKind);
@@ -77,10 +95,21 @@ export function CreateFunnelWizard() {
     if (step >= steps.length) setStep(steps.length - 1);
   }, [steps.length, step]);
 
-  const currentTemplate = useMemo(
-    () => funnelTemplates.find((t) => t.id === brief.templateId)
-       ?? funnelTemplates.find((t) => t.name === brief.funnelType)
-       ?? funnelTemplates[1],
+  // Template premium courant (pour Génération step)
+  const currentPremiumTemplate = useMemo(
+    () =>
+      getPremiumTemplate(brief.templateId) ??
+      getPremiumTemplate(DEFAULT_PREMIUM_TEMPLATE_ID) ??
+      PREMIUM_TEMPLATES[0],
+    [brief.templateId]
+  );
+
+  // Template simple (rétrocompat ancien système, pour l'objectif/sections legacy)
+  const currentLegacyTemplate = useMemo(
+    () =>
+      funnelTemplates.find((t) => t.id === brief.templateId) ??
+      funnelTemplates.find((t) => t.name === brief.funnelType) ??
+      funnelTemplates[1],
     [brief.funnelType, brief.templateId]
   );
 
@@ -106,10 +135,15 @@ export function CreateFunnelWizard() {
     const k = getFunnelKind(kind);
     updateMany({
       funnelKind: kind,
-      templateId: k?.suggestedTemplateId,
-      funnelType: funnelTemplates.find((t) => t.id === k?.suggestedTemplateId)?.name ?? brief.funnelType,
+      funnelType:
+        funnelTemplates.find((t) => t.id === k?.suggestedTemplateId)?.name ??
+        brief.funnelType,
     });
     setStep((v) => Math.min(v + 1, steps.length - 1));
+  }
+
+  function selectTemplate(templateId: string) {
+    update("templateId", templateId);
   }
 
   function setLogo(dataUrl: string | undefined) {
@@ -128,7 +162,7 @@ export function CreateFunnelWizard() {
       const fallback: AiHealth = {
         ok: false,
         reason: "network-error",
-        message: "Impossible de vérifier la clé IA. La génération démo sera utilisée si l'erreur persiste",
+        message: "Impossible de vérifier la connexion IA. Vérifiez votre réseau",
       };
       setAiHealth(fallback);
       return fallback;
@@ -139,22 +173,47 @@ export function CreateFunnelWizard() {
 
   async function generate() {
     setIsGenerating(true);
-    setMessage("");
+    setSuccessMessage("");
+    setErrorMessage("");
+    setErrorReason("");
+
     try {
       const health = aiHealth ?? (await checkHealth());
-      if (health.reason === "invalid-key") {
-        setMessage(health.message);
+      if (!health.ok) {
+        setErrorReason(health.reason);
+        setErrorMessage(health.message);
         setIsGenerating(false);
         return;
       }
+
       const response = await fetch("/api/ai/generate-funnel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(brief),
       });
-      if (!response.ok) throw new Error("Generation failed");
-      const data = await response.json();
-      setFunnel({
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const apiErr = data as ApiError;
+        setErrorReason(apiErr.reason ?? "unknown");
+        setErrorMessage(
+          apiErr.message ??
+          "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI"
+        );
+        setFunnel(null);
+        return;
+      }
+
+      if (!data?.funnel) {
+        setErrorReason("empty-response");
+        setErrorMessage("La réponse du serveur est vide. Réessayez la génération");
+        setFunnel(null);
+        return;
+      }
+
+      // Réussite : on injecte les couleurs du brief par-dessus le design retourné
+      const enrichedFunnel = {
         ...data.funnel,
         design: {
           ...data.funnel.design,
@@ -162,10 +221,26 @@ export function CreateFunnelWizard() {
           secondaryColor: brief.secondaryColor ?? data.funnel.design.secondaryColor,
           style: brief.designStyle,
         },
-      });
-      setMessage("Tunnel généré : page, formulaire, page merci, emails et export sont prêts");
+      };
+
+      setFunnel(enrichedFunnel);
+      setSuccessMessage(
+        "Tunnel généré : redirection vers l'éditeur..."
+      );
+
+      // Persistance + redirection vers l'éditeur
+      const stored = createFunnelFromAi(enrichedFunnel, brief);
+      // Petit délai pour laisser le toast de succès s'afficher
+      setTimeout(() => {
+        router.push(`/editor/${stored.id}`);
+      }, 600);
+
     } catch {
-      setMessage("La génération externe n'est pas disponible, le mode démo local reste utilisable");
+      setErrorReason("network-error");
+      setErrorMessage(
+        "Impossible de joindre le serveur. Vérifiez que npm run dev tourne bien et réessayez"
+      );
+      setFunnel(null);
     } finally {
       setIsGenerating(false);
     }
@@ -180,35 +255,45 @@ export function CreateFunnelWizard() {
         type: "hero",
         eyebrow: brief.funnelType,
         headline: `${brief.offerName} : ${brief.promise}`,
-        subheadline: `Un tunnel pensé pour ${brief.targetAudience}, avec preuve, offre et CTA visible`,
+        subheadline: `Un tunnel pensé pour ${brief.targetAudience}`,
         cta: brief.primaryCta,
         image: { mode: brief.defaultImageMode ?? "none" },
         visible: true,
       },
       ...(brief.aboutText
         ? [{
-            id: "preview-about",
-            type: "about" as const,
-            eyebrow: "À propos",
-            headline: "Un accompagnement aligné avec votre métier",
-            body: brief.aboutText,
-            image: { mode: "none" as const },
-            visible: true,
-          }]
+          id: "preview-about",
+          type: "about" as const,
+          eyebrow: "À propos",
+          headline: brief.brandName,
+          body: brief.aboutText,
+          image: { mode: "none" as const },
+          visible: true,
+        }]
+        : []),
+      ...(brief.videoUrl
+        ? [{
+          id: "preview-video",
+          type: "video" as const,
+          eyebrow: "Présentation",
+          headline: "Découvrez la méthode en quelques minutes",
+          video: { provider: "url" as const, url: brief.videoUrl },
+          image: { mode: "none" as const },
+          visible: true,
+        }]
         : []),
       {
         id: "preview-benefits",
         type: "benefits",
-        eyebrow: "Conversion",
-        headline: "Un parcours clair du premier clic à la décision",
+        eyebrow: "Aperçu",
+        headline: "Le résultat sera personnalisé après génération IA",
         bullets: [
-          "Page de vente structurée",
-          "Formulaire lead",
-          "Page de remerciement et emails",
-          "Export systeme.io",
+          "Cliquez sur Générer pour produire le copywriting réel",
+          "Toutes les sections seront adaptées à votre offre",
+          "L'aperçu actuel est une coquille structurelle",
         ],
         cta: brief.primaryCta,
-        image: { mode: brief.defaultImageMode ?? "none" },
+        image: { mode: "none" },
         visible: true,
       },
     ],
@@ -229,19 +314,18 @@ export function CreateFunnelWizard() {
   return (
     <div className="grid gap-5 animate-[fadeIn_0.4s_ease-out]">
       <Card className="p-3">
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-11">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-12">
           {steps.map((label, index) => (
             <button
               key={label}
               type="button"
               onClick={() => setStep(index)}
-              className={`rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all duration-200 ${
-                index === step
+              className={`rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all duration-200 ${index === step
                   ? "bg-[#080E1A] text-white shadow-sm"
                   : index < step
-                  ? "bg-[#31845C]/10 text-[#31845C]"
-                  : "bg-canvas text-muted hover:bg-line/40"
-              }`}
+                    ? "bg-[#31845C]/10 text-[#31845C]"
+                    : "bg-canvas text-muted hover:bg-line/40"
+                }`}
             >
               <span className="mb-1 block text-[10px] opacity-80">
                 {String(index + 1).padStart(2, "0")}
@@ -269,10 +353,21 @@ export function CreateFunnelWizard() {
                 onSelect={selectKind}
               />
             )}
+            {stepLabel === "Template" && (
+              <TemplateGalleryStep
+                funnelKind={brief.funnelKind}
+                language={brief.language}
+                selectedTemplateId={brief.templateId}
+                onSelect={selectTemplate}
+              />
+            )}
             {stepLabel === "Objectif" && (
               <ObjectiveStep
                 value={brief.funnelType}
-                onSelect={(v) => { update("funnelType", v); setStep((s) => Math.min(s + 1, steps.length - 1)); }}
+                onSelect={(v: string) => {
+                  update("funnelType", v);
+                  setStep((s) => Math.min(s + 1, steps.length - 1));
+                }}
               />
             )}
             {stepLabel === "Marque" && (
@@ -289,14 +384,14 @@ export function CreateFunnelWizard() {
               <AboutStep
                 language={brief.language}
                 value={brief.aboutText}
-                onChange={(text) => update("aboutText", text)}
+                onChange={(text: string) => update("aboutText", text)}
               />
             )}
             {stepLabel === "Vidéo" && (
               <VideoStep
                 language={brief.language}
                 videoUrl={brief.videoUrl}
-                onChange={(url) => update("videoUrl", url)}
+                onChange={(url: string) => update("videoUrl", url)}
               />
             )}
             {stepLabel === "CTA" && <CtaStep brief={brief} updateCta={updateCta} />}
@@ -307,19 +402,24 @@ export function CreateFunnelWizard() {
                 moodId={brief.moodId}
                 mainColor={brief.mainColor}
                 secondaryColor={brief.secondaryColor}
-                onChange={(patch) => updateMany(patch)}
+                onChange={(patch: Partial<FunnelBrief>) => updateMany(patch)}
               />
             )}
             {stepLabel === "Génération" && (
               <GenerationStep
-                templateName={currentTemplate.name}
-                templateObjective={currentTemplate.objective}
+                templateName={currentPremiumTemplate.name}
+                templateObjective={
+                  currentPremiumTemplate.personality[brief.language] ??
+                  currentPremiumTemplate.personality.fr
+                }
                 isGenerating={isGenerating}
                 onGenerate={generate}
                 onCheckHealth={checkHealth}
                 checkingHealth={checkingHealth}
                 health={aiHealth}
-                message={message}
+                successMessage={successMessage}
+                errorMessage={errorMessage}
+                errorReason={errorReason}
               />
             )}
           </div>
@@ -341,11 +441,12 @@ export function CreateFunnelWizard() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#C7A436]">Live preview</p>
                 <h2 className="mt-1 truncate text-lg font-black text-ink">{brief.brandName}</h2>
                 <p className="mt-0.5 truncate text-xs text-muted">
-                  {brief.funnelType} · {currentTemplate.sections.length} sections · {brief.language.toUpperCase()}
+                  {brief.funnelType} · {currentLegacyTemplate.sections.length} sections · {brief.language.toUpperCase()}
+                  {funnel ? " · IA" : " · structure"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button href="/funnels/demo" variant="secondary">Résultat</Button>
+                <Button href="/funnels/demo" variant="secondary">Démo</Button>
                 <Button href="/export-systeme" variant="secondary">
                   <Upload size={14} /> Export
                 </Button>
@@ -392,11 +493,10 @@ function ObjectiveStep({ value, onSelect }: { value: string; onSelect: (v: strin
             key={goal.value}
             type="button"
             onClick={() => onSelect(goal.value)}
-            className={`rounded-lg border p-4 text-left transition-all duration-200 ${
-              value === goal.value
+            className={`rounded-lg border p-4 text-left transition-all duration-200 ${value === goal.value
                 ? "border-[#31845C] bg-[#31845C]/10 shadow-sm"
                 : "border-line bg-white hover:border-[#080E1A]/30"
-            }`}
+              }`}
           >
             <span className="flex items-center justify-between gap-3 font-bold text-ink">
               {goal.label}
@@ -484,8 +584,8 @@ function AudienceStep({ brief, update }: { brief: FunnelBrief; update: <K extend
 
 function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: Partial<CtaConfig>) => void; }) {
   const cta = brief.primaryCta ?? makeAnchorCta("Recevoir l'offre", "lead-form");
-  const modes: { value: CtaMode; label: string; hint: string; icon: any; available: boolean }[] = [
-    { value: "redirect", label: "Lien de redirection", hint: "Checkout, calendrier, page externe, WhatsApp", icon: LinkIcon, available: true },
+  const modes: { value: CtaMode; label: string; hint: string; icon: typeof LinkIcon; available: boolean }[] = [
+    { value: "redirect", label: "Lien de redirection", hint: "Checkout Stripe, Calendly, page externe, WhatsApp", icon: LinkIcon, available: true },
     { value: "anchor", label: "Ancre interne", hint: "Faire défiler vers une section, par exemple le formulaire", icon: AnchorIcon, available: true },
     { value: "popup", label: "Popup intégrée", hint: "Ouvrir un formulaire en superposition", icon: Wand2, available: false },
   ];
@@ -513,11 +613,10 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
                 else if (m.value === "anchor") updateCta({ mode: "anchor", anchorId: cta.anchorId ?? "lead-form", target: "_self", url: undefined });
                 else updateCta({ mode: "popup", popupId: cta.popupId ?? "lead-popup" });
               }}
-              className={`flex items-start gap-3 rounded-lg border p-3.5 text-left transition-all duration-200 ${
-                active ? "border-[#31845C] bg-[#31845C]/10 shadow-sm" :
-                m.available ? "border-line bg-white hover:border-[#080E1A]/30" :
-                "border-line bg-canvas opacity-60 cursor-not-allowed"
-              }`}
+              className={`flex items-start gap-3 rounded-lg border p-3.5 text-left transition-all duration-200 ${active ? "border-[#31845C] bg-[#31845C]/10 shadow-sm" :
+                  m.available ? "border-line bg-white hover:border-[#080E1A]/30" :
+                    "border-line bg-canvas opacity-60 cursor-not-allowed"
+                }`}
             >
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-ink">
                 <Icon size={16} />
@@ -539,12 +638,12 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
 
       {cta.mode === "redirect" && (
         <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3 animate-[fadeIn_0.2s_ease-out]">
-          <Field label="URL de redirection">
-            <Input value={cta.url ?? ""} onChange={(e) => updateCta({ url: e.target.value })} placeholder="https://votre-page-de-paiement.com" type="url" />
+          <Field label="URL de redirection (Stripe Payment Link, Calendly, page externe...)">
+            <Input value={cta.url ?? ""} onChange={(e) => updateCta({ url: e.target.value })} placeholder="https://buy.stripe.com/..." type="url" />
           </Field>
           <Field label="Ouverture du lien">
             <Select value={cta.target ?? "_blank"} onChange={(e) => updateCta({ target: e.target.value as "_self" | "_blank" })}>
-              <option value="_blank">Nouvel onglet</option>
+              <option value="_blank">Nouvel onglet (recommandé)</option>
               <option value="_self">Même onglet</option>
             </Select>
           </Field>
@@ -567,10 +666,10 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
 
 function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends keyof FunnelBrief>(k: K, v: FunnelBrief[K]) => void; }) {
   const current = brief.defaultImageMode ?? "none";
-  const modes: { value: ImageMode; label: string; hint: string; icon: any }[] = [
-    { value: "none", label: "Aucune image par défaut", hint: "Tunnel sobre et rapide, vous ajoutez les images section par section après génération", icon: ImageOff },
-    { value: "ai-suggested", label: "Visuels recommandés par l'IA", hint: "Images libres de droits sélectionnées automatiquement selon le contexte", icon: Wand2 },
-    { value: "upload", label: "Préparer des emplacements pour vos visuels", hint: "Le tunnel laisse des emplacements prêts à recevoir vos propres images", icon: ImageIcon },
+  const modes: { value: ImageMode; label: string; hint: string; icon: typeof ImageOff; available: boolean }[] = [
+    { value: "none", label: "Aucune image par défaut", hint: "Tunnel sobre et rapide, vous ajoutez les images section par section après génération", icon: ImageOff, available: true },
+    { value: "upload", label: "Préparer des emplacements pour vos visuels", hint: "Le tunnel laisse des emplacements prêts à recevoir vos propres images", icon: ImageIcon, available: true },
+    { value: "ai-suggested", label: "Visuels recommandés par l'IA", hint: "Disponible dans une prochaine version", icon: Wand2, available: false },
   ];
 
   return (
@@ -587,10 +686,12 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
             <button
               key={m.value}
               type="button"
-              onClick={() => update("defaultImageMode", m.value)}
-              className={`flex items-start gap-3 rounded-lg border p-3.5 text-left transition-all duration-200 ${
-                active ? "border-[#31845C] bg-[#31845C]/10 shadow-sm" : "border-line bg-white hover:border-[#080E1A]/30"
-              }`}
+              disabled={!m.available}
+              onClick={() => m.available && update("defaultImageMode", m.value)}
+              className={`flex items-start gap-3 rounded-lg border p-3.5 text-left transition-all duration-200 ${active ? "border-[#31845C] bg-[#31845C]/10 shadow-sm" :
+                  m.available ? "border-line bg-white hover:border-[#080E1A]/30" :
+                    "border-line bg-canvas opacity-60 cursor-not-allowed"
+                }`}
             >
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-ink">
                 <Icon size={16} />
@@ -598,6 +699,9 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm font-bold text-ink">
                   {m.label}
+                  {!m.available && (
+                    <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted">À venir</span>
+                  )}
                   {active && <CheckCircle2 size={14} className="text-[#31845C]" />}
                 </span>
                 <span className="mt-0.5 block text-xs text-muted">{m.hint}</span>
@@ -614,21 +718,29 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
 }
 
 function GenerationStep({
-  templateName, templateObjective, isGenerating, onGenerate, message,
+  templateName, templateObjective,
+  isGenerating, onGenerate,
   onCheckHealth, checkingHealth, health,
+  successMessage, errorMessage, errorReason,
 }: {
   templateName: string; templateObjective: string;
-  isGenerating: boolean; onGenerate: () => void; message: string;
+  isGenerating: boolean; onGenerate: () => void;
   onCheckHealth: () => Promise<AiHealth>;
   checkingHealth: boolean;
   health: AiHealth | null;
+  successMessage: string;
+  errorMessage: string;
+  errorReason: string;
 }) {
   useEffect(() => {
     if (!health && !checkingHealth) onCheckHealth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const blocked = health?.reason === "invalid-key";
+  const blocked =
+    health?.reason === "missing-key" ||
+    health?.reason === "invalid-key" ||
+    health?.reason === "header-error";
 
   return (
     <div className="grid gap-4">
@@ -638,16 +750,15 @@ function GenerationStep({
         <p className="mt-1 text-xs leading-5 text-muted">{templateObjective}</p>
       </div>
 
-      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
-        health?.ok ? "border-[#31845C]/30 bg-[#31845C]/5 text-[#080E1A]" :
-        blocked ? "border-red/30 bg-red/5 text-red" :
-        "border-line bg-canvas text-muted"
-      }`}>
+      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${health?.ok ? "border-[#31845C]/30 bg-[#31845C]/5 text-[#080E1A]" :
+          blocked ? "border-red/30 bg-red/5 text-red" :
+            "border-line bg-canvas text-muted"
+        }`}>
         {health?.ok ? <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#31845C]" /> :
-         <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />}
         <div className="min-w-0 flex-1">
           <p className="font-bold">
-            {checkingHealth ? "Vérification de la clé IA…" : health?.ok ? "Clé IA opérationnelle" : "Diagnostic IA"}
+            {checkingHealth ? "Vérification de la clé IA..." : health?.ok ? "Clé IA opérationnelle" : "Diagnostic IA"}
           </p>
           <p className="mt-0.5 leading-relaxed">
             {checkingHealth ? "Patientez quelques secondes" : health?.message ?? "Cliquez pour vérifier"}
@@ -665,12 +776,29 @@ function GenerationStep({
 
       {isGenerating ? <LoaderIA /> : (
         <Button onClick={onGenerate} type="button" disabled={blocked}>
-          <Sparkles size={16} /> Générer le tunnel
+          <Sparkles size={16} /> {errorMessage ? "Réessayer la génération" : "Générer le tunnel"}
         </Button>
       )}
 
-      {message && (
-        <p className="rounded-lg bg-[#31845C]/10 p-3 text-xs font-semibold text-[#080E1A]">{message}</p>
+      {successMessage && !errorMessage && (
+        <p className="rounded-lg bg-[#31845C]/10 p-3 text-xs font-semibold text-[#080E1A]">
+          {successMessage}
+        </p>
+      )}
+
+      {errorMessage && (
+        <div className="rounded-lg border border-red/30 bg-red/5 p-3">
+          <p className="flex items-start gap-2 text-xs font-bold text-red">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>La génération a échoué</span>
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-red/90">{errorMessage}</p>
+          {errorReason && (
+            <p className="mt-2 text-[10px] uppercase tracking-wider text-red/70 font-bold">
+              Code: {errorReason}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
