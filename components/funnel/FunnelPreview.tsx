@@ -49,17 +49,20 @@ function getSectionColors(section: FunnelSection) {
   return style.colors ?? {};
 }
 
-// Détermine si la section utilise un renderer spécialisé (et donc on n'affiche pas les bullets génériques)
+// Détermine si la section utilise un renderer spécialisé.
+// On compare via le type "string" (au lieu du type littéral) pour rester tolérant
+// si certains slugs (faq, testimonials) ne sont pas encore dans FunnelSectionType.
 function usesSpecializedRenderer(section: FunnelSection): boolean {
   if (!Array.isArray(section.items) || section.items.length === 0) return false;
+  const t = section.type as string;
   return (
-    section.type === "faq" ||
-    section.type === "testimonials" ||
-    section.type === "proof" ||
-    section.type === "pricing" ||
-    section.type === "offer" ||
-    section.type === "bonus" ||
-    section.type === "guarantee"
+    t === "faq" ||
+    t === "testimonials" ||
+    t === "proof" ||
+    t === "pricing" ||
+    t === "offer" ||
+    t === "bonus" ||
+    t === "guarantee"
   );
 }
 
@@ -102,8 +105,11 @@ export function FunnelPreview({
       )}
 
       <div
-        className="bg-[#F4F5F8] flex items-start justify-center overflow-y-auto"
-        style={{ height: viewportHeight }}
+        className="bg-[#F4F5F8] flex items-start justify-center"
+        style={{
+          height: viewportHeight === "auto" ? "auto" : viewportHeight,
+          overflowY: viewportHeight === "auto" ? "visible" : "auto",
+        }}
       >
         <TemplateThemeProvider
           templateId={templateId}
@@ -400,6 +406,10 @@ function SectionBlock({
   const colors = getSectionColors(section);
   const useSpecialized = usesSpecializedRenderer(section);
 
+  // On utilise le type cast en string pour éviter les warnings TS
+  // si certains slugs (faq, testimonials) ne sont pas encore dans le type union.
+  const sectionType = section.type as string;
+
   const defaultBulletIconName = (section as any).iconName || "check";
   const DefaultBulletIcon = getIconByName(defaultBulletIconName);
   const bulletIcons = (section as any).bulletIcons as (string | undefined)[] | undefined;
@@ -461,20 +471,20 @@ function SectionBlock({
         </p>
       )}
 
-      {/* Renderers spécialisés selon section.type */}
-      {useSpecialized && section.type === "faq" && (
+      {/* Renderers spécialisés selon section.type (cast en string pour tolérer faq/testimonials hors-union) */}
+      {useSpecialized && sectionType === "faq" && (
         <FaqRenderer section={section} bodySize={bodySize} />
       )}
-      {useSpecialized && (section.type === "testimonials" || section.type === "proof") && (
+      {useSpecialized && (sectionType === "testimonials" || sectionType === "proof") && (
         <TestimonialsRenderer section={section} bodySize={bodySize} compact={compact} />
       )}
-      {useSpecialized && (section.type === "pricing" || section.type === "offer") && (
+      {useSpecialized && (sectionType === "pricing" || sectionType === "offer") && (
         <PricingRenderer section={section} bodySize={bodySize} compact={compact} />
       )}
-      {useSpecialized && section.type === "bonus" && (
+      {useSpecialized && sectionType === "bonus" && (
         <BonusRenderer section={section} bodySize={bodySize} compact={compact} />
       )}
-      {useSpecialized && section.type === "guarantee" && (
+      {useSpecialized && sectionType === "guarantee" && (
         <GuaranteeRenderer section={section} bodySize={bodySize} />
       )}
 

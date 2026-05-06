@@ -10,8 +10,8 @@ import type { IconName } from "@/lib/funnels/types";
 
 const ICONS: { name: IconName; Icon: LucideIcon; label: string }[] = [
   { name: "check", Icon: Check, label: "Check" },
-  { name: "checkCircle", Icon: CheckCircle, label: "Check rond" },
-  { name: "badgeCheck", Icon: BadgeCheck, label: "Badge" },
+  { name: "checkCircle" as IconName, Icon: CheckCircle, label: "Check rond" },
+  { name: "badgeCheck" as IconName, Icon: BadgeCheck, label: "Badge" },
   { name: "star", Icon: Star, label: "Étoile" },
   { name: "zap", Icon: Zap, label: "Éclair" },
   { name: "shield", Icon: Shield, label: "Bouclier" },
@@ -20,12 +20,12 @@ const ICONS: { name: IconName; Icon: LucideIcon; label: string }[] = [
   { name: "award", Icon: Award, label: "Récompense" },
   { name: "sparkles", Icon: Sparkles, label: "Étincelles" },
   { name: "target", Icon: Target, label: "Cible" },
-  { name: "trophy", Icon: Trophy, label: "Trophée" },
+  { name: "trophy" as IconName, Icon: Trophy, label: "Trophée" },
   { name: "lock", Icon: Lock, label: "Sécurité" },
   { name: "clock", Icon: Clock, label: "Temps" },
-  { name: "flame", Icon: Flame, label: "Flamme" },
-  { name: "crown", Icon: Crown, label: "Couronne" },
-  { name: "thumbsUp", Icon: ThumbsUp, label: "Pouce" },
+  { name: "flame" as IconName, Icon: Flame, label: "Flamme" },
+  { name: "crown" as IconName, Icon: Crown, label: "Couronne" },
+  { name: "thumbs-up" as IconName, Icon: ThumbsUp, label: "Pouce" },
   { name: "rocket", Icon: Rocket, label: "Fusée" },
   { name: "lightbulb", Icon: Lightbulb, label: "Idée" },
 ];
