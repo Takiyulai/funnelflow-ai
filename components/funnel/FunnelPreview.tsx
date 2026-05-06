@@ -15,6 +15,11 @@ import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
 import { getIconByName } from "@/components/editor/tabs/items/IconPicker";
+import { FaqRenderer } from "@/components/funnel/sections/FaqRenderer";
+import { TestimonialsRenderer } from "@/components/funnel/sections/TestimonialsRenderer";
+import { PricingRenderer } from "@/components/funnel/sections/PricingRenderer";
+import { BonusRenderer } from "@/components/funnel/sections/BonusRenderer";
+import { GuaranteeRenderer } from "@/components/funnel/sections/GuaranteeRenderer";
 
 
 type PreviewMode = "desktop" | "mobile";
@@ -29,7 +34,6 @@ interface FunnelPreviewProps {
   className?: string;
 }
 
-// Helper : lit un preset d'animation pour une cible donnée, avec fallback fade-up.
 function animOf(
   animations: SectionAnimations | undefined,
   target: keyof SectionAnimations,
@@ -38,12 +42,25 @@ function animOf(
   return animations?.[target] ?? fallback;
 }
 
-// Helper : extrait les overrides de couleur d'une section (si présents).
 function getSectionColors(section: FunnelSection) {
   const style = (section.style ?? {}) as {
     colors?: { bg?: string; ink?: string; accent?: string };
   };
   return style.colors ?? {};
+}
+
+// Détermine si la section utilise un renderer spécialisé (et donc on n'affiche pas les bullets génériques)
+function usesSpecializedRenderer(section: FunnelSection): boolean {
+  if (!Array.isArray(section.items) || section.items.length === 0) return false;
+  return (
+    section.type === "faq" ||
+    section.type === "testimonials" ||
+    section.type === "proof" ||
+    section.type === "pricing" ||
+    section.type === "offer" ||
+    section.type === "bonus" ||
+    section.type === "guarantee"
+  );
 }
 
 export function FunnelPreview({
@@ -381,8 +398,8 @@ function SectionBlock({
   const hasUploadedImage = section.image?.mode === "upload" && section.image?.url;
 
   const colors = getSectionColors(section);
+  const useSpecialized = usesSpecializedRenderer(section);
 
-  // Icône par défaut des bullets (et override par bullet via section.bulletIcons[i])
   const defaultBulletIconName = (section as any).iconName || "check";
   const DefaultBulletIcon = getIconByName(defaultBulletIconName);
   const bulletIcons = (section as any).bulletIcons as (string | undefined)[] | undefined;
@@ -444,7 +461,25 @@ function SectionBlock({
         </p>
       )}
 
-      {Array.isArray(section.bullets) && section.bullets.length > 0 && (
+      {/* Renderers spécialisés selon section.type */}
+      {useSpecialized && section.type === "faq" && (
+        <FaqRenderer section={section} bodySize={bodySize} />
+      )}
+      {useSpecialized && (section.type === "testimonials" || section.type === "proof") && (
+        <TestimonialsRenderer section={section} bodySize={bodySize} compact={compact} />
+      )}
+      {useSpecialized && (section.type === "pricing" || section.type === "offer") && (
+        <PricingRenderer section={section} bodySize={bodySize} compact={compact} />
+      )}
+      {useSpecialized && section.type === "bonus" && (
+        <BonusRenderer section={section} bodySize={bodySize} compact={compact} />
+      )}
+      {useSpecialized && section.type === "guarantee" && (
+        <GuaranteeRenderer section={section} bodySize={bodySize} />
+      )}
+
+      {/* Bullets génériques uniquement si PAS de renderer spécialisé */}
+      {!useSpecialized && Array.isArray(section.bullets) && section.bullets.length > 0 && (
         <ul
           data-ff-bullets="stagger"
           className="ff-bullets space-y-2 mb-4 list-none pl-0"
@@ -606,12 +641,6 @@ function CtaLink({
   );
 }
 
-/**
- * Extrait le nom de marque depuis un titre de tunnel.
- * Exemple : "KHALIS NATURE - Ebook Gratuit" → "KHALIS NATURE"
- *           "Mon site | Page de vente"      → "Mon site"
- *           "Acme — Offre"                   → "Acme"
- */
 function extractBrandName(fullName: string): string {
   if (!fullName) return "";
   const separators = [" - ", " – ", " — ", " | ", " : "];
