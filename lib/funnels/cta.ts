@@ -16,6 +16,11 @@ export function isSafeUrl(url: string): boolean {
   }
 }
 
+// Détermine si une URL est absolue (http/https) → mérite par défaut _blank
+function isAbsoluteHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url.trim());
+}
+
 // Calcule l'attribut href en fonction du mode du CTA
 export function ctaHref(cta?: CtaConfig | null): string {
   if (!cta) return "#lead-form";
@@ -35,9 +40,15 @@ export function ctaHref(cta?: CtaConfig | null): string {
 }
 
 // Calcule l'attribut target en fonction du mode et de la préférence utilisateur
+// CORRECTION : par défaut _blank pour les URLs absolues en mode redirect
+// (avant, _self par défaut → clic restait sur la même page)
 export function ctaTarget(cta?: CtaConfig | null): "_self" | "_blank" {
   if (!cta) return "_self";
-  if (cta.mode === "redirect" && cta.target === "_blank") return "_blank";
+  if (cta.mode !== "redirect") return "_self";
+  if (cta.target === "_self") return "_self";
+  if (cta.target === "_blank") return "_blank";
+  // target non défini : on choisit en fonction du type d'URL
+  if (cta.url && isAbsoluteHttpUrl(cta.url)) return "_blank";
   return "_self";
 }
 

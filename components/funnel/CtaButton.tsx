@@ -1,6 +1,7 @@
 "use client";
 
 import type { CtaConfig } from "@/lib/funnels/types";
+import { isSafeUrl } from "@/lib/funnels/cta";
 
 type Props = {
   cta: CtaConfig;
@@ -16,11 +17,7 @@ type Props = {
  * Bouton CTA qui rend la balise sémantique correcte selon cta.mode :
  *  - "redirect" : <a href={cta.url}> avec target/rel sécurisés
  *  - "anchor"   : <a href="#anchorId"> qui scrolle vers la section cible
- *  - "popup"    : <button> qui ouvrira un popup (Phase C)
- *
- * Le rendu visuel est entièrement piloté par la classe `ff-btn` définie dans
- * app/funnel-theme.css → couleurs, typographie, animations dépendent du
- * data-ff-template du wrapper parent (TemplateThemeProvider).
+ *  - "popup"    : <button> qui ouvre un popup embarqué
  */
 export function CtaButton({ cta, disabled = false, className = "" }: Props) {
   const baseClasses =
@@ -40,25 +37,51 @@ export function CtaButton({ cta, disabled = false, className = "" }: Props) {
   }
 
   // Mode "redirect" : lien externe (Stripe Payment Link, Calendly, etc.)
-  if (cta.mode === "redirect" && cta.url) {
-    const target = cta.target ?? "_blank";
-    const rel = target === "_blank" ? "noopener noreferrer" : undefined;
+  // CORRECTION CRITIQUE : par défaut, _blank pour les URLs externes.
+  // Avant, target="_self" si non défini → clic restait dans la même page.
+  if (cta.mode === "redirect") {
+    if (cta.url && isSafeUrl(cta.url)) {
+      // Si target n'est pas explicitement "_self", on force "_blank" sur les URLs absolues
+      const isAbsolute = /^https?:\/\//i.test(cta.url.trim());
+      const target =
+        cta.target === "_self"
+          ? "_self"
+          : cta.target === "_blank"
+          ? "_blank"
+          : isAbsolute
+          ? "_blank" // Défaut sain : nouvel onglet pour URL absolue
+          : "_self";
+      const rel = target === "_blank" ? "noopener noreferrer" : undefined;
+      return (
+        <a
+          href={cta.url}
+          target={target}
+          rel={rel}
+          className={finalClasses}
+          data-ff-cta
+        >
+          {cta.label}
+        </a>
+      );
+    }
+    // URL manquante ou douteuse : on tombe en fallback bouton inerte plutôt
+    // que rediriger vers #lead-form (ce qui était l'ancien comportement trompeur)
     return (
-      <a
-        href={cta.url}
-        target={target}
-        rel={rel}
+      <button
+        type="button"
+        disabled
         className={finalClasses}
         data-ff-cta
+        title="URL de redirection manquante ou invalide"
       >
         {cta.label}
-      </a>
+      </button>
     );
   }
 
   // Mode "anchor" : scroll vers une section interne
   if (cta.mode === "anchor") {
-    const anchorId = cta.anchorId ?? "lead-form";
+    const anchorId = (cta.anchorId ?? "lead-form").replace(/^#/, "");
     return (
       <a href={`#${anchorId}`} className={finalClasses} data-ff-cta>
         {cta.label}
@@ -66,7 +89,7 @@ export function CtaButton({ cta, disabled = false, className = "" }: Props) {
     );
   }
 
-  // Mode "popup" : ouverture du popup embarqué (markup généré par l'export)
+  // Mode "popup" : ouverture du popup embarqué
   if (cta.mode === "popup") {
     const popupId = cta.popupId ?? "lead-popup";
     return (
@@ -77,9 +100,6 @@ export function CtaButton({ cta, disabled = false, className = "" }: Props) {
         className={finalClasses}
         data-ff-cta
         onClick={(e) => {
-          // Sur la page publique, le popup est géré par le script embarqué
-          // dans le bloc HTML exporté. En mode app (Next.js), on déclenche
-          // ici l'ouverture si un overlay correspondant existe dans le DOM.
           const overlay =
             typeof document !== "undefined"
               ? document.getElementById(popupId)
@@ -96,7 +116,7 @@ export function CtaButton({ cta, disabled = false, className = "" }: Props) {
     );
   }
 
-  // Fallback : redirect sans URL renseignée → bouton inerte
+  // Fallback : bouton inerte
   return (
     <button type="button" disabled className={finalClasses} data-ff-cta>
       {cta.label}

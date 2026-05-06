@@ -6,6 +6,7 @@ import { loadPublishedFunnel, loadFunnelBySlug } from "@/lib/store/funnelStore";
 import { FunnelSectionsAnimated } from "@/components/funnel/FunnelSectionsAnimated";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
+import FunnelFooter from "@/components/funnel/FunnelFooter";
 
 type State =
   | { status: "loading" }
@@ -88,7 +89,7 @@ export function PublicFunnelClient({ slug }: Props) {
           accent={accent ?? "#C7A436"}
           dark={primary ?? "#080E1A"}
         />
-
+        <FunnelFooter funnel={funnel} />
         <PublicLeadForm language={funnel.language} />
       </main>
     </TemplateThemeProvider>

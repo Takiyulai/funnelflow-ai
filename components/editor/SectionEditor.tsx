@@ -49,20 +49,20 @@ export function SectionEditor({ section, language, onChange }: Props) {
   const sectionLabel = SECTION_LABELS[section.type] ?? section.type;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02]">
+    <div className="rounded-2xl border border-white/15 bg-zinc-900 shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-white/40">
+          <div className="text-[10px] uppercase tracking-wider text-white/50">
             Section
           </div>
           <div className="text-sm font-semibold text-white">{sectionLabel}</div>
         </div>
-        <div className="text-[10px] text-white/30">id: {section.id}</div>
+        <div className="text-[10px] text-white/40">id: {section.id}</div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-white/10 px-2 pt-2">
+      <div className="flex gap-1 border-b border-white/10 bg-zinc-950/50 px-2 pt-2">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -74,8 +74,8 @@ export function SectionEditor({ section, language, onChange }: Props) {
               className={[
                 "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-xs font-medium transition-colors",
                 isActive
-                  ? "border-amber-300 bg-white/[0.04] text-amber-200"
-                  : "border-transparent text-white/60 hover:bg-white/[0.03] hover:text-white",
+                  ? "border-amber-300 bg-zinc-900 text-amber-300"
+                  : "border-transparent text-white/60 hover:bg-white/[0.04] hover:text-white",
               ].join(" ")}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -86,7 +86,7 @@ export function SectionEditor({ section, language, onChange }: Props) {
       </div>
 
       {/* Tab content */}
-      <div className="p-4">
+      <div className="p-4 text-white">
         {activeTab === "content" && (
           <ContentTab section={section} language={language} onChange={onChange} />
         )}

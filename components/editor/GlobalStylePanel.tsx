@@ -2,11 +2,22 @@
 
 import { X } from "lucide-react";
 import type { Funnel } from "@/lib/funnels/types";
+import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 
 type Props = {
   funnel: Funnel;
   onChange: (patch: Partial<Funnel>) => void;
   onClose: () => void;
+};
+
+type ButtonAnim = "lift" | "glow" | "pulse" | "shine";
+
+// Type étendu pour les champs ajoutés (animationsEnabled, buttonAnim) qui
+// ne sont peut-être pas encore typés dans Funnel["design"]. Quand le type
+// sera consolidé, ces casts pourront être retirés.
+type DesignExt = Funnel["design"] & {
+  animationsEnabled?: boolean;
+  buttonAnim?: ButtonAnim;
 };
 
 const STYLE_PRESETS: { value: string; label: string }[] = [
@@ -17,6 +28,13 @@ const STYLE_PRESETS: { value: string; label: string }[] = [
   { value: "minimal", label: "Minimal" },
 ];
 
+const BUTTON_ANIMS: { value: ButtonAnim; label: string; hint: string }[] = [
+  { value: "lift", label: "⬆ Lift", hint: "Soulèvement subtil" },
+  { value: "glow", label: "✨ Glow", hint: "Lueur autour du bouton" },
+  { value: "pulse", label: "💓 Pulse", hint: "Battement continu" },
+  { value: "shine", label: "🌟 Shine", hint: "Reflet qui balaie" },
+];
+
 const DEFAULT_DESIGN: Funnel["design"] = {
   primaryColor: "#fbbf24",
   secondaryColor: "#0a0a0a",
@@ -25,10 +43,16 @@ const DEFAULT_DESIGN: Funnel["design"] = {
 };
 
 export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
-  const design: Funnel["design"] = funnel.design ?? DEFAULT_DESIGN;
+  const design = (funnel.design ?? DEFAULT_DESIGN) as DesignExt;
+  const templateId = (funnel.meta as { templateId?: string } | undefined)
+    ?.templateId;
 
-  const updateDesign = (patch: Partial<Funnel["design"]>) => {
-    onChange({ design: { ...design, ...patch } });
+  const animationsEnabled = design.animationsEnabled !== false;
+  const currentButtonAnim: ButtonAnim =
+    design.buttonAnim ?? getTemplateButtonAnim(templateId);
+
+  const updateDesign = (patch: Partial<DesignExt>) => {
+    onChange({ design: { ...design, ...patch } as Funnel["design"] });
   };
 
   return (
@@ -37,7 +61,7 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -51,7 +75,10 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* === Identité === */}
+          <SectionTitle>Identité</SectionTitle>
+
           <Field label="Nom du tunnel">
             <input
               type="text"
@@ -60,6 +87,9 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
               className={inputClass}
             />
           </Field>
+
+          {/* === Couleurs === */}
+          <SectionTitle>Couleurs</SectionTitle>
 
           <Field label="Couleur primaire">
             <ColorRow
@@ -95,6 +125,64 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
               ))}
             </select>
           </Field>
+
+          {/* === Animations === */}
+          <SectionTitle>Animations</SectionTitle>
+
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+            <div>
+              <div className="text-xs font-medium text-white">
+                Animations activées
+              </div>
+              <div className="text-[10px] text-white/50">
+                Désactivez pour un rendu statique sans transitions ni effets
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={animationsEnabled}
+              onChange={(e) =>
+                updateDesign({ animationsEnabled: e.target.checked })
+              }
+              className="h-4 w-4 cursor-pointer accent-amber-300"
+            />
+          </label>
+
+          <Field label="Animation des boutons">
+            <div className="grid grid-cols-2 gap-1.5">
+              {BUTTON_ANIMS.map((anim) => {
+                const active = currentButtonAnim === anim.value;
+                const disabled = !animationsEnabled;
+                return (
+                  <button
+                    key={anim.value}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => updateDesign({ buttonAnim: anim.value })}
+                    title={anim.hint}
+                    className={[
+                      "rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors",
+                      disabled
+                        ? "cursor-not-allowed border-white/5 bg-white/[0.01] text-white/30"
+                        : active
+                        ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
+                        : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20 hover:text-white",
+                    ].join(" ")}
+                  >
+                    {anim.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[10px] text-white/40">
+              {animationsEnabled
+                ? `Actuel : ${
+                    BUTTON_ANIMS.find((a) => a.value === currentButtonAnim)
+                      ?.hint ?? ""
+                  }`
+                : "Activez les animations pour personnaliser les boutons"}
+            </p>
+          </Field>
         </div>
 
         <div className="mt-5 flex justify-end">
@@ -114,10 +202,26 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
 const inputClass =
   "w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/40";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-medium text-white/70">{label}</label>
+      <label className="mb-1.5 block text-xs font-medium text-white/70">
+        {label}
+      </label>
       {children}
     </div>
   );

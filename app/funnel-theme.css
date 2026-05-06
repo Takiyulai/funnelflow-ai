@@ -658,3 +658,214 @@
   border-left: 3px solid var(--ff-accent);
   background: #fafbfc;
 }
+/* ===========================================================================
+ * Compatibilité avec useScrollReveal (ff-anim-pending / ff-anim-active)
+ * ----------------------------------------------------------------------------
+ * useScrollReveal bascule de "ff-anim-pending" à "ff-anim-active".
+ * On veut que ce système déclenche les MÊMES animations que la classe ff-in
+ * (utilisée par TemplateThemeProvider). Donc on duplique les sélecteurs.
+ * ======================================================================== */
+
+[data-ff-template] [data-ff-anim].ff-anim-active {
+  /* Quand useScrollReveal active un élément, on le marque aussi comme "in" */
+}
+
+/* fade-up via ff-anim-active */
+[data-ff-template] [data-ff-anim="fade-up"].ff-anim-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* fade-in via ff-anim-active */
+[data-ff-template] [data-ff-anim="fade-in"].ff-anim-active {
+  opacity: 1;
+}
+
+/* zoom-in via ff-anim-active */
+[data-ff-template] [data-ff-anim="zoom-in"].ff-anim-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* pulse via ff-anim-active */
+[data-ff-template] [data-ff-anim="pulse"].ff-anim-active {
+  opacity: 1;
+  animation: ffPulseSubtle 2.6s ease-in-out 0.4s infinite;
+}
+
+/* none via ff-anim-active : déjà visible */
+[data-ff-template] [data-ff-anim="none"].ff-anim-active {
+  opacity: 1;
+}
+
+/* Stagger via ff-anim-active */
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(1)  { transition-delay: 0ms;   animation-delay: 0ms;   }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(2)  { transition-delay: 80ms;  animation-delay: 80ms;  }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(3)  { transition-delay: 160ms; animation-delay: 160ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(4)  { transition-delay: 240ms; animation-delay: 240ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(5)  { transition-delay: 320ms; animation-delay: 320ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(6)  { transition-delay: 400ms; animation-delay: 400ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(7)  { transition-delay: 480ms; animation-delay: 480ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(8)  { transition-delay: 560ms; animation-delay: 560ms; }
+
+/* Désactivation globale aussi via ff-anim-pending */
+[data-ff-template][data-ff-animations="off"] [data-ff-anim].ff-anim-pending,
+[data-ff-template][data-ff-animations="off"] [data-ff-anim].ff-anim-active {
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+}
+/* ─────────────────────────────────────────────────────────────────────────
+   Alignement intelligent : titres/CTA centrés, corps de texte aligné à
+   gauche pour la lisibilité (max ~65 caractères). Sur mobile, tout centré.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-ff-template] .ff-section {
+  text-align: center;
+}
+
+[data-ff-template] .ff-headline,
+[data-ff-template] .ff-subheadline,
+[data-ff-template] .ff-eyebrow {
+  text-align: center;
+}
+
+/* Corps de texte et listes : alignés à gauche sur desktop, largeur lisible */
+[data-ff-template] .ff-body,
+[data-ff-template] .ff-bullets,
+[data-ff-template] .ff-bullets li {
+  text-align: left;
+  max-width: 65ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* CTA et images centrés (déjà block-level mais on force) */
+[data-ff-template] .ff-cta-wrap,
+[data-ff-template] .ff-image-wrap {
+  text-align: center;
+}
+
+/* Mobile : tout centré pour un rendu compact */
+@media (max-width: 640px) {
+  [data-ff-template] .ff-body,
+  [data-ff-template] .ff-bullets,
+  [data-ff-template] .ff-bullets li {
+    text-align: center;
+  }
+}
+
+/* Layouts split : pas de centrage forcé (texte côte à côte avec image) */
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"],
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"],
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] {
+  text-align: left;
+}
+
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-headline {
+  text-align: left;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Footer minimal — informations business
+   ───────────────────────────────────────────────────────────────────────── */
+[data-ff-template] .ff-footer {
+  margin-top: 4rem;
+  padding: 2rem 1.5rem;
+  border-top: 1px solid var(--ff-border, rgba(255, 255, 255, 0.08));
+  background: var(--ff-bg-soft, transparent);
+  color: var(--ff-muted, rgba(255, 255, 255, 0.6));
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+[data-ff-template] .ff-footer-business {
+  font-weight: 600;
+  color: var(--ff-ink, inherit);
+  margin-bottom: 0.25rem;
+}
+
+[data-ff-template] .ff-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+
+[data-ff-template] .ff-footer-meta span {
+  white-space: nowrap;
+}
+
+[data-ff-template] .ff-footer-copyright {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+/* ─────────────────────────────────────────────────────────────────────────
+   Bandeaux header & footer unifiés (neutres, indépendants du template)
+   ───────────────────────────────────────────────────────────────────────── */
+.ff-brand-bar {
+  background: #0a0a0a;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.875rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--ff-font-body, "Inter", system-ui, sans-serif);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: 0.01em;
+}
+
+.ff-brand-bar img {
+  height: 28px;
+  width: 28px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px;
+}
+
+/* Footer — fond aligné sur le header pour cohérence visuelle */
+[data-ff-template] .ff-footer {
+  margin-top: 0;
+  padding: 2rem 1.5rem;
+  background: #0a0a0a;
+  color: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+[data-ff-template] .ff-footer-business {
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 0.25rem;
+}
+
+[data-ff-template] .ff-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+
+[data-ff-template] .ff-footer-meta span {
+  white-space: nowrap;
+}
+
+[data-ff-template] .ff-footer-copyright {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+

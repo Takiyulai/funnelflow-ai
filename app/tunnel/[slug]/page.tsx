@@ -5,6 +5,7 @@ import { FunnelSectionsAnimated } from "@/components/funnel/FunnelSectionsAnimat
 import { PublicFunnelClient } from "@/components/funnel/PublicFunnelClient";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
+import FunnelFooter from "@/components/funnel/FunnelFooter";
 
 // Slugs résolus côté serveur (statiques / démo)
 const SERVER_FUNNELS: Record<string, Funnel> = {
@@ -61,6 +62,7 @@ const buttonAnim = userButtonAnim ?? getTemplateButtonAnim(templateId);
           accent={accent ?? "#C7A436"}
           dark={primary ?? "#080E1A"}
         />
+        <FunnelFooter funnel={funnel} />
 
         <PublicLeadForm language={funnel.language} />
       </main>

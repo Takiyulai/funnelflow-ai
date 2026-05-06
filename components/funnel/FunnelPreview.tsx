@@ -11,6 +11,9 @@ import type {
 import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
 import { getVideoEmbed } from "@/lib/funnels/video";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
+import { getTemplateButtonAnim } from "@/lib/funnels/templates";
+import FunnelFooter from "@/components/funnel/FunnelFooter";
 
 type PreviewMode = "desktop" | "mobile";
 
@@ -33,6 +36,16 @@ function animOf(
   return animations?.[target] ?? fallback;
 }
 
+// Helper : extrait les overrides de couleur d'une section (si présents).
+function getSectionColors(section: FunnelSection) {
+  // section.style.colors est ajouté dans cette livraison (Livraison A).
+  // Type-cast tolérant le temps que lib/funnels/types.ts soit étendu.
+  const style = (section.style ?? {}) as {
+    colors?: { bg?: string; ink?: string; accent?: string };
+  };
+  return style.colors ?? {};
+}
+
 export function FunnelPreview({
   funnel,
   defaultMode = "desktop",
@@ -53,6 +66,17 @@ export function FunnelPreview({
   const heroSection = visibleSections.find((s) => s.type === "hero");
   const otherSections = visibleSections.filter((s) => s.type !== "hero");
 
+  // Theme parameters from funnel meta + design
+  const templateId = (funnel.meta as any)?.templateId ?? "story-sell";
+  const design = (funnel.design ?? {}) as any;
+  const animationsEnabled = design.animationsEnabled !== false;
+  const buttonAnim = design.buttonAnim ?? getTemplateButtonAnim(templateId);
+
+  const overrides = {
+    accent: design.secondaryColor,
+    primary: design.primaryColor,
+  };
+
   return (
     <div
       className={`rounded-2xl border border-line bg-white shadow-sm overflow-hidden transition-shadow ${className}`}
@@ -65,21 +89,28 @@ export function FunnelPreview({
         className="bg-[#F4F5F8] flex items-start justify-center overflow-y-auto"
         style={{ height: viewportHeight }}
       >
-        {activeMode === "desktop" ? (
-          <DesktopFrame
-            funnel={funnel}
-            heroSection={heroSection}
-            otherSections={otherSections}
-            logoSrc={logoSrc}
-          />
-        ) : (
-          <MobileFrame
-            funnel={funnel}
-            heroSection={heroSection}
-            otherSections={otherSections}
-            logoSrc={logoSrc}
-          />
-        )}
+        <TemplateThemeProvider
+          templateId={templateId}
+          buttonAnim={buttonAnim}
+          animationsEnabled={animationsEnabled}
+          overrides={overrides}
+        >
+          {activeMode === "desktop" ? (
+            <DesktopFrame
+              funnel={funnel}
+              heroSection={heroSection}
+              otherSections={otherSections}
+              logoSrc={logoSrc}
+            />
+          ) : (
+            <MobileFrame
+              funnel={funnel}
+              heroSection={heroSection}
+              otherSections={otherSections}
+              logoSrc={logoSrc}
+            />
+          )}
+        </TemplateThemeProvider>
       </div>
     </div>
   );
@@ -146,13 +177,14 @@ function DesktopFrame({
   otherSections: FunnelSection[];
   logoSrc?: string;
 }) {
-  // Le containerRef enveloppe la zone scrollable : useScrollReveal observe
-  // tous les [data-ff-anim] et déclenche les animations à l'apparition.
   const containerRef = useScrollReveal<HTMLDivElement>();
 
   return (
     <div ref={containerRef} className="w-full p-5 animate-[ffFade_0.25s_ease-out]">
-      <div className="mx-auto max-w-[1100px] bg-white rounded-xl border border-line shadow-sm overflow-hidden">
+      <div
+        className="mx-auto max-w-[1100px] rounded-xl border border-line shadow-sm overflow-hidden"
+        style={{ background: "var(--ff-bg, #ffffff)", color: "var(--ff-ink, #0f172a)" }}
+      >
         <PreviewBody
           funnel={funnel}
           heroSection={heroSection}
@@ -181,7 +213,10 @@ function MobileFrame({
   return (
     <div className="py-6 animate-[ffFade_0.25s_ease-out]">
       <div className="w-[380px] bg-black rounded-[36px] p-3 shadow-xl">
-        <div className="bg-white rounded-[28px] overflow-hidden">
+        <div
+          className="rounded-[28px] overflow-hidden"
+          style={{ background: "var(--ff-bg, #ffffff)", color: "var(--ff-ink, #0f172a)" }}
+        >
           <div className="h-6 bg-black flex items-center justify-center">
             <span className="h-1 w-12 rounded-full bg-white/30" />
           </div>
@@ -217,45 +252,48 @@ function PreviewBody({
   const padY = compact ? "py-6" : "py-10";
   const titleSize = compact ? "text-[26px] leading-[1.15]" : "text-4xl leading-tight";
   const bodySize = compact ? "text-sm" : "text-base";
-  const accent = funnel.design?.secondaryColor ?? "#C7A436";
-  const dark = funnel.design?.primaryColor ?? "#080E1A";
+
+  // Hide logo placeholder if no real logo provided
+  const hasLogo = Boolean(logoSrc);
+  const brandName = extractBrandName(funnel.funnelName || "");
+
+  // Couleurs personnalisées du hero (si définies dans Style → Couleurs)
+  const heroColors = heroSection ? getSectionColors(heroSection) : {};
 
   return (
-    <div className="bg-white">
+    <div style={{ background: "var(--ff-bg, #ffffff)" }}>
+      {(hasLogo || brandName) && (
+  <div className="ff-brand-bar">
+    {hasLogo && <img src={logoSrc} alt="" />}
+    {brandName && <span>{brandName}</span>}
+  </div>
+)}
+
       {heroSection && (
         <section
           id={heroSection.id || "hero"}
           data-ff-section="hero"
           data-ff-layout={heroSection.layoutVariant ?? "centered"}
-          className={`${padX} ${padY} text-white`}
-          style={{ background: dark }}
+          className={`ff-section ${padX} ${padY}`}
+          style={{
+            background: heroColors.bg ?? "var(--ff-hero-bg, var(--ff-bg))",
+            color: heroColors.ink ?? "var(--ff-hero-ink, var(--ff-ink))",
+            ...(heroColors.accent
+              ? ({ ["--ff-accent"]: heroColors.accent } as React.CSSProperties)
+              : {}),
+          }}
         >
-          <div
-            data-ff-anim="fade-in"
-            className="flex items-center gap-2 mb-4"
-          >
-            {logoSrc ? (
-              <img
-                src={logoSrc}
-                alt=""
-                className="h-8 w-8 rounded-lg object-contain bg-white/10 p-0.5"
-              />
-            ) : (
-              <div
-                className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-sm"
-                style={{ background: accent, color: dark }}
-              >
-                FF
-              </div>
-            )}
-            <span className="font-semibold">{funnel.funnelName || "FunnelFlow AI"}</span>
-          </div>
+          
+
 
           {heroSection.eyebrow && (
             <span
               data-ff-anim={animOf(heroSection.animations, "eyebrow", "fade-in")}
-              className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
-              style={{ background: `${accent}26`, color: accent }}
+              className="ff-eyebrow inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
+              style={{
+                background: "color-mix(in srgb, var(--ff-accent) 15%, transparent)",
+                color: "var(--ff-accent)",
+              }}
             >
               {heroSection.eyebrow}
             </span>
@@ -264,7 +302,7 @@ function PreviewBody({
           {heroSection.headline && (
             <h1
               data-ff-anim={animOf(heroSection.animations, "headline", "fade-up")}
-              className={`font-black text-white ${titleSize} mb-4`}
+              className={`ff-headline font-black ${titleSize} mb-4`}
             >
               {heroSection.headline}
             </h1>
@@ -273,7 +311,8 @@ function PreviewBody({
           {heroSection.subheadline && (
             <p
               data-ff-anim={animOf(heroSection.animations, "subheadline", "fade-up")}
-              className={`text-white/80 ${bodySize} mb-5`}
+              className={`ff-subheadline ${bodySize} mb-5`}
+              style={{ opacity: 0.85 }}
             >
               {heroSection.subheadline}
             </p>
@@ -282,7 +321,8 @@ function PreviewBody({
           {heroSection.image?.mode === "upload" && heroSection.image?.url && (
             <figure
               data-ff-anim={animOf(heroSection.animations, "image", "fade-in")}
-              className="mt-4 mb-5 overflow-hidden rounded-xl border border-white/10"
+              className="ff-image-wrap mt-4 mb-5 overflow-hidden rounded-xl"
+              style={{ border: "1px solid rgba(255,255,255,0.1)" }}
             >
               <img
                 src={heroSection.image.url}
@@ -302,13 +342,13 @@ function PreviewBody({
           )}
 
           {heroSection.cta?.label && (
-            <CtaLink
-              cta={heroSection.cta}
-              bg={accent}
-              fg={dark}
-              className="text-sm"
-              anim={animOf(heroSection.animations, "cta", "fade-up")}
-            />
+            <div className="ff-cta-wrap">
+              <CtaLink
+                cta={heroSection.cta}
+                className="text-sm"
+                anim={animOf(heroSection.animations, "cta", "fade-up")}
+              />
+            </div>
           )}
         </section>
       )}
@@ -321,10 +361,10 @@ function PreviewBody({
           padY={padY}
           bodySize={bodySize}
           compact={compact}
-          accent={accent}
-          dark={dark}
         />
       ))}
+
+      <FunnelFooter funnel={funnel} />
     </div>
   );
 }
@@ -335,32 +375,43 @@ function SectionBlock({
   padY,
   bodySize,
   compact,
-  accent,
-  dark,
 }: {
   section: FunnelSection;
   padX: string;
   padY: string;
   bodySize: string;
   compact: boolean;
-  accent: string;
-  dark: string;
 }) {
   const titleSize = compact ? "text-xl" : "text-2xl";
   const isForm = section.type === "form";
   const hasUploadedImage = section.image?.mode === "upload" && section.image?.url;
+
+  // Couleurs personnalisées de la section (si définies dans Style → Couleurs)
+  const colors = getSectionColors(section);
 
   return (
     <section
       id={section.id}
       data-ff-section={section.type}
       data-ff-layout={section.layoutVariant ?? "centered"}
-      className={`${padX} ${padY} border-t border-line`}
+      className={`ff-section ${padX} ${padY}`}
+      style={{
+        borderTop: "1px solid var(--ff-border, rgba(0,0,0,0.08))",
+        background: colors.bg ?? "var(--ff-bg, #ffffff)",
+        color: colors.ink ?? "var(--ff-ink, #0f172a)",
+        ...(colors.accent
+          ? ({ ["--ff-accent"]: colors.accent } as React.CSSProperties)
+          : {}),
+      }}
     >
       {section.eyebrow && (
         <span
           data-ff-anim={animOf(section.animations, "eyebrow", "fade-in")}
-          className="inline-block px-2.5 py-1 rounded-full bg-[#08498D]/10 text-[#08498D] text-[10px] font-bold uppercase tracking-wider mb-3"
+          className="ff-eyebrow inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-3"
+          style={{
+            background: "color-mix(in srgb, var(--ff-accent) 12%, transparent)",
+            color: "var(--ff-accent)",
+          }}
         >
           {section.eyebrow}
         </span>
@@ -369,7 +420,7 @@ function SectionBlock({
       {section.headline && (
         <h2
           data-ff-anim={animOf(section.animations, "headline", "fade-up")}
-          className={`font-black text-ink ${titleSize} mb-3`}
+          className={`ff-headline font-black ${titleSize} mb-3`}
         >
           {section.headline}
         </h2>
@@ -378,7 +429,8 @@ function SectionBlock({
       {section.subheadline && (
         <p
           data-ff-anim={animOf(section.animations, "subheadline", "fade-up")}
-          className={`text-muted ${bodySize} mb-4`}
+          className={`ff-subheadline ${bodySize} mb-4`}
+          style={{ opacity: 0.75 }}
         >
           {section.subheadline}
         </p>
@@ -387,26 +439,25 @@ function SectionBlock({
       {section.body && (
         <p
           data-ff-anim={animOf(section.animations, "body", "fade-up")}
-          className={`text-ink/80 ${bodySize} mb-4 whitespace-pre-line`}
+          className={`ff-body ${bodySize} mb-4 whitespace-pre-line`}
+          style={{ opacity: 0.9 }}
         >
           {section.body}
         </p>
       )}
 
       {Array.isArray(section.bullets) && section.bullets.length > 0 && (
-        <ul
-          data-ff-bullets="stagger"
-          className="space-y-2 mb-4"
-        >
+        <ul data-ff-bullets="stagger" className="ff-bullets space-y-2 mb-4">
           {section.bullets.map((bullet, i) => (
             <li
               key={i}
               data-ff-anim={animOf(section.animations, "bullets", "fade-up")}
-              className={`flex gap-2 text-ink/85 ${bodySize}`}
+              className={`flex gap-2 ${bodySize}`}
+              style={{ opacity: 0.9 }}
             >
               <span
                 className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
-                style={{ background: "#31845C" }}
+                style={{ background: "var(--ff-accent, #31845C)" }}
               />
               <span>{bullet}</span>
             </li>
@@ -425,7 +476,8 @@ function SectionBlock({
       {hasUploadedImage && (
         <figure
           data-ff-anim={animOf(section.animations, "image", "fade-in")}
-          className="mt-4 mb-2 overflow-hidden rounded-lg border border-line"
+          className="ff-image-wrap mt-4 mb-2 overflow-hidden rounded-lg"
+          style={{ border: "1px solid var(--ff-border, rgba(0,0,0,0.08))" }}
         >
           <img
             src={section.image!.url!}
@@ -441,22 +493,32 @@ function SectionBlock({
           id="lead-form"
           onSubmit={(e) => e.preventDefault()}
           data-ff-anim={animOf(section.animations, "cta", "fade-up")}
-          className="space-y-3 mt-4 max-w-md"
+          className="space-y-3 mt-4 max-w-md mx-auto"
         >
           <input
             type="text"
             placeholder="Votre prénom"
-            className="w-full px-3 py-2.5 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D] transition-colors"
+            className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none transition-colors"
+            style={{
+              border: "1px solid var(--ff-border, rgba(0,0,0,0.12))",
+              background: "var(--ff-input-bg, #ffffff)",
+              color: "var(--ff-ink, #0f172a)",
+            }}
           />
           <input
             type="email"
             placeholder="Votre email"
-            className="w-full px-3 py-2.5 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D] transition-colors"
+            className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none transition-colors"
+            style={{
+              border: "1px solid var(--ff-border, rgba(0,0,0,0.12))",
+              background: "var(--ff-input-bg, #ffffff)",
+              color: "var(--ff-ink, #0f172a)",
+            }}
           />
           <button
             type="submit"
-            className="w-full px-4 py-2.5 rounded-lg font-bold text-sm hover:opacity-90 transition"
-            style={{ background: accent, color: dark }}
+            className="ff-btn w-full px-4 py-2.5 rounded-lg font-bold text-sm transition"
+            data-ff-cta
           >
             {section.cta?.label || "Envoyer"}
           </button>
@@ -464,13 +526,13 @@ function SectionBlock({
       )}
 
       {!isForm && section.cta?.label && (
-        <CtaLink
-          cta={section.cta}
-          bg={dark}
-          fg="#FFFFFF"
-          className="text-sm mt-2"
-          anim={animOf(section.animations, "cta", "fade-up")}
-        />
+        <div className="ff-cta-wrap">
+          <CtaLink
+            cta={section.cta}
+            className="text-sm mt-2"
+            anim={animOf(section.animations, "cta", "fade-up")}
+          />
+        </div>
       )}
     </section>
   );
@@ -493,9 +555,8 @@ function VideoEmbedBlock({
   return (
     <div
       data-ff-anim={anim ?? "zoom-in"}
-      className={`overflow-hidden rounded-lg border border-line/40 ${
-        compact ? "my-3" : "my-5"
-      }`}
+      className={`overflow-hidden rounded-lg ${compact ? "my-3" : "my-5"}`}
+      style={{ border: "1px solid var(--ff-border, rgba(0,0,0,0.08))" }}
     >
       <div className="relative aspect-video w-full bg-black">
         <iframe
@@ -510,17 +571,13 @@ function VideoEmbedBlock({
   );
 }
 
-// Lien CTA réel avec href / target / rel via les helpers partagés
+// Lien CTA réel — utilise la classe ff-btn alimentée par les variables CSS du template
 function CtaLink({
   cta,
-  bg,
-  fg,
   className = "",
   anim,
 }: {
   cta: NonNullable<FunnelSection["cta"]>;
-  bg: string;
-  fg: string;
   className?: string;
   anim?: AnimationPreset;
 }) {
@@ -535,11 +592,27 @@ function CtaLink({
       target={target}
       rel={rel}
       data-ff-anim={anim ?? "fade-up"}
-      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold shadow-md hover:opacity-90 transition no-underline ${className}`}
-      style={{ background: bg, color: fg }}
+      data-ff-cta
+      className={`ff-btn inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold no-underline ${className}`}
     >
       {cta.label}
       {external && <ExternalLink size={13} />}
     </a>
   );
 }
+/**
+ * Extrait le nom de marque depuis un titre de tunnel.
+ * Exemple : "KHALIS NATURE - Ebook Gratuit" → "KHALIS NATURE"
+ *           "Mon site | Page de vente"      → "Mon site"
+ *           "Acme — Offre"                   → "Acme"
+ */
+function extractBrandName(fullName: string): string {
+  if (!fullName) return "";
+  const separators = [" - ", " – ", " — ", " | ", " : "];
+  for (const sep of separators) {
+    const idx = fullName.indexOf(sep);
+    if (idx > 0) return fullName.slice(0, idx).trim();
+  }
+  return fullName.trim();
+}
+

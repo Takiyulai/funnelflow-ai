@@ -251,7 +251,27 @@ function mergeAiSectionWithSlot(
     const brand = brief.brandName?.trim() || brief.offerName?.trim() || "";
     merged.headline = brand ? `${brand} — ${slot.type}` : slot.type;
   }
+  const isMainCtaHost =
+    slot.type === "offer" ||
+    slot.type === "cta" ||
+    slot.type === "form" ||
+    (slot.type === "hero" && !merged.cta);
 
+  if (isMainCtaHost && brief.ctaUrl && brief.ctaUrl.trim().length > 0) {
+    const userUrl = brief.ctaUrl.trim();
+    // On respecte le label que l'IA a généré (plus contextuel) ou on tombe en fallback
+    const label =
+      merged.cta?.label?.trim() ||
+      brief.ctaLabel?.trim() ||
+      "Je commence maintenant";
+
+    merged.cta = {
+      mode: "redirect",
+      label,
+      url: userUrl,
+      target: brief.ctaTarget ?? "_blank",
+    };
+  }
   return merged;
 }
 

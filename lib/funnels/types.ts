@@ -90,11 +90,10 @@ export type CtaConfig = {
   anchorId?: string;
   // mode === "popup"
   popupId?: string;
-  popupTitle?: string;        // ← NOUVEAU
-  popupBody?: string;         // ← NOUVEAU (texte court d'intro dans le popup)
-  popupEmbed?: string;        // ← NOUVEAU (code d'embed formulaire systeme.io collé par l'utilisateur)
+  popupTitle?: string;
+  popupBody?: string;
+  popupEmbed?: string;
 };
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Image par section
@@ -132,17 +131,15 @@ export type SectionLayout =
   | "text-image"
   | "image-text";
 
-// Variante de mise en page utilisée par les templates premium
-// (plus riche que SectionLayout, applique des règles conditionnelles au rendu)
 export type SectionLayoutVariant =
-  | "centered"           // tout centré, espace généreux (premium par défaut)
-  | "left-aligned"       // texte aligné à gauche
-  | "split-text-image"   // texte gauche / image droite (desktop)
-  | "split-image-text"   // image gauche / texte droite (desktop)
-  | "stacked-card"       // carte centrée avec ombre
-  | "wide-banner"        // bannière pleine largeur
-  | "feature-grid"       // grille 3 colonnes (pour benefits)
-  | "dense-list";        // liste compacte (pour FAQ ou pricing)
+  | "centered"
+  | "left-aligned"
+  | "split-text-image"
+  | "split-image-text"
+  | "stacked-card"
+  | "wide-banner"
+  | "feature-grid"
+  | "dense-list";
 
 export type SectionStyle = {
   textColor?: string;
@@ -150,13 +147,16 @@ export type SectionStyle = {
   spacing?: "compact" | "default" | "large";
   align?: SectionAlign;
   layout?: SectionLayout;
+  colors?: {
+    bg?: string;
+    ink?: string;
+    accent?: string;
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Animations
 // ─────────────────────────────────────────────────────────────────────────────
-// Animations CSS appliquées au scroll via IntersectionObserver
-// Chaque preset correspond à une keyframe définie dans globals.css
 export type AnimationPreset =
   | "none"
   | "fade-in"
@@ -168,7 +168,6 @@ export type AnimationPreset =
   | "zoom-out"
   | "pulse";
 
-// Cibles d'animation au sein d'une section
 export type AnimationTarget =
   | "eyebrow"
   | "headline"
@@ -179,11 +178,69 @@ export type AnimationTarget =
   | "video"
   | "cta";
 
-// Mapping target → preset, défini par le template ou surchargé par l'utilisateur
 export type SectionAnimations = Partial<Record<AnimationTarget, AnimationPreset>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section d'un tunnel (avec animations et layoutVariant optionnels)
+// Items spécialisés par type de section (Livraison B)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** FAQ — paire question / réponse */
+export type FaqItem = {
+  question: string;
+  answer: string;
+};
+
+/** Témoignage client */
+export type TestimonialItem = {
+  quote: string;
+  authorName: string;
+  authorRole?: string;     // "CEO de Acme", "Cliente", etc.
+  avatarUrl?: string;
+  rating?: number;         // 1 à 5 (étoiles)
+  sourceUrl?: string;      // lien vers l'avis Google / Trustpilot / etc.
+};
+
+/** Plan de tarification */
+export type PricingPlanItem = {
+  name: string;
+  price: string;           // "29€", "Gratuit", "Sur devis"
+  period?: string;         // "/mois", "/an", "à vie"
+  description?: string;    // accroche courte
+  features: string[];      // bullets internes au plan
+  cta?: CtaConfig;         // bouton du plan
+  highlighted?: boolean;   // plan mis en avant
+  badge?: string;          // ex: "Populaire", "-20%"
+};
+
+/** Bonus / cadeau inclus dans une offre */
+export type BonusItem = {
+  title: string;
+  description?: string;
+  value?: string;          // "Valeur 97€"
+  iconName?: IconName;
+};
+
+/** Garantie / engagement */
+export type GuaranteeItem = {
+  title: string;
+  description?: string;
+  iconName?: IconName;     // shield, lock, check, award...
+  duration?: string;       // "30 jours", "1 an"
+};
+
+/**
+ * Union discriminée des items spécialisés.
+ * Le champ "kind" permet au renderer et à l'éditeur de dispatcher proprement.
+ */
+export type SectionItem =
+  | { kind: "faq"; data: FaqItem }
+  | { kind: "testimonial"; data: TestimonialItem }
+  | { kind: "pricing"; data: PricingPlanItem }
+  | { kind: "bonus"; data: BonusItem }
+  | { kind: "guarantee"; data: GuaranteeItem };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section d'un tunnel (avec animations, layoutVariant et items optionnels)
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelSection = {
   id: string;
@@ -206,11 +263,17 @@ export type FunnelSection = {
   visible?: boolean;
   style?: SectionStyle;
 
-  // Nouveautés Phase B : layout riche et animations
   layoutVariant?: SectionLayoutVariant;
   animations?: SectionAnimations;
 
   visualDirection?: string;
+
+  /**
+   * Items spécialisés par type (FAQ, témoignages, pricing, bonus, garantie).
+   * Le `kind` de chaque item doit correspondre au `type` de la section.
+   * Voir lib/funnels/sectionItems.ts pour helpers et migration.
+   */
+  items?: SectionItem[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,10 +357,13 @@ export type FunnelBrief = {
   videoUrl?: string;
 
   aboutText?: string;
+  ctaUrl?: string;
+  ctaLabel?: string;
+  ctaTarget?: "_self" | "_blank";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Template (ancien type, conservé pour rétrocompat avec funnelTemplates simples)
+// Template (ancien type, conservé pour rétrocompat)
 // ─────────────────────────────────────────────────────────────────────────────
 export type FunnelTemplate = {
   id: string;
@@ -309,83 +375,56 @@ export type FunnelTemplate = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NOUVEAU : Template premium avec personnalité, layouts et animations
+// Template premium
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Personnalité visuelle d'un template (description courte différenciante)
 export type TemplatePersonality = {
   fr: string;
   en: string;
   es: string;
 };
 
-// Slot de section dans un template premium
-// Définit la structure attendue + le layout + les animations par défaut
 export type TemplateSectionSlot = {
   type: FunnelSectionType;
-  // Identifiant stable de la section (slug-case)
   id: string;
-  // Si true, la section est obligatoire (le template ne marche pas sans)
   required: boolean;
-  // Layout principal (peut être ajusté par les règles conditionnelles)
   layoutVariant: SectionLayoutVariant;
-  // Animations par défaut pour chaque cible de cette section
   animations: SectionAnimations;
-  // Suggestion d'icône lucide pour les bullets, si applicable
   defaultBulletIcon?: IconName;
-  // Conditions à vérifier pour que la section soit incluse
-  // Ex : "video.required" inclut la section seulement si l'utilisateur a fourni videoUrl
   includeIf?: TemplateCondition;
 };
 
-// Condition simple évaluée contre le brief utilisateur
 export type TemplateCondition =
-  | { has: "video" }       // brief.videoUrl est rempli
-  | { has: "about" }       // brief.aboutText est rempli
-  | { has: "logo" }        // brief.logoUrl est rempli
+  | { has: "video" }
+  | { has: "about" }
+  | { has: "logo" }
   | { funnelKindIn: FunnelKind[] }
   | { moodIn: MoodId[] }
   | { always: true };
 
-// Règle conditionnelle de fallback de layout
-// Ex : "si la section n'a pas d'image, bascule split-text-image en centered"
 export type TemplateLayoutRule = {
-  // Condition qui déclenche la règle
   when:
     | { sectionMissing: "image" }
     | { sectionMissing: "video" }
     | { sectionMissing: "bullets" };
-  // Layout de remplacement
   fallbackLayout: SectionLayoutVariant;
 };
 
-// Définition complète d'un template premium
 export type TemplateDefinition = {
   id: string;
-  // Nom commercial court (affiché dans la galerie)
   name: string;
-  // Personnalité différenciante (1 phrase)
   personality: TemplatePersonality;
-  // Catégorie/usage type, pour filtrage
   bestFor: FunnelKind[];
-  // Mood par défaut suggéré (l'utilisateur peut le surcharger)
   defaultMoodId: MoodId;
-  // Badge court affiché sur la card (ex : "Premium", "Punchy", "Story")
   badge: string;
-  // Trois couleurs d'aperçu pour la card de galerie
   previewColors: [string, string, string];
-  // Sections du template, dans l'ordre
   sections: TemplateSectionSlot[];
-  // Règles de layout conditionnelles globales appliquées à toutes les sections
   layoutRules: TemplateLayoutRule[];
-  // Animation des bullets (au scroll en cascade ou non)
   bulletAnimation: "stagger" | "uniform" | "none";
-  // Densité visuelle générale (impacte spacing par défaut)
   density: "airy" | "balanced" | "dense";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TunnelGroup (préparation Phase B Message 4 : multi-pages)
+// TunnelGroup
 // ─────────────────────────────────────────────────────────────────────────────
 export type TunnelGroupKind =
   | "lead-magnet"
@@ -417,7 +456,7 @@ export type TunnelGroup = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Helpers CTA
 // ─────────────────────────────────────────────────────────────────────────────
 export const DEFAULT_CTA: CtaConfig = {
   label: "En savoir plus",

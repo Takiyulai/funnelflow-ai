@@ -29,6 +29,21 @@ type HistoryState = {
 
 const HISTORY_LIMIT = 50;
 const AUTO_SAVE_DEBOUNCE_MS = 600;
+/**
+ * Extrait le nom de marque depuis un titre de tunnel.
+ * Exemple : "KHALIS NATURE - Ebook Gratuit" → "KHALIS NATURE"
+ *           "Mon site | Page de vente"      → "Mon site"
+ *           "Acme — Offre"                   → "Acme"
+ */
+function extractBrandName(fullName: string): string {
+  if (!fullName) return "";
+  const separators = [" - ", " – ", " — ", " | ", " : "];
+  for (const sep of separators) {
+    const idx = fullName.indexOf(sep);
+    if (idx > 0) return fullName.slice(0, idx).trim();
+  }
+  return fullName.trim();
+}
 
 export default function EditorPage() {
   const params = useParams<{ id: string }>();
@@ -346,86 +361,88 @@ export default function EditorPage() {
   return (
     <AppShell>
       {/* Toolbar */}
-      <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-white/10 bg-black/60 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-1 text-sm text-white/60 hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Dashboard
-            </Link>
-            <div className="h-4 w-px bg-white/10" />
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <h1 className="truncate text-sm font-semibold text-white">
-                {funnel.funnelName}
-              </h1>
-              <div className="flex items-center gap-1 text-[10px] text-white/40">
-                <span>/tunnel/</span>
-                <input
-                  type="text"
-                  defaultValue={stored.slug}
-                  onBlur={(e) => updateSlug(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter")
-                      (e.target as HTMLInputElement).blur();
-                  }}
-                  className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-white/60 outline-none hover:border-white/10 focus:border-amber-300/40 focus:text-white"
-                />
-                {stored.publishedAt && (
-                  <span className="ml-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
-                    Publié
-                  </span>
-                )}
-              </div>
-            </div>
+<div className="sticky top-0 z-20 -mx-4 -mt-4 mb-4 border-b border-white/10 bg-black/60 px-4 py-3 backdrop-blur md:-mx-8 md:-mt-8 md:px-8">
+  <div className="grid grid-cols-3 items-center gap-3">
+    {/* Gauche : retour + indicateur de sauvegarde */}
+    <div className="flex items-center gap-3 min-w-0">
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-1 text-sm text-white/60 hover:text-white"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span className="hidden sm:inline">Dashboard</span>
+      </Link>
+      <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+    </div>
 
-            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={undo}
-              disabled={history.past.length === 0}
-              title="Annuler (Ctrl+Z)"
-              className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
-            >
-              <Undo2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={redo}
-              disabled={history.future.length === 0}
-              title="Rétablir (Ctrl+Y)"
-              className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
-            >
-              <Redo2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleManualSave}
-              title="Enregistrer (Ctrl+S)"
-              className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
-            >
-              <Save className="h-4 w-4" />
-              Enregistrer
-            </button>
-            <Link
-              href={`/tunnel/${stored.slug}`}
-              target="_blank"
-              className="flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
-            >
-              <Eye className="h-4 w-4" />
-              Aperçu public
-            </Link>
-            <Button onClick={handlePublish} className="text-xs">
-              Publier
-            </Button>
-          </div>
-        </div>
+    {/* Centre : nom de marque uniquement */}
+    <div className="flex flex-col items-center justify-center min-w-0">
+      <h1 className="truncate text-center text-sm font-semibold text-white">
+        {extractBrandName(funnel.funnelName)}
+      </h1>
+      <div className="flex items-center gap-1 text-[10px] text-white/40">
+        <span>/tunnel/</span>
+        <input
+          type="text"
+          defaultValue={stored.slug}
+          onBlur={(e) => updateSlug(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-white/60 outline-none hover:border-white/10 focus:border-amber-300/40 focus:text-white"
+        />
+        {stored.publishedAt && (
+          <span className="ml-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
+            Publié
+          </span>
+        )}
       </div>
+    </div>
+
+    {/* Droite : actions */}
+    <div className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={undo}
+        disabled={history.past.length === 0}
+        title="Annuler (Ctrl+Z)"
+        className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
+      >
+        <Undo2 className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={redo}
+        disabled={history.future.length === 0}
+        title="Rétablir (Ctrl+Y)"
+        className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
+      >
+        <Redo2 className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={handleManualSave}
+        title="Enregistrer (Ctrl+S)"
+        className="hidden md:flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
+      >
+        <Save className="h-4 w-4" />
+        Enregistrer
+      </button>
+      <Link
+        href={`/tunnel/${stored.slug}`}
+        target="_blank"
+        className="hidden md:flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
+      >
+        <Eye className="h-4 w-4" />
+        Aperçu public
+      </Link>
+      <Button onClick={handlePublish} className="text-xs">
+        Publier
+      </Button>
+    </div>
+  </div>
+</div>
+
 
       {/* 3-column layout */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]">

@@ -61,26 +61,38 @@ export function StyleTab({ section, onChange }: Props) {
   const animations: SectionAnimations = section.animations ?? {};
   const style: SectionStyle = section.style ?? {};
   const currentAlign: SectionAlign = style.align ?? "left";
+  const colors = style.colors ?? {};
 
   const updateAnim = (target: AnimationTarget, preset: AnimationPreset) => {
-    onChange({
-      animations: {
-        ...animations,
-        [target]: preset,
-      },
-    });
+    onChange({ animations: { ...animations, [target]: preset } });
   };
 
   const updateAlign = (align: SectionAlign) => {
-    onChange({
-      style: { ...style, align },
-    });
+    onChange({ style: { ...style, align } });
   };
 
   const updateSpacing = (spacing: NonNullable<SectionStyle["spacing"]>) => {
+    onChange({ style: { ...style, spacing } });
+  };
+
+  const updateColor = (
+    key: "bg" | "ink" | "accent",
+    value: string | undefined
+  ) => {
+    const nextColors = { ...colors };
+    if (value && value.trim()) {
+      nextColors[key] = value;
+    } else {
+      delete nextColors[key];
+    }
+    const hasAny = nextColors.bg || nextColors.ink || nextColors.accent;
     onChange({
-      style: { ...style, spacing },
+      style: { ...style, colors: hasAny ? nextColors : undefined },
     });
+  };
+
+  const resetColors = () => {
+    onChange({ style: { ...style, colors: undefined } });
   };
 
   return (
@@ -140,6 +152,46 @@ export function StyleTab({ section, onChange }: Props) {
           </ModeBtn>
         </div>
       </Field>
+
+      {/* Couleurs de section */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/70">
+            Couleurs de cette section
+          </h3>
+          {(colors.bg || colors.ink || colors.accent) && (
+            <button
+              type="button"
+              onClick={resetColors}
+              className="text-[10px] text-white/40 underline hover:text-white/70"
+            >
+              Réinitialiser
+            </button>
+          )}
+        </div>
+        <p className="mb-3 text-[10px] text-white/40">
+          Surcharge les couleurs du template uniquement pour cette section.
+          Laisse vide pour hériter du template.
+        </p>
+
+        <div className="space-y-2">
+          <ColorField
+            label="Fond"
+            value={colors.bg}
+            onChange={(v) => updateColor("bg", v)}
+          />
+          <ColorField
+            label="Texte"
+            value={colors.ink}
+            onChange={(v) => updateColor("ink", v)}
+          />
+          <ColorField
+            label="Accent"
+            value={colors.accent}
+            onChange={(v) => updateColor("accent", v)}
+          />
+        </div>
+      </div>
 
       {/* Animations */}
       <div>
@@ -222,5 +274,45 @@ function ModeBtn({
     >
       {children}
     </button>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | undefined;
+  onChange: (v: string | undefined) => void;
+}) {
+  const hasValue = Boolean(value && value.trim());
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 shrink-0 text-[11px] text-white/60">{label}</span>
+      <input
+        type="color"
+        value={value ?? "#000000"}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-10 cursor-pointer rounded border border-white/10 bg-transparent"
+      />
+      <input
+        type="text"
+        value={value ?? ""}
+        placeholder="hérite du template"
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className="min-w-0 flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[11px] text-white outline-none focus:border-amber-300/40"
+      />
+      {hasValue && (
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          title="Effacer"
+          className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }

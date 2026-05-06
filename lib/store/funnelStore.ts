@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import type { Funnel, FunnelBrief } from "@/lib/funnels/types";
+import { migrateAllSections } from "@/lib/funnels/sectionItems";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -93,6 +94,33 @@ function writeIndex(ids: string[]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Migration auto (Livraison B)
+// Bullets des sections FAQ/témoignages/pricing/bonus/garantie → items typés.
+// Idempotente : si la section a déjà des items non vides, ne touche pas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyMigrations(stored: StoredFunnel): StoredFunnel {
+  if (!stored.funnel || !Array.isArray(stored.funnel.sections)) {
+    return stored;
+  }
+  const migratedSections = migrateAllSections(stored.funnel.sections);
+
+  // Évite de créer un nouvel objet si rien n'a changé (référence stable)
+  const hasChanged = migratedSections.some(
+    (s, i) => s !== stored.funnel.sections[i]
+  );
+  if (!hasChanged) return stored;
+
+  return {
+    ...stored,
+    funnel: {
+      ...stored.funnel,
+      sections: migratedSections,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -101,7 +129,8 @@ export function loadFunnel(id: string): StoredFunnel | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_PREFIX + id);
     if (!raw) return null;
-    return JSON.parse(raw) as StoredFunnel;
+    const parsed = JSON.parse(raw) as StoredFunnel;
+    return applyMigrations(parsed);
   } catch {
     return null;
   }
@@ -179,8 +208,11 @@ export function createFunnelFromAi(funnel: Funnel, brief: FunnelBrief): StoredFu
     updatedAt: now,
   };
 
-  saveFunnel(stored);
-  return stored;
+  // Migration appliquée immédiatement à la création (cas où l'IA produit déjà
+  // des sections FAQ avec uniquement des bullets)
+  const migrated = applyMigrations(stored);
+  saveFunnel(migrated);
+  return migrated;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,7 +238,8 @@ export function loadPublishedFunnel(slug: string): StoredFunnel | null {
   try {
     const raw = window.localStorage.getItem(PUBLISHED_PREFIX + slug);
     if (!raw) return null;
-    return JSON.parse(raw) as StoredFunnel;
+    const parsed = JSON.parse(raw) as StoredFunnel;
+    return applyMigrations(parsed);
   } catch {
     return null;
   }
