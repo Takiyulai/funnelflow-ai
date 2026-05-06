@@ -14,6 +14,8 @@ import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
+import { getIconByName } from "@/components/editor/tabs/items/IconPicker";
+
 
 type PreviewMode = "desktop" | "mobile";
 
@@ -38,8 +40,6 @@ function animOf(
 
 // Helper : extrait les overrides de couleur d'une section (si présents).
 function getSectionColors(section: FunnelSection) {
-  // section.style.colors est ajouté dans cette livraison (Livraison A).
-  // Type-cast tolérant le temps que lib/funnels/types.ts soit étendu.
   const style = (section.style ?? {}) as {
     colors?: { bg?: string; ink?: string; accent?: string };
   };
@@ -66,7 +66,6 @@ export function FunnelPreview({
   const heroSection = visibleSections.find((s) => s.type === "hero");
   const otherSections = visibleSections.filter((s) => s.type !== "hero");
 
-  // Theme parameters from funnel meta + design
   const templateId = (funnel.meta as any)?.templateId ?? "story-sell";
   const design = (funnel.design ?? {}) as any;
   const animationsEnabled = design.animationsEnabled !== false;
@@ -253,21 +252,19 @@ function PreviewBody({
   const titleSize = compact ? "text-[26px] leading-[1.15]" : "text-4xl leading-tight";
   const bodySize = compact ? "text-sm" : "text-base";
 
-  // Hide logo placeholder if no real logo provided
   const hasLogo = Boolean(logoSrc);
   const brandName = extractBrandName(funnel.funnelName || "");
 
-  // Couleurs personnalisées du hero (si définies dans Style → Couleurs)
   const heroColors = heroSection ? getSectionColors(heroSection) : {};
 
   return (
     <div style={{ background: "var(--ff-bg, #ffffff)" }}>
       {(hasLogo || brandName) && (
-  <div className="ff-brand-bar">
-    {hasLogo && <img src={logoSrc} alt="" />}
-    {brandName && <span>{brandName}</span>}
-  </div>
-)}
+        <div className="ff-brand-bar">
+          {hasLogo && <img src={logoSrc} alt="" />}
+          {brandName && <span>{brandName}</span>}
+        </div>
+      )}
 
       {heroSection && (
         <section
@@ -283,9 +280,6 @@ function PreviewBody({
               : {}),
           }}
         >
-          
-
-
           {heroSection.eyebrow && (
             <span
               data-ff-anim={animOf(heroSection.animations, "eyebrow", "fade-in")}
@@ -386,8 +380,12 @@ function SectionBlock({
   const isForm = section.type === "form";
   const hasUploadedImage = section.image?.mode === "upload" && section.image?.url;
 
-  // Couleurs personnalisées de la section (si définies dans Style → Couleurs)
   const colors = getSectionColors(section);
+
+  // Icône par défaut des bullets (et override par bullet via section.bulletIcons[i])
+  const defaultBulletIconName = (section as any).iconName || "check";
+  const DefaultBulletIcon = getIconByName(defaultBulletIconName);
+  const bulletIcons = (section as any).bulletIcons as (string | undefined)[] | undefined;
 
   return (
     <section
@@ -447,21 +445,30 @@ function SectionBlock({
       )}
 
       {Array.isArray(section.bullets) && section.bullets.length > 0 && (
-        <ul data-ff-bullets="stagger" className="ff-bullets space-y-2 mb-4">
-          {section.bullets.map((bullet, i) => (
-            <li
-              key={i}
-              data-ff-anim={animOf(section.animations, "bullets", "fade-up")}
-              className={`flex gap-2 ${bodySize}`}
-              style={{ opacity: 0.9 }}
-            >
-              <span
-                className="mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0"
-                style={{ background: "var(--ff-accent, #31845C)" }}
-              />
-              <span>{bullet}</span>
-            </li>
-          ))}
+        <ul
+          data-ff-bullets="stagger"
+          className="ff-bullets space-y-2 mb-4 list-none pl-0"
+        >
+          {section.bullets.map((bullet, i) => {
+            const PerBulletIcon = bulletIcons?.[i]
+              ? getIconByName(bulletIcons[i])
+              : DefaultBulletIcon;
+            return (
+              <li
+                key={i}
+                data-ff-anim={animOf(section.animations, "bullets", "fade-up")}
+                className={`flex items-start gap-2 ${bodySize}`}
+                style={{ opacity: 0.95 }}
+              >
+                <PerBulletIcon
+                  className="h-5 w-5 shrink-0 mt-0.5"
+                  style={{ color: "var(--ff-accent, #31845C)" }}
+                  aria-hidden="true"
+                />
+                <span className="flex-1">{bullet}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -538,7 +545,6 @@ function SectionBlock({
   );
 }
 
-// Bloc vidéo embed sécurisé (YouTube / Vimeo / iframe HTTPS générique)
 function VideoEmbedBlock({
   url,
   compact,
@@ -571,7 +577,6 @@ function VideoEmbedBlock({
   );
 }
 
-// Lien CTA réel — utilise la classe ff-btn alimentée par les variables CSS du template
 function CtaLink({
   cta,
   className = "",
@@ -600,6 +605,7 @@ function CtaLink({
     </a>
   );
 }
+
 /**
  * Extrait le nom de marque depuis un titre de tunnel.
  * Exemple : "KHALIS NATURE - Ebook Gratuit" → "KHALIS NATURE"
@@ -615,4 +621,3 @@ function extractBrandName(fullName: string): string {
   }
   return fullName.trim();
 }
-
