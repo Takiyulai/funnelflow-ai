@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2, GripVertical } from "lucide-react";
-import type { FunnelSection, IconName } from "@/lib/funnels/types";
+import type { FunnelSection, IconName, Language } from "@/lib/funnels/types";
 import { FaqEditor } from "./items/FaqEditor";
 import { TestimonialsEditor } from "./items/TestimonialsEditor";
 import { PricingEditor } from "./items/PricingEditor";
@@ -12,6 +12,7 @@ import { IconPicker, getIconByName } from "./items/IconPicker";
 type Props = {
   section: FunnelSection;
   onChange: (patch: Partial<FunnelSection>) => void;
+  language?: Language;
 };
 
 export function ContentTab({ section, onChange }: Props) {
@@ -27,7 +28,7 @@ export function ContentTab({ section, onChange }: Props) {
     );
   }
 
-  if (section.type === "testimonials" || section.type === "proof") {
+  if (section.type === "proof") {
     return (
       <div className="space-y-4">
         <GenericTextFields section={section} onChange={onChange} hideBullets />
