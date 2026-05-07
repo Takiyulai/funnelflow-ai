@@ -237,7 +237,9 @@ export function getItemsOfKind<K extends SectionItem["kind"]>(
   kind: K
 ): Extract<SectionItem, { kind: K }>["data"][] {
   if (!Array.isArray(items)) return [];
-  return items
-    .filter((it): it is Extract<SectionItem, { kind: K }> => it.kind === kind)
-    .map((it) => it.data);
+  const filtered = items.filter((it) => it.kind === kind);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return filtered.map((it) => it.data) as any;
 }
+
+

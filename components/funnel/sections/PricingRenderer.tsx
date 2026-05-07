@@ -30,6 +30,26 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
     >
       {items.map((item, idx) => {
         const highlighted = item.data.highlighted;
+        const cta = item.data.cta;
+
+        // Résolution de la destination selon le mode du CTA (union discriminée)
+        let ctaHref = "#lead-form";
+        let ctaTarget: "_blank" | "_self" | undefined;
+        let ctaRel: string | undefined;
+        if (cta) {
+          if (cta.mode === "redirect") {
+            ctaHref = cta.url || "#";
+            ctaTarget = cta.target ?? "_blank";
+            ctaRel = ctaTarget === "_blank" ? "noopener noreferrer" : undefined;
+          } else if (cta.mode === "anchor") {
+            ctaHref = `#${cta.anchorId || "lead-form"}`;
+            ctaTarget = "_self";
+          } else if (cta.mode === "popup") {
+            ctaHref = `#${cta.popupId || "lead-form"}`;
+            ctaTarget = "_self";
+          }
+        }
+
         return (
           <div
             key={idx}
@@ -117,13 +137,15 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
               </ul>
             )}
 
-            {item.data.cta?.label && (
+            {cta?.label && (
               <a
-                href={item.data.cta.href || "#"}
+                href={ctaHref}
+                target={ctaTarget}
+                rel={ctaRel}
                 className="ff-btn inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg font-bold text-sm no-underline mt-auto"
                 data-ff-cta
               >
-                {item.data.cta.label}
+                {cta.label}
               </a>
             )}
           </div>
