@@ -71,6 +71,7 @@ const DEFAULT_HEADLINES: Record<FunnelSectionType, string> = {
   solution: "Notre solution",
   benefits: "Ce que vous obtenez",
   proof: "Ils en parlent",
+  testimonials: "Témoignages",
   offer: "L'offre complète",
   bonus: "Bonus exclusifs",
   guarantee: "Garantie satisfait ou remboursé",
@@ -127,7 +128,6 @@ function buildDefaultItems(type: FunnelSectionType): SectionItem[] | undefined {
         },
       ];
 
-
     case "bonus":
       return [
         {
@@ -151,6 +151,7 @@ function buildDefaultItems(type: FunnelSectionType): SectionItem[] | undefined {
       ];
 
     case "proof":
+    case "testimonials":
       return [
         {
           kind: "testimonial",
@@ -294,6 +295,7 @@ function buildDefaultSubheadline(type: FunnelSectionType): string | undefined {
     case "bonus":
       return "Inclus gratuitement avec votre achat";
     case "proof":
+    case "testimonials":
       return "Ce que disent nos clients";
     case "faq":
       return "Vous avez des questions, on a les réponses";
