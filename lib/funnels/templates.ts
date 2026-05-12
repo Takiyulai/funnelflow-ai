@@ -312,7 +312,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
         type: "proof", id: "proof", required: false,
         layoutVariant: "centered",
         animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
-        defaultBulletIcon: "thumbs-up",
+        defaultBulletIcon: "thumbsUp",
       },
       {
         type: "offer", id: "offer", required: true,
