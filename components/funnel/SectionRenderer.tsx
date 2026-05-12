@@ -302,16 +302,13 @@ function Headline({ section, animOf, large }: any) {
   return (
     <h2
       data-ff-anim={animOf("headline") || DEFAULT_ANIM}
-      className={
-        large
-          ? "ff-headline text-3xl md:text-5xl leading-tight"
-          : "ff-headline text-2xl md:text-4xl leading-tight"
-      }
+      className="ff-headline ff-headline-scaled leading-tight"
     >
       {section.headline}
     </h2>
   );
 }
+
 
 function Subheadline({ section, animOf }: any) {
   if (!section.subheadline) return null;

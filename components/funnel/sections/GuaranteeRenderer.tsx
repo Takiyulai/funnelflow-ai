@@ -1,7 +1,7 @@
 "use client";
 
 import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
-import { getIconByName } from "@/components/editor/tabs/items/IconPicker";
+import { getIconByName } from "@/components/editor/IconPicker";
 
 type Props = {
   section: FunnelSection;

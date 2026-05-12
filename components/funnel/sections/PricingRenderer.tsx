@@ -1,7 +1,8 @@
 "use client";
 
-import { Check, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
+import { IconRenderer } from "@/components/funnel/IconRenderer";
 
 type Props = {
   section: FunnelSection;
@@ -9,9 +10,13 @@ type Props = {
   compact?: boolean;
 };
 
-export function PricingRenderer({ section, bodySize = "text-base", compact }: Props) {
+export function PricingRenderer({
+  section,
+  bodySize = "text-base",
+  compact,
+}: Props) {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "pricing" } => it.kind === "pricing"
+    (it): it is SectionItem & { kind: "pricing" } => it.kind === "pricing",
   );
 
   if (items.length === 0) return null;
@@ -20,19 +25,19 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
     compact || items.length === 1
       ? "grid-cols-1"
       : items.length === 2
-      ? "grid-cols-1 md:grid-cols-2"
-      : "grid-cols-1 md:grid-cols-3";
+        ? "grid-cols-1 md:grid-cols-2"
+        : "grid-cols-1 md:grid-cols-3";
 
   return (
     <div
-      className={`ff-pricing grid ${gridCols} gap-4 mt-4`}
+      className={`ff-pricing grid ${gridCols} gap-5 mt-6`}
       data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
         const highlighted = item.data.highlighted;
         const cta = item.data.cta;
 
-        // Résolution de la destination selon le mode du CTA (union discriminée)
+        // Résolution de la destination selon le mode du CTA
         let ctaHref = "#lead-form";
         let ctaTarget: "_blank" | "_self" | undefined;
         let ctaRel: string | undefined;
@@ -50,47 +55,53 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
           }
         }
 
+        const featureIconConfig = item.data.featureIcon;
+
         return (
           <div
             key={idx}
-            className="ff-pricing-card relative rounded-xl p-6 flex flex-col"
-            style={{
-              background: highlighted
-                ? "color-mix(in srgb, var(--ff-accent, #31845C) 8%, transparent)"
-                : "color-mix(in srgb, var(--ff-ink, #0f172a) 3%, transparent)",
-              border: highlighted
-                ? "2px solid var(--ff-accent, #31845C)"
-                : "1px solid var(--ff-border, rgba(0,0,0,0.08))",
-              transform: highlighted && !compact ? "scale(1.02)" : "none",
-              boxShadow: highlighted
-                ? "0 10px 30px -10px color-mix(in srgb, var(--ff-accent, #31845C) 40%, transparent)"
-                : "none",
-            }}
+            data-ff-pricing-highlighted={highlighted ? "true" : undefined}
+            className={[
+              "ff-pricing-card",
+              highlighted ? "ff-card-elevated" : "ff-card",
+              "relative rounded-2xl p-6 flex flex-col",
+              "transition-transform duration-300",
+              !compact && highlighted ? "md:scale-[1.04]" : "",
+              "hover:-translate-y-1",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             {highlighted && (
               <div
-                className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap z-10"
                 style={{
-                  background: "var(--ff-accent, #31845C)",
-                  color: "#ffffff",
+                  background: "var(--ff-accent)",
+                  color: "var(--ff-accent-ink, #ffffff)",
+                  boxShadow:
+                    "0 4px 12px color-mix(in srgb, var(--ff-accent) 40%, transparent)",
                 }}
               >
-                <Star className="h-3 w-3" fill="currentColor" aria-hidden="true" />
-                Populaire
+                <Star
+                  className="h-3 w-3"
+                  fill="currentColor"
+                  aria-hidden="true"
+                />
+                {item.data.badge || "Populaire"}
               </div>
             )}
 
             <div className="mb-4">
               <h3
                 className="text-lg font-bold mb-1"
-                style={{ color: "var(--ff-ink, #0f172a)" }}
+                style={{ color: "var(--ff-ink)" }}
               >
                 {item.data.name || `Plan ${idx + 1}`}
               </h3>
               {item.data.description && (
                 <p
                   className="text-sm"
-                  style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.65 }}
+                  style={{ color: "var(--ff-ink-soft, var(--ff-ink))" }}
                 >
                   {item.data.description}
                 </p>
@@ -101,9 +112,7 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
               <span
                 className="text-4xl font-black"
                 style={{
-                  color: highlighted
-                    ? "var(--ff-accent, #31845C)"
-                    : "var(--ff-ink, #0f172a)",
+                  color: highlighted ? "var(--ff-accent)" : "var(--ff-ink)",
                 }}
               >
                 {item.data.price || "—"}
@@ -111,7 +120,10 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
               {item.data.period && (
                 <span
                   className="text-sm"
-                  style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.6 }}
+                  style={{
+                    color: "var(--ff-ink-soft, var(--ff-ink))",
+                    opacity: 0.8,
+                  }}
                 >
                   {item.data.period}
                 </span>
@@ -119,18 +131,24 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
             </div>
 
             {item.data.features && item.data.features.length > 0 && (
-              <ul className="space-y-2 mb-5 flex-1">
+              <ul className="space-y-2.5 mb-6 flex-1">
                 {item.data.features.map((feat, fIdx) => (
                   <li
                     key={fIdx}
                     className={`flex items-start gap-2 ${bodySize}`}
-                    style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.85 }}
+                    style={{ color: "var(--ff-ink)" }}
                   >
-                    <Check
-                      className="h-5 w-5 shrink-0 mt-0.5"
-                      style={{ color: "var(--ff-accent, #31845C)" }}
-                      aria-hidden="true"
-                    />
+                    <span
+                      className="shrink-0 mt-0.5 flex items-center justify-center"
+                      style={{
+                        color: featureIconConfig?.color ?? "var(--ff-accent)",
+                      }}
+                    >
+                      <IconRenderer
+                        config={featureIconConfig}
+                        fallbackName="check"
+                      />
+                    </span>
                     <span className="flex-1">{feat}</span>
                   </li>
                 ))}
@@ -142,7 +160,7 @@ export function PricingRenderer({ section, bodySize = "text-base", compact }: Pr
                 href={ctaHref}
                 target={ctaTarget}
                 rel={ctaRel}
-                className="ff-btn inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg font-bold text-sm no-underline mt-auto"
+                className="ff-btn inline-flex items-center justify-center w-full px-4 py-3 rounded-lg font-bold text-sm no-underline mt-auto"
                 data-ff-cta
               >
                 {cta.label}

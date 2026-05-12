@@ -3,7 +3,7 @@
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import type { FunnelSection, SectionItem, BonusItem } from "@/lib/funnels/types";
-import { IconPicker } from "./IconPicker";
+import { IconPicker } from "../../IconPicker";
 
 type Props = {
   section: FunnelSection;

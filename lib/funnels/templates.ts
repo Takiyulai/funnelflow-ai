@@ -6,8 +6,6 @@ import type {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Anciens templates simples (rétrocompatibilité)
-// Conservés pour ne pas casser le wizard, l'éditeur et FunnelRowMenu
-// qui les consomment encore directement
 // ─────────────────────────────────────────────────────────────────────────────
 export const funnelTemplates: FunnelTemplate[] = [
   {
@@ -78,12 +76,126 @@ export const funnelTemplates: FunnelTemplate[] = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Templates premium (Phase B)
-// Chaque template a une personnalité distincte, des layouts riches
-// et des animations par défaut adaptées au mood
 // ─────────────────────────────────────────────────────────────────────────────
 export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
   // ─────────────────────────────────────────────────────────────────────────
-  // 1. Sharp Launch — Direct, dense, conversion immédiate
+  // 0a. Clean Light — fond neutre clair, 100% personnalisable
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "clean-light",
+    name: "Clean Light",
+    personality: {
+      fr: "Fond clair neutre et épuré, dont chaque couleur peut être modifiée librement après génération",
+      en: "Neutral light background, fully customizable after generation",
+      es: "Fondo claro neutro, totalmente personalizable después de la generación",
+    },
+    bestFor: ["service", "lead-magnet", "digital-product", "saas", "booking"],
+    defaultMoodId: "institutional-trust",
+    badge: "Fond personnalisable",
+    previewColors: ["#FAFAF9", "#2563EB", "#18181B"],
+    customizable: true,
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "uniform",
+    density: "balanced",
+    decor: { style: "plain", intensity: "subtle" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 700,
+      headlineTracking: "tight",
+      headlineFamily: "sans",
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 0b. Clean Dark — fond neutre sombre, 100% personnalisable
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "clean-dark",
+    name: "Clean Dark",
+    personality: {
+      fr: "Fond sombre neutre et moderne, dont chaque couleur peut être modifiée librement après génération",
+      en: "Neutral dark background, fully customizable after generation",
+      es: "Fondo oscuro neutro, totalmente personalizable después de la generación",
+    },
+    bestFor: ["digital-product", "saas", "service", "vsl"],
+    defaultMoodId: "energetic",
+    badge: "Fond personnalisable",
+    previewColors: ["#18181B", "#10B981", "#FAFAFA"],
+    customizable: true,
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "uniform",
+    density: "balanced",
+    decor: { style: "plain", intensity: "subtle" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 700,
+      headlineTracking: "tight",
+      headlineFamily: "sans",
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1. Sharp Launch
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "sharp-launch",
@@ -96,7 +208,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["digital-product", "lead-magnet", "service"],
     defaultMoodId: "energetic",
     badge: "Punchy",
-    previewColors: ["#0A1020", "#FFB020", "#1ECB83"],
+    previewColors: ["#05080A", "#22D3EE", "#F1F5F9"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -137,10 +249,17 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "balanced",
+    decor: { style: "halo", intensity: "medium" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 700,
+      headlineTracking: "tight",
+      headlineFamily: "sans",
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 2. Story Sell — Narratif long, pour VSL et formations
+  // 2. Story Sell
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "story-sell",
@@ -153,7 +272,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["vsl", "formation", "webinar"],
     defaultMoodId: "premium-calm",
     badge: "Story",
-    previewColors: ["#080E1A", "#C7A436", "#31845C"],
+    previewColors: ["#0F0805", "#D4AF37", "#F5EFE6"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -228,10 +347,17 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "airy",
+    decor: { style: "blobs", intensity: "medium" },
+    typography: {
+      headlineScale: "lg",
+      headlineWeight: 600,
+      headlineTracking: "normal",
+      headlineFamily: "serif",
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 3. Premium Minimal — Espace blanc, typo éditoriale, haut de gamme
+  // 3. Premium Minimal
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "premium-minimal",
@@ -244,7 +370,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["service", "digital-product", "saas"],
     defaultMoodId: "premium-calm",
     badge: "Premium",
-    previewColors: ["#080E1A", "#C7A436", "#FFFFFF"],
+    previewColors: ["#1F0A12", "#E8C08A", "#FBF0F4"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -289,10 +415,17 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "uniform",
     density: "airy",
+    decor: { style: "halo", intensity: "subtle" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 500,
+      headlineTracking: "wide",
+      headlineFamily: "serif",
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 4. Trust Pro — Institutionnel, B2B, preuves mises en avant
+  // 4. Trust Pro
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "trust-pro",
@@ -305,7 +438,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["service", "saas", "booking"],
     defaultMoodId: "institutional-trust",
     badge: "B2B",
-    previewColors: ["#061B36", "#08498D", "#28D6D6"],
+    previewColors: ["#0B1E3D", "#06B6D4", "#E2E8F0"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -362,10 +495,17 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "uniform",
     density: "balanced",
+    decor: { style: "gradient", intensity: "medium" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 600,
+      headlineTracking: "normal",
+      headlineFamily: "sans",
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 5. Bold Energy — Saturé, animations marquées, audiences jeunes
+  // 5. Bold Energy
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "bold-energy",
@@ -378,7 +518,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["digital-product", "formation", "webinar"],
     defaultMoodId: "creative-warm",
     badge: "Bold",
-    previewColors: ["#1E1208", "#E07A3E", "#FFB020"],
+    previewColors: ["#1A0808", "#FF6B35", "#FFF5EE"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -425,10 +565,17 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "balanced",
+    decor: { style: "blobs", intensity: "strong" },
+    typography: {
+      headlineScale: "md",
+      headlineWeight: 800,
+      headlineTracking: "tight",
+      headlineFamily: "sans",
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 6. Lead Snap — Ultra-court, une page, capture rapide
+  // 6. Lead Snap
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "lead-snap",
@@ -441,7 +588,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["lead-magnet", "thank-you"],
     defaultMoodId: "energetic",
     badge: "Snap",
-    previewColors: ["#0A1020", "#FFB020", "#FFFFFF"],
+    previewColors: ["#1A0F2E", "#C084FC", "#F3E8FF"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -470,6 +617,13 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "uniform",
     density: "dense",
+    decor: { style: "halo", intensity: "subtle" },
+    typography: {
+      headlineScale: "sm",
+      headlineWeight: 600,
+      headlineTracking: "normal",
+      headlineFamily: "sans",
+    },
   },
 ];
 
@@ -481,23 +635,20 @@ export function getPremiumTemplate(id?: string): TemplateDefinition | undefined 
   return PREMIUM_TEMPLATES.find((t) => t.id === id);
 }
 
-// Retourne les templates premium recommandés pour un funnelKind donné
 export function getRecommendedTemplates(funnelKind?: string): TemplateDefinition[] {
   if (!funnelKind) return PREMIUM_TEMPLATES;
   const recommended = PREMIUM_TEMPLATES.filter((t) =>
     t.bestFor.includes(funnelKind as never)
   );
-  // Si aucun match strict, on retourne tous les templates (l'utilisateur choisit)
   return recommended.length > 0 ? recommended : PREMIUM_TEMPLATES;
 }
-/**
- * Animation de bouton par défaut associée à chaque template.
- * Utilisé par TemplateThemeProvider pour piloter l'attribut data-ff-btn-anim.
- */
+
 export const TEMPLATE_BUTTON_ANIMATION: Record<
   string,
   "lift" | "glow" | "pulse" | "shine"
 > = {
+  "clean-light": "lift",
+  "clean-dark": "lift",
   "story-sell": "shine",
   "bold-energy": "pulse",
   "premium-minimal": "lift",
@@ -513,5 +664,4 @@ export function getTemplateButtonAnim(
   return TEMPLATE_BUTTON_ANIMATION[templateId] ?? "lift";
 }
 
-// Template par défaut si l'utilisateur ne choisit pas explicitement
 export const DEFAULT_PREMIUM_TEMPLATE_ID = "story-sell";

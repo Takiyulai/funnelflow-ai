@@ -7,42 +7,88 @@ type Props = {
 };
 
 export default function FunnelFooter({ funnel }: Props) {
-  // Extract business info from meta or brief (whichever stores it in your project)
-  const meta = (funnel.meta ?? {}) as Record<string, any>;
-  const brief = (funnel as any).brief ?? {};
+  const meta = funnel.meta as
+    | { businessName?: string; legalNotice?: string; contactEmail?: string }
+    | undefined;
 
-  const businessName: string =
-    meta.businessName || brief.businessName || meta.brand || brief.brand || "";
-  const ownerName: string = meta.ownerName || brief.ownerName || "";
-  const email: string = meta.contactEmail || brief.contactEmail || "";
-  const phone: string = meta.contactPhone || brief.contactPhone || "";
-  const address: string = meta.address || brief.address || "";
-  const legalForm: string = meta.legalForm || brief.legalForm || "";
-  const siret: string = meta.siret || brief.siret || "";
-
-  // If nothing to show, render nothing (avoid empty footer)
-  const hasAny =
-    businessName || ownerName || email || phone || address || legalForm || siret;
-  if (!hasAny) return null;
-
+  const businessName = meta?.businessName?.trim();
+  const legalNotice = meta?.legalNotice?.trim();
+  const contactEmail = meta?.contactEmail?.trim();
   const year = new Date().getFullYear();
-  const displayName = businessName || ownerName;
+
+  // Nom à afficher : business name > nom de marque extrait > nom du funnel
+  const displayName =
+    businessName ||
+    extractBrandName(funnel.funnelName) ||
+    "FunnelFlow";
 
   return (
-    <footer className="ff-footer" role="contentinfo">
-      {displayName && <div className="ff-footer-business">{displayName}</div>}
+    <footer
+      className="ff-footer"
+      style={{
+        // Même fond sombre que la brand bar (header)
+        background: "var(--ff-brand-surface, var(--ff-ink, #0f172a))",
+        color: "var(--ff-brand-on-surface, rgba(255,255,255,0.85))",
+        padding: "2rem 1.5rem",
+        fontSize: "0.8125rem",
+        textAlign: "center",
+        borderTop: "1px solid rgba(255,255,255,0.08)",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 920,
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#ffffff" }}>
+          {displayName}
+        </div>
 
-      <div className="ff-footer-meta">
-        {legalForm && <span>{legalForm}</span>}
-        {siret && <span>SIRET&nbsp;: {siret}</span>}
-        {address && <span>{address}</span>}
-        {email && <span>{email}</span>}
-        {phone && <span>{phone}</span>}
-      </div>
+        {legalNotice && (
+          <div style={{ opacity: 0.7, lineHeight: 1.5 }}>{legalNotice}</div>
+        )}
 
-      <div className="ff-footer-copyright">
-        © {year} {displayName || "Tous droits réservés"}.
+        {contactEmail && (
+          <div>
+            <a
+              href={`mailto:${contactEmail}`}
+              style={{
+                color: "var(--ff-accent, #C7A436)",
+                textDecoration: "none",
+                fontWeight: 500,
+              }}
+            >
+              {contactEmail}
+            </a>
+          </div>
+        )}
+
+        <div
+          style={{
+            opacity: 0.5,
+            fontSize: "0.75rem",
+            marginTop: "0.5rem",
+            paddingTop: "0.75rem",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          © {year} {displayName} — Tous droits réservés
+        </div>
       </div>
     </footer>
   );
+}
+
+function extractBrandName(fullName: string): string {
+  if (!fullName) return "";
+  const separators = [" - ", " – ", " — ", " | ", " : "];
+  for (const sep of separators) {
+    const idx = fullName.indexOf(sep);
+    if (idx > 0) return fullName.slice(0, idx).trim();
+  }
+  return fullName.trim();
 }

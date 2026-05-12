@@ -1,16 +1,20 @@
 /* ============================================================================
- * FunnelForge — Thème de tunnel (animations + variables par template)
- * ----------------------------------------------------------------------------
- * Ce fichier est importé une seule fois dans app/layout.tsx.
- * Tous les sélecteurs sont scopés sous [data-ff-template] pour ne jamais
- * fuiter sur le reste de l'app (dashboard, éditeur, wizard).
+ * FunnelFlows — Thème de tunnel
+ * Source UNIQUE de vérité. Importée une seule fois via layout.tsx.
  * ========================================================================= */
 
-/* ---------------------------------------------------------------------------
- * 1. Variables par défaut (template fallback)
- * ------------------------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500;1,9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 1. Wrapper de template
+ * ─────────────────────────────────────────────────────────────────────── */
+.ff-template-root {
+  width: 100%;
+  min-height: 100%;
+  display: block;
+}
+
 [data-ff-template] {
-  /* Couleurs */
   --ff-bg: #ffffff;
   --ff-surface: #f8fafc;
   --ff-ink: #0f172a;
@@ -21,137 +25,193 @@
   --ff-accent-ink: #0f172a;
   --ff-primary: #080e1a;
 
-  /* Typographie */
-  --ff-font-heading: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --ff-font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ff-brand-bar-bg: #0a0a0a;
+  --ff-brand-bar-ink: #ffffff;
+  --ff-footer-bg: #0a0a0a;
+  --ff-footer-ink: rgba(255, 255, 255, 0.6);
+  --ff-footer-business-ink: #ffffff;
+
+  --ff-font-heading: "Inter", system-ui, sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
   --ff-font-eyebrow: "Inter", system-ui, sans-serif;
   --ff-heading-weight: 800;
   --ff-heading-tracking: -0.02em;
   --ff-heading-leading: 1.1;
   --ff-body-leading: 1.65;
 
-  /* Espacement section */
-  --ff-section-py: 4rem;
-  --ff-section-py-md: 6rem;
+  --ff-headline-weight: 700;
+  --ff-headline-tracking: -0.01em;
+  --ff-headline-family: "Inter", system-ui, sans-serif;
 
-  /* Bouton */
+  --ff-text-scale: 1;
+  --ff-btn-scale: 1;
+
+  --ff-headline-scale: calc(clamp(1.875rem, 4vw, 3rem) * var(--ff-text-scale));
+
   --ff-btn-radius: 0.625rem;
   --ff-btn-bg: var(--ff-accent);
   --ff-btn-ink: var(--ff-accent-ink);
   --ff-btn-shadow: 0 6px 18px rgba(8, 43, 76, 0.12);
-  --ff-btn-anim: ff-btn-lift; /* lift | glow | pulse | shine */
 
-  /* Effets visuels */
-  --ff-bg-overlay: none;
-  --ff-card-bg: rgba(15, 23, 42, 0.03);
-  --ff-card-border: rgba(15, 23, 42, 0.08);
+  --ff-section-py: 2.5rem;
+  --ff-section-py-md: 3.5rem;
+  --ff-section-alt-1: transparent;
+  --ff-section-alt-2: transparent;
+  --ff-section-alt-border: transparent;
 
-  /* Vitesses d'animation */
   --ff-anim-duration: 600ms;
   --ff-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --ff-shadow-color: #000000;
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: inherit;
+  width: 100%;
+  min-height: 100%;
+  display: block;
+  background-color: var(--ff-bg);
 }
 
-/* ---------------------------------------------------------------------------
- * 2. Animations d'entrée (déclenchées par .ff-in)
- *    L'IntersectionObserver côté client ajoute la classe .ff-in
- *    quand l'élément entre dans le viewport.
- * ------------------------------------------------------------------------- */
-
-[data-ff-template] [data-ff-anim] {
-  opacity: 0;
-  will-change: opacity, transform;
+/* ───────────────────────────────────────────────────────────────────────────
+ * 2. CONTENU TRANSPARENT
+ * (sauf sections avec bg custom — Lot K — ou image de fond — Lot G)
+ * ─────────────────────────────────────────────────────────────────────── */
+[data-ff-template] > div:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] > section:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] > main:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] > article:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
-/* fade-up */
-[data-ff-template] [data-ff-anim="fade-up"] {
-  transform: translateY(24px);
-  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
-              transform var(--ff-anim-duration) var(--ff-anim-easing);
-}
-[data-ff-template] [data-ff-anim="fade-up"].ff-in {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* fade-in */
-[data-ff-template] [data-ff-anim="fade-in"] {
-  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing);
-}
-[data-ff-template] [data-ff-anim="fade-in"].ff-in {
-  opacity: 1;
+[data-ff-template] .ff-btn,
+[data-ff-template] .ff-card,
+[data-ff-template] .ff-card-elevated,
+[data-ff-template] [data-ff-cta],
+[data-ff-template] button.ff-btn,
+[data-ff-template] input,
+[data-ff-template] textarea,
+[data-ff-template] select {
+  background-color: revert;
 }
 
-/* zoom-in */
-[data-ff-template] [data-ff-anim="zoom-in"] {
-  transform: scale(0.94);
-  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
-              transform var(--ff-anim-duration) var(--ff-anim-easing);
+[data-ff-template] .ff-brand-bar {
+  background-color: var(--ff-brand-bar-bg) !important;
+  color: var(--ff-brand-bar-ink) !important;
 }
-[data-ff-template] [data-ff-anim="zoom-in"].ff-in {
-  opacity: 1;
-  transform: scale(1);
+[data-ff-template] .ff-footer {
+  background-color: var(--ff-footer-bg) !important;
+  color: var(--ff-footer-ink) !important;
 }
 
-/* pulse — animation continue après apparition */
-[data-ff-template] [data-ff-anim="pulse"] {
-  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing);
-}
-[data-ff-template] [data-ff-anim="pulse"].ff-in {
-  opacity: 1;
-  animation: ffPulseSubtle 2.6s ease-in-out 0.4s infinite;
+[data-ff-template] > * {
+  position: relative;
+  z-index: 1;
 }
 
-/* none — pas d'animation, juste rendre visible */
-[data-ff-template] [data-ff-anim="none"] {
-  opacity: 1;
+/* ───────────────────────────────────────────────────────────────────────────
+ * 3. BULLES DE LUMIÈRE (uniquement templates artistiques)
+ * ─────────────────────────────────────────────────────────────────────── */
+[data-ff-template]:not([data-ff-template="clean-light"]):not([data-ff-template="clean-dark"])::before,
+[data-ff-template]:not([data-ff-template="clean-light"]):not([data-ff-template="clean-dark"])::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform;
 }
 
-/* Stagger pour bullets (s'applique au parent [data-ff-bullets="stagger"]) */
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(1)  { transition-delay: 0ms;   animation-delay: 0ms;   }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(2)  { transition-delay: 80ms;  animation-delay: 80ms;  }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(3)  { transition-delay: 160ms; animation-delay: 160ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(4)  { transition-delay: 240ms; animation-delay: 240ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(5)  { transition-delay: 320ms; animation-delay: 320ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(6)  { transition-delay: 400ms; animation-delay: 400ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(7)  { transition-delay: 480ms; animation-delay: 480ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(8)  { transition-delay: 560ms; animation-delay: 560ms; }
+/* ───────────────────────────────────────────────────────────────────────────
+ * 4. Animations d'entrée
+ * ─────────────────────────────────────────────────────────────────────── */
+[data-ff-template] [data-ff-anim] { opacity: 0; will-change: opacity, transform; }
+[data-ff-template] [data-ff-anim="fade-up"] { transform: translateY(24px); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="fade-up"].ff-in,
+[data-ff-template] [data-ff-anim="fade-up"].ff-anim-active { opacity: 1; transform: translateY(0); }
+[data-ff-template] [data-ff-anim="fade-in"] { transition: opacity var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="fade-in"].ff-in,
+[data-ff-template] [data-ff-anim="fade-in"].ff-anim-active { opacity: 1; }
+[data-ff-template] [data-ff-anim="fade-down"] { transform: translateY(-24px); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="fade-down"].ff-in,
+[data-ff-template] [data-ff-anim="fade-down"].ff-anim-active { opacity: 1; transform: translateY(0); }
+[data-ff-template] [data-ff-anim="slide-left"] { transform: translateX(24px); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="slide-left"].ff-in,
+[data-ff-template] [data-ff-anim="slide-left"].ff-anim-active { opacity: 1; transform: translateX(0); }
+[data-ff-template] [data-ff-anim="slide-right"] { transform: translateX(-24px); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="slide-right"].ff-in,
+[data-ff-template] [data-ff-anim="slide-right"].ff-anim-active { opacity: 1; transform: translateX(0); }
+[data-ff-template] [data-ff-anim="zoom-in"] { transform: scale(0.94); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="zoom-in"].ff-in,
+[data-ff-template] [data-ff-anim="zoom-in"].ff-anim-active { opacity: 1; transform: scale(1); }
+[data-ff-template] [data-ff-anim="zoom-out"] { transform: scale(1.06); transition: opacity var(--ff-anim-duration) var(--ff-anim-easing), transform var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="zoom-out"].ff-in,
+[data-ff-template] [data-ff-anim="zoom-out"].ff-anim-active { opacity: 1; transform: scale(1); }
+[data-ff-template] [data-ff-anim="pulse"] { transition: opacity var(--ff-anim-duration) var(--ff-anim-easing); }
+[data-ff-template] [data-ff-anim="pulse"].ff-in,
+[data-ff-template] [data-ff-anim="pulse"].ff-anim-active { opacity: 1; animation: ffPulseSubtle 2.6s ease-in-out 0.4s infinite; }
+[data-ff-template] [data-ff-anim="none"],
+[data-ff-template] [data-ff-anim="none"].ff-in,
+[data-ff-template] [data-ff-anim="none"].ff-anim-active { opacity: 1; }
 
-@keyframes ffPulseSubtle {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.025); }
-}
+@keyframes ffPulseSubtle { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.025); } }
 
-/* ---------------------------------------------------------------------------
- * 3. Animations de bouton (au survol / focus)
- *    La variable --ff-btn-anim est définie par chaque template.
- * ------------------------------------------------------------------------- */
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(1),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(1) { transition-delay: 0ms; animation-delay: 0ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(2),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(2) { transition-delay: 80ms; animation-delay: 80ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(3),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(3) { transition-delay: 160ms; animation-delay: 160ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(4),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(4) { transition-delay: 240ms; animation-delay: 240ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(5),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(5) { transition-delay: 320ms; animation-delay: 320ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(6),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(6) { transition-delay: 400ms; animation-delay: 400ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(7),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(7) { transition-delay: 480ms; animation-delay: 480ms; }
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-in:nth-child(8),
+[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(8) { transition-delay: 560ms; animation-delay: 560ms; }
 
+/* ───────────────────────────────────────────────────────────────────────────
+ * 5. Boutons CTA
+ * ─────────────────────────────────────────────────────────────────────── */
 [data-ff-template] .ff-btn,
 [data-ff-template] [data-ff-cta] {
   position: relative;
   overflow: hidden;
-  transition: transform 220ms ease, box-shadow 220ms ease, opacity 220ms ease, background-color 220ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: var(--ff-btn-radius);
+  background: var(--ff-btn-bg);
+  color: var(--ff-btn-ink);
+  font-family: var(--ff-font-body);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: transform 220ms ease, box-shadow 220ms ease, opacity 220ms ease;
+  box-shadow: var(--ff-btn-shadow);
+  padding: calc(0.625rem * var(--ff-btn-scale))
+           calc(1.25rem * var(--ff-btn-scale));
+  font-size: calc(0.875rem * var(--ff-btn-scale));
 }
 
-/* Animation : lift (par défaut) — léger soulèvement au hover */
 [data-ff-template][data-ff-btn-anim="lift"] .ff-btn:hover,
 [data-ff-template][data-ff-btn-anim="lift"] [data-ff-cta]:hover {
   transform: translateY(-2px);
-  box-shadow: var(--ff-btn-shadow);
-}
-
-/* Animation : glow — lueur autour du bouton */
-[data-ff-template][data-ff-btn-anim="glow"] .ff-btn,
-[data-ff-template][data-ff-btn-anim="glow"] [data-ff-cta] {
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent) 40%, transparent);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
 }
 [data-ff-template][data-ff-btn-anim="glow"] .ff-btn:hover,
 [data-ff-template][data-ff-btn-anim="glow"] [data-ff-cta]:hover {
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--ff-accent) 25%, transparent),
               0 8px 24px color-mix(in srgb, var(--ff-accent) 35%, transparent);
 }
-
-/* Animation : pulse-btn — battement continu */
 [data-ff-template][data-ff-btn-anim="pulse"] .ff-btn,
 [data-ff-template][data-ff-btn-anim="pulse"] [data-ff-cta] {
   animation: ffBtnPulse 2.2s ease-in-out infinite;
@@ -160,80 +220,44 @@
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent) 50%, transparent); }
   50%      { box-shadow: 0 0 0 12px color-mix(in srgb, var(--ff-accent) 0%, transparent); }
 }
-
-/* Animation : shine — reflet qui balaie au hover */
 [data-ff-template][data-ff-btn-anim="shine"] .ff-btn::before,
 [data-ff-template][data-ff-btn-anim="shine"] [data-ff-cta]::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
   transform: translateX(-100%);
   transition: transform 700ms ease;
   pointer-events: none;
 }
 [data-ff-template][data-ff-btn-anim="shine"] .ff-btn:hover::before,
-[data-ff-template][data-ff-btn-anim="shine"] [data-ff-cta]:hover::before {
-  transform: translateX(100%);
-}
+[data-ff-template][data-ff-btn-anim="shine"] [data-ff-cta]:hover::before { transform: translateX(100%); }
 
-/* ---------------------------------------------------------------------------
- * 4. Désactivation globale des animations
- *    Posée par le toggle dans GlobalStylePanel (Message 3/4)
- * ------------------------------------------------------------------------- */
 [data-ff-template][data-ff-animations="off"] [data-ff-anim],
 [data-ff-template][data-ff-animations="off"] .ff-btn,
 [data-ff-template][data-ff-animations="off"] [data-ff-cta] {
-  animation: none !important;
-  transition: none !important;
-  opacity: 1 !important;
-  transform: none !important;
+  animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important;
 }
 [data-ff-template][data-ff-animations="off"] .ff-btn::before,
-[data-ff-template][data-ff-animations="off"] [data-ff-cta]::before {
-  display: none !important;
-}
+[data-ff-template][data-ff-animations="off"] [data-ff-cta]::before { display: none !important; }
 
-/* ---------------------------------------------------------------------------
- * 5. Respect des préférences système
- * ------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   [data-ff-template] [data-ff-anim],
   [data-ff-template] .ff-btn,
-  [data-ff-template] [data-ff-cta] {
-    animation: none !important;
-    transition: none !important;
-    opacity: 1 !important;
-    transform: none !important;
+  [data-ff-template] [data-ff-cta],
+  [data-ff-template]::before,
+  [data-ff-template]::after {
+    animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important;
   }
 }
 
-/* ---------------------------------------------------------------------------
- * 6. Réservation pour les styles par template
- *    Les templates eux-mêmes seront ajoutés dans les Messages 2/4 et 3/4.
- *    Pour l'instant, tous héritent des valeurs par défaut.
- * ------------------------------------------------------------------------- */
-/* [data-ff-template="story-sell"]    → Message 2/4 */
-/* [data-ff-template="bold-energy"]   → Message 2/4 */
-/* [data-ff-template="premium-minimal"] → Message 2/4 */
-/* [data-ff-template="sharp-launch"]  → Message 3/4 */
-/* [data-ff-template="trust-pro"]     → Message 3/4 */
-/* [data-ff-template="lead-snap"]     → Message 3/4 */
-/* ===========================================================================
- * Styles partagés (s'appliquent à tous les templates, surchargeables ensuite)
- * ======================================================================== */
-
-[data-ff-template] .ff-section {
-  background: var(--ff-bg);
-  background-image: var(--ff-bg-overlay, none);
-  color: var(--ff-ink);
-}
-
+/* ───────────────────────────────────────────────────────────────────────────
+ * 6. Styles partagés
+ * ─────────────────────────────────────────────────────────────────────── */
 [data-ff-template] .ff-eyebrow {
   color: var(--ff-accent);
   font-family: var(--ff-font-eyebrow);
 }
-
 [data-ff-template] .ff-headline {
   color: var(--ff-ink);
   font-family: var(--ff-font-heading);
@@ -241,631 +265,1325 @@
   letter-spacing: var(--ff-heading-tracking);
   line-height: var(--ff-heading-leading);
 }
-
 [data-ff-template] .ff-subheadline {
   color: var(--ff-ink-soft);
   font-family: var(--ff-font-body);
   line-height: var(--ff-body-leading);
+  font-size: calc(1rem * var(--ff-text-scale));
 }
-
 [data-ff-template] .ff-body {
   color: var(--ff-ink-soft);
   font-family: var(--ff-font-body);
   line-height: var(--ff-body-leading);
+  font-size: calc(0.95rem * var(--ff-text-scale));
 }
-
+[data-ff-template] .ff-bullets li {
+  font-size: calc(0.95rem * var(--ff-text-scale));
+}
 [data-ff-template] .ff-card {
-  background: var(--ff-card-bg);
-  border: 1px solid var(--ff-card-border);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ff-border);
 }
-
 [data-ff-template] .ff-card-elevated {
-  background: var(--ff-card-bg);
-  border: 1px solid var(--ff-card-border);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ff-border);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
 }
 
-[data-ff-template] .ff-divide-list > li {
-  border-bottom: 1px solid var(--ff-border);
-}
-[data-ff-template] .ff-divide-list > li:last-child {
-  border-bottom: none;
-}
-
-[data-ff-template] .ff-image {
-  border: 1px solid var(--ff-border);
-}
-
-[data-ff-template] .ff-image-placeholder {
-  background: var(--ff-card-bg);
-  border: 1px dashed var(--ff-border);
-  color: var(--ff-muted);
+/* ───────────────────────────────────────────────────────────────────────────
+ * 7. PRIORITÉ FINALE — .ff-headline-scaled bat Tailwind
+ * ─────────────────────────────────────────────────────────────────────── */
+.ff-headline-scaled,
+[data-ff-template] .ff-headline-scaled,
+[data-ff-template] .ff-headline.ff-headline-scaled,
+[data-ff-template] h1.ff-headline-scaled,
+[data-ff-template] h2.ff-headline-scaled {
+  font-size: var(--ff-headline-scale) !important;
+  font-weight: var(--ff-headline-weight) !important;
+  letter-spacing: var(--ff-headline-tracking) !important;
+  font-family: var(--ff-headline-family) !important;
+  line-height: 1.1 !important;
 }
 
-[data-ff-template] .ff-video {
-  border: 1px solid var(--ff-border);
+/* ============================================================================
+ * 8. TEMPLATES (inchangé)
+ * ========================================================================= */
+
+/* ─── CLEAN LIGHT ───────────────────────────────────────────────────────── */
+[data-ff-template="clean-light"] {
+  --ff-bg: #FAFAF9;
+  --ff-ink: #18181B;
+  --ff-ink-soft: #52525B;
+  --ff-muted: #A1A1AA;
+  --ff-border: rgba(24, 24, 27, 0.08);
+  --ff-accent: #2563EB;
+  --ff-accent-ink: #FFFFFF;
+
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 700;
+  --ff-headline-tracking: -0.02em;
+  --ff-headline-family: "Inter", system-ui, sans-serif;
+  --ff-font-heading: "Inter", system-ui, sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "Inter", system-ui, sans-serif;
+  --ff-btn-radius: 0.5rem;
+  --ff-btn-bg: var(--ff-accent);
+  --ff-btn-ink: var(--ff-accent-ink);
+  --ff-btn-shadow: 0 4px 12px rgba(37, 99, 235, 0.18);
+
+  --ff-brand-bar-bg: #FFFFFF;
+  --ff-brand-bar-ink: #18181B;
+  --ff-footer-bg: #F4F4F5;
+  --ff-footer-ink: rgba(24, 24, 27, 0.65);
+  --ff-footer-business-ink: #18181B;
+
+  --ff-section-alt-1: #FFFFFF;
+  --ff-section-alt-2: rgba(37, 99, 235, 0.05);
+  --ff-section-alt-border: rgba(24, 24, 27, 0.08);
+
+  background: var(--ff-bg);
+  color: var(--ff-ink);
+}
+[data-ff-template="clean-light"] .ff-card { background: #FFFFFF; border: 1px solid var(--ff-border); }
+[data-ff-template="clean-light"] .ff-card-elevated {
+  background: #FFFFFF; border: 1px solid var(--ff-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+[data-ff-template="clean-light"] .ff-eyebrow {
+  font-weight: 600; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+}
+[data-ff-template="clean-light"] .ff-brand-bar { border-bottom: 1px solid var(--ff-border) !important; }
+[data-ff-template="clean-light"] .ff-footer { border-top: 1px solid var(--ff-border) !important; }
+
+/* ─── CLEAN DARK ────────────────────────────────────────────────────────── */
+[data-ff-template="clean-dark"] {
+  --ff-bg: #18181B;
+  --ff-ink: #FAFAFA;
+  --ff-ink-soft: #D4D4D8;
+  --ff-muted: #71717A;
+  --ff-border: rgba(255, 255, 255, 0.10);
+  --ff-accent: #10B981;
+  --ff-accent-ink: #FFFFFF;
+
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 700;
+  --ff-headline-tracking: -0.02em;
+  --ff-headline-family: "Inter", system-ui, sans-serif;
+  --ff-font-heading: "Inter", system-ui, sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "Inter", system-ui, sans-serif;
+  --ff-btn-radius: 0.5rem;
+  --ff-btn-bg: var(--ff-accent);
+  --ff-btn-ink: var(--ff-accent-ink);
+  --ff-btn-shadow: 0 4px 14px rgba(16, 185, 129, 0.30);
+
+  --ff-brand-bar-bg: #27272A;
+  --ff-brand-bar-ink: #FAFAFA;
+  --ff-footer-bg: #0F0F11;
+  --ff-footer-ink: rgba(250, 250, 250, 0.55);
+  --ff-footer-business-ink: #FAFAFA;
+
+  --ff-section-alt-1: #1F1F23;
+  --ff-section-alt-2: rgba(16, 185, 129, 0.07);
+  --ff-section-alt-border: rgba(255, 255, 255, 0.08);
+
+  background: var(--ff-bg);
+  color: var(--ff-ink);
+}
+[data-ff-template="clean-dark"] .ff-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--ff-border); }
+[data-ff-template="clean-dark"] .ff-card-elevated {
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--ff-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30);
+}
+[data-ff-template="clean-dark"] .ff-eyebrow {
+  font-weight: 600; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
 }
 
-[data-ff-template] .ff-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 52px;
-  padding: 0 24px;
-  border-radius: var(--ff-btn-radius);
-  background: var(--ff-btn-bg);
-  color: var(--ff-btn-ink);
-  font-family: var(--ff-font-body);
-  font-weight: 700;
-  font-size: 15px;
-  text-decoration: none;
-  cursor: pointer;
-  border: none;
-}
-
-/* ===========================================================================
- * TEMPLATE 1 — STORY SELL
- * Sombre cinématique, Playfair serif, gold profond, gradients radiaux
- * ======================================================================== */
+/* ─── STORY SELL ───────────────────────────────────────────────────────── */
 [data-ff-template="story-sell"] {
-  --ff-bg: #080e1a;
-  --ff-surface: #0f172a;
-  --ff-ink: #f8fafc;
+  --ff-bg: #0F0805;
+  --ff-ink: #F5EFE6;
   --ff-ink-soft: #cbd5e1;
   --ff-muted: #94a3b8;
-  --ff-border: rgba(199, 164, 54, 0.18);
-  --ff-accent: #c7a436;
-  --ff-accent-ink: #080e1a;
-  --ff-primary: #080e1a;
+  --ff-border: rgba(212, 175, 55, 0.18);
+  --ff-accent: #D4AF37;
+  --ff-accent-ink: #0F0805;
 
-  --ff-font-heading: var(--ff-font-playfair), Georgia, serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-heading-weight: 700;
-  --ff-heading-tracking: -0.015em;
-  --ff-heading-leading: 1.08;
-  --ff-body-leading: 1.7;
-
-  --ff-section-py: 5rem;
-  --ff-section-py-md: 8rem;
-
-  --ff-bg-overlay: radial-gradient(
-      ellipse at top,
-      rgba(199, 164, 54, 0.12) 0%,
-      transparent 50%
-    ),
-    radial-gradient(ellipse at bottom right, rgba(49, 132, 92, 0.08) 0%, transparent 60%);
-
-  --ff-card-bg: rgba(199, 164, 54, 0.04);
-  --ff-card-border: rgba(199, 164, 54, 0.18);
-
+  --ff-headline-scale: calc(clamp(2rem, 4.5vw, 3.25rem) * var(--ff-text-scale));
+  --ff-headline-weight: 600;
+  --ff-headline-tracking: -0.005em;
+  --ff-headline-family: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --ff-font-heading: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --ff-font-body: "Lora", Georgia, serif;
+  --ff-font-eyebrow: "Lora", Georgia, serif;
   --ff-btn-radius: 0.5rem;
   --ff-btn-bg: linear-gradient(180deg, #d4b04a 0%, #c7a436 100%);
-  --ff-btn-ink: #080e1a;
-  --ff-btn-shadow: 0 12px 32px rgba(199, 164, 54, 0.35);
+  --ff-btn-ink: #0F0805;
+  --ff-btn-shadow: 0 12px 32px rgba(212, 175, 55, 0.35);
+  --ff-brand-bar-bg: #1A0E07;
+  --ff-brand-bar-ink: #F5EFE6;
+  --ff-footer-bg: #07030A;
+  --ff-footer-ink: rgba(245, 239, 230, 0.55);
+  --ff-footer-business-ink: #F5EFE6;
+
+  --ff-section-alt-1: rgba(255, 255, 255, 0.025);
+  --ff-section-alt-2: rgba(212, 175, 55, 0.10);
+  --ff-section-alt-border: rgba(212, 175, 55, 0.18);
+
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(212, 175, 55, 0.10), transparent 50%),
+    linear-gradient(180deg, #0F0805 0%, #14100A 100%);
+  color: #F5EFE6;
+}
+[data-ff-template="story-sell"]::before {
+  width: 60%; height: 60%; top: -15%; right: -20%;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.55), transparent 65%);
+  opacity: 0.7; animation: ff-decor-drift 24s ease-in-out infinite;
+}
+[data-ff-template="story-sell"]::after {
+  width: 50%; height: 50%; bottom: -15%; left: -15%;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.40), transparent 65%);
+  opacity: 0.55; animation: ff-decor-drift 28s ease-in-out infinite reverse;
+}
+[data-ff-template="story-sell"] .ff-headline,
+[data-ff-template="story-sell"] .ff-headline-scaled {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, serif !important;
+  font-weight: 600 !important; font-style: italic !important;
+}
+[data-ff-template="story-sell"] .ff-subheadline,
+[data-ff-template="story-sell"] .ff-body,
+[data-ff-template="story-sell"] p { font-family: "Lora", Georgia, serif !important; }
+[data-ff-template="story-sell"] .ff-eyebrow {
+  font-family: "Lora", Georgia, serif !important; font-style: italic;
+  letter-spacing: 0.15em; font-size: 11px;
 }
 
-/* Headline en italique très subtil pour souligner le côté narratif */
-[data-ff-template="story-sell"] .ff-headline em {
-  font-style: italic;
-  color: var(--ff-accent);
-}
-
-/* ===========================================================================
- * TEMPLATE 2 — BOLD ENERGY
- * Saturé, Bricolage Grotesque XXL, orange/jaune punchy, animations marquées
- * ======================================================================== */
+/* ─── BOLD ENERGY ──────────────────────────────────────────────────────── */
 [data-ff-template="bold-energy"] {
-  --ff-bg: #0a0604;
-  --ff-surface: #1e1208;
-  --ff-ink: #ffffff;
+  --ff-bg: #1A0808;
+  --ff-ink: #FFF5EE;
   --ff-ink-soft: #fde9d4;
   --ff-muted: #b89579;
-  --ff-border: rgba(255, 176, 32, 0.25);
-  --ff-accent: #ffb020;
-  --ff-accent-ink: #0a0604;
-  --ff-primary: #1e1208;
+  --ff-border: rgba(255, 107, 53, 0.25);
+  --ff-accent: #FF6B35;
+  --ff-accent-ink: #1A0808;
 
-  --ff-font-heading: var(--ff-font-bricolage), system-ui, sans-serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-bricolage), system-ui, sans-serif;
-  --ff-heading-weight: 800;
-  --ff-heading-tracking: -0.035em;
-  --ff-heading-leading: 0.95;
-  --ff-body-leading: 1.6;
-
-  --ff-section-py: 4.5rem;
-  --ff-section-py-md: 7rem;
-
-  --ff-bg-overlay: radial-gradient(
-      circle at 20% 0%,
-      rgba(224, 122, 62, 0.18) 0%,
-      transparent 50%
-    ),
-    radial-gradient(circle at 80% 100%, rgba(255, 176, 32, 0.12) 0%, transparent 50%);
-
-  --ff-card-bg: rgba(255, 176, 32, 0.06);
-  --ff-card-border: rgba(255, 176, 32, 0.22);
-
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 900;
+  --ff-headline-tracking: -0.03em;
+  --ff-headline-family: "Archivo Black", "Inter", system-ui, sans-serif;
+  --ff-font-heading: "Archivo Black", "Inter", system-ui, sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "Inter", system-ui, sans-serif;
   --ff-btn-radius: 999px;
-  --ff-btn-bg: linear-gradient(135deg, #ffb020 0%, #e07a3e 100%);
-  --ff-btn-ink: #0a0604;
-  --ff-btn-shadow: 0 16px 40px rgba(224, 122, 62, 0.5);
-}
+  --ff-btn-bg: linear-gradient(135deg, #FF6B35 0%, #E07A3E 100%);
+  --ff-btn-ink: #FFF5EE;
+  --ff-btn-shadow: 0 16px 40px rgba(255, 107, 53, 0.5);
+  --ff-brand-bar-bg: #2A0E0E;
+  --ff-brand-bar-ink: #FFF5EE;
+  --ff-footer-bg: #0F0303;
+  --ff-footer-ink: rgba(255, 245, 238, 0.55);
+  --ff-footer-business-ink: #FFF5EE;
 
-/* Headlines en taille extra-extra-large pour Bold Energy */
-[data-ff-template="bold-energy"] .ff-headline {
-  font-size: clamp(2rem, 6vw, 4.5rem);
-  text-transform: none;
-}
-[data-ff-template="bold-energy"] [data-ff-layout="wide-banner"] .ff-headline {
-  font-size: clamp(2.5rem, 8vw, 6rem);
-}
+  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
+  --ff-section-alt-2: rgba(255, 107, 53, 0.13);
+  --ff-section-alt-border: rgba(255, 107, 53, 0.30);
 
-/* Eyebrow plus impactant */
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(255, 107, 53, 0.18), transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(255, 107, 53, 0.12), transparent 50%),
+    linear-gradient(180deg, #1A0808 0%, #220C0C 100%);
+  color: #FFF5EE;
+}
+[data-ff-template="bold-energy"]::before {
+  width: 60%; height: 60%; top: -20%; left: -15%;
+  background: radial-gradient(circle, rgba(255, 107, 53, 0.65), transparent 65%);
+  opacity: 0.7; animation: ff-decor-drift 20s ease-in-out infinite;
+}
+[data-ff-template="bold-energy"]::after {
+  width: 55%; height: 55%; top: -10%; right: -15%;
+  background: radial-gradient(circle, rgba(255, 87, 51, 0.55), transparent 65%);
+  opacity: 0.6; animation: ff-decor-drift 26s ease-in-out infinite reverse;
+}
+[data-ff-template="bold-energy"] .ff-headline,
+[data-ff-template="bold-energy"] .ff-headline-scaled {
+  font-family: "Archivo Black", "Inter", system-ui, sans-serif !important;
+  font-weight: 900 !important; text-transform: uppercase; line-height: 1 !important;
+}
+[data-ff-template="bold-energy"] .ff-subheadline,
+[data-ff-template="bold-energy"] .ff-body,
+[data-ff-template="bold-energy"] p { font-family: "Inter", system-ui, sans-serif !important; }
 [data-ff-template="bold-energy"] .ff-eyebrow {
-  background: var(--ff-accent);
-  color: var(--ff-accent-ink);
-  padding: 4px 12px;
-  border-radius: 999px;
-  display: inline-block;
+  font-family: "Inter", system-ui, sans-serif !important; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px;
+  background: var(--ff-accent); color: var(--ff-accent-ink);
+  padding: 4px 12px; border-radius: 999px; display: inline-block;
+}
+[data-ff-template="bold-energy"] .ff-btn {
+  font-family: "Inter", system-ui, sans-serif !important;
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
 }
 
-/* ===========================================================================
- * TEMPLATE 3 — PREMIUM MINIMAL
- * Espace blanc généreux, Playfair éditorial, gold subtil, peu d'animations
- * ======================================================================== */
+/* ─── PREMIUM MINIMAL ──────────────────────────────────────────────────── */
 [data-ff-template="premium-minimal"] {
-  --ff-bg: #fbfaf7;
-  --ff-surface: #ffffff;
-  --ff-ink: #0f172a;
-  --ff-ink-soft: #475569;
-  --ff-muted: #94a3b8;
-  --ff-border: rgba(15, 23, 42, 0.08);
-  --ff-accent: #b89043;
-  --ff-accent-ink: #ffffff;
-  --ff-primary: #0f172a;
+  --ff-bg: #1F0A12;
+  --ff-ink: #FBF0F4;
+  --ff-ink-soft: #D8B5C2;
+  --ff-muted: #8C6B78;
+  --ff-border: rgba(232, 192, 138, 0.20);
+  --ff-accent: #E8C08A;
+  --ff-accent-ink: #1F0A12;
 
-  --ff-font-heading: var(--ff-font-playfair), Georgia, serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-heading-weight: 500;
-  --ff-heading-tracking: -0.02em;
-  --ff-heading-leading: 1.15;
-  --ff-body-leading: 1.75;
-
-  --ff-section-py: 6rem;
-  --ff-section-py-md: 10rem;
-
-  --ff-bg-overlay: none;
-
-  --ff-card-bg: #ffffff;
-  --ff-card-border: rgba(15, 23, 42, 0.06);
-
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 500;
+  --ff-headline-tracking: -0.005em;
+  --ff-headline-family: "Fraunces", "Cormorant Garamond", Georgia, serif;
+  --ff-font-heading: "Fraunces", "Cormorant Garamond", Georgia, serif;
+  --ff-font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --ff-font-eyebrow: "Inter", system-ui, sans-serif;
   --ff-btn-radius: 0;
-  --ff-btn-bg: #0f172a;
-  --ff-btn-ink: #fbfaf7;
-  --ff-btn-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
-}
+  --ff-btn-bg: #E8C08A;
+  --ff-btn-ink: #1F0A12;
+  --ff-btn-shadow: 0 4px 14px rgba(232, 192, 138, 0.30);
+  --ff-brand-bar-bg: #2D0E1A;
+  --ff-brand-bar-ink: #FBF0F4;
+  --ff-footer-bg: #14060C;
+  --ff-footer-ink: rgba(251, 240, 244, 0.55);
+  --ff-footer-business-ink: #FBF0F4;
 
-/* Eyebrow ultra discret en lettres espacées */
+  --ff-section-alt-1: rgba(255, 255, 255, 0.028);
+  --ff-section-alt-2: rgba(232, 192, 138, 0.10);
+  --ff-section-alt-border: rgba(232, 192, 138, 0.22);
+
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 30%,
+      rgba(232, 192, 138, 0.10) 45%, rgba(232, 192, 138, 0.18) 50%,
+      rgba(232, 192, 138, 0.10) 55%, transparent 70%, transparent 100%),
+    linear-gradient(180deg, #1F0A12 0%, #29101B 60%, #1F0A12 100%);
+  color: #FBF0F4;
+}
+[data-ff-template="premium-minimal"]::before {
+  width: 140%; height: 60%; top: 20%; left: -20%; border-radius: 0;
+  background: linear-gradient(115deg, transparent 35%,
+    rgba(232, 192, 138, 0.25) 48%, rgba(232, 192, 138, 0.35) 50%,
+    rgba(232, 192, 138, 0.25) 52%, transparent 65%);
+  filter: blur(40px); opacity: 0.7;
+  animation: ff-spotlight-sweep 18s ease-in-out infinite;
+}
+[data-ff-template="premium-minimal"]::after {
+  width: 50%; height: 50%; top: -20%; right: -15%;
+  background: radial-gradient(circle, rgba(232, 192, 138, 0.30), transparent 65%);
+  filter: blur(80px); opacity: 0.5;
+}
+[data-ff-template="premium-minimal"] .ff-headline,
+[data-ff-template="premium-minimal"] .ff-headline-scaled,
+[data-ff-template="premium-minimal"] h1.ff-headline,
+[data-ff-template="premium-minimal"] h2.ff-headline {
+  font-family: "Fraunces", "Cormorant Garamond", Georgia, serif !important;
+  font-weight: 500 !important; font-style: italic !important;
+  letter-spacing: -0.005em !important;
+  font-variation-settings: "opsz" 144, "SOFT" 50 !important;
+}
+[data-ff-template="premium-minimal"] .ff-subheadline,
+[data-ff-template="premium-minimal"] .ff-body,
+[data-ff-template="premium-minimal"] p {
+  font-family: "Inter", system-ui, -apple-system, sans-serif !important;
+  font-weight: 400 !important;
+}
 [data-ff-template="premium-minimal"] .ff-eyebrow {
-  letter-spacing: 0.3em;
-  font-size: 10px;
-  color: var(--ff-accent);
+  font-family: "Inter", system-ui, sans-serif !important;
+  font-weight: 500 !important; letter-spacing: 0.3em; font-size: 10px;
+  color: var(--ff-accent); text-transform: uppercase;
 }
-
-/* Headlines en weight medium (500) pour le côté éditorial */
-[data-ff-template="premium-minimal"] .ff-headline {
+[data-ff-template="premium-minimal"] .ff-btn,
+[data-ff-template="premium-minimal"] [data-ff-cta] {
+  font-family: "Inter", system-ui, sans-serif !important;
+  text-transform: uppercase; letter-spacing: 0.15em;
   font-weight: 500;
+  font-size: calc(12px * var(--ff-btn-scale)) !important;
+  padding: 0 calc(32px * var(--ff-btn-scale)) !important;
+  min-height: calc(56px * var(--ff-btn-scale)) !important;
 }
 
-/* Cards très épurées */
-[data-ff-template="premium-minimal"] .ff-card,
-[data-ff-template="premium-minimal"] .ff-card-elevated {
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-
-/* Bouton angulaire (pas de border-radius) caractéristique du luxe */
-[data-ff-template="premium-minimal"] .ff-btn {
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 32px;
-  min-height: 56px;
-}
-/* ===========================================================================
- * TEMPLATE 4 — SHARP LAUNCH
- * Punchy, contrasté, jaune/vert action, animations rapides, style "tech bold"
- * ======================================================================== */
+/* ─── SHARP LAUNCH ─────────────────────────────────────────────────────── */
 [data-ff-template="sharp-launch"] {
-  --ff-bg: #0a1020;
-  --ff-surface: #111a30;
-  --ff-ink: #f8fafc;
+  --ff-bg: #05080A;
+  --ff-ink: #F1F5F9;
   --ff-ink-soft: #cbd5e1;
   --ff-muted: #64748b;
-  --ff-border: rgba(255, 176, 32, 0.2);
-  --ff-accent: #ffb020;
-  --ff-accent-ink: #0a1020;
-  --ff-primary: #1ecb83;
+  --ff-border: rgba(34, 211, 238, 0.20);
+  --ff-accent: #22D3EE;
+  --ff-accent-ink: #05080A;
 
-  --ff-font-heading: var(--ff-font-space), var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-space), system-ui, sans-serif;
-  --ff-heading-weight: 700;
-  --ff-heading-tracking: -0.025em;
-  --ff-heading-leading: 1.05;
-  --ff-body-leading: 1.6;
-
-  --ff-section-py: 4rem;
-  --ff-section-py-md: 6rem;
-
-  --ff-bg-overlay: linear-gradient(
-      180deg,
-      rgba(255, 176, 32, 0.04) 0%,
-      transparent 30%,
-      rgba(30, 203, 131, 0.04) 100%
-    );
-
-  --ff-card-bg: rgba(255, 255, 255, 0.03);
-  --ff-card-border: rgba(255, 255, 255, 0.08);
-
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 700;
+  --ff-headline-tracking: -0.025em;
+  --ff-headline-family: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --ff-font-heading: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "JetBrains Mono", ui-monospace, monospace;
   --ff-btn-radius: 0.5rem;
-  --ff-btn-bg: linear-gradient(180deg, #ffc347 0%, #ffb020 100%);
-  --ff-btn-ink: #0a1020;
-  --ff-btn-shadow: 0 8px 24px rgba(255, 176, 32, 0.4);
-
+  --ff-btn-bg: linear-gradient(180deg, #67E8F9 0%, #22D3EE 100%);
+  --ff-btn-ink: #05080A;
+  --ff-btn-shadow: 0 8px 24px rgba(34, 211, 238, 0.4);
   --ff-anim-duration: 400ms;
-}
+  --ff-brand-bar-bg: #0B1418;
+  --ff-brand-bar-ink: #F1F5F9;
+  --ff-footer-bg: #02060A;
+  --ff-footer-ink: rgba(241, 245, 249, 0.55);
+  --ff-footer-business-ink: #F1F5F9;
 
-/* Eyebrow tech : monospace style avec dot */
+  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
+  --ff-section-alt-2: rgba(34, 211, 238, 0.10);
+  --ff-section-alt-border: rgba(34, 211, 238, 0.25);
+
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(34, 211, 238, 0.15), transparent 60%),
+    linear-gradient(180deg, #05080A 0%, #0A0F14 100%);
+  color: #F1F5F9;
+}
+[data-ff-template="sharp-launch"]::before {
+  width: 80%; height: 50%; top: -20%; left: 10%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.50), transparent 70%);
+  opacity: 0.6;
+}
+[data-ff-template="sharp-launch"]::after {
+  width: 40%; height: 40%; bottom: -15%; right: -10%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.30), transparent 70%);
+  opacity: 0.5;
+}
+[data-ff-template="sharp-launch"] .ff-headline,
+[data-ff-template="sharp-launch"] .ff-headline-scaled {
+  font-family: "Space Grotesk", "Inter", system-ui, sans-serif !important;
+  font-weight: 700 !important;
+}
+[data-ff-template="sharp-launch"] .ff-subheadline,
+[data-ff-template="sharp-launch"] .ff-body,
+[data-ff-template="sharp-launch"] p { font-family: "Inter", system-ui, sans-serif !important; }
 [data-ff-template="sharp-launch"] .ff-eyebrow {
-  font-family: var(--ff-font-space);
-  font-weight: 600;
-  font-size: 11px;
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  font-weight: 500; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
 }
-[data-ff-template="sharp-launch"] .ff-eyebrow::before {
-  content: "● ";
-  color: #1ecb83;
-}
-
-/* Cards avec liseré accent */
-[data-ff-template="sharp-launch"] .ff-card {
-  border-left: 2px solid var(--ff-accent);
+[data-ff-template="sharp-launch"] .ff-btn {
+  font-family: "Space Grotesk", "Inter", sans-serif !important;
+  font-weight: 600; letter-spacing: 0.01em;
 }
 
-/* ===========================================================================
- * TEMPLATE 5 — TRUST PRO
- * B2B institutionnel, bleu marine + cyan, sérieux, peu d'animations
- * ======================================================================== */
+/* ─── TRUST PRO ────────────────────────────────────────────────────────── */
 [data-ff-template="trust-pro"] {
-  --ff-bg: #f8fafc;
-  --ff-surface: #ffffff;
-  --ff-ink: #061b36;
-  --ff-ink-soft: #2c4a70;
+  --ff-bg: #0B1E3D;
+  --ff-ink: #E2E8F0;
+  --ff-ink-soft: #94a3b8;
   --ff-muted: #6b8aaf;
-  --ff-border: rgba(8, 73, 141, 0.14);
-  --ff-accent: #08498d;
+  --ff-border: rgba(6, 182, 212, 0.20);
+  --ff-accent: #06B6D4;
   --ff-accent-ink: #ffffff;
-  --ff-primary: #061b36;
 
-  --ff-font-heading: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-heading-weight: 700;
-  --ff-heading-tracking: -0.015em;
-  --ff-heading-leading: 1.15;
-  --ff-body-leading: 1.65;
-
-  --ff-section-py: 5rem;
-  --ff-section-py-md: 7rem;
-
-  --ff-bg-overlay: none;
-
-  --ff-card-bg: #ffffff;
-  --ff-card-border: rgba(8, 73, 141, 0.1);
-
+  --ff-headline-scale: calc(clamp(1.75rem, 3.5vw, 2.75rem) * var(--ff-text-scale));
+  --ff-headline-weight: 600;
+  --ff-headline-tracking: -0.015em;
+  --ff-headline-family: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --ff-font-heading: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --ff-font-body: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "IBM Plex Mono", ui-monospace, monospace;
   --ff-btn-radius: 0.375rem;
-  --ff-btn-bg: #08498d;
+  --ff-btn-bg: #06B6D4;
   --ff-btn-ink: #ffffff;
-  --ff-btn-shadow: 0 6px 16px rgba(8, 73, 141, 0.22);
-
+  --ff-btn-shadow: 0 6px 16px rgba(6, 182, 212, 0.30);
   --ff-anim-duration: 800ms;
-}
+  --ff-brand-bar-bg: #102B52;
+  --ff-brand-bar-ink: #E2E8F0;
+  --ff-footer-bg: #06122A;
+  --ff-footer-ink: rgba(226, 232, 240, 0.55);
+  --ff-footer-business-ink: #E2E8F0;
 
-/* Eyebrow : pill cyan caractéristique du B2B */
+  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
+  --ff-section-alt-2: rgba(6, 182, 212, 0.10);
+  --ff-section-alt-border: rgba(6, 182, 212, 0.25);
+
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(6, 182, 212, 0.18), transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(6, 182, 212, 0.12), transparent 50%),
+    linear-gradient(135deg, #0B1E3D 0%, #0F2847 100%);
+  color: #E2E8F0;
+}
+[data-ff-template="trust-pro"]::before {
+  width: 55%; height: 55%; top: -15%; left: -15%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.55), transparent 65%);
+  opacity: 0.65; animation: ff-decor-drift 30s ease-in-out infinite;
+}
+[data-ff-template="trust-pro"]::after {
+  width: 50%; height: 50%; bottom: -15%; right: -15%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.40), transparent 65%);
+  opacity: 0.55; animation: ff-decor-drift 36s ease-in-out infinite reverse;
+}
+[data-ff-template="trust-pro"] .ff-headline,
+[data-ff-template="trust-pro"] .ff-headline-scaled {
+  font-family: "IBM Plex Sans", "Inter", system-ui, sans-serif !important;
+  font-weight: 600 !important;
+}
+[data-ff-template="trust-pro"] .ff-subheadline,
+[data-ff-template="trust-pro"] .ff-body,
+[data-ff-template="trust-pro"] p {
+  font-family: "IBM Plex Sans", "Inter", system-ui, sans-serif !important;
+  font-weight: 400 !important;
+}
 [data-ff-template="trust-pro"] .ff-eyebrow {
-  background: rgba(40, 214, 214, 0.12);
-  color: #0e7490;
-  padding: 4px 10px;
-  border-radius: 4px;
-  letter-spacing: 0.12em;
-  font-size: 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace !important;
+  background: rgba(6, 182, 212, 0.12); color: #67E8F9;
+  padding: 4px 10px; border-radius: 4px; letter-spacing: 0.08em;
+  font-size: 10px; font-weight: 500; text-transform: uppercase;
 }
-
-/* Cards solides avec ombre douce */
-[data-ff-template="trust-pro"] .ff-card,
-[data-ff-template="trust-pro"] .ff-card-elevated {
-  box-shadow: 0 1px 3px rgba(8, 73, 141, 0.06),
-              0 8px 24px rgba(8, 73, 141, 0.04);
-}
-
-/* Headlines plus serrées (institutionnel) */
-[data-ff-template="trust-pro"] .ff-headline {
-  font-weight: 700;
-}
-
-/* ===========================================================================
- * TEMPLATE 6 — LEAD SNAP
- * Court, mobile-first, vif, fond clair, conversion rapide
- * ======================================================================== */
-[data-ff-template="lead-snap"] {
-  --ff-bg: #ffffff;
-  --ff-surface: #fafbfc;
-  --ff-ink: #0a1020;
-  --ff-ink-soft: #475569;
-  --ff-muted: #94a3b8;
-  --ff-border: rgba(10, 16, 32, 0.08);
-  --ff-accent: #ffb020;
-  --ff-accent-ink: #0a1020;
-  --ff-primary: #0a1020;
-
-  --ff-font-heading: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-body: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-font-eyebrow: var(--ff-font-inter), system-ui, sans-serif;
-  --ff-heading-weight: 800;
-  --ff-heading-tracking: -0.03em;
-  --ff-heading-leading: 1.05;
-  --ff-body-leading: 1.55;
-
-  --ff-section-py: 3rem;
-  --ff-section-py-md: 5rem;
-
-  --ff-bg-overlay: none;
-
-  --ff-card-bg: #fafbfc;
-  --ff-card-border: rgba(10, 16, 32, 0.08);
-
-  --ff-btn-radius: 999px;
-  --ff-btn-bg: #ffb020;
-  --ff-btn-ink: #0a1020;
-  --ff-btn-shadow: 0 8px 20px rgba(255, 176, 32, 0.45);
-
-  --ff-anim-duration: 350ms;
-}
-
-/* Eyebrow ultra simple */
-[data-ff-template="lead-snap"] .ff-eyebrow {
-  font-weight: 700;
-  font-size: 11px;
-  color: var(--ff-accent);
-}
-
-/* Headlines très impactantes mais compactes */
-[data-ff-template="lead-snap"] .ff-headline {
-  font-size: clamp(1.75rem, 5vw, 3.25rem);
-}
-
-/* Bullets denses */
-[data-ff-template="lead-snap"] .ff-divide-list > li {
-  padding: 10px 0;
-  font-weight: 500;
-}
-
-/* Cards avec accent latéral jaune */
-[data-ff-template="lead-snap"] .ff-card {
-  border-left: 3px solid var(--ff-accent);
-  background: #fafbfc;
-}
-/* ===========================================================================
- * Compatibilité avec useScrollReveal (ff-anim-pending / ff-anim-active)
- * ----------------------------------------------------------------------------
- * useScrollReveal bascule de "ff-anim-pending" à "ff-anim-active".
- * On veut que ce système déclenche les MÊMES animations que la classe ff-in
- * (utilisée par TemplateThemeProvider). Donc on duplique les sélecteurs.
- * ======================================================================== */
-
-[data-ff-template] [data-ff-anim].ff-anim-active {
-  /* Quand useScrollReveal active un élément, on le marque aussi comme "in" */
-}
-
-/* fade-up via ff-anim-active */
-[data-ff-template] [data-ff-anim="fade-up"].ff-anim-active {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* fade-in via ff-anim-active */
-[data-ff-template] [data-ff-anim="fade-in"].ff-anim-active {
-  opacity: 1;
-}
-
-/* zoom-in via ff-anim-active */
-[data-ff-template] [data-ff-anim="zoom-in"].ff-anim-active {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* pulse via ff-anim-active */
-[data-ff-template] [data-ff-anim="pulse"].ff-anim-active {
-  opacity: 1;
-  animation: ffPulseSubtle 2.6s ease-in-out 0.4s infinite;
-}
-
-/* none via ff-anim-active : déjà visible */
-[data-ff-template] [data-ff-anim="none"].ff-anim-active {
-  opacity: 1;
-}
-
-/* Stagger via ff-anim-active */
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(1)  { transition-delay: 0ms;   animation-delay: 0ms;   }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(2)  { transition-delay: 80ms;  animation-delay: 80ms;  }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(3)  { transition-delay: 160ms; animation-delay: 160ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(4)  { transition-delay: 240ms; animation-delay: 240ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(5)  { transition-delay: 320ms; animation-delay: 320ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(6)  { transition-delay: 400ms; animation-delay: 400ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(7)  { transition-delay: 480ms; animation-delay: 480ms; }
-[data-ff-template] [data-ff-bullets="stagger"] > [data-ff-anim].ff-anim-active:nth-child(8)  { transition-delay: 560ms; animation-delay: 560ms; }
-
-/* Désactivation globale aussi via ff-anim-pending */
-[data-ff-template][data-ff-animations="off"] [data-ff-anim].ff-anim-pending,
-[data-ff-template][data-ff-animations="off"] [data-ff-anim].ff-anim-active {
-  opacity: 1 !important;
-  transform: none !important;
-  animation: none !important;
-}
-/* ─────────────────────────────────────────────────────────────────────────
-   Alignement intelligent : titres/CTA centrés, corps de texte aligné à
-   gauche pour la lisibilité (max ~65 caractères). Sur mobile, tout centré.
-   ───────────────────────────────────────────────────────────────────────── */
-[data-ff-template] .ff-section {
-  text-align: center;
-}
-
-[data-ff-template] .ff-headline,
-[data-ff-template] .ff-subheadline,
-[data-ff-template] .ff-eyebrow {
-  text-align: center;
-}
-
-/* Corps de texte et listes : alignés à gauche sur desktop, largeur lisible */
-[data-ff-template] .ff-body,
-[data-ff-template] .ff-bullets,
-[data-ff-template] .ff-bullets li {
-  text-align: left;
-  max-width: 65ch;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* CTA et images centrés (déjà block-level mais on force) */
-[data-ff-template] .ff-cta-wrap,
-[data-ff-template] .ff-image-wrap {
-  text-align: center;
-}
-
-/* Mobile : tout centré pour un rendu compact */
-@media (max-width: 640px) {
-  [data-ff-template] .ff-body,
-  [data-ff-template] .ff-bullets,
-  [data-ff-template] .ff-bullets li {
-    text-align: center;
-  }
-}
-
-/* Layouts split : pas de centrage forcé (texte côte à côte avec image) */
-[data-ff-template] .ff-section[data-ff-layout="split-text-image"],
-[data-ff-template] .ff-section[data-ff-layout="split-image-text"],
-[data-ff-template] .ff-section[data-ff-layout="feature-grid"] {
-  text-align: left;
-}
-
-[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-headline,
-[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-headline,
-[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-headline {
-  text-align: left;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   Footer minimal — informations business
-   ───────────────────────────────────────────────────────────────────────── */
-[data-ff-template] .ff-footer {
-  margin-top: 4rem;
-  padding: 2rem 1.5rem;
-  border-top: 1px solid var(--ff-border, rgba(255, 255, 255, 0.08));
-  background: var(--ff-bg-soft, transparent);
-  color: var(--ff-muted, rgba(255, 255, 255, 0.6));
-  font-size: 0.875rem;
-  text-align: center;
-}
-
-[data-ff-template] .ff-footer-business {
+[data-ff-template="trust-pro"] .ff-btn {
+  font-family: "IBM Plex Sans", "Inter", sans-serif !important;
   font-weight: 600;
-  color: var(--ff-ink, inherit);
-  margin-bottom: 0.25rem;
 }
 
-[data-ff-template] .ff-footer-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem 1.5rem;
-  margin-top: 0.5rem;
-  font-size: 0.8125rem;
-  opacity: 0.75;
+/* ─── LEAD SNAP ────────────────────────────────────────────────────────── */
+[data-ff-template="lead-snap"] {
+  --ff-bg: #1A0F2E;
+  --ff-ink: #F3E8FF;
+  --ff-ink-soft: #C4B5DC;
+  --ff-muted: #8C7AAB;
+  --ff-border: rgba(192, 132, 252, 0.20);
+  --ff-accent: #C084FC;
+  --ff-accent-ink: #1A0F2E;
+
+  --ff-headline-scale: calc(clamp(1.5rem, 3vw, 2.25rem) * var(--ff-text-scale));
+  --ff-headline-weight: 700;
+  --ff-headline-tracking: -0.02em;
+  --ff-headline-family: "Sora", "Inter", system-ui, sans-serif;
+  --ff-font-heading: "Sora", "Inter", system-ui, sans-serif;
+  --ff-font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-font-eyebrow: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-btn-radius: 999px;
+  --ff-btn-bg: linear-gradient(135deg, #C084FC 0%, #A855F7 100%);
+  --ff-btn-ink: #1A0F2E;
+  --ff-btn-shadow: 0 8px 24px rgba(192, 132, 252, 0.45);
+  --ff-anim-duration: 350ms;
+  --ff-brand-bar-bg: #271847;
+  --ff-brand-bar-ink: #F3E8FF;
+  --ff-footer-bg: #0E0820;
+  --ff-footer-ink: rgba(243, 232, 255, 0.55);
+  --ff-footer-business-ink: #F3E8FF;
+
+  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
+  --ff-section-alt-2: rgba(192, 132, 252, 0.12);
+  --ff-section-alt-border: rgba(192, 132, 252, 0.28);
+
+  background-color: #1A0F2E;
+  background-image:
+    linear-gradient(rgba(192, 132, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(192, 132, 252, 0.06) 1px, transparent 1px),
+    radial-gradient(ellipse at 100% 0%, rgba(192, 132, 252, 0.18), transparent 55%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+  background-position: 0 0, 0 0, 0 0;
+  color: #F3E8FF;
+}
+[data-ff-template="lead-snap"]::before {
+  width: 50%; height: 50%; top: -15%; right: -15%;
+  background: radial-gradient(circle, rgba(192, 132, 252, 0.45), transparent 65%);
+  opacity: 0.65;
+}
+[data-ff-template="lead-snap"]::after {
+  width: 35%; height: 35%; bottom: -10%; left: -10%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.35), transparent 65%);
+  opacity: 0.5;
+}
+[data-ff-template="lead-snap"] .ff-headline,
+[data-ff-template="lead-snap"] .ff-headline-scaled {
+  font-family: "Sora", "Inter", system-ui, sans-serif !important;
+  font-weight: 700 !important;
+}
+[data-ff-template="lead-snap"] .ff-subheadline,
+[data-ff-template="lead-snap"] .ff-body,
+[data-ff-template="lead-snap"] p {
+  font-family: "DM Sans", "Inter", system-ui, sans-serif !important;
+  font-weight: 400 !important;
+}
+[data-ff-template="lead-snap"] .ff-eyebrow {
+  font-family: "DM Sans", "Inter", system-ui, sans-serif !important;
+  font-weight: 700; font-size: 11px; color: var(--ff-accent);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+[data-ff-template="lead-snap"] .ff-btn {
+  font-family: "Sora", "Inter", sans-serif !important;
+  font-weight: 600;
 }
 
-[data-ff-template] .ff-footer-meta span {
-  white-space: nowrap;
+/* ─── Animations de décor ─── */
+@keyframes ff-decor-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(5%, -3%) scale(1.05); }
+  66%      { transform: translate(-3%, 4%) scale(0.97); }
+}
+@keyframes ff-spotlight-sweep {
+  0%, 100% { transform: translateX(-15%) skewX(-5deg); opacity: 0.55; }
+  50%      { transform: translateX(15%) skewX(-5deg); opacity: 0.85; }
 }
 
-[data-ff-template] .ff-footer-copyright {
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  opacity: 0.55;
-}
-/* ─────────────────────────────────────────────────────────────────────────
-   Bandeaux header & footer unifiés (neutres, indépendants du template)
-   ───────────────────────────────────────────────────────────────────────── */
+/* ============================================================================
+ * 9. ANIMATIONS legacy
+ * ========================================================================= */
+@keyframes ff-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ff-fade-up { from { opacity: 0; transform: translate3d(0, 16px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes ff-fade-down { from { opacity: 0; transform: translate3d(0, -16px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes ff-zoom-in { from { opacity: 0; transform: scale3d(0.92, 0.92, 1); } to { opacity: 1; transform: scale3d(1, 1, 1); } }
+@keyframes ff-pulse { 0%,100% { transform: scale3d(1,1,1); } 50% { transform: scale3d(1.04,1.04,1); } }
+
+/* ============================================================================
+ * 10. Header & Footer (inchangé)
+ * ========================================================================= */
 .ff-brand-bar {
-  background: #0a0a0a;
-  color: #ffffff;
+  background: var(--ff-brand-bar-bg, #0a0a0a);
+  color: var(--ff-brand-bar-ink, #ffffff);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.875rem 1.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-family: var(--ff-font-body, "Inter", system-ui, sans-serif);
+  padding: 0.75rem 1.25rem;
+  font-family: var(--ff-font-body, "Inter", sans-serif);
   font-weight: 600;
   font-size: 0.9375rem;
-  letter-spacing: 0.01em;
+  width: 100%;
+  z-index: 40;
+}
+
+.ff-brand-bar .ff-brand-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ff-brand-bar .ff-brand-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .ff-brand-bar img {
-  height: 28px;
-  width: 28px;
+  height: 32px;
+  width: auto;
+  max-width: 160px;
   border-radius: 6px;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px;
+  background: transparent;
+  flex-shrink: 0;
 }
 
-/* Footer — fond aligné sur le header pour cohérence visuelle */
-[data-ff-template] .ff-footer {
-  margin-top: 0;
-  padding: 2rem 1.5rem;
-  background: #0a0a0a;
-  color: rgba(255, 255, 255, 0.6);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.875rem;
-  text-align: center;
-}
-
-[data-ff-template] .ff-footer-business {
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 0.25rem;
-}
-
-[data-ff-template] .ff-footer-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem 1.5rem;
-  margin-top: 0.5rem;
-  font-size: 0.8125rem;
-  opacity: 0.75;
-}
-
-[data-ff-template] .ff-footer-meta span {
+.ff-brand-bar .ff-brand-bar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-[data-ff-template] .ff-footer-copyright {
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  opacity: 0.55;
+.ff-brand-bar .ff-brand-bar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--ff-btn-radius, 0.5rem);
+  background: var(--ff-accent, #c7a436);
+  color: var(--ff-accent-ink, #0f172a);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+  flex-shrink: 0;
+}
+.ff-brand-bar .ff-brand-bar-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ff-accent, #c7a436) 35%, transparent);
 }
 
+.ff-brand-bar[data-ff-header-sticky="true"] {
+  position: sticky;
+  top: 0;
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+}
+
+[data-ff-template]:has(.ff-brand-bar[data-ff-header-sticky="true"]) {
+  overflow: visible !important;
+}
+.ff-template-root:has(.ff-brand-bar[data-ff-header-sticky="true"]) {
+  overflow: visible !important;
+}
+.ff-desktop-stage:has(.ff-brand-bar[data-ff-header-sticky="true"]) {
+  overflow: visible !important;
+}
+
+.ff-brand-bar[data-ff-header-transparent="true"] {
+  background: color-mix(in srgb, var(--ff-brand-bar-bg, #0a0a0a) 70%, transparent) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 480px) {
+  .ff-brand-bar .ff-brand-bar-cta {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  .ff-brand-bar .ff-brand-bar-name {
+    font-size: 0.875rem;
+  }
+  .ff-brand-bar img {
+    height: 28px;
+    max-width: 120px;
+  }
+}
+
+/* ============================================================================
+ * Cadre mobile (inchangé)
+ * ========================================================================= */
+[data-ff-mobile-frame] {
+  isolation: isolate;
+}
+
+[data-ff-mobile-frame] [data-ff-template] {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+[data-ff-mobile-frame] [data-ff-template] > div > .ff-brand-bar,
+[data-ff-mobile-frame] [data-ff-template] > .ff-brand-bar {
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+}
+
+[data-ff-mobile-frame] [data-ff-template] .ff-footer:last-child {
+  border-bottom-left-radius: 28px;
+  border-bottom-right-radius: 28px;
+}
+
+[data-ff-mobile-frame],
+[data-ff-mobile-frame] > div {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+[data-ff-mobile-frame]::-webkit-scrollbar,
+[data-ff-mobile-frame] > div::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ============================================================================
+ * 11. Alignement intelligent (inchangé)
+ * ========================================================================= */
+[data-ff-template] .ff-section { text-align: center; }
+[data-ff-template] .ff-headline,
+[data-ff-template] .ff-subheadline,
+[data-ff-template] .ff-eyebrow { text-align: center; }
+[data-ff-template] .ff-body,
+[data-ff-template] .ff-bullets,
+[data-ff-template] .ff-bullets li {
+  text-align: left; max-width: 65ch; margin-left: auto; margin-right: auto;
+}
+[data-ff-template] .ff-cta-wrap { text-align: center; }
+
+@media (max-width: 640px) {
+  [data-ff-template] .ff-body,
+  [data-ff-template] .ff-bullets,
+  [data-ff-template] .ff-bullets li { text-align: center; }
+}
+
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"],
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"],
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"],
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"],
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] {
+  text-align: left;
+}
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-eyebrow {
+  text-align: left;
+}
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-body,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-body,
+[data-ff-template] .ff-section[data-ff-layout="feature-grid"] .ff-body,
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-body,
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-body {
+  text-align: left;
+  margin-left: 0;
+  margin-right: 0;
+}
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-cta-wrap,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-cta-wrap,
+[data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-cta-wrap,
+[data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-cta-wrap {
+  text-align: left;
+}
+
+[data-ff-template] .ff-section[data-ff-section="hero"],
+[data-ff-template] .ff-section[data-ff-section="hero"] .ff-headline,
+[data-ff-template] .ff-section[data-ff-section="hero"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-section="hero"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-section="hero"] .ff-cta-wrap {
+  text-align: center;
+}
+
+/* ============================================================================
+ * 12. ALTERNANCE DE FONDS ENTRE SECTIONS
+ * (sauf sections avec bg custom — Lot K — ou image de fond — Lot G)
+ * ========================================================================= */
+[data-ff-template] .ff-section:nth-of-type(even):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: var(--ff-section-alt-1, transparent);
+}
+
+[data-ff-template] .ff-section[data-ff-section="testimonials"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="proof"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="faq"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="pricing"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="offer"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="bonus"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template] .ff-section[data-ff-section="guarantee"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: var(--ff-section-alt-2, transparent) !important;
+  border-top: 1px solid var(--ff-section-alt-border, transparent);
+  border-bottom: 1px solid var(--ff-section-alt-border, transparent);
+}
+
+[data-ff-template] .ff-section[data-ff-section="hero"]:not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: transparent !important;
+  border-top: none;
+  border-bottom: none;
+}
+
+/* ============================================================================
+ * 13. CTA full-width sur mobile (inchangé)
+ * ========================================================================= */
+@media (max-width: 640px) {
+  [data-ff-template] .ff-cta-wrap .ff-btn,
+  [data-ff-template] .ff-cta-wrap [data-ff-cta] {
+    width: 100%;
+    max-width: 320px;
+  }
+}
+
+/* ============================================================================
+ * 14. LOT 2 — Highlight de la section ciblée par la sidebar éditeur (inchangé)
+ * ========================================================================= */
+@keyframes ff-section-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent, #C7A436) 55%, transparent); }
+  60%  { box-shadow: 0 0 0 8px color-mix(in srgb, var(--ff-accent, #C7A436) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+[data-ff-template] .ff-section[data-ff-active="true"] {
+  position: relative;
+  z-index: 1;
+  animation: ff-section-pulse 1.5s ease-out 1;
+  outline: 2px solid color-mix(in srgb, var(--ff-accent, #C7A436) 65%, transparent);
+  outline-offset: -2px;
+  border-radius: 4px;
+  transition: outline-color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ff-template] .ff-section[data-ff-active="true"] {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+ * 15. LOT 3 — Fond personnalisé (templates clean uniquement) (inchangé)
+ * ========================================================================= */
+[data-ff-template][data-ff-custom-bg="true"] {
+  background: var(--ff-custom-bg) !important;
+}
+[data-ff-template][data-ff-custom-bg="true"] .ff-section:nth-of-type(even) {
+  background-color: transparent;
+}
+
+/* ============================================================================
+ * 16. LOT C — Icônes : tailles et animations (inchangé)
+ * ========================================================================= */
+[data-ff-template] [data-ff-icon-size] {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+[data-ff-template] [data-ff-icon-size="sm"] { width: 16px; height: 16px; }
+[data-ff-template] [data-ff-icon-size="md"] { width: 20px; height: 20px; }
+[data-ff-template] [data-ff-icon-size="lg"] { width: 28px; height: 28px; }
+[data-ff-template] [data-ff-icon-size="xl"] { width: 36px; height: 36px; }
+
+[data-ff-template] [data-ff-icon-anim="pulse"]  { animation: ff-icon-pulse 1.8s ease-in-out infinite; }
+[data-ff-template] [data-ff-icon-anim="bounce"] { animation: ff-icon-bounce 1.4s ease-in-out infinite; }
+[data-ff-template] [data-ff-icon-anim="spin"]   { animation: ff-icon-spin 3s linear infinite; }
+[data-ff-template] [data-ff-icon-anim="wiggle"] { animation: ff-icon-wiggle 1.2s ease-in-out infinite; transform-origin: 50% 50%; }
+[data-ff-template] [data-ff-icon-anim="float"]  { animation: ff-icon-float 3s ease-in-out infinite; }
+
+@keyframes ff-icon-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.15); opacity: 0.85; }
+}
+@keyframes ff-icon-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+@keyframes ff-icon-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ff-icon-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-8deg); }
+  75%      { transform: rotate(8deg); }
+}
+@keyframes ff-icon-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-3px) rotate(2deg); }
+}
+
+[data-ff-template][data-ff-animations="off"] [data-ff-icon-anim],
+[data-ff-template] [data-ff-icon-anim="none"] {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ff-template] [data-ff-icon-anim] { animation: none !important; }
+}
+
+/* ============================================================================
+ * 17. LOT D — Scène desktop (inchangé)
+ * ========================================================================= */
+.ff-desktop-stage {
+  width: 100% !important;
+  max-width: var(--ff-stage-w, 1180px);
+}
+
+/* ============================================================================
+ * 18. LOT J — Ombrages (inchangé)
+ * ========================================================================= */
+[data-ff-template] [data-ff-shadow="sm"] {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ff-shadow-color, #000) 25%, transparent);
+}
+[data-ff-template] [data-ff-shadow="md"] {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ff-shadow-color, #000) 30%, transparent);
+}
+[data-ff-template] [data-ff-shadow="lg"] {
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ff-shadow-color, #000) 35%, transparent);
+}
+[data-ff-template] [data-ff-shadow="xl"] {
+  box-shadow: 0 24px 48px color-mix(in srgb, var(--ff-shadow-color, #000) 40%, transparent);
+}
+
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-card-elevated {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ff-shadow-color, #000) 25%, transparent);
+}
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-card-elevated {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ff-shadow-color, #000) 30%, transparent);
+}
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-card-elevated {
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ff-shadow-color, #000) 35%, transparent);
+}
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-card-elevated {
+  box-shadow: 0 24px 48px color-mix(in srgb, var(--ff-shadow-color, #000) 40%, transparent);
+}
+
+/* ============================================================================
+ * 19. LOT H + N — Split layout (image+texte côte-à-côte)
+ *
+ * Wrapper :
+ *   <section> > <DecorativeIconsLayer /> > <div class="relative mx-auto…"> > contenu
+ *
+ * Principe (inspiré des landings pros type Thales Gomes) :
+ *  • align-items: start → le texte commence en haut, pas centré dans le vide
+ *  • column-gap réduit
+ *  • rythme vertical compact (eyebrow→headline→sub→body→bullets→cta)
+ *  • la taille de l'image (data-ff-img-size) est RESPECTÉE en split
+ * ========================================================================= */
+@media (min-width: 768px) {
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 2.5rem;
+    row-gap: 0;
+    align-items: start;            /* ← TEXTE EN HAUT, plus de gros vide au-dessus */
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Texte à gauche, image à droite */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-body,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-bullets,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-cta-wrap {
+    grid-column: 1;
+    min-width: 0;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: center;            /* image centrée verticalement par rapport au bloc texte */
+    justify-self: center;          /* image centrée horizontalement dans sa colonne */
+    margin: 0;
+  }
+
+  /* Image à gauche, texte à droite */
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-body,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-bullets,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-cta-wrap {
+    grid-column: 2;
+    min-width: 0;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: center;
+    justify-self: center;
+    margin: 0;
+  }
+
+  /* ─── Rythme vertical compact (split) ─────────────────────────────────
+     On écrase les marges Tailwind (mb-3/4/5) prévues pour le mode centered.
+     Espacement final : eyebrow ▸ 4px ▸ H2 ▸ 12px ▸ sub ▸ 20px ▸ body/bullets ▸ 24px ▸ CTA */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
+    margin: 0 0 0.25rem 0 !important;     /* 4px */
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline {
+    margin: 0 0 0.75rem 0 !important;     /* 12px */
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-subheadline {
+    margin: 0 0 1.25rem 0 !important;     /* 20px */
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-body,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-body {
+    margin: 0 0 1.25rem 0 !important;     /* 20px */
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-bullets,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-bullets {
+    margin: 0 0 1.5rem 0 !important;       /* 24px */
+    max-width: none;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-cta-wrap,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-cta-wrap {
+    margin: 0 !important;
+  }
+
+  /* Bullets resserrés en split */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-bullets > li,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-bullets > li {
+    margin-bottom: 0.5rem;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-bullets > li:last-child,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-bullets > li:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ─── Tailles d'image RESPECTÉES en split ─────────────────────────────
+     Plus de override à max-width: 100% — la taille choisie dans l'éditeur
+     (sm/md/lg/full/custom) s'applique normalement. L'image est centrée
+     dans sa colonne via justify-self: center ci-dessus. */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="sm"],
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="sm"] {
+    max-width: 280px;
+    width: 100%;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="md"],
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="md"] {
+    max-width: 380px;
+    width: 100%;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="lg"],
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="lg"] {
+    max-width: 480px;
+    width: 100%;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="full"],
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="full"] {
+    max-width: 100%;
+    width: 100%;
+  }
+  /* "custom" : la max-width inline (customWidth px) gagne déjà */
+}
+
+/* Mobile : empilage image au-dessus du texte */
+@media (max-width: 767px) {
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap {
+    order: -1;
+    margin: 0 auto;
+  }
+}
+
+
+
+/* ============================================================================
+ * 20. LOT K — Couleur de fond custom par section
+ * ========================================================================= */
+[data-ff-template] .ff-section[data-ff-custom-bg="true"]:not([data-ff-has-bg-image="true"]),
+[data-ff-template] section[data-ff-custom-bg="true"]:not([data-ff-has-bg-image="true"]) {
+  background-image: none !important;
+}
+
+/* ============================================================================
+ * 21. LOT G — Image de fond de section
+ *
+ * Quand une section porte data-ff-has-bg-image="true", le composant React
+ * applique en inline :
+ *   - background-color (couleur du thème ou bg custom)
+ *   - background-image: url(...) (image uploadée)
+ *   - background-size / background-position / background-repeat
+ *
+ * On doit s'assurer qu'AUCUNE règle CSS de ce fichier n'écrase ces longhand
+ * via background, background-image ou background-color avec !important.
+ * Les :not([data-ff-has-bg-image="true"]) ajoutés en sections 2, 12 et 20
+ * garantissent ça. On ajoute ici une règle de sécurité finale qui réaffirme
+ * que ces sections gardent leur image de fond.
+ * ========================================================================= */
+[data-ff-template] .ff-section[data-ff-has-bg-image="true"],
+[data-ff-template] section[data-ff-has-bg-image="true"] {
+  /* Laisser le style inline (backgroundImage, backgroundSize, etc.) gagner.
+     Aucune règle ici — c'est volontaire — sinon on écraserait l'inline. */
+  background-repeat: no-repeat;
+}
+
+/* ============================================================================
+ * 22. Lot G — Images : tailles, fond transparent, animations (inchangé)
+ * ========================================================================= */
+[data-ff-template] .ff-image-wrap[data-ff-img-size="sm"] {
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-ff-template] .ff-image-wrap[data-ff-img-size="md"] {
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-ff-template] .ff-image-wrap[data-ff-img-size="lg"] {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-ff-template] .ff-image-wrap[data-ff-img-size="full"] {
+  max-width: 100%;
+}
+
+[data-ff-template] .ff-image-wrap[data-ff-img-transparent="true"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+[data-ff-template] .ff-image-wrap[data-ff-img-transparent="true"] img {
+  background: transparent !important;
+}
+
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-image-wrap,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-image-wrap {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+@keyframes ff-img-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes ff-img-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+
+[data-ff-template] .ff-image-wrap[data-ff-img-anim="float"] img {
+  animation: ff-img-float 3.5s ease-in-out infinite;
+}
+[data-ff-template] .ff-image-wrap[data-ff-img-anim="pulse"] img {
+  animation: ff-img-pulse 2.4s ease-in-out infinite;
+}
+
+[data-ff-template][data-ff-animations="off"] .ff-image-wrap[data-ff-img-anim] img {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ff-template] .ff-image-wrap[data-ff-img-anim] img {
+    animation: none !important;
+  }
+}
+/* ============================================================================
+ * Lot L — Animations d'icônes
+ * ============================================================================ */
+
+/* Pulse, bounce, spin existent déjà en Tailwind (animate-pulse, etc.)
+   On ajoute wiggle et float qui n'existent pas par défaut. */
+
+@keyframes ff-icon-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-8deg); }
+  75%      { transform: rotate(8deg); }
+}
+
+@keyframes ff-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+.ff-icon-anim-pulse  { animation: pulse  2s ease-in-out infinite; }
+.ff-icon-anim-bounce { animation: bounce 1.2s ease-in-out infinite; }
+.ff-icon-anim-spin   { animation: spin   3s linear infinite; }
+.ff-icon-anim-wiggle { animation: ff-icon-wiggle 1.5s ease-in-out infinite; }
+.ff-icon-anim-float  { animation: ff-icon-float  2.5s ease-in-out infinite; }
+
+/* Respect des préférences d'accessibilité */
+@media (prefers-reduced-motion: reduce) {
+  .ff-icon-anim-pulse,
+  .ff-icon-anim-bounce,
+  .ff-icon-anim-spin,
+  .ff-icon-anim-wiggle,
+  .ff-icon-anim-float {
+    animation: none !important;
+  }
+}
+/* ============================================================================
+ * Lot L — Icônes décoratives : zone de sécurité responsive
+ * ============================================================================ */
+
+/* Padding-top auto sur les sections qui ont une icône "top-*" pour éviter
+   qu'elle ne chevauche l'eyebrow/headline. On le fait via data-attribute
+   posé dans le JSX (voir étape suivante). */
+
+.ff-section[data-ff-deco-top="true"] {
+  padding-top: calc(var(--ff-deco-safe-top, 56px));
+}
+
+.ff-section[data-ff-deco-bottom="true"] {
+  padding-bottom: calc(var(--ff-deco-safe-bottom, 56px));
+}
+
+/* Distance des bords (top/bottom/left/right) — plus serrée sur mobile */
+.ff-section {
+  --ff-deco-edge: 16px;
+  --ff-deco-safe-top: 64px;
+  --ff-deco-safe-bottom: 64px;
+}
+
+@media (max-width: 640px) {
+  .ff-section {
+    --ff-deco-edge: 10px;
+    --ff-deco-safe-top: 48px;
+    --ff-deco-safe-bottom: 48px;
+  }
+}
+
+/* Dans le frame mobile (data-ff-mobile-frame) on est encore plus à l'étroit */
+[data-ff-mobile-frame] .ff-section {
+  --ff-deco-edge: 8px;
+  --ff-deco-safe-top: 44px;
+  --ff-deco-safe-bottom: 44px;
+}
+
+/* Empêcher le débordement horizontal des icônes décoratives en bord */
+.ff-deco-icon {
+  max-width: 90%;
+}
+/* ============================================================================
+ * Lot N — Cards (pricing, témoignages, bonus, garantie, FAQ)
+ * Styling de base + ombre activable, intégration avec data-ff-shadow-scope
+ * ============================================================================ */
+
+/* Card neutre — fond contrasté avec la section, peu importe le template */
+[data-ff-template] .ff-card {
+  background: color-mix(in srgb, var(--ff-ink) 6%, transparent);
+  border: 1px solid var(--ff-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Card mise en avant (highlighted) — accent visible + ombre marquée */
+[data-ff-template] .ff-card-elevated {
+  background: color-mix(in srgb, var(--ff-accent) 10%, transparent);
+  border: 2px solid var(--ff-accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ff-accent) 20%, transparent),
+    0 12px 32px color-mix(in srgb, var(--ff-accent) 25%, transparent);
+}
+
+/* Templates sombres : on remonte légèrement la luminosité du fond des cards */
+[data-ff-template="clean-dark"] .ff-card,
+[data-ff-template="story-sell"] .ff-card,
+[data-ff-template="bold-energy"] .ff-card,
+[data-ff-template="premium-minimal"] .ff-card,
+[data-ff-template="sharp-launch"] .ff-card,
+[data-ff-template="trust-pro"] .ff-card,
+[data-ff-template="lead-snap"] .ff-card {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-ff-template="clean-dark"] .ff-card-elevated,
+[data-ff-template="story-sell"] .ff-card-elevated,
+[data-ff-template="bold-energy"] .ff-card-elevated,
+[data-ff-template="premium-minimal"] .ff-card-elevated,
+[data-ff-template="sharp-launch"] .ff-card-elevated,
+[data-ff-template="trust-pro"] .ff-card-elevated,
+[data-ff-template="lead-snap"] .ff-card-elevated {
+  background: color-mix(in srgb, var(--ff-accent) 14%, rgba(255, 255, 255, 0.04));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ff-accent) 30%, transparent),
+    0 16px 40px color-mix(in srgb, var(--ff-accent) 25%, rgba(0, 0, 0, 0.4));
+}
+
+/* L'ombre data-ff-shadow-scope définie par l'utilisateur dans le panneau
+   "Style" doit prendre le pas sur les ombres par défaut des cards.
+   On ajoute donc des règles avec spécificité plus élevée. */
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-card-elevated,
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-pricing-card,
+[data-ff-template] [data-ff-shadow-scope="sm"] .ff-testimonial-card {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ff-shadow-color, #000) 25%, transparent) !important;
+}
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-card-elevated,
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-pricing-card,
+[data-ff-template] [data-ff-shadow-scope="md"] .ff-testimonial-card {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ff-shadow-color, #000) 30%, transparent) !important;
+}
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-card-elevated,
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-pricing-card,
+[data-ff-template] [data-ff-shadow-scope="lg"] .ff-testimonial-card {
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ff-shadow-color, #000) 35%, transparent) !important;
+}
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-card,
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-card-elevated,
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-pricing-card,
+[data-ff-template] [data-ff-shadow-scope="xl"] .ff-testimonial-card {
+  box-shadow: 0 24px 48px color-mix(in srgb, var(--ff-shadow-color, #000) 40%, transparent) !important;
+}

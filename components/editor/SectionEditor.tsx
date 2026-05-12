@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Image as ImageIcon, MousePointerClick, Palette } from "lucide-react";
+import {
+  FileText,
+  Image as ImageIcon,
+  MousePointerClick,
+  Palette,
+} from "lucide-react";
 import type { FunnelSection, Language } from "@/lib/funnels/types";
 import { ContentTab } from "@/components/editor/tabs/ContentTab";
 import { MediaTab } from "@/components/editor/tabs/MediaTab";
 import { CtaTab } from "@/components/editor/tabs/CtaTab";
 import { StyleTab } from "@/components/editor/tabs/StyleTab";
+import { DecorativeIconsPanel } from "@/components/editor/tabs/DecorativeIconsPanel";
 
 type TabId = "content" | "media" | "cta" | "style";
 
@@ -86,7 +92,7 @@ export function SectionEditor({ section, language, onChange }: Props) {
       </div>
 
       {/* Tab content */}
-      <div className="p-4 text-white">
+      <div className="space-y-4 p-4 text-white">
         {activeTab === "content" && (
           <ContentTab section={section} language={language} onChange={onChange} />
         )}
@@ -99,6 +105,10 @@ export function SectionEditor({ section, language, onChange }: Props) {
         {activeTab === "style" && (
           <StyleTab section={section} language={language} onChange={onChange} />
         )}
+
+        {/* ─── Lot L : Icônes décoratives — disponible sur TOUTES les sections,
+              toujours visible quel que soit l'onglet actif ──────────────── */}
+        <DecorativeIconsPanel section={section} onChange={onChange} />
       </div>
     </div>
   );

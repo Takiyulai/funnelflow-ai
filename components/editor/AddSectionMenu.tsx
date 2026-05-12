@@ -2,7 +2,11 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { FunnelSection, FunnelSectionType } from "@/lib/funnels/types";
+import type {
+  FunnelSection,
+  FunnelSectionType,
+  SectionItem,
+} from "@/lib/funnels/types";
 
 type Props = {
   onAdd: (section: FunnelSection) => void;
@@ -82,6 +86,226 @@ const DEFAULT_HEADLINES: Record<FunnelSectionType, string> = {
   qualification: "Êtes-vous au bon endroit ?",
 };
 
+/**
+ * Génère un set d'items de démo pour les sections qui en attendent.
+ * Retourne undefined pour les sections qui n'ont pas besoin d'items.
+ */
+function buildDefaultItems(type: FunnelSectionType): SectionItem[] | undefined {
+  switch (type) {
+    case "pricing":
+    case "offer":
+      return [
+        {
+          kind: "pricing",
+          data: {
+            name: "Starter",
+            price: "29€",
+            period: "/mois",
+            description: "Pour démarrer rapidement",
+            features: ["Fonctionnalité 1", "Fonctionnalité 2", "Fonctionnalité 3"],
+            highlighted: false,
+            featureIcon: { name: "check", size: "md", animation: "none" },
+          },
+        },
+        {
+          kind: "pricing",
+          data: {
+            name: "Pro",
+            price: "79€",
+            period: "/mois",
+            description: "Le plus populaire",
+            features: [
+              "Tout du Starter",
+              "Fonctionnalité avancée 1",
+              "Fonctionnalité avancée 2",
+              "Support prioritaire",
+            ],
+            highlighted: true,
+            badge: "Populaire",
+            featureIcon: { name: "checkCircle", size: "md", animation: "none" },
+          },
+        },
+      ];
+
+
+    case "bonus":
+      return [
+        {
+          kind: "bonus",
+          data: {
+            title: "Bonus 1",
+            description: "Description du premier bonus inclus",
+            value: "Valeur 49€",
+            iconName: "gift",
+          },
+        },
+        {
+          kind: "bonus",
+          data: {
+            title: "Bonus 2",
+            description: "Description du deuxième bonus inclus",
+            value: "Valeur 29€",
+            iconName: "sparkles",
+          },
+        },
+      ];
+
+    case "proof":
+      return [
+        {
+          kind: "testimonial",
+          data: {
+            quote: "Un produit qui a vraiment changé ma façon de travailler.",
+            authorName: "Prénom Nom",
+            authorRole: "Métier · Entreprise",
+            rating: 5,
+          },
+        },
+        {
+          kind: "testimonial",
+          data: {
+            quote: "Je recommande sans hésiter, le retour sur investissement est rapide.",
+            authorName: "Prénom Nom",
+            authorRole: "Métier · Entreprise",
+            rating: 5,
+          },
+        },
+      ];
+
+    case "faq":
+      return [
+        {
+          kind: "faq",
+          data: {
+            question: "Première question fréquente ?",
+            answer: "Réponse claire et rassurante à la première question.",
+          },
+        },
+        {
+          kind: "faq",
+          data: {
+            question: "Deuxième question fréquente ?",
+            answer: "Réponse claire et rassurante à la deuxième question.",
+          },
+        },
+        {
+          kind: "faq",
+          data: {
+            question: "Troisième question fréquente ?",
+            answer: "Réponse claire et rassurante à la troisième question.",
+          },
+        },
+      ];
+
+    case "guarantee":
+      return [
+        {
+          kind: "guarantee",
+          data: {
+            title: "Garantie satisfait ou remboursé",
+            description:
+              "Si vous n'êtes pas satisfait, on vous rembourse intégralement, sans question.",
+            duration: "30 jours",
+            iconName: "shield",
+          },
+        },
+      ];
+
+    case "form":
+      return [
+        {
+          kind: "formField",
+          data: {
+            name: "prenom",
+            label: "Prénom",
+            placeholder: "Votre prénom",
+            type: "text",
+            required: true,
+            width: "half",
+          },
+        },
+        {
+          kind: "formField",
+          data: {
+            name: "email",
+            label: "Email",
+            placeholder: "vous@exemple.com",
+            type: "email",
+            required: true,
+            width: "half",
+          },
+        },
+        {
+          kind: "formField",
+          data: {
+            name: "rgpd",
+            label: "J'accepte de recevoir des emails et la politique de confidentialité",
+            type: "checkbox",
+            required: true,
+            width: "full",
+          },
+        },
+      ];
+
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * CTA par défaut pour certains types (notamment form, cta, webinar).
+ */
+function buildDefaultCta(type: FunnelSectionType): FunnelSection["cta"] | undefined {
+  switch (type) {
+    case "form":
+      return {
+        mode: "anchor",
+        label: "Recevoir l'accès",
+        anchorId: "lead-form",
+        target: "_self",
+      };
+    case "cta":
+      return {
+        mode: "anchor",
+        label: "Je veux commencer",
+        anchorId: "lead-form",
+        target: "_self",
+      };
+    case "webinar":
+      return {
+        mode: "anchor",
+        label: "Réserver ma place",
+        anchorId: "lead-form",
+        target: "_self",
+      };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Sous-titre par défaut pour les sections où ça aide à comprendre le rendu.
+ */
+function buildDefaultSubheadline(type: FunnelSectionType): string | undefined {
+  switch (type) {
+    case "pricing":
+    case "offer":
+      return "Choisissez le plan qui vous correspond";
+    case "bonus":
+      return "Inclus gratuitement avec votre achat";
+    case "proof":
+      return "Ce que disent nos clients";
+    case "faq":
+      return "Vous avez des questions, on a les réponses";
+    case "form":
+      return "Remplissez ce formulaire pour recevoir l'accès immédiatement";
+    case "guarantee":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
 export function AddSectionMenu({ onAdd }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,10 +328,17 @@ export function AddSectionMenu({ onAdd }: Props) {
 
   const handleAdd = (type: FunnelSectionType) => {
     const id = `${type}-${Date.now().toString(36)}`;
+    const items = buildDefaultItems(type);
+    const cta = buildDefaultCta(type);
+    const subheadline = buildDefaultSubheadline(type);
+
     const newSection: FunnelSection = {
       id,
       type,
       headline: DEFAULT_HEADLINES[type] ?? "Nouvelle section",
+      ...(subheadline ? { subheadline } : {}),
+      ...(cta ? { cta } : {}),
+      ...(items ? { items } : {}),
       visible: true,
       layoutVariant: "centered",
       animations: { headline: "fade-up", body: "fade-up", cta: "fade-up" },

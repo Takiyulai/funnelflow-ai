@@ -3,14 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Undo2, Redo2, Eye, Loader2 } from "lucide-react";
+import {
+  ArrowLeft, Save, Undo2, Redo2, ExternalLink, Loader2,
+  Copy, Check, Globe, Rocket,
+} from "lucide-react";
 
 import { AppShell } from "@/components/dashboard/AppShell";
-import { Button } from "@/components/ui/Button";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { GlobalStylePanel } from "@/components/editor/GlobalStylePanel";
+import { SectionEditorDrawer } from "@/components/editor/SectionEditorDrawer";
+import { SystemeIoExportMenu } from "@/components/editor/SystemeIoExportMenu";
+import { HeaderTab } from "@/components/editor/tabs/HeaderTab";
 import { useToast } from "@/components/ui/Toast";
 import {
   useFunnel,
@@ -29,12 +34,7 @@ type HistoryState = {
 
 const HISTORY_LIMIT = 50;
 const AUTO_SAVE_DEBOUNCE_MS = 600;
-/**
- * Extrait le nom de marque depuis un titre de tunnel.
- * Exemple : "KHALIS NATURE - Ebook Gratuit" → "KHALIS NATURE"
- *           "Mon site | Page de vente"      → "Mon site"
- *           "Acme — Offre"                   → "Acme"
- */
+
 function extractBrandName(fullName: string): string {
   if (!fullName) return "";
   const separators = [" - ", " – ", " — ", " | ", " : "];
@@ -51,10 +51,8 @@ export default function EditorPage() {
   const toast = useToast();
   const funnelId = params?.id ?? "";
 
-  // Le hook retourne directement StoredFunnel | null
   const stored = useFunnel(funnelId);
 
-  // Petit délai d'hydratation pour éviter de rediriger avant le 1er rendu localStorage
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setHydrated(true), 80);
@@ -69,13 +67,18 @@ export default function EditorPage() {
   });
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showGlobalStyle, setShowGlobalStyle] = useState(false);
+  const [headerOpen, setHeaderOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
+  const previewWrapperRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoadRef = useRef(true);
 
-  // ─── Initial load from store ─────────────────────────────────────
+  // ─── Initial load ───────────────────────────────────────────────
   useEffect(() => {
     if (loading) return;
     if (!stored) {
@@ -93,7 +96,7 @@ export default function EditorPage() {
 
   const funnel = history.present;
 
-  // ─── Auto-save (debounced) ───────────────────────────────────────
+  // ─── Auto-save ──────────────────────────────────────────────────
   useEffect(() => {
     if (!funnel || !stored || isInitialLoadRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -122,7 +125,7 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [funnel]);
 
-  // ─── History helpers ─────────────────────────────────────────────
+  // ─── History helpers ────────────────────────────────────────────
   const pushHistory = useCallback((next: Funnel) => {
     setHistory((h) => {
       if (!h.present) return { past: [], present: next, future: [] };
@@ -155,7 +158,6 @@ export default function EditorPage() {
     });
   }, []);
 
-  // ─── Manual save ─────────────────────────────────────────────────
   const handleManualSave = useCallback(() => {
     if (!funnel || !stored) return;
     try {
@@ -173,7 +175,7 @@ export default function EditorPage() {
     }
   }, [funnel, stored, toast]);
 
-  // ─── Keyboard shortcuts ──────────────────────────────────────────
+  // ─── Keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -199,7 +201,7 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [undo, redo, handleManualSave]);
 
-  // ─── Section CRUD ────────────────────────────────────────────────
+  // ─── Section CRUD ───────────────────────────────────────────────
   const updateSection = useCallback(
     (sectionId: string, patch: Partial<FunnelSection>) => {
       if (!funnel) return;
@@ -268,6 +270,7 @@ export default function EditorPage() {
       pushHistory({ ...funnel, sections });
       if (selectedSectionId === sectionId) {
         setSelectedSectionId(sections[0]?.id ?? null);
+        setDrawerOpen(false);
       }
     },
     [funnel, pushHistory, selectedSectionId],
@@ -279,6 +282,7 @@ export default function EditorPage() {
       const sections = [...funnel.sections, newSection];
       pushHistory({ ...funnel, sections });
       setSelectedSectionId(newSection.id);
+      setDrawerOpen(true);
     },
     [funnel, pushHistory],
   );
@@ -322,7 +326,6 @@ export default function EditorPage() {
     [funnel, pushHistory],
   );
 
-  // ─── Publish ─────────────────────────────────────────────────────
   const handlePublish = useCallback(() => {
     if (!funnel || !stored) return;
     try {
@@ -343,7 +346,76 @@ export default function EditorPage() {
     }
   }, [funnel, stored, toast]);
 
-  // ─── Render guards ───────────────────────────────────────────────
+  const handleCopyLink = useCallback(() => {
+    if (!stored) return;
+    const url = `${window.location.origin}/tunnel/${stored.slug}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [stored]);
+
+  // ─── Lot E + F : scroll preview + ouverture du drawer ───────────
+  const scrollToSection = useCallback((sectionId: string) => {
+    setSelectedSectionId(sectionId);
+    setDrawerOpen(true);
+
+    requestAnimationFrame(() => {
+      const wrapper = previewWrapperRef.current;
+      if (!wrapper) return;
+
+      const target =
+        wrapper.querySelector<HTMLElement>(`#${CSS.escape(sectionId)}`) ??
+        wrapper.querySelector<HTMLElement>(
+          `[data-ff-section][id="${CSS.escape(sectionId)}"]`,
+        );
+      if (!target) return;
+
+      let scrollContainer: HTMLElement | null = target.parentElement;
+      while (scrollContainer && scrollContainer !== wrapper) {
+        const style = window.getComputedStyle(scrollContainer);
+        if (
+          (style.overflowY === "auto" || style.overflowY === "scroll") &&
+          scrollContainer.scrollHeight > scrollContainer.clientHeight
+        ) {
+          break;
+        }
+        scrollContainer = scrollContainer.parentElement;
+      }
+
+      if (scrollContainer && scrollContainer !== wrapper) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const currentScroll = scrollContainer.scrollTop;
+        const offset = 24;
+        const newScroll =
+          currentScroll + (targetRect.top - containerRect.top) - offset;
+
+        scrollContainer.scrollTo({
+          top: Math.max(0, newScroll),
+          behavior: "smooth",
+        });
+      } else {
+        const offset = 80;
+        const rect = target.getBoundingClientRect();
+        const targetTop = rect.top + window.scrollY - offset;
+        window.scrollTo({ top: targetTop, behavior: "smooth" });
+      }
+
+      target.setAttribute("data-ff-active", "true");
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => {
+        target.removeAttribute("data-ff-active");
+      }, 1600);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
+
   if (loading || !funnel || !stored) {
     return (
       <AppShell>
@@ -357,135 +429,170 @@ export default function EditorPage() {
 
   const selectedSection =
     funnel.sections.find((s) => s.id === selectedSectionId) ?? null;
+  const isPublished = Boolean(stored.publishedAt);
+  const brandName = extractBrandName(funnel.funnelName);
 
   return (
     <AppShell>
-      {/* Toolbar */}
-<div className="sticky top-0 z-20 -mx-4 -mt-4 mb-4 border-b border-white/10 bg-black/60 px-4 py-3 backdrop-blur md:-mx-8 md:-mt-8 md:px-8">
-  <div className="grid grid-cols-3 items-center gap-3">
-    {/* Gauche : retour + indicateur de sauvegarde */}
-    <div className="flex items-center gap-3 min-w-0">
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-1 text-sm text-white/60 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span className="hidden sm:inline">Dashboard</span>
-      </Link>
-      <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
-    </div>
+      {/* ───────── Toolbar pro ───────── */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 md:-mx-8 md:-mt-8">
+        <div className="flex h-14 items-center gap-3 px-4 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/dashboard"
+              title="Retour au dashboard"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
 
-    {/* Centre : nom de marque uniquement */}
-    <div className="flex flex-col items-center justify-center min-w-0">
-      <h1 className="truncate text-center text-sm font-semibold text-white">
-        {extractBrandName(funnel.funnelName)}
-      </h1>
-      <div className="flex items-center gap-1 text-[10px] text-white/40">
-        <span>/tunnel/</span>
-        <input
-          type="text"
-          defaultValue={stored.slug}
-          onBlur={(e) => updateSlug(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-white/60 outline-none hover:border-white/10 focus:border-amber-300/40 focus:text-white"
-        />
-        {stored.publishedAt && (
-          <span className="ml-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
-            Publié
-          </span>
-        )}
-      </div>
-    </div>
-
-    {/* Droite : actions */}
-    <div className="flex items-center justify-end gap-2">
-      <button
-        type="button"
-        onClick={undo}
-        disabled={history.past.length === 0}
-        title="Annuler (Ctrl+Z)"
-        className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
-      >
-        <Undo2 className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={redo}
-        disabled={history.future.length === 0}
-        title="Rétablir (Ctrl+Y)"
-        className="rounded-lg border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white disabled:opacity-40"
-      >
-        <Redo2 className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={handleManualSave}
-        title="Enregistrer (Ctrl+S)"
-        className="hidden md:flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
-      >
-        <Save className="h-4 w-4" />
-        Enregistrer
-      </button>
-      <Link
-        href={`/tunnel/${stored.slug}`}
-        target="_blank"
-        className="hidden md:flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/80 hover:border-white/20 hover:text-white"
-      >
-        <Eye className="h-4 w-4" />
-        Aperçu public
-      </Link>
-      <Button onClick={handlePublish} className="text-xs">
-        Publier
-      </Button>
-    </div>
-  </div>
-</div>
-
-
-      {/* 3-column layout */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]">
-        {/* Sidebar */}
-        <EditorSidebar
-          sections={funnel.sections}
-          selectedId={selectedSectionId}
-          onSelect={setSelectedSectionId}
-          onReorder={reorderSections}
-          onToggleVisibility={toggleVisibility}
-          onDuplicate={duplicateSection}
-          onDelete={deleteSection}
-          onAdd={addSection}
-          onOpenGlobalStyle={() => setShowGlobalStyle(true)}
-        />
-
-        {/* Center: editor */}
-        <div className="min-w-0">
-          {selectedSection ? (
-            <SectionEditor
-              key={selectedSection.id}
-              section={selectedSection}
-              language={funnel.language}
-              onChange={(patch: Partial<FunnelSection>) =>
-                updateSection(selectedSection.id, patch)
-              }
-            />
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
-              Sélectionne une section dans la barre latérale pour l'éditer.
+            <div className="flex min-w-0 flex-col leading-tight">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-sm font-semibold text-white">
+                  {brandName || "Sans titre"}
+                </h1>
+                {isPublished ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    Publié
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
+                    Brouillon
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+                <span className="shrink-0">/tunnel/</span>
+                <input
+                  type="text"
+                  defaultValue={stored.slug}
+                  onBlur={(e) => updateSlug(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-zinc-300 outline-none hover:border-zinc-700 focus:border-indigo-500/50 focus:text-white"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  title="Copier le lien"
+                  className="ml-0.5 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition"
+                >
+                  {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Right: live preview */}
-        <div className="min-w-0">
-          <div className="sticky top-20">
-            <FunnelPreview funnel={funnel} />
+          <div className="ml-2 hidden flex-1 items-center justify-center md:flex">
+            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+          </div>
+
+          <div className="flex-1 md:hidden" />
+
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center rounded-md border border-zinc-800 bg-zinc-900">
+              <button
+                onClick={undo}
+                disabled={history.past.length === 0}
+                title="Annuler (Ctrl+Z)"
+                className="flex h-8 w-8 items-center justify-center rounded-l-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
+              <div className="h-5 w-px bg-zinc-800" />
+              <button
+                onClick={redo}
+                disabled={history.future.length === 0}
+                title="Rétablir (Ctrl+Y)"
+                className="flex h-8 w-8 items-center justify-center rounded-r-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <button
+              onClick={handleManualSave}
+              title="Enregistrer (Ctrl+S)"
+              className="hidden md:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+            >
+              <Save className="h-3.5 w-3.5" />
+              Enregistrer
+            </button>
+
+            <SystemeIoExportMenu funnel={funnel} />
+
+            <Link
+              href={`/tunnel/${stored.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden md:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Aperçu
+            </Link>
+
+            <button
+              onClick={handlePublish}
+              className="flex h-8 items-center gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition"
+            >
+              {isPublished ? <Globe className="h-3.5 w-3.5" /> : <Rocket className="h-3.5 w-3.5" />}
+              {isPublished ? "Republier" : "Publier"}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Global style modal */}
+      {/* ───────── 2-column layout ───────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(380px,38fr)_minmax(0,62fr)]">
+        <div className="flex flex-col gap-4 min-w-0">
+          <EditorSidebar
+            sections={funnel.sections}
+            selectedId={selectedSectionId}
+            onSelect={scrollToSection}
+            onReorder={reorderSections}
+            onToggleVisibility={toggleVisibility}
+            onDuplicate={duplicateSection}
+            onDelete={deleteSection}
+            onAdd={addSection}
+            onOpenGlobalStyle={() => setShowGlobalStyle(true)}
+            onOpenHeader={() => setHeaderOpen(true)}
+          />
+        </div>
+
+        <div className="min-w-0">
+          <div
+            className="sticky top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden"
+            ref={previewWrapperRef}
+          >
+            <FunnelPreview
+              funnel={funnel}
+              defaultMode="desktop"
+              showToolbar={true}
+              viewportHeight="calc(100vh - 7rem)"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ───────── Drawer d'édition de section (Lot F) ───────── */}
+      <SectionEditorDrawer
+        open={drawerOpen && !!selectedSection}
+        onClose={() => setDrawerOpen(false)}
+        title={selectedSection?.headline || selectedSection?.type || "Modifier la section"}
+      >
+        {selectedSection && (
+          <SectionEditor
+            key={selectedSection.id}
+            section={selectedSection}
+            language={funnel.language}
+            onChange={(patch: Partial<FunnelSection>) =>
+              updateSection(selectedSection.id, patch)
+            }
+          />
+        )}
+      </SectionEditorDrawer>
+
       {showGlobalStyle && (
         <GlobalStylePanel
           funnel={funnel}
@@ -493,11 +600,36 @@ export default function EditorPage() {
           onClose={() => setShowGlobalStyle(false)}
         />
       )}
+
+      {/* ───────── Modale Header (Lot M) ───────── */}
+      {headerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setHeaderOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">Header</h2>
+              <button
+                type="button"
+                onClick={() => setHeaderOpen(false)}
+                className="text-white/60 hover:text-white text-xl leading-none"
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+            <HeaderTab funnel={funnel} onChange={updateFunnelMeta} />
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
 
-// ─── Save indicator ────────────────────────────────────────────────
 function SaveIndicator({
   state,
   lastSavedAt,
@@ -513,7 +645,7 @@ function SaveIndicator({
 
   if (state === "saving") {
     return (
-      <span className="flex items-center gap-1 text-xs text-white/40">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/60 px-2.5 py-1 text-[11px] font-medium text-zinc-300 ring-1 ring-zinc-700">
         <Loader2 className="h-3 w-3 animate-spin" />
         Enregistrement…
       </span>
@@ -525,12 +657,16 @@ function SaveIndicator({
       diff < 5_000
         ? "À l'instant"
         : diff < 60_000
-          ? `Il y a ${Math.floor(diff / 1000)}s`
+          ? `Il y a ${Math.floor(diff / 1000)} s`
           : diff < 3_600_000
             ? `Il y a ${Math.floor(diff / 60_000)} min`
             : "Il y a > 1 h";
     return (
-      <span className="text-xs text-white/40" data-tick={tick}>
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-400 ring-1 ring-emerald-500/20"
+        data-tick={tick}
+      >
+        <Check className="h-3 w-3" />
         Enregistré · {label}
       </span>
     );

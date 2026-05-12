@@ -20,8 +20,8 @@ type Props = {
 const LAYOUTS: { value: SectionLayoutVariant; label: string }[] = [
   { value: "centered", label: "Centré" },
   { value: "left-aligned", label: "Aligné à gauche" },
-  { value: "split-text-image", label: "Texte | Image" },
-  { value: "split-image-text", label: "Image | Texte" },
+  { value: "split-text-image", label: "Texte | Image (desktop)" },
+  { value: "split-image-text", label: "Image | Texte (desktop)" },
   { value: "stacked-card", label: "Carte empilée" },
   { value: "wide-banner", label: "Bannière large" },
   { value: "feature-grid", label: "Grille de features" },
@@ -57,24 +57,44 @@ const ANIM_TARGETS: { key: AnimationTarget; label: string }[] = [
   { key: "cta", label: "CTA" },
 ];
 
+type ShadowSize = "none" | "sm" | "md" | "lg" | "xl";
+const SHADOW_SIZES: { value: ShadowSize; label: string }[] = [
+  { value: "none", label: "Aucune" },
+  { value: "sm",   label: "S" },
+  { value: "md",   label: "M" },
+  { value: "lg",   label: "L" },
+  { value: "xl",   label: "XL" },
+];
+
 export function StyleTab({ section, onChange }: Props) {
   const animations: SectionAnimations = section.animations ?? {};
-  const style: SectionStyle = section.style ?? {};
+  const style = (section.style ?? {}) as SectionStyle & {
+    shadow?: { size?: ShadowSize; color?: string };
+    userColorsOverride?: boolean;
+  };
   const currentAlign: SectionAlign = style.align ?? "left";
   const colors = style.colors ?? {};
+  const shadow = style.shadow ?? {};
+  const shadowSize: ShadowSize = shadow.size ?? "none";
+  const shadowColor: string = shadow.color ?? "#000000";
 
   const updateAnim = (target: AnimationTarget, preset: AnimationPreset) => {
     onChange({ animations: { ...animations, [target]: preset } });
   };
 
   const updateAlign = (align: SectionAlign) => {
-    onChange({ style: { ...style, align } });
+    onChange({ style: { ...style, align } as SectionStyle });
   };
 
   const updateSpacing = (spacing: NonNullable<SectionStyle["spacing"]>) => {
-    onChange({ style: { ...style, spacing } });
+    onChange({ style: { ...style, spacing } as SectionStyle });
   };
 
+  /**
+   * Lot K — Mise à jour d'une couleur de section.
+   * On pose `userColorsOverride: true` dès qu'au moins une couleur est définie,
+   * pour passer le garde-fou de getSectionColors() dans FunnelPreview.
+   */
   const updateColor = (
     key: "bg" | "ink" | "accent",
     value: string | undefined
@@ -85,20 +105,57 @@ export function StyleTab({ section, onChange }: Props) {
     } else {
       delete nextColors[key];
     }
-    const hasAny = nextColors.bg || nextColors.ink || nextColors.accent;
+    const hasAny = Boolean(nextColors.bg || nextColors.ink || nextColors.accent);
     onChange({
-      style: { ...style, colors: hasAny ? nextColors : undefined },
+      style: {
+        ...style,
+        colors: hasAny ? nextColors : undefined,
+        userColorsOverride: hasAny ? true : undefined,
+      } as SectionStyle,
     });
   };
 
   const resetColors = () => {
-    onChange({ style: { ...style, colors: undefined } });
+    onChange({
+      style: {
+        ...style,
+        colors: undefined,
+        userColorsOverride: undefined,
+      } as SectionStyle,
+    });
+  };
+
+  const updateShadowSize = (size: ShadowSize) => {
+    if (size === "none") {
+      // Supprime complètement l'ombre
+      const { shadow: _omit, ...rest } = style;
+      onChange({ style: rest as SectionStyle });
+    } else {
+      onChange({
+        style: {
+          ...style,
+          shadow: { size, color: shadow.color ?? "#000000" },
+        } as SectionStyle,
+      });
+    }
+  };
+
+  const updateShadowColor = (color: string) => {
+    onChange({
+      style: {
+        ...style,
+        shadow: { size: shadowSize === "none" ? "md" : shadowSize, color },
+      } as SectionStyle,
+    });
   };
 
   return (
     <div className="space-y-5">
       {/* Layout */}
-      <Field label="Layout (variante de mise en page)">
+      <Field
+        label="Layout"
+        hint="« Texte | Image » et « Image | Texte » mettent les deux côte-à-côte sur desktop, empilés sur mobile."
+      >
         <select
           value={section.layoutVariant ?? "centered"}
           onChange={(e) =>
@@ -171,26 +228,60 @@ export function StyleTab({ section, onChange }: Props) {
         </div>
         <p className="mb-3 text-[10px] text-white/40">
           Surcharge les couleurs du template uniquement pour cette section.
-          Laisse vide pour hériter du template.
         </p>
 
         <div className="space-y-2">
-          <ColorField
-            label="Fond"
-            value={colors.bg}
-            onChange={(v) => updateColor("bg", v)}
-          />
-          <ColorField
-            label="Texte"
-            value={colors.ink}
-            onChange={(v) => updateColor("ink", v)}
-          />
-          <ColorField
-            label="Accent"
-            value={colors.accent}
-            onChange={(v) => updateColor("accent", v)}
-          />
+          <ColorField label="Fond" value={colors.bg} onChange={(v) => updateColor("bg", v)} />
+          <ColorField label="Texte" value={colors.ink} onChange={(v) => updateColor("ink", v)} />
+          <ColorField label="Accent" value={colors.accent} onChange={(v) => updateColor("accent", v)} />
         </div>
+      </div>
+
+      {/* Ombrage des médias et cards */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/70">
+          Ombrage (image, vidéo, cards)
+        </h3>
+        <p className="mb-3 text-[10px] text-white/40">
+          Applique une ombre aux médias et cartes de cette section.
+        </p>
+
+        <Field label="Intensité">
+          <div className="flex gap-1.5">
+            {SHADOW_SIZES.map((s) => (
+              <ModeBtn
+                key={s.value}
+                active={shadowSize === s.value}
+                onClick={() => updateShadowSize(s.value)}
+              >
+                {s.label}
+              </ModeBtn>
+            ))}
+          </div>
+        </Field>
+
+        {shadowSize !== "none" && (
+          <div className="mt-3">
+            <label className="mb-1.5 block text-[11px] font-medium text-white/70">
+              Couleur de l'ombre
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={shadowColor}
+                onChange={(e) => updateShadowColor(e.target.value)}
+                className="h-8 w-10 cursor-pointer rounded border border-white/10 bg-transparent"
+              />
+              <input
+                type="text"
+                value={shadowColor}
+                onChange={(e) => updateShadowColor(e.target.value)}
+                className="min-w-0 flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[11px] text-white outline-none focus:border-amber-300/40"
+                placeholder="#000000"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Animations */}
@@ -207,14 +298,10 @@ export function StyleTab({ section, onChange }: Props) {
               key={t.key}
               className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5"
             >
-              <span className="w-20 shrink-0 text-[11px] text-white/60">
-                {t.label}
-              </span>
+              <span className="w-20 shrink-0 text-[11px] text-white/60">{t.label}</span>
               <select
                 value={animations[t.key] ?? "none"}
-                onChange={(e) =>
-                  updateAnim(t.key, e.target.value as AnimationPreset)
-                }
+                onChange={(e) => updateAnim(t.key, e.target.value as AnimationPreset)}
                 className="min-w-0 flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-white outline-none focus:border-amber-300/40"
               >
                 {PRESETS.map((p) => (
@@ -235,14 +322,8 @@ const selectClass =
   "w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/40";
 
 function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
+  label, hint, children,
+}: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="mb-1.5 block text-xs font-medium text-white/70">{label}</label>
@@ -253,14 +334,8 @@ function Field({
 }
 
 function ModeBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+  active, onClick, children,
+}: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -278,9 +353,7 @@ function ModeBtn({
 }
 
 function ColorField({
-  label,
-  value,
-  onChange,
+  label, value, onChange,
 }: {
   label: string;
   value: string | undefined;

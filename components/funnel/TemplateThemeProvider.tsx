@@ -4,29 +4,27 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 type Props = {
   templateId?: string | null;
-  /** Animation par défaut des boutons : lift | glow | pulse | shine */
   buttonAnim?: "lift" | "glow" | "pulse" | "shine";
-  /** Si false → désactive toutes les animations */
   animationsEnabled?: boolean;
-  /** Couleurs personnalisées qui surchargent celles du template */
   overrides?: {
     primary?: string;
     accent?: string;
     accentInk?: string;
     bg?: string;
     ink?: string;
+    /** Multiplicateur taille du texte (1 = défaut) */
+    textScale?: number;
+    /** Multiplicateur taille des boutons (1 = défaut) */
+    buttonScale?: number;
+    /** Couleur de fond personnalisée (templates clean) */
+    customBg?: string;
+    /** Active la couleur de fond personnalisée */
+    customBgEnabled?: boolean;
   };
   className?: string;
   children: ReactNode;
 };
 
-/**
- * Wrapper qui pose data-ff-template + data-ff-btn-anim + data-ff-animations
- * et qui anime les éléments [data-ff-anim] quand ils entrent dans le viewport.
- *
- * Tous les composants à l'intérieur héritent automatiquement des CSS variables
- * définies dans app/funnel-theme.css.
- */
 export function TemplateThemeProvider({
   templateId,
   buttonAnim = "lift",
@@ -41,11 +39,9 @@ export function TemplateThemeProvider({
     const root = rootRef.current;
     if (!root) return;
 
-    // IntersectionObserver pour révéler [data-ff-anim] au scroll
     const targets = root.querySelectorAll<HTMLElement>("[data-ff-anim]");
     if (targets.length === 0) return;
 
-    // Si l'utilisateur préfère réduire les animations, on rend tout visible immédiatement
     const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -71,13 +67,28 @@ export function TemplateThemeProvider({
     return () => io.disconnect();
   }, [animationsEnabled, templateId]);
 
-  // Construction des styles inline pour les overrides (jamais hardcodés)
+  // ─── Variables CSS injectées au root du template ───────────────
   const inlineVars: Record<string, string> = {};
-  if (overrides?.primary) inlineVars["--ff-primary"] = overrides.primary;
-  if (overrides?.accent) inlineVars["--ff-accent"] = overrides.accent;
+  if (overrides?.primary)   inlineVars["--ff-primary"]    = overrides.primary;
+  if (overrides?.accent)    inlineVars["--ff-accent"]     = overrides.accent;
   if (overrides?.accentInk) inlineVars["--ff-accent-ink"] = overrides.accentInk;
-  if (overrides?.bg) inlineVars["--ff-bg"] = overrides.bg;
-  if (overrides?.ink) inlineVars["--ff-ink"] = overrides.ink;
+  if (overrides?.bg)        inlineVars["--ff-bg"]         = overrides.bg;
+  if (overrides?.ink)       inlineVars["--ff-ink"]        = overrides.ink;
+
+  // Lot 3 : multiplicateurs et fond custom
+  if (typeof overrides?.textScale === "number") {
+    inlineVars["--ff-text-scale"] = String(clamp(overrides.textScale, 0.85, 1.25));
+  }
+  if (typeof overrides?.buttonScale === "number") {
+    inlineVars["--ff-btn-scale"] = String(clamp(overrides.buttonScale, 0.85, 1.25));
+  }
+  if (overrides?.customBgEnabled && overrides.customBg) {
+    inlineVars["--ff-custom-bg"] = overrides.customBg;
+  }
+
+  const customBgActive = Boolean(
+    overrides?.customBgEnabled && overrides.customBg
+  );
 
   return (
     <div
@@ -85,10 +96,16 @@ export function TemplateThemeProvider({
       data-ff-template={templateId ?? "default"}
       data-ff-btn-anim={buttonAnim}
       data-ff-animations={animationsEnabled ? "on" : "off"}
-      className={className}
+      data-ff-custom-bg={customBgActive ? "true" : "false"}
+      className={`ff-template-root ${className ?? ""}`}
       style={inlineVars as React.CSSProperties}
     >
       {children}
     </div>
   );
+}
+
+function clamp(n: number, min: number, max: number): number {
+  if (Number.isNaN(n)) return 1;
+  return Math.min(max, Math.max(min, n));
 }

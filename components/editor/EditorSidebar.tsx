@@ -8,6 +8,7 @@ import {
   Trash2,
   GripVertical,
   Palette,
+  Layout,
 } from "lucide-react";
 import type { FunnelSection } from "@/lib/funnels/types";
 import { AddSectionMenu } from "@/components/editor/AddSectionMenu";
@@ -23,6 +24,8 @@ type Props = {
   onDelete: (id: string) => void;
   onAdd: (section: FunnelSection) => void;
   onOpenGlobalStyle: () => void;
+  onOpenHeader: () => void;
+
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -56,6 +59,7 @@ export function EditorSidebar({
   onDelete,
   onAdd,
   onOpenGlobalStyle,
+  onOpenHeader,
 }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -105,15 +109,26 @@ export function EditorSidebar({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-white/60">
           Sections ({sections.length})
         </h2>
-        <button
-          type="button"
-          onClick={onOpenGlobalStyle}
-          title="Style global"
-          className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
-        >
-          <Palette className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onOpenHeader}
+            title="Header & Footer"
+            className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
+          >
+            <Layout className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onOpenGlobalStyle}
+            title="Style global"
+            className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
+          >
+            <Palette className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
+
 
       <AddSectionMenu onAdd={onAdd} />
 

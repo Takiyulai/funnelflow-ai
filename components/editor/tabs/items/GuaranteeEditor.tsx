@@ -1,7 +1,7 @@
 "use client";
 
 import type { FunnelSection, SectionItem, GuaranteeItem } from "@/lib/funnels/types";
-import { IconPicker } from "./IconPicker";
+import { IconPicker } from "../../IconPicker";
 
 type Props = {
   section: FunnelSection;

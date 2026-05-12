@@ -7,7 +7,9 @@ import { TestimonialsEditor } from "./items/TestimonialsEditor";
 import { PricingEditor } from "./items/PricingEditor";
 import { BonusEditor } from "./items/BonusEditor";
 import { GuaranteeEditor } from "./items/GuaranteeEditor";
-import { IconPicker, getIconByName } from "./items/IconPicker";
+import { IconPicker, getIconByName } from "../IconPicker";
+import { FormFieldsEditor } from "./items/FormFieldsEditor";
+
 
 type Props = {
   section: FunnelSection;
@@ -60,6 +62,16 @@ export function ContentTab({ section, onChange }: Props) {
       </div>
     );
   }
+  if (section.type === "form") {
+  return (
+    <div className="space-y-4">
+      <GenericTextFields section={section} onChange={onChange} hideBullets />
+      <div className="border-t border-white/10 pt-4">
+        <FormFieldsEditor section={section} onChange={onChange} />
+      </div>
+    </div>
+  );
+}
 
   if (section.type === "guarantee") {
     return (
@@ -189,9 +201,13 @@ function GenericTextFields({
             <span className="text-[11px] text-white/50">Icône des puces :</span>
             <IconPicker
               value={section.iconName || "check"}
+              size={(section as any).iconSize || "md"}
+              animation={(section as any).iconAnimation || "none"}
               onChange={setBulletIcon}
-              compact
+              onSizeChange={(iconSize) => onChange({ ...(({ iconSize } as any)) })}
+              onAnimationChange={(iconAnimation) => onChange({ ...(({ iconAnimation } as any)) })}
             />
+
           </div>
 
           <div className="space-y-1.5">

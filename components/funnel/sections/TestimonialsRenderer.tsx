@@ -9,9 +9,14 @@ type Props = {
   compact?: boolean;
 };
 
-export function TestimonialsRenderer({ section, bodySize = "text-base", compact }: Props) {
+export function TestimonialsRenderer({
+  section,
+  bodySize = "text-base",
+  compact,
+}: Props) {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "testimonial" } => it.kind === "testimonial"
+    (it): it is SectionItem & { kind: "testimonial" } =>
+      it.kind === "testimonial",
   );
 
   if (items.length === 0) return null;
@@ -20,12 +25,12 @@ export function TestimonialsRenderer({ section, bodySize = "text-base", compact 
     compact || items.length === 1
       ? "grid-cols-1"
       : items.length === 2
-      ? "grid-cols-1 md:grid-cols-2"
-      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+        ? "grid-cols-1 md:grid-cols-2"
+        : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
   return (
     <div
-      className={`ff-testimonials grid ${gridCols} gap-4 mt-4`}
+      className={`ff-testimonials grid ${gridCols} gap-5 mt-6`}
       data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
@@ -40,11 +45,7 @@ export function TestimonialsRenderer({ section, bodySize = "text-base", compact 
         return (
           <div
             key={idx}
-            className="ff-testimonial-card rounded-xl p-5"
-            style={{
-              background: "color-mix(in srgb, var(--ff-ink, #0f172a) 4%, transparent)",
-              border: "1px solid var(--ff-border, rgba(0,0,0,0.08))",
-            }}
+            className="ff-testimonial-card ff-card rounded-2xl p-6 transition-transform duration-300 hover:-translate-y-1 flex flex-col"
           >
             {item.data.rating && item.data.rating > 0 && (
               <div className="mb-3 flex items-center gap-0.5">
@@ -62,27 +63,27 @@ export function TestimonialsRenderer({ section, bodySize = "text-base", compact 
 
             {item.data.quote && (
               <blockquote
-                className={`${bodySize} mb-4 leading-relaxed`}
-                style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.9 }}
+                className={`${bodySize} mb-4 leading-relaxed flex-1`}
+                style={{ color: "var(--ff-ink)" }}
               >
                 « {item.data.quote} »
               </blockquote>
             )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mt-auto">
               {item.data.avatarUrl ? (
                 <img
                   src={item.data.avatarUrl}
                   alt={item.data.authorName || ""}
-                  className="h-10 w-10 rounded-full object-cover"
+                  className="h-10 w-10 rounded-full object-cover shrink-0"
                   loading="lazy"
                 />
               ) : (
                 <div
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold shrink-0"
                   style={{
-                    background: "var(--ff-accent, #31845C)",
-                    color: "#ffffff",
+                    background: "var(--ff-accent)",
+                    color: "var(--ff-accent-ink, #ffffff)",
                   }}
                   aria-hidden="true"
                 >
@@ -93,7 +94,7 @@ export function TestimonialsRenderer({ section, bodySize = "text-base", compact 
                 {item.data.authorName && (
                   <div
                     className="text-sm font-semibold truncate"
-                    style={{ color: "var(--ff-ink, #0f172a)" }}
+                    style={{ color: "var(--ff-ink)" }}
                   >
                     {item.data.authorName}
                   </div>
@@ -101,7 +102,10 @@ export function TestimonialsRenderer({ section, bodySize = "text-base", compact 
                 {item.data.authorRole && (
                   <div
                     className="text-xs truncate"
-                    style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.6 }}
+                    style={{
+                      color: "var(--ff-ink-soft, var(--ff-ink))",
+                      opacity: 0.7,
+                    }}
                   >
                     {item.data.authorRole}
                   </div>

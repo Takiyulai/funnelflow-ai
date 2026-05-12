@@ -4,6 +4,7 @@
 @tailwind utilities;
 
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+/* NE PAS importer funnel-theme.css ici : il est déjà importé dans layout.tsx */
 
 :root {
   --ff-ink: #0F172A;
@@ -19,12 +20,9 @@
   --ff-brand-blue: #08498D;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-html,
-body {
+html, body {
   margin: 0;
   padding: 0;
   font-family: 'DM Sans', Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -34,54 +32,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-::selection {
-  background: rgba(199, 164, 54, 0.25);
-}
+::selection { background: rgba(199, 164, 54, 0.25); }
 
-/* Focus ring partagé par les composants UI */
-.focus-ring {
-  outline: none;
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
-}
+.focus-ring { outline: none; transition: box-shadow 0.18s ease, border-color 0.18s ease; }
 .focus-ring:focus-visible {
   box-shadow: 0 0 0 3px rgba(8, 73, 141, 0.18);
   border-color: var(--ff-brand-blue);
 }
 
-/* Scrollbar discret pour les zones de preview et listes */
-.ff-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.ff-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.ff-scroll::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.15);
-  border-radius: 8px;
-}
-.ff-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.25);
-}
+.ff-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.ff-scroll::-webkit-scrollbar-track { background: transparent; }
+.ff-scroll::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.15); border-radius: 8px; }
+.ff-scroll::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.25); }
 
-/* Helpers utilitaires */
-.ff-card-hover {
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-.ff-card-hover:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-}
+.ff-card-hover { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+.ff-card-hover:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); }
 
-/* Désactive les comportements par défaut indésirables */
-button {
-  font-family: inherit;
-}
-input,
-textarea,
-select {
-  font-family: inherit;
-}
+button, input, textarea, select { font-family: inherit; }
+
 @keyframes ffFade {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -94,90 +62,3 @@ select {
   from { opacity: 0; transform: translateX(-6px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-/* ─────────────────────────────────────────────────────────────────────────
-   Phase B — Animations FunnelFlow AI
-   Chaque keyframe correspond à un AnimationPreset défini dans types.ts
-   Les éléments animés portent l'attribut data-ff-anim="<preset>"
-   et la classe ff-anim-pending. Le hook useScrollReveal ajoute
-   ff-anim-active lorsque l'élément entre dans le viewport.
-   ───────────────────────────────────────────────────────────────────────── */
-
-@keyframes ff-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes ff-fade-up {
-  from { opacity: 0; transform: translate3d(0, 16px, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-@keyframes ff-fade-down {
-  from { opacity: 0; transform: translate3d(0, -16px, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-@keyframes ff-slide-left {
-  from { opacity: 0; transform: translate3d(24px, 0, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-@keyframes ff-slide-right {
-  from { opacity: 0; transform: translate3d(-24px, 0, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-@keyframes ff-zoom-in {
-  from { opacity: 0; transform: scale3d(0.92, 0.92, 1); }
-  to   { opacity: 1; transform: scale3d(1, 1, 1); }
-}
-@keyframes ff-zoom-out {
-  from { opacity: 0; transform: scale3d(1.08, 1.08, 1); }
-  to   { opacity: 1; transform: scale3d(1, 1, 1); }
-}
-@keyframes ff-pulse {
-  0%, 100% { transform: scale3d(1, 1, 1); }
-  50%      { transform: scale3d(1.04, 1.04, 1); }
-}
-
-/* État initial : invisible avant entrée dans le viewport */
-[data-ff-anim].ff-anim-pending {
-  opacity: 0;
-  will-change: opacity, transform;
-}
-
-/* État actif : on joue la keyframe correspondant au preset */
-[data-ff-anim].ff-anim-active {
-  animation-duration: 0.7s;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  animation-fill-mode: both;
-}
-[data-ff-anim="fade-in"].ff-anim-active     { animation-name: ff-fade-in; }
-[data-ff-anim="fade-up"].ff-anim-active     { animation-name: ff-fade-up; }
-[data-ff-anim="fade-down"].ff-anim-active   { animation-name: ff-fade-down; }
-[data-ff-anim="slide-left"].ff-anim-active  { animation-name: ff-slide-left; }
-[data-ff-anim="slide-right"].ff-anim-active { animation-name: ff-slide-right; }
-[data-ff-anim="zoom-in"].ff-anim-active     { animation-name: ff-zoom-in; }
-[data-ff-anim="zoom-out"].ff-anim-active    { animation-name: ff-zoom-out; }
-[data-ff-anim="pulse"].ff-anim-active {
-  animation-name: ff-pulse;
-  animation-duration: 1.6s;
-  animation-iteration-count: infinite;
-  opacity: 1;
-}
-[data-ff-anim="none"].ff-anim-active { opacity: 1; }
-
-/* Stagger : décalage progressif des bullets quand le parent porte data-ff-bullets="stagger" */
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(1) { animation-delay: 0.05s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(2) { animation-delay: 0.15s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(3) { animation-delay: 0.25s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(4) { animation-delay: 0.35s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(5) { animation-delay: 0.45s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(6) { animation-delay: 0.55s; }
-[data-ff-bullets="stagger"] [data-ff-anim].ff-anim-active:nth-child(n+7) { animation-delay: 0.65s; }
-
-/* Respect de prefers-reduced-motion : on désactive les keyframes */
-@media (prefers-reduced-motion: reduce) {
-  [data-ff-anim].ff-anim-pending,
-  [data-ff-anim].ff-anim-active {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-}
-

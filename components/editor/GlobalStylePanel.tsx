@@ -12,12 +12,15 @@ type Props = {
 
 type ButtonAnim = "lift" | "glow" | "pulse" | "shine";
 
-// Type étendu pour les champs ajoutés (animationsEnabled, buttonAnim) qui
-// ne sont peut-être pas encore typés dans Funnel["design"]. Quand le type
-// sera consolidé, ces casts pourront être retirés.
+// Type étendu (les nouveaux champs Lot 3 sont aussi typés ici en attendant
+// que tu valides la mise à jour de Funnel["design"] dans types.ts).
 type DesignExt = Funnel["design"] & {
   animationsEnabled?: boolean;
   buttonAnim?: ButtonAnim;
+  textScale?: number;
+  buttonScale?: number;
+  customBgEnabled?: boolean;
+  customBg?: string;
 };
 
 const STYLE_PRESETS: { value: string; label: string }[] = [
@@ -42,6 +45,13 @@ const DEFAULT_DESIGN: Funnel["design"] = {
   style: "premium",
 };
 
+const SCALE_MIN = 0.85;
+const SCALE_MAX = 1.25;
+const SCALE_STEP = 0.05;
+
+/** Templates dont le fond est neutre et donc personnalisable */
+const CUSTOM_BG_TEMPLATES = new Set(["clean-light", "clean-dark"]);
+
 export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
   const design = (funnel.design ?? DEFAULT_DESIGN) as DesignExt;
   const templateId = (funnel.meta as { templateId?: string } | undefined)
@@ -50,6 +60,13 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
   const animationsEnabled = design.animationsEnabled !== false;
   const currentButtonAnim: ButtonAnim =
     design.buttonAnim ?? getTemplateButtonAnim(templateId);
+
+  const textScale = clampScale(design.textScale ?? 1);
+  const buttonScale = clampScale(design.buttonScale ?? 1);
+
+  const customBgSupported = CUSTOM_BG_TEMPLATES.has(templateId ?? "");
+  const customBgEnabled = design.customBgEnabled === true;
+  const customBg = design.customBg ?? "#ffffff";
 
   const updateDesign = (patch: Partial<DesignExt>) => {
     onChange({ design: { ...design, ...patch } as Funnel["design"] });
@@ -126,6 +143,74 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
             </select>
           </Field>
 
+          {/* === Tailles (Lot 3) === */}
+          <SectionTitle>Tailles</SectionTitle>
+
+          <Field label={`Taille du texte · ${formatScale(textScale)}`}>
+            <ScaleRow
+              value={textScale}
+              onChange={(v) => updateDesign({ textScale: v })}
+              onReset={() => updateDesign({ textScale: 1 })}
+            />
+            <p className="mt-1 text-[10px] text-white/40">
+              S'applique aux titres, sous-titres et paragraphes du tunnel.
+            </p>
+          </Field>
+
+          <Field label={`Taille des boutons · ${formatScale(buttonScale)}`}>
+            <ScaleRow
+              value={buttonScale}
+              onChange={(v) => updateDesign({ buttonScale: v })}
+              onReset={() => updateDesign({ buttonScale: 1 })}
+            />
+            <p className="mt-1 text-[10px] text-white/40">
+              Ajuste le padding et la taille de texte des CTA.
+            </p>
+          </Field>
+
+          {/* === Fond du tunnel (templates clean uniquement) === */}
+          {customBgSupported && (
+            <>
+              <SectionTitle>Fond du tunnel</SectionTitle>
+
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+                <div>
+                  <div className="text-xs font-medium text-white">
+                    Fond personnalisé
+                  </div>
+                  <div className="text-[10px] text-white/50">
+                    Remplace le fond neutre du template par une couleur de votre choix
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={customBgEnabled}
+                  onChange={(e) =>
+                    updateDesign({ customBgEnabled: e.target.checked })
+                  }
+                  className="h-4 w-4 cursor-pointer accent-amber-300"
+                />
+              </label>
+
+              {customBgEnabled && (
+                <Field label="Couleur de fond">
+                  <ColorRow
+                    value={customBg}
+                    onChange={(c) => updateDesign({ customBg: c })}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+
+          {!customBgSupported && (
+            <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-[10px] text-white/40">
+              Le fond de ce template fait partie de son identité visuelle et n'est
+              pas modifiable. Pour un fond personnalisable, choisissez un template{" "}
+              <span className="text-white/60">Clean</span>.
+            </div>
+          )}
+
           {/* === Animations === */}
           <SectionTitle>Animations</SectionTitle>
 
@@ -199,6 +284,17 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────
+
+function clampScale(n: number): number {
+  if (Number.isNaN(n)) return 1;
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, n));
+}
+
+function formatScale(n: number): string {
+  return `${Math.round(n * 100)} %`;
+}
+
 const inputClass =
   "w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/40";
 
@@ -248,6 +344,38 @@ function ColorRow({
         onChange={(e) => onChange(e.target.value)}
         className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-white outline-none focus:border-amber-300/40"
       />
+    </div>
+  );
+}
+
+function ScaleRow({
+  value,
+  onChange,
+  onReset,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="range"
+        min={SCALE_MIN}
+        max={SCALE_MAX}
+        step={SCALE_STEP}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="flex-1 cursor-pointer accent-amber-300"
+      />
+      <button
+        type="button"
+        onClick={onReset}
+        className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[10px] font-medium text-white/60 hover:border-white/20 hover:text-white"
+        title="Réinitialiser à 100 %"
+      >
+        Reset
+      </button>
     </div>
   );
 }

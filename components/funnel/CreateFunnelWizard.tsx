@@ -71,6 +71,11 @@ type ApiError = {
   message?: string;
 };
 
+function capitalize(str: string): string {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export function CreateFunnelWizard() {
   const [step, setStep] = useState(0);
   const [brief, setBrief] = useState<FunnelBrief>(initialBrief);
@@ -84,7 +89,6 @@ export function CreateFunnelWizard() {
   const [checkingHealth, setCheckingHealth] = useState(false);
   const router = useRouter();
 
-
   const steps = useMemo<StepLabel[]>(() => {
     const kind = getFunnelKind(brief.funnelKind);
     const includeVideo = kind?.needsVideo === true;
@@ -95,7 +99,6 @@ export function CreateFunnelWizard() {
     if (step >= steps.length) setStep(steps.length - 1);
   }, [steps.length, step]);
 
-  // Template premium courant (pour Génération step)
   const currentPremiumTemplate = useMemo(
     () =>
       getPremiumTemplate(brief.templateId) ??
@@ -104,7 +107,6 @@ export function CreateFunnelWizard() {
     [brief.templateId]
   );
 
-  // Template simple (rétrocompat ancien système, pour l'objectif/sections legacy)
   const currentLegacyTemplate = useMemo(
     () =>
       funnelTemplates.find((t) => t.id === brief.templateId) ??
@@ -212,7 +214,6 @@ export function CreateFunnelWizard() {
         return;
       }
 
-      // Réussite : on injecte les couleurs du brief par-dessus le design retourné
       const enrichedFunnel = {
         ...data.funnel,
         design: {
@@ -224,13 +225,9 @@ export function CreateFunnelWizard() {
       };
 
       setFunnel(enrichedFunnel);
-      setSuccessMessage(
-        "Tunnel généré : redirection vers l'éditeur..."
-      );
+      setSuccessMessage("Tunnel généré : redirection vers l'éditeur...");
 
-      // Persistance + redirection vers l'éditeur
       const stored = createFunnelFromAi(enrichedFunnel, brief);
-      // Petit délai pour laisser le toast de succès s'afficher
       setTimeout(() => {
         router.push(`/editor/${stored.id}`);
       }, 600);
@@ -246,7 +243,7 @@ export function CreateFunnelWizard() {
     }
   }
 
-  const previewFunnel: Funnel = funnel ?? {
+  const previewFunnelBase: Funnel = funnel ?? {
     funnelName: `${brief.brandName} — ${brief.offerName}`,
     language: brief.language,
     sections: [
@@ -254,7 +251,7 @@ export function CreateFunnelWizard() {
         id: "preview-hero",
         type: "hero",
         eyebrow: brief.funnelType,
-        headline: `${brief.offerName} : ${brief.promise}`,
+        headline: capitalize(brief.promise),
         subheadline: `Un tunnel pensé pour ${brief.targetAudience}`,
         cta: brief.primaryCta,
         image: { mode: brief.defaultImageMode ?? "none" },
@@ -307,6 +304,17 @@ export function CreateFunnelWizard() {
       style: brief.designStyle,
     },
     defaultCta: brief.primaryCta,
+  };
+
+  const previewFunnel: Funnel = {
+    ...previewFunnelBase,
+    meta: {
+      ...(previewFunnelBase.meta ?? {}),
+      templateId: brief.templateId,
+      moodId: brief.moodId,
+      funnelKind: brief.funnelKind,
+      logoUrl: logoPreview || brief.logoUrl,
+    },
   };
 
   const stepLabel = steps[step];
@@ -435,17 +443,18 @@ export function CreateFunnelWizard() {
         </Card>
 
         <div className="grid gap-3 min-w-0">
+          {/* ───── Barre Live preview / Démo / Export — toujours sur une ligne ───── */}
           <Card className="p-4">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3 flex-nowrap">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#C7A436]">Live preview</p>
                 <h2 className="mt-1 truncate text-lg font-black text-ink">{brief.brandName}</h2>
                 <p className="mt-0.5 truncate text-xs text-muted">
                   {brief.funnelType} · {currentLegacyTemplate.sections.length} sections · {brief.language.toUpperCase()}
-                  {funnel ? " · IA" : " · structure"}
+                  {funnel ? " · IA" : " · structure"} · {currentPremiumTemplate.name}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button href="/funnels/demo" variant="secondary">Démo</Button>
                 <Button href="/export-systeme" variant="secondary">
                   <Upload size={14} /> Export
@@ -669,7 +678,6 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
   const modes: { value: ImageMode; label: string; hint: string; icon: typeof ImageOff; available: boolean }[] = [
     { value: "none", label: "Aucune image par défaut", hint: "Tunnel sobre et rapide, vous ajoutez les images section par section après génération", icon: ImageOff, available: true },
     { value: "upload", label: "Préparer des emplacements pour vos visuels", hint: "Le tunnel laisse des emplacements prêts à recevoir vos propres images", icon: ImageIcon, available: true },
-    { value: "ai-suggested", label: "Visuels recommandés par l'IA", hint: "Disponible dans une prochaine version", icon: Wand2, available: false },
   ];
 
   return (
@@ -699,9 +707,6 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm font-bold text-ink">
                   {m.label}
-                  {!m.available && (
-                    <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted">À venir</span>
-                  )}
                   {active && <CheckCircle2 size={14} className="text-[#31845C]" />}
                 </span>
                 <span className="mt-0.5 block text-xs text-muted">{m.hint}</span>
