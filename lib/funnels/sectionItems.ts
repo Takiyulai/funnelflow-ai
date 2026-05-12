@@ -1,12 +1,13 @@
 // lib/funnels/sectionItems.ts
 //
-// Helpers pour les items spécialisés (FAQ, témoignages, pricing, bonus, garantie).
+// Helpers pour les items spécialisés (FAQ, témoignages, pricing, bonus, garantie, formField).
 // Création d'items vides + migration auto des bullets existants vers le nouveau
 // format (Livraison B, choix utilisateur "ii" — migration automatique).
 
 import type {
   BonusItem,
   FaqItem,
+  FormFieldItem,
   FunnelSection,
   FunnelSectionType,
   GuaranteeItem,
@@ -28,7 +29,8 @@ export function itemKindForSectionType(
     case "faq":
       return "faq";
     case "proof":
-      // Les sections "proof" sont en pratique des témoignages clients
+    case "testimonials":
+      // Les sections "proof" et "testimonials" sont en pratique des témoignages clients
       return "testimonial";
     case "pricing":
       return "pricing";
@@ -36,6 +38,8 @@ export function itemKindForSectionType(
       return "bonus";
     case "guarantee":
       return "guarantee";
+    case "form":
+      return "formField";
     default:
       return null;
   }
@@ -87,6 +91,17 @@ export function makeEmptyGuaranteeItem(): GuaranteeItem {
   };
 }
 
+export function makeEmptyFormFieldItem(): FormFieldItem {
+  return {
+    name: "field",
+    label: "",
+    placeholder: "",
+    type: "text",
+    required: false,
+    width: "full",
+  };
+}
+
 /** Crée un SectionItem vide selon le kind demandé. */
 export function makeEmptyItem(kind: SectionItem["kind"]): SectionItem {
   switch (kind) {
@@ -100,6 +115,14 @@ export function makeEmptyItem(kind: SectionItem["kind"]): SectionItem {
       return { kind: "bonus", data: makeEmptyBonusItem() };
     case "guarantee":
       return { kind: "guarantee", data: makeEmptyGuaranteeItem() };
+    case "formField":
+      return { kind: "formField", data: makeEmptyFormFieldItem() };
+    default: {
+      // Exhaustiveness check : si un nouveau kind est ajouté à SectionItem,
+      // TypeScript signalera ici qu'il n'est pas géré.
+      const _exhaustive: never = kind;
+      throw new Error(`Unknown SectionItem kind: ${String(_exhaustive)}`);
+    }
   }
 }
 
@@ -122,7 +145,7 @@ function bulletToFaqItem(bullet: string): FaqItem {
     const idx = trimmed.indexOf(sep);
     if (idx > 0 && idx < trimmed.length - sep.length) {
       const question = trimmed.slice(0, idx).trim();
-      let answer = trimmed.slice(idx + sep.length).trim();
+      const answer = trimmed.slice(idx + sep.length).trim();
       // Si on a coupé sur "?" on remet le point d'interrogation à la question
       if (sep === "?" || sep === " ? ") {
         return {
@@ -179,6 +202,26 @@ function bulletToGuaranteeItem(bullet: string): GuaranteeItem {
   return { title: bullet.trim(), iconName: "shield" };
 }
 
+function bulletToFormFieldItem(bullet: string): FormFieldItem {
+  // Heuristique très basique : on prend le bullet comme label, on dérive un name.
+  const trimmed = bullet.trim();
+  const name = trimmed
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32) || "field";
+  return {
+    name,
+    label: trimmed,
+    placeholder: "",
+    type: "text",
+    required: false,
+    width: "full",
+  };
+}
+
 /**
  * Migre les bullets d'une section vers le nouveau format `items`.
  * Retourne null si la section n'a pas besoin de migration (pas du bon type ou
@@ -210,6 +253,12 @@ export function migrateSectionBulletsToItems(
           return { kind: "bonus", data: bulletToBonusItem(bullet) };
         case "guarantee":
           return { kind: "guarantee", data: bulletToGuaranteeItem(bullet) };
+        case "formField":
+          return { kind: "formField", data: bulletToFormFieldItem(bullet) };
+        default: {
+          const _exhaustive: never = kind;
+          throw new Error(`Unknown SectionItem kind: ${String(_exhaustive)}`);
+        }
       }
     });
 }
@@ -241,5 +290,3 @@ export function getItemsOfKind<K extends SectionItem["kind"]>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return filtered.map((it) => it.data) as any;
 }
-
-
