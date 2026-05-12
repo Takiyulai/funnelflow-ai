@@ -1202,17 +1202,19 @@
 }
 
 /* ============================================================================
- * 19. LOT H + N — Split layout (image+texte côte-à-côte)
+ * 19. LOT H + N — Split layout (image+texte côte-à-côte) — DESKTOP UNIQUEMENT
  *
- * Wrapper :
- *   <section> > <DecorativeIconsLayer /> > <div class="relative mx-auto…"> > contenu
+ * Important : la "vue mobile" du preview est un cadre 380px DANS un viewport
+ * desktop. Les media queries ne fonctionnent pas pour cela. On utilise donc
+ * l'attribut [data-ff-mobile-frame] (posé sur le cadre mobile dans
+ * FunnelPreview.tsx → MobileFrame) pour neutraliser le split.
  *
- * Principe (inspiré des landings pros type Thales Gomes) :
- *  • align-items: start → le texte commence en haut, pas centré dans le vide
- *  • column-gap réduit
- *  • rythme vertical compact (eyebrow→headline→sub→body→bullets→cta)
- *  • la taille de l'image (data-ff-img-size) est RESPECTÉE en split
+ * Wrapper interne :
+ *   <div class="relative mx-auto max-w-[920px]">  (mode normal)
+ *   <div class="relative">                        (mode compact)
  * ========================================================================= */
+
+/* ─── 19.1 — Active le split pour les vraies vues desktop (vrai viewport ≥ 768px) ── */
 @media (min-width: 768px) {
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative {
@@ -1220,7 +1222,7 @@
     grid-template-columns: 1fr 1fr;
     column-gap: 2.5rem;
     row-gap: 0;
-    align-items: start;            /* ← TEXTE EN HAUT, plus de gros vide au-dessus */
+    align-items: center;
     max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
@@ -1236,12 +1238,13 @@
     grid-column: 1;
     min-width: 0;
   }
-  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap {
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > figure.ff-image-wrap {
     grid-column: 2;
-    grid-row: 1 / -1;
-    align-self: center;            /* image centrée verticalement par rapport au bloc texte */
-    justify-self: center;          /* image centrée horizontalement dans sa colonne */
-    margin: 0;
+    grid-row: 1 / span 99;
+    align-self: center;
+    justify-self: center;
+    margin: 0 !important;
   }
 
   /* Image à gauche, texte à droite */
@@ -1254,36 +1257,35 @@
     grid-column: 2;
     min-width: 0;
   }
-  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap {
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > figure.ff-image-wrap {
     grid-column: 1;
-    grid-row: 1 / -1;
+    grid-row: 1 / span 99;
     align-self: center;
     justify-self: center;
-    margin: 0;
+    margin: 0 !important;
   }
 
-  /* ─── Rythme vertical compact (split) ─────────────────────────────────
-     On écrase les marges Tailwind (mb-3/4/5) prévues pour le mode centered.
-     Espacement final : eyebrow ▸ 4px ▸ H2 ▸ 12px ▸ sub ▸ 20px ▸ body/bullets ▸ 24px ▸ CTA */
+  /* Rythme vertical compact */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
-    margin: 0 0 0.25rem 0 !important;     /* 4px */
+    margin: 0 0 0.25rem 0 !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline {
-    margin: 0 0 0.75rem 0 !important;     /* 12px */
+    margin: 0 0 0.75rem 0 !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-subheadline,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-subheadline {
-    margin: 0 0 1.25rem 0 !important;     /* 20px */
+    margin: 0 0 1.25rem 0 !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-body,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-body {
-    margin: 0 0 1.25rem 0 !important;     /* 20px */
+    margin: 0 0 1.25rem 0 !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-bullets,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-bullets {
-    margin: 0 0 1.5rem 0 !important;       /* 24px */
+    margin: 0 0 1.5rem 0 !important;
     max-width: none;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-cta-wrap,
@@ -1291,7 +1293,6 @@
     margin: 0 !important;
   }
 
-  /* Bullets resserrés en split */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-bullets > li,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-bullets > li {
     margin-bottom: 0.5rem;
@@ -1301,49 +1302,166 @@
     margin-bottom: 0;
   }
 
-  /* ─── Tailles d'image RESPECTÉES en split ─────────────────────────────
-     Plus de override à max-width: 100% — la taille choisie dans l'éditeur
-     (sm/md/lg/full/custom) s'applique normalement. L'image est centrée
-     dans sa colonne via justify-self: center ci-dessus. */
+  /* Tailles d'image en split */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="sm"],
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="sm"] {
-    max-width: 280px;
-    width: 100%;
+    max-width: 280px; width: 100%;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="md"],
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="md"] {
-    max-width: 380px;
-    width: 100%;
+    max-width: 380px; width: 100%;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="lg"],
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="lg"] {
-    max-width: 480px;
-    width: 100%;
+    max-width: 480px; width: 100%;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap[data-ff-img-size="full"],
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap[data-ff-img-size="full"] {
-    max-width: 100%;
-    width: 100%;
+    max-width: 100%; width: 100%;
   }
-  /* "custom" : la max-width inline (customWidth px) gagne déjà */
+
+  /* Padding réduit pour ne pas perdre le contenu au milieu */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"],
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+  }
 }
 
-/* Mobile : empilage image au-dessus du texte */
+/* ============================================================================
+ * 19.2 — MOBILE : neutralise le split dans le cadre mobile du preview
+ *
+ * Le cadre mobile (MobileFrame) porte data-ff-mobile-frame. À l'intérieur,
+ * on FORCE l'empilage : texte → image, centré, peu importe la largeur du
+ * viewport réel du navigateur.
+ *
+ * Important : on utilise une spécificité plus forte que la grille du 19.1
+ * en préfixant par [data-ff-mobile-frame] et en utilisant !important.
+ * ========================================================================= */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative {
+  display: block !important;
+  text-align: center !important;
+  max-width: 100% !important;
+  column-gap: 0 !important;
+  row-gap: 0 !important;
+}
+
+/* Reset des positions de grille pour TOUS les enfants (sinon grid-column/row
+   resterait défini et casserait le block flow) */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > *,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > * {
+  grid-column: auto !important;
+  grid-row: auto !important;
+  justify-self: auto !important;
+  align-self: auto !important;
+}
+
+/* Image après le texte, centrée */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > figure.ff-image-wrap,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > figure.ff-image-wrap {
+  margin: 1.25rem auto 0 auto !important;
+  max-width: 80% !important;
+}
+
+/* Reset des marges compactes du desktop pour retrouver le rythme normal */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-subheadline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-subheadline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-body,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-body,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-bullets,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-bullets,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-cta-wrap,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-cta-wrap {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Padding section restauré en mobile */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"],
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] {
+  padding-top: 2rem !important;
+  padding-bottom: 2rem !important;
+}
+
+/* Bullets centrés (le texte de chaque bullet reste lisible à gauche) */
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-bullets,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-bullets {
+  text-align: left !important;
+  max-width: 92% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* ============================================================================
+ * 19.3 — Vrai mobile (publication finale, pas le preview)
+ * Pour quand l'utilisateur final visite le tunnel publié sur son téléphone.
+ * Reprend la même logique que 19.2 mais via media query classique.
+ * ========================================================================= */
 @media (max-width: 767px) {
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
+    display: block;
+    text-align: center;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > *,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > * {
+    grid-column: auto;
+    grid-row: auto;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap {
-    order: -1;
-    margin: 0 auto;
+    margin: 1.25rem auto 0 auto;
+    max-width: 80%;
+  }
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-bullets,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-bullets {
+    text-align: left;
+    max-width: 92%;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
+/* 19.1.b — Centrer l'eyebrow + ajouter une marge verticale sur tous les écrans */
 
+/* Marge verticale sur tous les écrans (desktop + mobile preview + mobile réel) */
+[data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-eyebrow,
+[data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-eyebrow {
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.75rem !important;
+}
 
+/* Desktop : centrer l'eyebrow dans sa colonne de texte */
+@media (min-width: 768px) {
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
+    text-align: center !important;
+    justify-self: center !important;
+    width: 100%;
+  }
+
+  /* Si l'eyebrow est un span inline (badge), on force son conteneur en flex centré */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+}
+@media (min-width: 768px) {
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline {
+    text-align: center !important;
+  }
+}
 
 /* ============================================================================
  * 20. LOT K — Couleur de fond custom par section

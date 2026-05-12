@@ -550,6 +550,7 @@ function PreviewBody({
           data-ff-has-bg-image={heroBg.hasBackgroundImage ? "true" : undefined}
           data-ff-deco-top={heroEdges.top ? "true" : undefined}
           data-ff-deco-bottom={heroEdges.bottom ? "true" : undefined}
+          data-ff-anim="fade-up"
           className={`ff-section ${padX} ${padY} relative`}
           style={{
             ...(heroColors.bg ? { backgroundColor: heroColors.bg } : {}),
@@ -737,6 +738,7 @@ function SectionBlock({
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
+      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
       className={`ff-section ${padX} ${padY} relative`}
       style={{
         ...(colors.bg ? { backgroundColor: colors.bg } : {}),
