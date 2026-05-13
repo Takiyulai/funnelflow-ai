@@ -68,6 +68,7 @@ const imageSchema = z
     credit: z.string().optional(),
     sourceUrl: z.string().optional(),
     suggestionQuery: z.string().optional(),
+    mediaRef: z.string().optional(), // ← Phase 2 : référence à un MediaItem
   })
   .optional();
 

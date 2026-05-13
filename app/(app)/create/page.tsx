@@ -9,7 +9,7 @@ export default function CreatePage() {
       <p className="mt-2 text-sm text-muted">
         Renseignez les étapes, définissez vos CTA et vos visuels, puis générez un tunnel complet prêt à modifier
       </p>
-      <div className="mt-8">
+      <div className="mt-8 min-w-0 max-w-full">
         <CreateFunnelWizard />
       </div>
     </AppShell>

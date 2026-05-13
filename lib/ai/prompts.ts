@@ -66,6 +66,100 @@ function briefContextBlock(brief: FunnelBrief): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helpers Phase 2 — Médias & préférences copywriting
+// ─────────────────────────────────────────────────────────────────────────────
+
+function copywritingPrefsBlock(brief: FunnelBrief): string {
+  const prefs = brief.copywritingPrefs;
+  if (!prefs) return "";
+
+  const lines: string[] = [];
+
+  if (prefs.tone) {
+    const toneDescriptions: Record<string, string> = {
+      direct: "phrases courtes, zéro fioriture, droit au but",
+      empathique:
+        "comprend la douleur du lecteur, rassure, humanise le propos",
+      storytelling: "structure avant/après, anecdotes, narration immersive",
+      expert: "vocabulaire précis, autorité, méthodologie claire",
+      amical: "ton accessible, tutoiement, posture complice",
+      premium: "sobre, élégant, exigeant, sans superlatifs creux",
+    };
+    lines.push(
+      `- Ton dominant : ${prefs.tone}${
+        toneDescriptions[prefs.tone] ? ` (${toneDescriptions[prefs.tone]})` : ""
+      }`,
+    );
+  }
+
+  if (prefs.length) {
+    const lengthDescriptions: Record<string, string> = {
+      concise:
+        "textes très courts. Headlines de 4-8 mots, sous-titres de 8-15 mots, bullets de 5-10 mots, body 1-2 phrases max",
+      balanced:
+        "longueur équilibrée. Headlines de 6-12 mots, sous-titres de 12-20 mots, bullets de 8-15 mots, body 2-4 phrases",
+      detailed:
+        "textes plus riches. Headlines de 8-15 mots, sous-titres de 15-25 mots, bullets de 10-20 mots, body 3-6 phrases",
+    };
+    lines.push(`- Longueur : ${lengthDescriptions[prefs.length]}`);
+  }
+
+  if (prefs.exampleSentence && prefs.exampleSentence.trim().length > 0) {
+    lines.push(
+      `- Phrase de référence du style attendu (inspire-toi du rythme et du registre, ne la recopie pas) : "${prefs.exampleSentence.trim()}"`,
+    );
+  }
+
+  if (prefs.avoidWords && prefs.avoidWords.length > 0) {
+    lines.push(
+      `- Mots ou expressions à éviter strictement : ${prefs.avoidWords
+        .map((w) => `"${w}"`)
+        .join(", ")}`,
+    );
+  }
+
+  if (lines.length === 0) return "";
+  return `\nPréférences de copywriting (à respecter strictement)\n${lines.join(
+    "\n",
+  )}\n`;
+}
+
+function mediasBlock(brief: FunnelBrief): string {
+  const medias = brief.medias;
+  if (!medias || medias.length === 0) return "";
+
+  const usableMedias = medias.filter(
+    (m) => m.url && m.url.trim().length > 0,
+  );
+  if (usableMedias.length === 0) return "";
+
+  const lines = usableMedias.map((m, i) => {
+    const parts: string[] = [`  ${i + 1}. id="${m.id}" (${m.kind})`];
+    if (m.description) parts.push(`description: ${m.description}`);
+    if (m.sectionHint)
+      parts.push(`section suggérée par l'utilisateur: ${m.sectionHint}`);
+    if (m.alt) parts.push(`alt: ${m.alt}`);
+    return parts.join(" — ");
+  });
+
+  return `\nMédias fournis par l'utilisateur (à placer intelligemment)
+L'utilisateur a uploadé ${usableMedias.length} média(s). Tu dois choisir quel média placer dans quelles sections, en te basant sur leur description et leur sectionHint.
+
+${lines.join("\n")}
+
+Règle d'utilisation des médias
+- Pour utiliser un média dans une section, ajoute le champ "image" avec :
+  { "mode": "upload", "mediaRef": "<id_du_media>", "alt": "<alt_court>" }
+- N'invente JAMAIS d'URL. N'écris JAMAIS le champ "url" toi-même.
+- Le système résoudra automatiquement mediaRef en URL réelle après ta réponse.
+- Si une section a un sectionHint explicite (ex. "hero"), utilise ce média en priorité dans cette section.
+- Un même mediaRef ne peut être utilisé qu'une seule fois dans tout le tunnel.
+- Si tu n'as pas de média pertinent pour une section, garde { "mode": "none" } (par défaut).
+- Pour les médias de type "video", utilise plutôt le champ "video" de la section, pas "image".
+`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 1. Génération complète d'un tunnel
 // ─────────────────────────────────────────────────────────────────────────────
 export function completeFunnelPrompt(brief: FunnelBrief): string {
@@ -85,6 +179,8 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
 Le label doit être court, direct et orienté action`;
 
   const context = briefContextBlock(brief);
+  const copyPrefs = copywritingPrefsBlock(brief);
+  const medias = mediasBlock(brief);
 
   return `Rôle
 Tu es un expert en copywriting de conversion, structure de tunnels de vente, CRO et marketing digital sobre et premium
@@ -102,7 +198,7 @@ Créer un tunnel de vente complet en ${lang} pour l'offre suivante
 - Style design : ${brief.designStyle}
 
 ${context}${commonProductRules(brief.language)}
-
+${copyPrefs}${medias}
 Approche copywriting
 - Hiérarchie : promesse forte, résultat concret, simplicité, preuve, offre, action
 - Frameworks utilisables : AIDA, PAS, Story-Proof-Offer
@@ -119,9 +215,11 @@ Modes CTA autorisés
 - "popup" : seulement si explicitement demandé, popupId court en kebab-case
 
 Images
-- Pour chaque section, ajouter le champ "image" avec mode="none" par défaut
+- Pour chaque section, ajouter le champ "image"
+- Si l'utilisateur a fourni des médias (voir bloc "Médias fournis"), utiliser mode="upload" + mediaRef="<id>"
+- Sinon, mode="none" par défaut
+- Si une suggestion visuelle est utile et qu'aucun média utilisateur ne convient, utiliser mode="ai-suggested" avec un champ "suggestionQuery" en anglais
 - Ne jamais inventer d'URL d'image
-- Si une suggestion visuelle est utile, utiliser mode="ai-suggested" et fournir un champ "suggestionQuery" en anglais, court, descriptif
 
 Format de sortie
 Retourner uniquement un JSON valide, sans markdown, sans commentaire, conforme à ce schéma :
@@ -146,7 +244,9 @@ Retourner uniquement un JSON valide, sans markdown, sans commentaire, conforme �
         "target": "_self | _blank"
       },
       "image": {
-        "mode": "none | ai-suggested",
+        "mode": "none | upload | ai-suggested",
+        "mediaRef": "string optionnel (id d'un média utilisateur)",
+        "alt": "string optionnel",
         "suggestionQuery": "string optionnel en anglais"
       },
       "visible": true,
@@ -183,7 +283,8 @@ Règles strictes
 - Ne pas inventer de témoignages chiffrés invérifiables
 - Ne pas inclure d'émoji, ni dans les textes ni dans les bullets
 - Ne pas utiliser de points à la fin des phrases courtes en titre, sous-titre ou bullet
-- Toujours fournir un id stable pour chaque section`;
+- Toujours fournir un id stable pour chaque section
+- N'inventer aucune URL d'image, utiliser exclusivement mediaRef pour les médias utilisateur`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

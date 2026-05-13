@@ -62,3 +62,45 @@ button, input, textarea, select { font-family: inherit; }
   from { opacity: 0; transform: translateX(-6px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+/* ─── Wizard : empêcher l'aperçu de faire déborder la page sur mobile ─── */
+@media (max-width: 1279px) {
+  .ff-preview-wrapper,
+  .ff-preview-wrapper .ff-template-root,
+  .ff-preview-wrapper .ff-desktop-stage {
+    max-width: 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden;
+  }
+
+  .ff-preview-wrapper .ff-section,
+  .ff-preview-wrapper .ff-section > *,
+  .ff-preview-wrapper .ff-section-inner {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .ff-preview-wrapper img,
+  .ff-preview-wrapper video,
+  .ff-preview-wrapper iframe {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .ff-preview-wrapper h1,
+  .ff-preview-wrapper h2,
+  .ff-preview-wrapper h3,
+  .ff-preview-wrapper p {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+}
+
+
+
+/* ─── Garde-fou global anti-débordement horizontal ─── */
+html, body {
+  overflow-x: hidden;
+}

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Save, Undo2, Redo2, ExternalLink, Loader2,
-  Copy, Check, Globe, Rocket,
+  Copy, Check, Globe, Rocket, Layers, Eye,
 } from "lucide-react";
 
 import { AppShell } from "@/components/dashboard/AppShell";
@@ -72,6 +72,9 @@ export default function EditorPage() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Onglet actif sur mobile/tablette (< lg). Sur desktop, les deux panneaux sont visibles.
+  const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
 
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -359,6 +362,8 @@ export default function EditorPage() {
   const scrollToSection = useCallback((sectionId: string) => {
     setSelectedSectionId(sectionId);
     setDrawerOpen(true);
+    // Sur mobile, bascule automatiquement sur l'onglet Aperçu pour montrer la section
+    setMobileTab("preview");
 
     requestAnimationFrame(() => {
       const wrapper = previewWrapperRef.current;
@@ -435,9 +440,10 @@ export default function EditorPage() {
   return (
     <AppShell>
       {/* ───────── Toolbar pro ───────── */}
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 md:-mx-8 md:-mt-8">
-        <div className="flex h-14 items-center gap-3 px-4 md:px-8">
-          <div className="flex min-w-0 items-center gap-3">
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 md:-mx-8 md:-mt-8 min-w-0">
+        <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-8 min-w-0">
+          {/* Bloc titre + slug */}
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
             <Link
               href="/dashboard"
               title="Retour au dashboard"
@@ -447,22 +453,30 @@ export default function EditorPage() {
             </Link>
 
             <div className="flex min-w-0 flex-col leading-tight">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <h1 className="truncate text-sm font-semibold text-white">
                   {brandName || "Sans titre"}
                 </h1>
                 {isPublished ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30 shrink-0">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                     Publié
                   </span>
                 ) : (
-                  <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
+                  <span className="hidden sm:inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-700 shrink-0">
                     Brouillon
                   </span>
                 )}
+                {/* Version compacte du badge sur mobile : juste un point coloré */}
+                <span
+                  className={`sm:hidden inline-block h-2 w-2 rounded-full shrink-0 ${
+                    isPublished ? "bg-emerald-400" : "bg-zinc-500"
+                  }`}
+                  aria-label={isPublished ? "Publié" : "Brouillon"}
+                />
               </div>
-              <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+              {/* Slug : caché sur mobile pour gagner de la place */}
+              <div className="hidden md:flex items-center gap-1 text-[11px] text-zinc-500 min-w-0">
                 <span className="shrink-0">/tunnel/</span>
                 <input
                   type="text"
@@ -484,19 +498,20 @@ export default function EditorPage() {
             </div>
           </div>
 
-          <div className="ml-2 hidden flex-1 items-center justify-center md:flex">
+          {/* SaveIndicator : visible uniquement sur desktop */}
+          <div className="ml-2 hidden lg:flex items-center justify-center shrink-0">
             <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
           </div>
 
-          <div className="flex-1 md:hidden" />
-
-          <div className="flex items-center gap-1.5">
+          {/* Actions à droite */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Undo / Redo : toujours visibles mais compacts sur mobile */}
             <div className="flex items-center rounded-md border border-zinc-800 bg-zinc-900">
               <button
                 onClick={undo}
                 disabled={history.past.length === 0}
                 title="Annuler (Ctrl+Z)"
-                className="flex h-8 w-8 items-center justify-center rounded-l-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
+                className="flex h-8 w-7 sm:w-8 items-center justify-center rounded-l-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
               >
                 <Undo2 className="h-3.5 w-3.5" />
               </button>
@@ -505,47 +520,96 @@ export default function EditorPage() {
                 onClick={redo}
                 disabled={history.future.length === 0}
                 title="Rétablir (Ctrl+Y)"
-                className="flex h-8 w-8 items-center justify-center rounded-r-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
+                className="flex h-8 w-7 sm:w-8 items-center justify-center rounded-r-md text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition"
               >
                 <Redo2 className="h-3.5 w-3.5" />
               </button>
             </div>
 
+            {/* Bouton Enregistrer : desktop only (sur mobile, l'auto-save suffit + Ctrl+S si clavier) */}
             <button
               onClick={handleManualSave}
               title="Enregistrer (Ctrl+S)"
-              className="hidden md:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+              className="hidden lg:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
             >
               <Save className="h-3.5 w-3.5" />
               Enregistrer
             </button>
 
+            {/* Export Systeme.io : toujours visible */}
             <SystemeIoExportMenu funnel={funnel} />
 
+            {/* Aperçu (lien externe) : desktop only */}
             <Link
               href={`/tunnel/${stored.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden md:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+              className="hidden lg:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Aperçu
             </Link>
 
+            {/* Publier : toujours visible */}
             <button
               onClick={handlePublish}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition"
+              className="flex h-8 items-center gap-1 sm:gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-2.5 sm:px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition"
             >
               {isPublished ? <Globe className="h-3.5 w-3.5" /> : <Rocket className="h-3.5 w-3.5" />}
-              {isPublished ? "Republier" : "Publier"}
+              <span className="hidden xs:inline sm:inline">
+                {isPublished ? "Republier" : "Publier"}
+              </span>
             </button>
           </div>
         </div>
+
+        {/* Indicateur de sauvegarde sur mobile/tablette : en dessous de la toolbar */}
+        <div className="lg:hidden flex items-center justify-center pb-2 px-3 min-w-0">
+          <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+        </div>
       </div>
 
-      {/* ───────── 2-column layout ───────── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(380px,38fr)_minmax(0,62fr)]">
-        <div className="flex flex-col gap-4 min-w-0">
+      {/* ───────── Onglets mobile/tablette (cachés sur lg+) ───────── */}
+      <div className="lg:hidden mb-4 min-w-0">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-900/60 p-1 ring-1 ring-white/5">
+          <button
+            type="button"
+            onClick={() => setMobileTab("sections")}
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition ${
+              mobileTab === "sections"
+                ? "bg-zinc-800 text-white shadow-sm"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            Sections
+            <span className="ml-1 rounded-full bg-zinc-700/80 px-1.5 text-[10px] font-bold text-zinc-300">
+              {funnel.sections.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("preview")}
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition ${
+              mobileTab === "preview"
+                ? "bg-zinc-800 text-white shadow-sm"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Aperçu
+          </button>
+        </div>
+      </div>
+
+      {/* ───────── Layout principal ───────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(380px,38fr)_minmax(0,62fr)] min-w-0">
+        {/* Panneau Sections */}
+        <div
+          className={`flex flex-col gap-4 min-w-0 ${
+            mobileTab === "preview" ? "hidden lg:flex" : ""
+          }`}
+        >
           <EditorSidebar
             sections={funnel.sections}
             selectedId={selectedSectionId}
@@ -560,9 +624,14 @@ export default function EditorPage() {
           />
         </div>
 
-        <div className="min-w-0">
+        {/* Panneau Aperçu */}
+        <div
+          className={`min-w-0 ${
+            mobileTab === "sections" ? "hidden lg:block" : ""
+          }`}
+        >
           <div
-            className="sticky top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden"
+            className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0"
             ref={previewWrapperRef}
           >
             <FunnelPreview
@@ -608,7 +677,7 @@ export default function EditorPage() {
           onClick={() => setHeaderOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-4 sm:p-5 max-h-[90vh] overflow-y-auto min-w-0"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

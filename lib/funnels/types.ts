@@ -100,15 +100,20 @@ export type SectionImage = {
   suggestionQuery?: string;
 
   // ─── Lot G : contrôles d'affichage ──────────────────────────
-  /** Préserve le fond transparent (PNG/WEBP avec alpha) : pas de fond blanc ni de bordure */
   transparentBg?: boolean;
-  /** Taille prédéfinie : sm (320px), md (480px), lg (720px), full (100%), custom */
   size?: ImageSize;
-  /** Largeur personnalisée en pixels (si size === "custom") */
   customWidth?: number;
-  /** Animation propre à cette image (override de section.animations.image) */
   animation?: ImageAnimation;
+
+  // ─── Phase 2 — Référence à un MediaItem fourni par l'utilisateur ─
+  /**
+   * Id d'un MediaItem présent dans `brief.medias`. Si présent, le post-traitement
+   * de applyTemplateToFunnel résout cet id en URL réelle (et écrit `url` et `alt`).
+   * Permet à l'IA de choisir un média sans inventer d'URL.
+   */
+  mediaRef?: string;
 };
+
 
 /** Lot G — Image de fond appliquée à toute une section */
 export type SectionBackground = {
@@ -558,6 +563,73 @@ export type Funnel = {
     contactEmail?: string;
   };
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 1 du wizard simplifié — Médias utilisateur & préférences copywriting
+// Tous ces champs sont OPTIONNELS sur FunnelBrief et n'affectent pas le code
+// existant tant qu'ils ne sont pas renseignés.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Type d'un média fourni par l'utilisateur pendant le wizard. */
+export type MediaKind = "image" | "video";
+
+/**
+ * Un média uploadé ou lié par l'utilisateur, accompagné d'une description
+ * libre et d'un hint optionnel sur la section où le placer.
+ */
+export type MediaItem = {
+  /** Identifiant unique (pour les listes React). */
+  id: string;
+  /** image | video */
+  kind: MediaKind;
+  /** Data URL (upload local) OU URL distante (https://...). */
+  url: string;
+  /** Description libre fournie par l'utilisateur (utilisée par l'IA pour le placement et l'alt). */
+  description?: string;
+  /**
+   * Hint optionnel : type de section où placer ce média en priorité.
+   * Si absent, l'IA décide en fonction de la description.
+   */
+  sectionHint?: FunnelSectionType;
+  /** Texte alternatif (accessibilité). Si absent, dérivé de description. */
+  alt?: string;
+  /** Nom de fichier d'origine (informationnel). */
+  fileName?: string;
+};
+
+/** Tons d'écriture proposés au wizard (radios). */
+export type CopywritingTone =
+  | "direct"
+  | "empathique"
+  | "storytelling"
+  | "expert"
+  | "amical"
+  | "premium";
+
+/** Préférence de longueur des textes générés. */
+export type CopywritingLength = "concise" | "balanced" | "detailed";
+
+/**
+ * Préférences de copywriting capturées au wizard.
+ * Toutes optionnelles : si absentes, on retombe sur brief.tone (legacy).
+ */
+export type CopywritingPrefs = {
+  tone?: CopywritingTone;
+  length?: CopywritingLength;
+  /** Phrase d'exemple fournie par l'utilisateur pour calibrer le style. */
+  exampleSentence?: string;
+  /** Mots/expressions à éviter dans la copie (liste libre). */
+  avoidWords?: string[];
+};
+
+/** Helper : crée un MediaItem vide avec un id unique. */
+export function makeEmptyMediaItem(kind: MediaKind = "image"): MediaItem {
+  return {
+    id: `media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind,
+    url: "",
+    description: "",
+  };
+}
 
 export type FunnelBrief = {
   brandName: string;
@@ -589,6 +661,12 @@ export type FunnelBrief = {
   ctaUrl?: string;
   ctaLabel?: string;
   ctaTarget?: "_self" | "_blank";
+
+  // ─── Phase 1 du wizard simplifié (optionnels, rétro-compatibles) ─────
+  /** Médias fournis par l'utilisateur (étape "Médias" du nouveau wizard). */
+  medias?: MediaItem[];
+  /** Préférences de copywriting (étape "Ton & style d'écriture"). */
+  copywritingPrefs?: CopywritingPrefs;
 };
 
 export type FunnelTemplate = {

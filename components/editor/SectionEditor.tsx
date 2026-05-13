@@ -55,20 +55,22 @@ export function SectionEditor({ section, language, onChange }: Props) {
   const sectionLabel = SECTION_LABELS[section.type] ?? section.type;
 
   return (
-    <div className="rounded-2xl border border-white/15 bg-zinc-900 shadow-lg">
+    <div className="rounded-2xl border border-white/15 bg-zinc-900 shadow-lg min-w-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <div>
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 sm:px-4 py-3 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-white/50">
             Section
           </div>
-          <div className="text-sm font-semibold text-white">{sectionLabel}</div>
+          <div className="truncate text-sm font-semibold text-white">{sectionLabel}</div>
         </div>
-        <div className="text-[10px] text-white/40">id: {section.id}</div>
+        <div className="hidden sm:block text-[10px] text-white/40 shrink-0 truncate max-w-[140px]">
+          id: {section.id}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-white/10 bg-zinc-950/50 px-2 pt-2">
+      {/* Tabs — scroll horizontal si nécessaire sur très petits écrans */}
+      <div className="flex gap-1 border-b border-white/10 bg-zinc-950/50 px-2 pt-2 overflow-x-auto scrollbar-thin min-w-0">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -78,7 +80,7 @@ export function SectionEditor({ section, language, onChange }: Props) {
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={[
-                "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-2.5 sm:px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap",
                 isActive
                   ? "border-amber-300 bg-zinc-900 text-amber-300"
                   : "border-transparent text-white/60 hover:bg-white/[0.04] hover:text-white",
@@ -92,7 +94,7 @@ export function SectionEditor({ section, language, onChange }: Props) {
       </div>
 
       {/* Tab content */}
-      <div className="space-y-4 p-4 text-white">
+      <div className="space-y-4 p-3 sm:p-4 text-white min-w-0">
         {activeTab === "content" && (
           <ContentTab section={section} language={language} onChange={onChange} />
         )}

@@ -42,24 +42,24 @@ export default function TemplateGalleryStep({
   const labels = LABELS[language] ?? LABELS.fr;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 min-w-0">
       <header className="space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/5 px-3 py-1 text-xs font-medium text-amber-300">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#C7A436]/40 bg-[#C7A436]/10 px-3 py-1 text-[11px] font-bold text-[#8a6f1f]">
           <Sparkles className="h-3.5 w-3.5" />
           {labels.eyebrow}
         </div>
-        <h2 className="text-2xl font-semibold text-white">{labels.title}</h2>
-        <p className="max-w-2xl text-sm text-white/60">{labels.subtitle}</p>
+        <h2 className="text-xl font-black text-ink">{labels.title}</h2>
+        <p className="max-w-2xl text-xs text-muted leading-relaxed">{labels.subtitle}</p>
       </header>
 
       {recommended.length > 0 && (
-        <section className="space-y-3">
+        <section className="space-y-3 min-w-0">
           {others.length > 0 && (
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#31845C]">
               {labels.recommended}
             </h3>
           )}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 min-w-0">
             {recommended.map((tpl) => (
               <TemplateCardItem
                 key={tpl.id}
@@ -75,11 +75,11 @@ export default function TemplateGalleryStep({
       )}
 
       {others.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
+        <section className="space-y-3 min-w-0">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted">
             {labels.others}
           </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 min-w-0">
             {others.map((tpl) => (
               <TemplateCardItem
                 key={tpl.id}
@@ -98,7 +98,7 @@ export default function TemplateGalleryStep({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Card individuelle — mini-aperçu réaliste avec les couleurs du template
+// Card individuelle — thème CLAIR, contraste accru
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CardProps = {
@@ -122,8 +122,6 @@ function TemplateCardItem({
   // previewColors: [bgDark, accent, secondary]
   const [bgDark, accent, secondary] = template.previewColors;
 
-  // Pour "premium-minimal" et "lead-snap", la 3e couleur est blanche.
-  // On utilise alors un fond clair pour le mini-aperçu, plus représentatif.
   const isLightTheme = secondary === "#FFFFFF" || secondary === "#ffffff";
   const cardBg = isLightTheme ? "#FAF8F3" : bgDark;
   const cardInk = isLightTheme ? bgDark : "#FFFFFF";
@@ -131,7 +129,6 @@ function TemplateCardItem({
     ? "rgba(8,14,26,0.55)"
     : "rgba(255,255,255,0.55)";
 
-  // Sections count pour la jauge
   const sectionsCount = template.sections.length;
 
   return (
@@ -140,16 +137,16 @@ function TemplateCardItem({
       onClick={onClick}
       aria-pressed={isSelected}
       className={[
-        "group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-all duration-200",
-        "focus:outline-none focus:ring-2 focus:ring-amber-400/60",
+        "group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition-all duration-200 bg-white min-w-0",
+        "focus:outline-none focus:ring-2 focus:ring-[#C7A436]/50",
         isSelected
-          ? "border-amber-400 bg-white/[0.04] shadow-[0_0_0_2px_rgba(251,191,36,0.4),0_8px_24px_-8px_rgba(251,191,36,0.3)] -translate-y-0.5"
-          : "border-white/10 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04] hover:-translate-y-0.5",
+          ? "border-[#31845C] shadow-[0_0_0_2px_rgba(49,132,92,0.15),0_8px_20px_-8px_rgba(49,132,92,0.35)] -translate-y-0.5"
+          : "border-line hover:border-[#080E1A]/40 hover:shadow-md hover:-translate-y-0.5",
       ].join(" ")}
     >
       {/* Mini-aperçu réaliste du template */}
       <div
-        className="relative aspect-[5/4] w-full overflow-hidden"
+        className="relative aspect-[5/4] w-full overflow-hidden border-b border-line"
         style={{ backgroundColor: cardBg }}
       >
         {/* Bandeau supérieur (header marque) */}
@@ -206,28 +203,16 @@ function TemplateCardItem({
             />
           </div>
 
-          {/* Petite ligne de preuve sociale (3 dots + texte) */}
+          {/* Petite ligne de preuve sociale */}
           <div className="flex items-center gap-1 mt-1.5">
-            <div
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: secondary, opacity: 0.7 }}
-            />
-            <div
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: secondary, opacity: 0.7 }}
-            />
-            <div
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: secondary, opacity: 0.7 }}
-            />
-            <div
-              className="h-1 w-8 rounded-full ml-1"
-              style={{ backgroundColor: cardMuted }}
-            />
+            <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: secondary, opacity: 0.7 }} />
+            <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: secondary, opacity: 0.7 }} />
+            <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: secondary, opacity: 0.7 }} />
+            <div className="h-1 w-8 rounded-full ml-1" style={{ backgroundColor: cardMuted }} />
           </div>
         </div>
 
-        {/* Badge type de template (en haut-gauche, sur le bandeau) */}
+        {/* Badge type de template */}
         <div className="absolute left-2 top-1 z-10">
           <span
             className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm"
@@ -243,7 +228,7 @@ function TemplateCardItem({
         {/* Pastille recommandé */}
         {isRecommended && (
           <div className="absolute right-2 top-7 z-10">
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-black shadow-md">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#C7A436] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#080E1A] shadow-md">
               <Sparkles className="h-2.5 w-2.5" />
               Reco
             </span>
@@ -252,35 +237,34 @@ function TemplateCardItem({
 
         {/* Coche sélection */}
         {isSelected && (
-          <div className="absolute bottom-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-black shadow-lg ring-2 ring-black/30">
+          <div className="absolute bottom-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#31845C] text-white shadow-lg ring-2 ring-white">
             <Check className="h-4 w-4" strokeWidth={3} />
           </div>
         )}
       </div>
 
-      {/* Contenu textuel */}
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="text-base font-semibold text-white">{template.name}</h4>
-          {/* Pastille de couleur d'accent */}
+      {/* Contenu textuel — THÈME CLAIR */}
+      <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4 bg-white min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <h4 className="text-sm sm:text-base font-black text-ink truncate">{template.name}</h4>
           <span
-            className="inline-block h-3 w-3 rounded-full ring-1 ring-white/20 shrink-0"
+            className="inline-block h-3 w-3 rounded-full ring-1 ring-line shrink-0"
             style={{ backgroundColor: accent }}
             aria-hidden="true"
             title="Couleur d'accent du template"
           />
         </div>
 
-        <p className="text-xs leading-relaxed text-white/60 line-clamp-2 min-h-[2.5rem]">
+        <p className="text-[11px] sm:text-xs leading-relaxed text-muted line-clamp-2 min-h-[2.2rem]">
           {personality}
         </p>
 
-        <div className="mt-auto flex items-center justify-between pt-3 text-[11px] text-white/40 border-t border-white/5">
-          <span className="inline-flex items-center gap-1">
-            <span className="font-semibold text-white/70">{sectionsCount}</span>
-            {LABELS_SECTIONS_GENERIC[language]}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2.5 text-[10px] sm:text-[11px] text-muted border-t border-line min-w-0">
+          <span className="inline-flex items-center gap-1 min-w-0 truncate">
+            <span className="font-bold text-ink">{sectionsCount}</span>
+            <span className="truncate">{LABELS_SECTIONS_GENERIC[language]}</span>
           </span>
-          <span className="capitalize px-2 py-0.5 rounded-full bg-white/5 text-white/50">
+          <span className="capitalize px-2 py-0.5 rounded-full bg-canvas text-ink font-semibold shrink-0">
             {LABELS_DENSITY[language][template.density]}
           </span>
         </div>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, CheckCircle2,
   Sparkles, Target, Upload, Link as LinkIcon, AnchorIcon,
-  ImageOff, Image as ImageIcon, Wand2, AlertCircle,
+  ImageOff, Image as ImageIcon, Wand2, AlertCircle, Eye, Pencil,
+  Building2, Package, User,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,7 +15,6 @@ import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { LogoUploader } from "@/components/funnel/LogoUploader";
 import { FunnelKindStep } from "@/components/funnel/wizard/FunnelKindStep";
 import { MoodStep } from "@/components/funnel/wizard/MoodStep";
-import { AboutStep } from "@/components/funnel/wizard/AboutStep";
 import { VideoStep } from "@/components/funnel/wizard/VideoStep";
 import TemplateGalleryStep from "@/components/funnel/TemplateGalleryStep";
 import {
@@ -25,16 +25,20 @@ import {
 } from "@/lib/funnels/templates";
 import { getFunnelKind } from "@/lib/funnels/kinds";
 import type {
-  Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind,
+  Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs,
 } from "@/lib/funnels/types";
 import { makeAnchorCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
 import { useRouter } from "next/navigation";
 import { createFunnelFromAi } from "@/lib/store/funnelStore";
+import { MediasStep } from "@/components/funnel/wizard/MediasStep";
+import { CopywritingStep } from "@/components/funnel/wizard/CopywritingStep";
 
+// 11 étapes (fusion Marque + Offre + À propos = "Ton offre")
 const ALL_STEPS = [
-  "Format", "Template", "Objectif", "Marque", "Offre", "Audience",
-  "À propos", "Vidéo", "CTA", "Visuels", "Ambiance", "Génération",
+  "Format", "Template", "Objectif", "Ton offre", "Audience",
+  "Copywriting", "Vidéo", "Médias", "CTA", "Visuels",
+  "Ambiance", "Génération",
 ] as const;
 type StepLabel = typeof ALL_STEPS[number];
 
@@ -78,6 +82,8 @@ function capitalize(str: string): string {
 
 export function CreateFunnelWizard() {
   const [step, setStep] = useState(0);
+  const [mobileTab, setMobileTab] = useState<"form" | "preview">("form");
+  const stepperRef = useRef<HTMLDivElement>(null);
   const [brief, setBrief] = useState<FunnelBrief>(initialBrief);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -114,6 +120,19 @@ export function CreateFunnelWizard() {
       funnelTemplates[1],
     [brief.funnelType, brief.templateId]
   );
+
+  useEffect(() => {
+    const container = stepperRef.current;
+    if (!container) return;
+    const activeBtn = container.querySelector<HTMLElement>(`[data-step-index="${step}"]`);
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }, [step]);
+
+  useEffect(() => {
+    setMobileTab("form");
+  }, [step]);
 
   function update<K extends keyof FunnelBrief>(key: K, value: FunnelBrief[K]) {
     setBrief((current) => ({ ...current, [key]: value }));
@@ -320,32 +339,99 @@ export function CreateFunnelWizard() {
   const stepLabel = steps[step];
 
   return (
-    <div className="grid gap-5 animate-[fadeIn_0.4s_ease-out]">
-      <Card className="p-3">
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-12">
+    <div className="grid gap-5 animate-[fadeIn_0.4s_ease-out] min-w-0 max-w-full">
+      {/* ─── Stepper ─── */}
+      <Card className="p-2 sm:p-3 min-w-0 overflow-hidden">
+        {/* Mobile / tablette : scroll horizontal */}
+        <div
+          ref={stepperRef}
+          className="flex gap-1.5 overflow-x-auto pb-1 xl:hidden -mx-1 px-1 snap-x snap-mandatory min-w-0 scroll-smooth"
+        >
+          {steps.map((label, index) => (
+            <button
+              key={label}
+              type="button"
+              data-step-index={index}
+              onClick={() => setStep(index)}
+              title={label}
+              className={`shrink-0 snap-start rounded-lg px-2.5 py-2 text-left text-[11px] font-bold transition-all duration-200 min-w-[88px] max-w-[110px] ${
+                index === step
+                  ? "bg-[#080E1A] text-white shadow-sm"
+                  : index < step
+                  ? "bg-[#31845C]/10 text-[#31845C]"
+                  : "bg-canvas text-muted hover:bg-line/40"
+              }`}
+            >
+              <span className="mb-0.5 block text-[9px] opacity-80">
+                {String(index + 1).padStart(2, "0")} / {String(steps.length).padStart(2, "0")}
+              </span>
+              <span className="block truncate">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Desktop : grille 12 colonnes */}
+        <div className="hidden xl:grid grid-cols-12 gap-2">
           {steps.map((label, index) => (
             <button
               key={label}
               type="button"
               onClick={() => setStep(index)}
-              className={`rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all duration-200 ${index === step
+              title={label}
+              className={`min-w-0 rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all duration-200 ${
+                index === step
                   ? "bg-[#080E1A] text-white shadow-sm"
                   : index < step
-                    ? "bg-[#31845C]/10 text-[#31845C]"
-                    : "bg-canvas text-muted hover:bg-line/40"
-                }`}
+                  ? "bg-[#31845C]/10 text-[#31845C]"
+                  : "bg-canvas text-muted hover:bg-line/40"
+              }`}
             >
               <span className="mb-1 block text-[10px] opacity-80">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              {label}
+              <span className="block truncate">{label}</span>
             </button>
           ))}
         </div>
       </Card>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,38%)_minmax(0,62%)] items-start">
-        <Card className="p-5 min-w-0">
+      {/* ─── Onglets mobile/tablette (cachés sur xl+) ─── */}
+      <div className="xl:hidden">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-canvas p-1">
+          <button
+            type="button"
+            onClick={() => setMobileTab("form")}
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold transition ${
+              mobileTab === "form"
+                ? "bg-white text-ink shadow-sm"
+                : "text-muted hover:text-ink"
+            }`}
+          >
+            <Pencil size={13} />
+            Formulaire
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("preview")}
+            className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold transition ${
+              mobileTab === "preview"
+                ? "bg-white text-ink shadow-sm"
+                : "text-muted hover:text-ink"
+            }`}
+          >
+            <Eye size={13} />
+            Aperçu
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,38%)_minmax(0,62%)] items-start min-w-0">
+        {/* ─── Panneau Formulaire ─── */}
+        <Card
+          className={`p-3 sm:p-5 min-w-0 ${
+            mobileTab === "preview" ? "hidden xl:block" : ""
+          }`}
+        >
           <NavBar
             step={step}
             total={steps.length}
@@ -353,7 +439,7 @@ export function CreateFunnelWizard() {
             onNext={() => setStep((v) => Math.min(steps.length - 1, v + 1))}
           />
 
-          <div className="mt-5 animate-[slideIn_0.25s_ease-out]" key={`${step}-${stepLabel}`}>
+          <div className="mt-5 animate-[slideIn_0.25s_ease-out] min-w-0" key={`${step}-${stepLabel}`}>
             {stepLabel === "Format" && (
               <FunnelKindStep
                 language={brief.language}
@@ -378,21 +464,20 @@ export function CreateFunnelWizard() {
                 }}
               />
             )}
-            {stepLabel === "Marque" && (
-              <BusinessStep
+            {stepLabel === "Ton offre" && (
+              <OfferStep
                 brief={brief}
                 update={update}
                 logoPreview={logoPreview}
                 setLogo={setLogo}
               />
             )}
-            {stepLabel === "Offre" && <OfferStep brief={brief} update={update} />}
             {stepLabel === "Audience" && <AudienceStep brief={brief} update={update} />}
-            {stepLabel === "À propos" && (
-              <AboutStep
+            {stepLabel === "Copywriting" && (
+              <CopywritingStep
                 language={brief.language}
-                value={brief.aboutText}
-                onChange={(text: string) => update("aboutText", text)}
+                prefs={brief.copywritingPrefs}
+                onChange={(next: CopywritingPrefs) => update("copywritingPrefs", next)}
               />
             )}
             {stepLabel === "Vidéo" && (
@@ -400,6 +485,13 @@ export function CreateFunnelWizard() {
                 language={brief.language}
                 videoUrl={brief.videoUrl}
                 onChange={(url: string) => update("videoUrl", url)}
+              />
+            )}
+            {stepLabel === "Médias" && (
+              <MediasStep
+                language={brief.language}
+                medias={brief.medias}
+                onChange={(next: MediaItem[]) => update("medias", next)}
               />
             )}
             {stepLabel === "CTA" && <CtaStep brief={brief} updateCta={updateCta} />}
@@ -432,7 +524,7 @@ export function CreateFunnelWizard() {
             )}
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 sticky bottom-0 -mx-3 -mb-3 sm:static sm:mx-0 sm:mb-0 bg-white/95 backdrop-blur-sm border-t border-line sm:border-0 px-3 py-2 sm:px-0 sm:py-0 sm:bg-transparent xl:static z-10">
             <NavBar
               step={step}
               total={steps.length}
@@ -442,19 +534,23 @@ export function CreateFunnelWizard() {
           </div>
         </Card>
 
-        <div className="grid gap-3 min-w-0">
-          {/* ───── Barre Live preview / Démo / Export — toujours sur une ligne ───── */}
-          <Card className="p-4">
-            <div className="flex items-center justify-between gap-3 flex-nowrap">
+        {/* ─── Panneau Aperçu ─── */}
+        <div
+          className={`grid gap-3 min-w-0 ${
+            mobileTab === "form" ? "hidden xl:grid" : ""
+          }`}
+        >
+          <Card className="p-3 sm:p-4 min-w-0 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 flex-nowrap min-w-0">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#C7A436]">Live preview</p>
-                <h2 className="mt-1 truncate text-lg font-black text-ink">{brief.brandName}</h2>
-                <p className="mt-0.5 truncate text-xs text-muted">
+                <h2 className="mt-1 truncate text-base sm:text-lg font-black text-ink">{brief.brandName}</h2>
+                <p className="mt-0.5 truncate text-[11px] sm:text-xs text-muted">
                   {brief.funnelType} · {currentLegacyTemplate.sections.length} sections · {brief.language.toUpperCase()}
                   {funnel ? " · IA" : " · structure"} · {currentPremiumTemplate.name}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <Button href="/funnels/demo" variant="secondary">Démo</Button>
                 <Button href="/export-systeme" variant="secondary">
                   <Upload size={14} /> Export
@@ -463,7 +559,7 @@ export function CreateFunnelWizard() {
             </div>
           </Card>
 
-          <div className="xl:sticky xl:top-4">
+          <div className="xl:sticky xl:top-4 ff-preview-wrapper min-w-0 max-w-full overflow-hidden">
             <FunnelPreview
               funnel={previewFunnel}
               logoSrc={logoPreview}
@@ -519,7 +615,8 @@ function ObjectiveStep({ value, onSelect }: { value: string; onSelect: (v: strin
   );
 }
 
-function BusinessStep({
+// ─── ÉTAPE FUSIONNÉE : Marque + Offre + À propos ───
+function OfferStep({
   brief, update, logoPreview, setLogo,
 }: {
   brief: FunnelBrief;
@@ -528,42 +625,93 @@ function BusinessStep({
   setLogo: (dataUrl: string | undefined) => void;
 }) {
   return (
-    <div className="grid gap-4">
-      <h2 className="text-xl font-black">Marque et identité</h2>
-      <Field label="Nom de marque">
-        <Input value={brief.brandName} onChange={(e) => update("brandName", e.target.value)} />
-      </Field>
-      <Field label="Logo">
-        <LogoUploader
-          value={logoPreview || brief.logoUrl}
-          brandName={brief.brandName}
-          onChange={setLogo}
-        />
-      </Field>
-      <Field label="Langue de génération">
-        <Select value={brief.language} onChange={(e) => update("language", e.target.value as Language)}>
-          <option value="fr">Français</option>
-          <option value="en">English</option>
-          <option value="es">Español</option>
-        </Select>
-      </Field>
-    </div>
-  );
-}
+    <div className="grid gap-5">
+      <div>
+        <h2 className="text-xl font-black text-ink">Ton offre</h2>
+        <p className="mt-1 text-xs text-muted">
+          Présente ta marque, ton produit et qui tu es. Ces infos guideront tout le copywriting du tunnel.
+        </p>
+      </div>
 
-function OfferStep({ brief, update }: { brief: FunnelBrief; update: <K extends keyof FunnelBrief>(k: K, v: FunnelBrief[K]) => void; }) {
-  return (
-    <div className="grid gap-4">
-      <h2 className="text-xl font-black">Offre</h2>
-      <Field label="Nom du produit ou service">
-        <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} />
-      </Field>
-      <Field label="Prix">
-        <Input value={brief.price} onChange={(e) => update("price", e.target.value)} />
-      </Field>
-      <Field label="Promesse principale">
-        <Textarea value={brief.promise} onChange={(e) => update("promise", e.target.value)} />
-      </Field>
+      {/* ── Bloc 1 : Marque ── */}
+      <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
+            <Building2 size={14} />
+          </span>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Marque</h3>
+        </div>
+
+        <Field label="Nom de marque">
+          <Input value={brief.brandName} onChange={(e) => update("brandName", e.target.value)} />
+        </Field>
+
+        <Field label="Logo">
+          <LogoUploader
+            value={logoPreview || brief.logoUrl}
+            brandName={brief.brandName}
+            onChange={setLogo}
+          />
+        </Field>
+
+        <Field label="Langue de génération">
+          <Select value={brief.language} onChange={(e) => update("language", e.target.value as Language)}>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </Select>
+        </Field>
+      </section>
+
+      {/* ── Bloc 2 : Offre ── */}
+      <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
+            <Package size={14} />
+          </span>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Offre</h3>
+        </div>
+
+        <Field label="Nom du produit ou service">
+          <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} />
+        </Field>
+
+        <Field label="Prix">
+          <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
+        </Field>
+
+        <Field label="Promesse principale">
+          <Textarea
+            value={brief.promise}
+            onChange={(e) => update("promise", e.target.value)}
+            placeholder="Le bénéfice n°1 que ton client obtient grâce à ton offre"
+            rows={3}
+          />
+        </Field>
+      </section>
+
+      {/* ── Bloc 3 : À propos ── */}
+      <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#31845C]/10 text-[#31845C]">
+            <User size={14} />
+          </span>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">À propos de toi</h3>
+        </div>
+
+        <Field label="Présente-toi en quelques lignes (optionnel)">
+          <Textarea
+            rows={5}
+            value={brief.aboutText ?? ""}
+            placeholder="Ex. Coach business depuis 8 ans, j'ai accompagné 200+ entrepreneurs à structurer leur offre..."
+            onChange={(e) => update("aboutText", e.target.value)}
+          />
+        </Field>
+
+        <p className="rounded-lg bg-canvas p-3 text-xs text-muted">
+          💡 Astuce : 3 à 5 lignes suffisent. Mentionne ton métier, ton expérience et un résultat marquant.
+        </p>
+      </section>
     </div>
   );
 }

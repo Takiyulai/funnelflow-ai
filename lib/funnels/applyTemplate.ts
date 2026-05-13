@@ -274,6 +274,171 @@ function mergeAiSectionWithSlot(
   }
   return merged;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2 — Résolution des mediaRef en URLs réelles
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sections où l'image hero/visuelle a un vrai impact si on lui pose
+ * automatiquement un média non utilisé (fallback de placement).
+ */
+const PREFERRED_FALLBACK_SECTION_TYPES: FunnelSectionType[] = [
+  "hero",
+  "about",
+  "solution",
+  "benefits",
+  "offer",
+];
+
+/**
+ * Résout les mediaRef vers les URLs réelles fournies par l'utilisateur.
+ *
+ * Logique :
+ *  1) Pour chaque section dont image.mediaRef est défini, on cherche le média
+ *     correspondant dans brief.medias et on remplace mode/url/alt.
+ *  2) Si une vidéo utilisateur a été référencée via image.mediaRef, on la
+ *     déplace dans section.video et on remet image en mode "none".
+ *  3) Fallback : tout média utilisateur non placé par l'IA est injecté dans
+ *     la première section pertinente vide (hero > about > solution > ...).
+ *  4) Un même mediaId n'est utilisé qu'une seule fois.
+ */
+function resolveMediasInFunnel(funnel: Funnel, brief: FunnelBrief): Funnel {
+  const medias = brief.medias ?? [];
+  if (medias.length === 0) return funnel;
+
+  // Index par id, en ne gardant que les médias exploitables
+  const byId = new Map(
+    medias
+      .filter((m) => m.url && m.url.trim().length > 0)
+      .map((m) => [m.id, m]),
+  );
+  if (byId.size === 0) return funnel;
+
+  // 1) Résolution explicite via mediaRef
+  const usedIds = new Set<string>();
+  const sections = funnel.sections.map((section) => {
+    const ref = section.image?.mediaRef;
+    if (!ref) return section;
+
+    const media = byId.get(ref);
+    if (!media) {
+      // Référence cassée : on nettoie et on log
+      console.warn(
+        `[applyTemplate] mediaRef "${ref}" introuvable dans brief.medias`,
+      );
+      const { mediaRef: _drop, ...cleanImage } = section.image ?? { mode: "none" as const };
+      void _drop;
+      return { ...section, image: cleanImage };
+    }
+
+    usedIds.add(media.id);
+
+    // Vidéo utilisateur référencée comme "image" → on la déplace en section.video
+    if (media.kind === "video") {
+      return {
+        ...section,
+        video: section.video ?? {
+          provider: detectMediaProvider(media.url),
+          url: media.url,
+        },
+        image: { mode: "none" as const },
+      };
+    }
+
+    // Image utilisateur : on remplace url/alt et on enlève mediaRef
+    return {
+      ...section,
+      image: {
+        ...section.image,
+        mode: "upload" as const,
+        url: media.url,
+        alt: section.image?.alt ?? media.alt ?? media.description ?? "",
+        mediaRef: undefined,
+      },
+    };
+  });
+
+  // 2) Fallback : médias non utilisés → premières sections pertinentes vides
+  const unused = medias.filter(
+    (m) => m.url && m.url.trim().length > 0 && !usedIds.has(m.id),
+  );
+
+  if (unused.length === 0) {
+    return { ...funnel, sections };
+  }
+
+  const finalSections = [...sections];
+
+  for (const media of unused) {
+    // Priorité 1 : sectionHint utilisateur si la section existe et n'a pas déjà d'image/vidéo
+    if (media.sectionHint) {
+      const idx = finalSections.findIndex(
+        (s) =>
+          s.type === media.sectionHint &&
+          !s.image?.url &&
+          !s.video?.url,
+      );
+      if (idx !== -1) {
+        finalSections[idx] = applyMediaToSection(finalSections[idx], media);
+        usedIds.add(media.id);
+        continue;
+      }
+    }
+
+    // Priorité 2 : première section "préférée" sans image/vidéo
+    const idx = finalSections.findIndex(
+      (s) =>
+        PREFERRED_FALLBACK_SECTION_TYPES.includes(s.type) &&
+        !s.image?.url &&
+        !s.video?.url,
+    );
+    if (idx !== -1) {
+      finalSections[idx] = applyMediaToSection(finalSections[idx], media);
+      usedIds.add(media.id);
+    }
+    // Sinon : on abandonne ce média (pas de slot pertinent disponible)
+  }
+
+  return { ...funnel, sections: finalSections };
+}
+
+/**
+ * Applique un média (image ou vidéo) à une section, sans écraser de contenu existant.
+ */
+function applyMediaToSection(
+  section: FunnelSection,
+  media: NonNullable<FunnelBrief["medias"]>[number],
+): FunnelSection {
+  if (media.kind === "video") {
+    return {
+      ...section,
+      video: {
+        provider: detectMediaProvider(media.url),
+        url: media.url,
+      },
+    };
+  }
+  return {
+    ...section,
+    image: {
+      ...section.image,
+      mode: "upload",
+      url: media.url,
+      alt: section.image?.alt ?? media.alt ?? media.description ?? "",
+    },
+  };
+}
+
+/**
+ * Détecte le provider d'une URL (réutilise la logique existante de detectVideoProvider).
+ */
+function detectMediaProvider(url: string): VideoSource["provider"] {
+  const u = url.toLowerCase();
+  if (u.startsWith("data:")) return "upload";
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "youtube";
+  if (u.includes("vimeo.com")) return "vimeo";
+  return "url";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API publique : applyTemplateToFunnel
