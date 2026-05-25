@@ -1,12 +1,14 @@
 // components/dashboard/Sidebar.tsx
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart3, Download, GitBranch, LayoutDashboard,
-  PlusCircle, Upload, Users, FileText, Settings,
+  PlusCircle, Upload, Users, LogOut,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -25,6 +27,39 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      setUserEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      onClose?.();
+      router.push("/login");
+      router.refresh();
+    } catch (err) {
+      console.error("logout error", err);
+      setLoggingOut(false);
+      alert("Déconnexion impossible. Réessayez.");
+    }
+  }
 
   return (
     <>
@@ -39,7 +74,7 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform overflow-y-auto border-r border-white/5 px-4 py-5 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col overflow-y-auto border-r border-white/5 px-4 py-5 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         style={{ background: "#0D1628" }}
@@ -108,7 +143,10 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* Carte plan en bas */}
+        {/* Spacer pour pousser le footer vers le bas */}
+        <div className="flex-1" />
+
+        {/* Carte plan */}
         <div
           className="mt-8 rounded-xl border p-4"
           style={{
@@ -118,13 +156,57 @@ export function Sidebar({
         >
           <div className="mb-2 flex items-center gap-2">
             <BarChart3 size={14} style={{ color: "#C7A436" }} />
-            <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#C7A436" }}>
+            <p
+              className="text-[11px] font-bold uppercase tracking-wider"
+              style={{ color: "#C7A436" }}
+            >
               Plan Pro
             </p>
           </div>
           <p className="text-xs leading-relaxed text-white/65">
             Export systeme.io et régénération IA inclus
           </p>
+        </div>
+
+        {/* Bloc utilisateur + déconnexion */}
+        <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+          {userEmail ? (
+            <>
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white"
+                  style={{
+                    background: "linear-gradient(135deg,#31845C,#08498D)",
+                  }}
+                >
+                  {userEmail.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-white">
+                    {userEmail}
+                  </p>
+                  <p className="text-[10px] text-white/50">Connecté</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+              >
+                <LogOut size={13} />
+                {loggingOut ? "Déconnexion…" : "Se déconnecter"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+            >
+              Se connecter
+            </Link>
+          )}
         </div>
       </aside>
     </>

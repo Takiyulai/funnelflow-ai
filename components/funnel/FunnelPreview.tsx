@@ -1,23 +1,39 @@
+// components/funnel/FunnelPreview.tsx
 "use client";
 
 import { useState, useMemo } from "react";
-import { Monitor, Smartphone, ExternalLink } from "lucide-react";
+import {
+  Monitor,
+  Smartphone,
+  ExternalLink,
+  CheckCircle2,
+  Mail,
+  Download,
+  PartyPopper,
+} from "lucide-react";
 import type {
   AnimationPreset,
   DecorativeIcon,
   Funnel,
+  FunnelPage,
   FunnelSection,
+  MediaItem,
+  PageRole,
   SectionAnimations,
   SectionColors,
+  SectionImage,
+  TimerItem,
 } from "@/lib/funnels/types";
 import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
 import { getVideoEmbed } from "@/lib/funnels/video";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
+import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
 import FunnelHeader from "@/components/funnel/FunnelHeader";
 import { getIconByName } from "@/components/editor/IconPicker";
+import { RichText } from "@/components/funnel/RichText";
 import { FaqRenderer } from "@/components/funnel/sections/FaqRenderer";
 import { TestimonialsRenderer } from "@/components/funnel/sections/TestimonialsRenderer";
 import { PricingRenderer } from "@/components/funnel/sections/PricingRenderer";
@@ -28,13 +44,16 @@ import {
   DecorativeIconsLayer,
   InlineDecorativeIcon,
 } from "@/components/funnel/DecorativeIconsLayer";
+import { TimerRenderer } from "@/components/funnel/sections/TimerRenderer";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
 type ShadowSize = "none" | "sm" | "md" | "lg" | "xl";
+type BulletsMode = "list" | "grid" | "inline-strip";
 
 interface FunnelPreviewProps {
   funnel: Funnel;
+  activePage?: FunnelPage;
   defaultMode?: PreviewMode;
   forcedMode?: ForcedMode;
   showToolbar?: boolean;
@@ -42,6 +61,104 @@ interface FunnelPreviewProps {
   desktopWidth?: number;
   logoSrc?: string;
   className?: string;
+  pageRole?: PageRole;
+}
+
+const SUCCESS_PAGE_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
+  "thankyou",
+  "delivery",
+  "confirmation",
+]);
+
+/* Sections autorisées à utiliser grid/inline-strip */
+const BULLET_LAYOUT_SECTIONS = new Set<string>([
+  "benefits",
+  "benefit",
+  "features",
+  "feature",
+  "stats",
+  "numbers",
+  "metrics",
+  "kpi",
+]);
+
+/* Sections forcées en mode "list" (jamais grid/strip) */
+const BULLET_LIST_ONLY_SECTIONS = new Set<string>([
+  "hero",
+  "cta",
+  "form",
+  "guarantee",
+]);
+
+function extractTimers(section: FunnelSection): TimerItem[] {
+  if (!Array.isArray(section.items)) return [];
+  return section.items
+    .filter((it): it is { kind: "timer"; data: TimerItem } => it.kind === "timer")
+    .map((it) => it.data);
+}
+
+function isSuccessRole(role: PageRole | undefined): boolean {
+  if (!role) return false;
+  return SUCCESS_PAGE_ROLES.has(role);
+}
+
+function getRoleIcon(role: PageRole | undefined): React.ComponentType<{
+  className?: string;
+  strokeWidth?: number;
+  style?: React.CSSProperties;
+}> {
+  switch (role) {
+    case "delivery":
+      return Download;
+    case "confirmation":
+      return Mail;
+    case "thankyou":
+      return CheckCircle2;
+    default:
+      return PartyPopper;
+  }
+}
+
+function resolveActivePage(funnel: Funnel): FunnelPage | undefined {
+  if (!funnel.pages || funnel.pages.length === 0) return undefined;
+  if (typeof window === "undefined") {
+    return funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+  }
+  const m = window.location.pathname.match(/^\/tunnel\/[^/]+(?:\/([^/]+))?/);
+  const pageSlug = m?.[1] ? decodeURIComponent(m[1]).replace(/^\/+|\/+$/g, "") : "";
+  if (!pageSlug) return funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+  const found = funnel.pages.find(
+    (p) => p.slug.replace(/^\/+|\/+$/g, "") === pageSlug,
+  );
+  return found ?? funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+}
+
+function getRoleIconColors(role: PageRole | undefined): {
+  fg: string;
+  bg: string;
+  ring: string;
+} {
+  switch (role) {
+    case "delivery":
+      return {
+        fg: "rgb(59, 130, 246)",
+        bg: "rgba(59, 130, 246, 0.14)",
+        ring: "rgba(59, 130, 246, 0.10)",
+      };
+    case "thankyou":
+    case "confirmation":
+      return {
+        fg: "rgb(34, 197, 94)",
+        bg: "rgba(34, 197, 94, 0.14)",
+        ring: "rgba(34, 197, 94, 0.10)",
+      };
+    default:
+      return {
+        fg: "var(--ff-accent, rgb(34, 197, 94))",
+        bg: "color-mix(in srgb, var(--ff-accent) 18%, transparent)",
+        ring: "color-mix(in srgb, var(--ff-accent) 8%, transparent)",
+      };
+  }
 }
 
 function animOf(
@@ -64,13 +181,6 @@ function getSectionColors(section: FunnelSection): SectionColors {
     typeof colors.bg === "string" && colors.bg.trim().length > 0;
   if (hasExplicitBg) return colors;
 
-  if (process.env.NODE_ENV === "development" && colors.bg) {
-    // eslint-disable-next-line no-console
-    console.debug(
-      `[FunnelPreview] section "${section.id}" (${section.type}): bg "${colors.bg}" ignoré (pas d'override utilisateur)`,
-    );
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { bg: _ignored, ...rest } = colors;
   return rest;
 }
@@ -92,7 +202,6 @@ function shadowStyleVar(color: string): React.CSSProperties {
   return { ["--ff-shadow-color" as string]: color } as React.CSSProperties;
 }
 
-/** Construit le style background pour une section (image de fond + overlay) */
 function buildBackgroundStyle(section: FunnelSection): {
   containerStyle: React.CSSProperties;
   hasBackgroundImage: boolean;
@@ -128,10 +237,6 @@ function usesSpecializedRenderer(section: FunnelSection): boolean {
   );
 }
 
-/**
- * Détecte si la section comporte au moins une icône décorative en bord haut/bas,
- * afin d'ajouter un padding supplémentaire (via attributs data-ff-deco-top/bottom).
- */
 function hasDecorativeAtEdge(
   icons: DecorativeIcon[] | undefined,
 ): { top: boolean; bottom: boolean } {
@@ -150,8 +255,126 @@ function hasDecorativeAtEdge(
   return { top, bottom };
 }
 
+function resolveImageUrl(
+  image: SectionImage | undefined,
+  mediaLibrary: MediaItem[] | undefined,
+): { url: string; alt: string } | null {
+  if (!image || image.mode === "none") return null;
+
+  if (image.url && image.url.length > 0) {
+    return { url: image.url, alt: image.alt ?? "" };
+  }
+
+  if (image.mediaRef && mediaLibrary && mediaLibrary.length > 0) {
+    const item = mediaLibrary.find((m) => m.id === image.mediaRef);
+    if (item?.url && item.url.length > 0) {
+      return { url: item.url, alt: image.alt ?? item.alt ?? "" };
+    }
+  }
+
+  return null;
+}
+
+function cleanSlug(s: string | undefined): string {
+  if (!s) return "";
+  return s.replace(/^\/+/, "").replace(/\/+$/, "").trim();
+}
+
+function buildPageLinkMap(funnel: Funnel): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!funnel.pages || funnel.pages.length === 0) return map;
+
+  let basePath = "";
+  if (typeof window !== "undefined") {
+    const path = window.location.pathname;
+    const match = path.match(/^(\/tunnel\/[^/]+)/);
+    if (match) {
+      basePath = match[1];
+    }
+  }
+
+  for (const page of funnel.pages) {
+    if (page.isHome) {
+      map.set(page.id, basePath || "/");
+    } else {
+      const slug = cleanSlug(page.slug);
+      map.set(page.id, slug ? `${basePath}/${slug}` : basePath || "/");
+    }
+  }
+  return map;
+}
+
+function buildSlugLinkMap(funnel: Funnel): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!funnel.pages || funnel.pages.length === 0) return map;
+
+  let basePath = "";
+  if (typeof window !== "undefined") {
+    const match = window.location.pathname.match(/^(\/tunnel\/[^/]+)/);
+    if (match) basePath = match[1];
+  }
+
+  for (const page of funnel.pages) {
+    if (page.isHome) {
+      map.set("", basePath || "/");
+      map.set("/", basePath || "/");
+    } else {
+      const slug = cleanSlug(page.slug);
+      if (slug) map.set(slug, `${basePath}/${slug}`);
+    }
+  }
+  return map;
+}
+
+/* ─── Helpers bullets ──────────────────────────────────────────────────── */
+
+/**
+ * Parse "75% | de réussite" ou "75% — de réussite" → { value, label }.
+ * Sinon retourne null.
+ */
+function splitBulletValueLabel(
+  raw: string,
+): { value: string; label: string } | null {
+  if (!raw) return null;
+  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
+  if (!m) return null;
+  const value = m[1].trim();
+  const label = m[2].trim();
+  if (!value || !label) return null;
+  // Heuristique : la valeur doit être courte (≤ 12 chars)
+  if (value.length > 12) return null;
+  return { value, label };
+}
+
+/**
+ * Détermine si tous les bullets ont un format "value | label" court → inline-strip.
+ */
+function bulletsFitInlineStrip(bullets: string[]): boolean {
+  if (bullets.length < 2 || bullets.length > 6) return false;
+  return bullets.every((b) => splitBulletValueLabel(b) !== null);
+}
+
+/**
+ * Décide le mode d'affichage des bullets.
+ */
+function decideBulletsMode(
+  sectionType: string,
+  bullets: string[],
+  isSuccess: boolean,
+): BulletsMode {
+  if (isSuccess) return "list";
+  if (BULLET_LIST_ONLY_SECTIONS.has(sectionType)) return "list";
+  if (!BULLET_LAYOUT_SECTIONS.has(sectionType)) return "list";
+  if (bulletsFitInlineStrip(bullets)) return "inline-strip";
+  if (bullets.length >= 2) return "grid";
+  return "list";
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+
 export function FunnelPreview({
   funnel,
+  activePage,
   defaultMode = "desktop",
   forcedMode,
   showToolbar = true,
@@ -159,6 +382,7 @@ export function FunnelPreview({
   desktopWidth = 1180,
   logoSrc,
   className = "",
+  pageRole,
 }: FunnelPreviewProps) {
   const [mode, setMode] = useState<PreviewMode>(
     forcedMode === "raw" ? "desktop" : (forcedMode ?? defaultMode),
@@ -168,13 +392,27 @@ export function FunnelPreview({
 
   const isEmbed = viewportHeight === "auto";
 
+  // Page active : prop explicite > résolution via URL > home > première
+  const resolvedActivePage = useMemo<FunnelPage | undefined>(
+    () => activePage ?? resolveActivePage(funnel),
+    [activePage, funnel],
+  );
+
+  const sourceSections = useMemo(
+    () => resolvedActivePage?.sections ?? funnel.sections,
+    [resolvedActivePage, funnel.sections],
+  );
+
   const visibleSections = useMemo(
-    () => funnel.sections.filter((s) => s.visible !== false),
-    [funnel.sections],
+    () => sourceSections.filter((s) => s.visible !== false),
+    [sourceSections],
   );
 
   const heroSection = visibleSections.find((s) => s.type === "hero");
   const otherSections = visibleSections.filter((s) => s.type !== "hero");
+
+  const pageLinks = useMemo(() => buildPageLinkMap(funnel), [funnel]);
+  const slugLinks = useMemo(() => buildSlugLinkMap(funnel), [funnel]);
 
   const templateId =
     (funnel.meta as { templateId?: string } | undefined)?.templateId ??
@@ -201,20 +439,23 @@ export function FunnelPreview({
     customBgEnabled: design.customBgEnabled,
   };
 
+  const frameProps: FrameProps = {
+    funnel,
+    activePage: resolvedActivePage,
+    heroSection,
+    otherSections,
+    logoSrc,
+    templateId,
+    buttonAnim,
+    animationsEnabled,
+    overrides,
+    pageRole,
+    pageLinks,
+    slugLinks,
+  };
+
   if (isRaw) {
-    return (
-      <RawFrame
-        funnel={funnel}
-        heroSection={heroSection}
-        otherSections={otherSections}
-        logoSrc={logoSrc}
-        templateId={templateId}
-        buttonAnim={buttonAnim}
-        animationsEnabled={animationsEnabled}
-        overrides={overrides}
-        className={className}
-      />
-    );
+    return <RawFrame {...frameProps} className={className} />;
   }
 
   const outerClass = isEmbed
@@ -237,39 +478,11 @@ export function FunnelPreview({
 
       <div style={innerStyle}>
         {isEmbed ? (
-          <EmbedFrame
-            funnel={funnel}
-            heroSection={heroSection}
-            otherSections={otherSections}
-            logoSrc={logoSrc}
-            templateId={templateId}
-            buttonAnim={buttonAnim}
-            animationsEnabled={animationsEnabled}
-            overrides={overrides}
-          />
+          <EmbedFrame {...frameProps} />
         ) : activeMode === "desktop" ? (
-          <DesktopFrame
-            funnel={funnel}
-            heroSection={heroSection}
-            otherSections={otherSections}
-            logoSrc={logoSrc}
-            templateId={templateId}
-            buttonAnim={buttonAnim}
-            animationsEnabled={animationsEnabled}
-            overrides={overrides}
-            desktopWidth={desktopWidth}
-          />
+          <DesktopFrame {...frameProps} desktopWidth={desktopWidth} />
         ) : (
-          <MobileFrame
-            funnel={funnel}
-            heroSection={heroSection}
-            otherSections={otherSections}
-            logoSrc={logoSrc}
-            templateId={templateId}
-            buttonAnim={buttonAnim}
-            animationsEnabled={animationsEnabled}
-            overrides={overrides}
-          />
+          <MobileFrame {...frameProps} />
         )}
       </div>
     </div>
@@ -323,6 +536,7 @@ function PreviewToolbar({
 
 type FrameProps = {
   funnel: Funnel;
+  activePage?: FunnelPage;
   heroSection: FunnelSection | undefined;
   otherSections: FunnelSection[];
   logoSrc?: string;
@@ -337,112 +551,68 @@ type FrameProps = {
     customBg?: string;
     customBgEnabled?: boolean;
   };
+  pageRole?: PageRole;
+  pageLinks: Map<string, string>;
+  slugLinks: Map<string, string>;
 };
 
-function RawFrame({
-  funnel,
-  heroSection,
-  otherSections,
-  logoSrc,
-  templateId,
-  buttonAnim,
-  animationsEnabled,
-  overrides,
-  className = "",
-}: FrameProps & { className?: string }) {
+function RawFrame(props: FrameProps & { className?: string }) {
+  const { className = "", ...rest } = props;
   const containerRef = useScrollReveal<HTMLDivElement>();
   return (
     <div ref={containerRef} className={`w-full ${className}`}>
       <TemplateThemeProvider
-        templateId={templateId}
-        buttonAnim={buttonAnim}
-        animationsEnabled={animationsEnabled}
-        overrides={overrides}
+        templateId={rest.templateId}
+        buttonAnim={rest.buttonAnim}
+        animationsEnabled={rest.animationsEnabled}
+        overrides={rest.overrides}
       >
-        <PreviewBody
-          funnel={funnel}
-          heroSection={heroSection}
-          otherSections={otherSections}
-          logoSrc={logoSrc}
-          compact={false}
-          embed
-        />
+        <PreviewBody {...rest} compact={false} embed />
       </TemplateThemeProvider>
     </div>
   );
 }
 
-function EmbedFrame({
-  funnel,
-  heroSection,
-  otherSections,
-  logoSrc,
-  templateId,
-  buttonAnim,
-  animationsEnabled,
-  overrides,
-}: FrameProps) {
+function EmbedFrame(props: FrameProps) {
   const containerRef = useScrollReveal<HTMLDivElement>();
   return (
     <div ref={containerRef} className="w-full">
       <TemplateThemeProvider
-        templateId={templateId}
-        buttonAnim={buttonAnim}
-        animationsEnabled={animationsEnabled}
-        overrides={overrides}
+        templateId={props.templateId}
+        buttonAnim={props.buttonAnim}
+        animationsEnabled={props.animationsEnabled}
+        overrides={props.overrides}
       >
-        <PreviewBody
-          funnel={funnel}
-          heroSection={heroSection}
-          otherSections={otherSections}
-          logoSrc={logoSrc}
-          compact={false}
-          embed
-        />
+        <PreviewBody {...props} compact={false} embed />
       </TemplateThemeProvider>
     </div>
   );
 }
 
-function DesktopFrame({
-  funnel,
-  heroSection,
-  otherSections,
-  logoSrc,
-  templateId,
-  buttonAnim,
-  animationsEnabled,
-  overrides,
-  desktopWidth,
-}: FrameProps & { desktopWidth: number }) {
+function DesktopFrame(props: FrameProps & { desktopWidth: number }) {
+  const { desktopWidth, ...rest } = props;
   const containerRef = useScrollReveal<HTMLDivElement>();
 
   return (
     <div className="w-full animate-[ffFade_0.25s_ease-out]">
       <div
-        className="ff-desktop-stage mx-auto"
+        className="ff-desktop-stage mx-auto overflow-visible"
         style={
           {
             width: `${desktopWidth}px`,
+            maxWidth: "100%",
             ["--ff-stage-w" as string]: `${desktopWidth}px`,
           } as React.CSSProperties
         }
       >
-        <div ref={containerRef} style={{ transformOrigin: "top center" }}>
+        <div ref={containerRef} style={{ transformOrigin: "top center", overflow: "visible" }}>
           <TemplateThemeProvider
-            templateId={templateId}
-            buttonAnim={buttonAnim}
-            animationsEnabled={animationsEnabled}
-            overrides={overrides}
+            templateId={rest.templateId}
+            buttonAnim={rest.buttonAnim}
+            animationsEnabled={rest.animationsEnabled}
+            overrides={rest.overrides}
           >
-            <PreviewBody
-              funnel={funnel}
-              heroSection={heroSection}
-              otherSections={otherSections}
-              logoSrc={logoSrc}
-              compact={false}
-              embed
-            />
+            <PreviewBody {...rest} compact={false} embed={false} />
           </TemplateThemeProvider>
         </div>
       </div>
@@ -450,16 +620,7 @@ function DesktopFrame({
   );
 }
 
-function MobileFrame({
-  funnel,
-  heroSection,
-  otherSections,
-  logoSrc,
-  templateId,
-  buttonAnim,
-  animationsEnabled,
-  overrides,
-}: FrameProps) {
+function MobileFrame(props: FrameProps) {
   const containerRef = useScrollReveal<HTMLDivElement>();
   return (
     <div className="py-6 flex justify-center animate-[ffFade_0.25s_ease-out]">
@@ -481,18 +642,12 @@ function MobileFrame({
             }}
           >
             <TemplateThemeProvider
-              templateId={templateId}
-              buttonAnim={buttonAnim}
-              animationsEnabled={animationsEnabled}
-              overrides={overrides}
+              templateId={props.templateId}
+              buttonAnim={props.buttonAnim}
+              animationsEnabled={props.animationsEnabled}
+              overrides={props.overrides}
             >
-              <PreviewBody
-                funnel={funnel}
-                heroSection={heroSection}
-                otherSections={otherSections}
-                logoSrc={logoSrc}
-                compact
-              />
+              <PreviewBody {...props} compact />
             </TemplateThemeProvider>
           </div>
         </div>
@@ -503,172 +658,62 @@ function MobileFrame({
 
 function PreviewBody({
   funnel,
+  activePage,
   heroSection,
   otherSections,
   logoSrc,
   compact,
   embed = false,
+  pageRole,
+  pageLinks,
+  slugLinks,
 }: {
   funnel: Funnel;
+  activePage?: FunnelPage;
   heroSection: FunnelSection | undefined;
   otherSections: FunnelSection[];
   logoSrc?: string;
   compact: boolean;
   embed?: boolean;
+  pageRole?: PageRole;
+  pageLinks: Map<string, string>;
+  slugLinks: Map<string, string>;
 }) {
-  const padX = embed ? "px-6 sm:px-10 md:px-16" : compact ? "px-5" : "px-10";
-  const padY = embed ? "py-12 md:py-16" : compact ? "py-8" : "py-10";
-  const titleSize = "ff-headline-scaled leading-tight";
+  const mediaLibrary = funnel.media;
+
+  const padX = embed ? "px-4 sm:px-6 md:px-8" : compact ? "px-4" : "px-6";
+  const padY = embed ? "py-8 md:py-12" : compact ? "py-6" : "py-8";
   const bodySize = compact ? "text-sm" : "text-base";
 
-  const heroColors: SectionColors = heroSection
-    ? getSectionColors(heroSection)
-    : {};
-  const heroShadow = heroSection
-    ? readShadow(heroSection)
-    : { size: "none" as ShadowSize, color: "#000" };
-  const heroBg = heroSection
-    ? buildBackgroundStyle(heroSection)
-    : { containerStyle: {}, hasBackgroundImage: false, overlay: 0 };
+  const isSuccess = isSuccessRole(pageRole);
+  const sectionInner = compact
+    ? ""
+    : isSuccess
+      ? "mx-auto max-w-[720px] text-center"
+      : "mx-auto max-w-[920px]";
 
-  const sectionInner = compact ? "" : "mx-auto max-w-[920px]";
-
-  // ─── Lot L : icônes décoratives du hero ────────────────────────────────
-  const heroDecoIcons = heroSection?.decorativeIcons;
-  const heroEdges = hasDecorativeAtEdge(heroDecoIcons);
+  const successPadY = isSuccess && !compact ? "py-16 md:py-20" : padY;
 
   return (
     <div>
       <FunnelHeader funnel={funnel} logoSrc={logoSrc} />
 
       {heroSection && (
-        <section
-          id={heroSection.id || "hero"}
-          data-ff-section="hero"
-          data-ff-layout={heroSection.layoutVariant ?? "centered"}
-          data-ff-custom-bg={heroColors.bg ? "true" : undefined}
-          data-ff-has-bg-image={heroBg.hasBackgroundImage ? "true" : undefined}
-          data-ff-deco-top={heroEdges.top ? "true" : undefined}
-          data-ff-deco-bottom={heroEdges.bottom ? "true" : undefined}
-          data-ff-anim="fade-up"
-          className={`ff-section ${padX} ${padY} relative`}
-          style={{
-            ...(heroColors.bg ? { backgroundColor: heroColors.bg } : {}),
-            ...(heroColors.ink ? { color: heroColors.ink } : {}),
-            ...(heroColors.accent
-              ? ({
-                  ["--ff-accent" as string]: heroColors.accent,
-                } as React.CSSProperties)
-              : {}),
-            ...shadowStyleVar(heroShadow.color),
-            ...heroBg.containerStyle,
-          }}
-        >
-          {heroBg.hasBackgroundImage && heroBg.overlay > 0 && (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
-              style={{ background: `rgba(0,0,0,${heroBg.overlay})` }}
-            />
-          )}
-
-          {/* ─── Lot L : icônes décoratives "edge" et "floating-bg" du hero ─── */}
-          <DecorativeIconsLayer icons={heroDecoIcons} />
-
-          <div className={`relative ${sectionInner}`} style={{ zIndex: 1 }}>
-            {heroSection.eyebrow && (
-              <span
-                data-ff-anim={animOf(
-                  heroSection.animations,
-                  "eyebrow",
-                  "fade-in",
-                )}
-                className="ff-eyebrow inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
-                style={{
-                  background:
-                    "color-mix(in srgb, var(--ff-accent) 15%, transparent)",
-                  color: "var(--ff-accent)",
-                }}
-              >
-                {heroSection.eyebrow}
-              </span>
-            )}
-
-            {heroSection.headline && (
-              <h1
-                data-ff-anim={animOf(
-                  heroSection.animations,
-                  "headline",
-                  "fade-up",
-                )}
-                className={`ff-headline ${titleSize} mb-4`}
-              >
-                <InlineDecorativeIcon
-                  icons={heroDecoIcons}
-                  position="before-headline"
-                />
-                {heroSection.headline}
-                <InlineDecorativeIcon
-                  icons={heroDecoIcons}
-                  position="after-headline"
-                />
-              </h1>
-            )}
-
-            {heroSection.subheadline && (
-              <p
-                data-ff-anim={animOf(
-                  heroSection.animations,
-                  "subheadline",
-                  "fade-up",
-                )}
-                className={`ff-subheadline ${bodySize} mb-5`}
-                style={{ opacity: 0.85 }}
-              >
-                {heroSection.subheadline}
-              </p>
-            )}
-
-            {heroSection.image?.mode === "upload" && heroSection.image?.url && (
-              <ImageBlock
-                image={heroSection.image}
-                fallbackAnim={animOf(
-                  heroSection.animations,
-                  "image",
-                  "fade-in",
-                )}
-                shadowSize={heroShadow.size}
-              />
-            )}
-
-            {heroSection.video?.url && (
-              <VideoEmbedBlock
-                url={heroSection.video.url}
-                compact={compact}
-                anim={animOf(heroSection.animations, "video", "zoom-in")}
-                shadowSize={heroShadow.size}
-              />
-            )}
-
-            {heroSection.cta?.label && (
-              <div className="ff-cta-wrap inline-flex items-center gap-2">
-                <InlineDecorativeIcon
-                  icons={heroDecoIcons}
-                  position="before-cta"
-                />
-                <CtaLink
-                  cta={heroSection.cta}
-                  className="text-sm"
-                  anim={animOf(heroSection.animations, "cta", "fade-up")}
-                />
-                <InlineDecorativeIcon
-                  icons={heroDecoIcons}
-                  position="after-cta"
-                />
-              </div>
-            )}
-          </div>
-        </section>
+        <HeroBlock
+          section={heroSection}
+          padX={padX}
+          padY={successPadY}
+          bodySize={bodySize}
+          compact={compact}
+          sectionInner={sectionInner}
+          mediaLibrary={mediaLibrary}
+          isSuccess={isSuccess}
+          pageRole={pageRole}
+          pageLinks={pageLinks}
+          slugLinks={slugLinks}
+          funnel={funnel}
+          activePage={activePage}
+        />
       )}
 
       {otherSections.map((section) => (
@@ -680,6 +725,12 @@ function PreviewBody({
           bodySize={bodySize}
           compact={compact}
           sectionInner={sectionInner}
+          mediaLibrary={mediaLibrary}
+          isSuccess={isSuccess}
+          pageLinks={pageLinks}
+          slugLinks={slugLinks}
+          funnel={funnel}
+          activePage={activePage}
         />
       ))}
 
@@ -688,13 +739,22 @@ function PreviewBody({
   );
 }
 
-function SectionBlock({
+/* ──────────────────────────────────────────────────────────────────────── */
+
+function HeroBlock({
   section,
   padX,
   padY,
   bodySize,
   compact,
   sectionInner,
+  mediaLibrary,
+  isSuccess,
+  pageRole,
+  pageLinks,
+  slugLinks,
+  funnel,
+  activePage,
 }: {
   section: FunnelSection;
   padX: string;
@@ -702,51 +762,47 @@ function SectionBlock({
   bodySize: string;
   compact: boolean;
   sectionInner: string;
+  mediaLibrary?: MediaItem[];
+  isSuccess: boolean;
+  pageRole?: PageRole;
+  pageLinks: Map<string, string>;
+  slugLinks: Map<string, string>;
+  funnel: Funnel;
+  activePage?: FunnelPage;
 }) {
-  const titleSize = compact ? "text-xl" : "text-2xl";
-  const isForm = section.type === "form";
-  const hasUploadedImage =
-    section.image?.mode === "upload" && !!section.image?.url;
   const colors: SectionColors = getSectionColors(section);
-
   const { size: shadowSize, color: shadowColor } = readShadow(section);
   const shadowAttr = shadowSize !== "none" ? shadowSize : undefined;
-
   const bg = buildBackgroundStyle(section);
-
-  const useSpecialized = usesSpecializedRenderer(section);
-  const sectionType = section.type as string;
-
-  // Bullets génériques (sections non spécialisées)
-  const defaultBulletIconName = section.iconName || "check";
-  const DefaultBulletIcon = getIconByName(defaultBulletIconName);
-  const bulletIcons = section.bulletIcons;
-  const iconSize = section.iconSize ?? "md";
-  const iconAnim = section.iconAnimation ?? "none";
-
-  // ─── Lot L : icônes décoratives de la section ──────────────────────────
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
+  const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
+  const layout = isSuccess
+    ? "success-centered"
+    : effectiveLayoutVariant(section, funnel);
+
+  const RoleIcon = isSuccess ? getRoleIcon(pageRole) : null;
+  const roleIconColors = isSuccess ? getRoleIconColors(pageRole) : null;
 
   return (
     <section
-      id={section.id}
-      data-ff-section={section.type}
-      data-ff-layout={section.layoutVariant ?? "centered"}
+      id={section.id || "hero"}
+      data-ff-section="hero"
+      data-ff-section-id={section.id}
+      data-ff-layout={layout}
       data-ff-shadow-scope={shadowAttr}
+      data-ff-page-role={pageRole ?? undefined}
       data-ff-custom-bg={colors.bg ? "true" : undefined}
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
-      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
+      data-ff-anim="fade-up"
       className={`ff-section ${padX} ${padY} relative`}
       style={{
         ...(colors.bg ? { backgroundColor: colors.bg } : {}),
         ...(colors.ink ? { color: colors.ink } : {}),
         ...(colors.accent
-          ? ({
-              ["--ff-accent" as string]: colors.accent,
-            } as React.CSSProperties)
+          ? ({ ["--ff-accent" as string]: colors.accent } as React.CSSProperties)
           : {}),
         ...shadowStyleVar(shadowColor),
         ...bg.containerStyle,
@@ -760,149 +816,321 @@ function SectionBlock({
         />
       )}
 
-      {/* ─── Lot L : icônes décoratives "edge" et "floating-bg" ────────── */}
+      <DecorativeIconsLayer icons={decoIcons} />
+
+      <div className={`relative ${sectionInner}`} style={{ zIndex: 1 }}>
+        {RoleIcon && roleIconColors && (
+          <div data-ff-anim="zoom-in" className="mb-2 flex justify-center">
+            <div
+              className="ff-success-icon inline-flex items-center justify-center rounded-full"
+              style={{
+                width: compact ? 64 : 80,
+                height: compact ? 64 : 80,
+                background: roleIconColors.bg,
+                boxShadow: `0 0 0 6px ${roleIconColors.ring}`,
+              }}
+            >
+              <RoleIcon
+                strokeWidth={2.2}
+                className="ff-success-icon-svg"
+                style={{
+                  color: roleIconColors.fg,
+                  width: compact ? 32 : 40,
+                  height: compact ? 32 : 40,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {section.eyebrow && (
+          <RichText
+            as="span"
+            className="ff-eyebrow text-xs"
+            text={section.eyebrow}
+            dataAnim={animOf(section.animations, "eyebrow", "fade-in")}
+          />
+        )}
+
+        {section.headline && (
+          <h1
+            data-ff-anim={animOf(section.animations, "headline", "fade-up")}
+            className="ff-headline ff-headline-scaled"
+          >
+            <InlineDecorativeIcon icons={decoIcons} position="before-headline" />
+            <RichText as="span" text={section.headline} />
+            <InlineDecorativeIcon icons={decoIcons} position="after-headline" />
+          </h1>
+        )}
+
+        {section.subheadline && (
+          <RichText
+            as="p"
+            className={`ff-subheadline ${bodySize}`}
+            text={section.subheadline}
+            dataAnim={animOf(section.animations, "subheadline", "fade-up")}
+          />
+        )}
+
+        {section.body && (
+          <RichText
+            as="p"
+            className={`ff-body ${bodySize} whitespace-pre-line`}
+            text={section.body}
+            dataAnim={animOf(section.animations, "body", "fade-up")}
+          />
+        )}
+
+        {usesSpecializedRenderer(section) && (
+          <SpecializedContent section={section} bodySize={bodySize} compact={compact} />
+        )}
+
+        {!usesSpecializedRenderer(section) &&
+          Array.isArray(section.bullets) &&
+          section.bullets.length > 0 && (
+            <BulletsList
+              bullets={section.bullets}
+              bulletIcons={section.bulletIcons}
+              defaultIconName={section.iconName || "check"}
+              iconSize={section.iconSize ?? "md"}
+              iconAnim={section.iconAnimation ?? "none"}
+              animations={section.animations}
+              bodySize={bodySize}
+              isSuccess={isSuccess}
+              sectionType={section.type as string}
+              shadowSize={shadowSize}
+            />
+          )}
+
+        {(section.video?.url || resolvedImage) && (
+          <>
+            {section.video?.url && (
+              <VideoEmbedBlock
+                url={section.video.url}
+                compact={compact}
+                anim={animOf(section.animations, "video", "zoom-in")}
+                shadowSize={shadowSize}
+              />
+            )}
+            {resolvedImage && section.image && (
+              <ImageBlock
+                image={{
+                  ...section.image,
+                  url: resolvedImage.url,
+                  alt: resolvedImage.alt,
+                }}
+                fallbackAnim={animOf(section.animations, "image", "fade-in")}
+                shadowSize={shadowSize}
+                centered={isSuccess}
+              />
+            )}
+          </>
+        )}
+
+        {/* Timers de la section — affichés avant le CTA */}
+        {extractTimers(section).map((timer) => (
+          <TimerRenderer
+            key={timer.id}
+            timer={timer}
+            funnelId={funnel.meta?.tunnelGroupId || "default"}
+            pageId={section.id}
+            language={funnel.language}
+          />
+        ))}
+
+        {section.cta?.label && section.type !== "form" && (
+          <div className={`ff-cta-wrap inline-flex items-center gap-2 ${isSuccess ? "mt-2" : ""}`}>
+            <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
+            <CtaLink
+              cta={section.cta}
+              className="text-sm"
+              anim={animOf(section.animations, "cta", "fade-up")}
+              pageLinks={pageLinks}
+              slugLinks={slugLinks}
+            />
+            <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
+          </div>
+        )}
+
+        {section.type === "form" && (
+          <div data-ff-shadow={shadowAttr}>
+            <FormRenderer section={section} funnel={funnel} page={activePage} />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SectionBlock({
+  section,
+  padX,
+  padY,
+  bodySize,
+  compact,
+  sectionInner,
+  mediaLibrary,
+  isSuccess,
+  pageLinks,
+  slugLinks,
+  funnel,
+  activePage,
+}: {
+  section: FunnelSection;
+  padX: string;
+  padY: string;
+  bodySize: string;
+  compact: boolean;
+  sectionInner: string;
+  mediaLibrary?: MediaItem[];
+  isSuccess: boolean;
+  pageLinks: Map<string, string>;
+  slugLinks: Map<string, string>;
+  funnel: Funnel;
+  activePage?: FunnelPage;
+}) {
+  const isForm = section.type === "form";
+  const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
+  const colors: SectionColors = getSectionColors(section);
+  const { size: shadowSize, color: shadowColor } = readShadow(section);
+  const shadowAttr = shadowSize !== "none" ? shadowSize : undefined;
+  const bg = buildBackgroundStyle(section);
+  const useSpecialized = usesSpecializedRenderer(section);
+  const decoIcons = section.decorativeIcons;
+  const edges = hasDecorativeAtEdge(decoIcons);
+
+  const layout = isSuccess
+    ? "success-centered"
+    : effectiveLayoutVariant(section, funnel);
+
+  return (
+    <section
+      id={section.id}
+      data-ff-section={section.type}
+      data-ff-section-id={section.id}
+      data-ff-layout={layout}
+      data-ff-shadow-scope={shadowAttr}
+      data-ff-custom-bg={colors.bg ? "true" : undefined}
+      data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
+      data-ff-deco-top={edges.top ? "true" : undefined}
+      data-ff-deco-bottom={edges.bottom ? "true" : undefined}
+      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
+      className={`ff-section ${padX} ${padY} relative`}
+      style={{
+        ...(colors.bg ? { backgroundColor: colors.bg } : {}),
+        ...(colors.ink ? { color: colors.ink } : {}),
+        ...(colors.accent
+          ? ({ ["--ff-accent" as string]: colors.accent } as React.CSSProperties)
+          : {}),
+        ...shadowStyleVar(shadowColor),
+        ...bg.containerStyle,
+      }}
+    >
+      {bg.hasBackgroundImage && bg.overlay > 0 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ background: `rgba(0,0,0,${bg.overlay})` }}
+        />
+      )}
+
       <DecorativeIconsLayer icons={decoIcons} />
 
       <div className={`relative ${sectionInner}`} style={{ zIndex: 1 }}>
         {section.eyebrow && (
-          <span
-            data-ff-anim={animOf(section.animations, "eyebrow", "fade-in")}
-            className="ff-eyebrow inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-3"
-            style={{
-              background:
-                "color-mix(in srgb, var(--ff-accent) 12%, transparent)",
-              color: "var(--ff-accent)",
-            }}
-          >
-            {section.eyebrow}
-          </span>
+          <RichText
+            as="span"
+            className="ff-eyebrow text-xs"
+            text={section.eyebrow}
+            dataAnim={animOf(section.animations, "eyebrow", "fade-in")}
+          />
         )}
 
         {section.headline && (
           <h2
             data-ff-anim={animOf(section.animations, "headline", "fade-up")}
-            className={`ff-headline ${titleSize} mb-3`}
+            className="ff-headline ff-headline-scaled"
           >
-            <InlineDecorativeIcon
-              icons={decoIcons}
-              position="before-headline"
-            />
-            {section.headline}
-            <InlineDecorativeIcon
-              icons={decoIcons}
-              position="after-headline"
-            />
+            <InlineDecorativeIcon icons={decoIcons} position="before-headline" />
+            <RichText as="span" text={section.headline} />
+            <InlineDecorativeIcon icons={decoIcons} position="after-headline" />
           </h2>
         )}
 
         {section.subheadline && (
-          <p
-            data-ff-anim={animOf(section.animations, "subheadline", "fade-up")}
-            className={`ff-subheadline ${bodySize} mb-4`}
-            style={{ opacity: 0.75 }}
-          >
-            {section.subheadline}
-          </p>
+          <RichText
+            as="p"
+            className={`ff-subheadline ${bodySize}`}
+            text={section.subheadline}
+            dataAnim={animOf(section.animations, "subheadline", "fade-up")}
+          />
         )}
 
         {section.body && (
-          <p
-            data-ff-anim={animOf(section.animations, "body", "fade-up")}
-            className={`ff-body ${bodySize} mb-4 whitespace-pre-line`}
-            style={{ opacity: 0.9 }}
-          >
-            {section.body}
-          </p>
-        )}
-
-        {useSpecialized && sectionType === "faq" && (
-          <FaqRenderer section={section} bodySize={bodySize} />
-        )}
-        {useSpecialized &&
-          (sectionType === "testimonials" || sectionType === "proof") && (
-            <TestimonialsRenderer
-              section={section}
-              bodySize={bodySize}
-              compact={compact}
-            />
-          )}
-        {useSpecialized &&
-          (sectionType === "pricing" || sectionType === "offer") && (
-            <PricingRenderer
-              section={section}
-              bodySize={bodySize}
-              compact={compact}
-            />
-          )}
-        {useSpecialized && sectionType === "bonus" && (
-          <BonusRenderer
-            section={section}
-            bodySize={bodySize}
-            compact={compact}
+          <RichText
+            as="p"
+            className={`ff-body ${bodySize} whitespace-pre-line`}
+            text={section.body}
+            dataAnim={animOf(section.animations, "body", "fade-up")}
           />
         )}
-        {useSpecialized && sectionType === "guarantee" && (
-          <GuaranteeRenderer section={section} bodySize={bodySize} />
+
+        {useSpecialized && (
+          <SpecializedContent section={section} bodySize={bodySize} compact={compact} />
         )}
 
         {!useSpecialized &&
           Array.isArray(section.bullets) &&
           section.bullets.length > 0 && (
-            <ul
-              data-ff-bullets="stagger"
-              className="ff-bullets space-y-2 mb-4 list-none pl-0"
-            >
-              {section.bullets.map((bullet, i) => {
-                const PerBulletIcon = bulletIcons?.[i]
-                  ? getIconByName(bulletIcons[i] as string)
-                  : DefaultBulletIcon;
-                return (
-                  <li
-                    key={i}
-                    data-ff-anim={animOf(
-                      section.animations,
-                      "bullets",
-                      "fade-up",
-                    )}
-                    className={`flex items-start gap-2 ${bodySize}`}
-                    style={{ opacity: 0.95 }}
-                  >
-                    <PerBulletIcon
-                      data-ff-icon-size={iconSize}
-                      data-ff-icon-anim={iconAnim}
-                      className="shrink-0 mt-0.5"
-                      style={{ color: "var(--ff-accent, #31845C)" }}
-                      aria-hidden="true"
-                    />
-                    <span className="flex-1">{bullet}</span>
-                  </li>
-                );
-              })}
-            </ul>
+            <BulletsList
+              bullets={section.bullets}
+              bulletIcons={section.bulletIcons}
+              defaultIconName={section.iconName || "check"}
+              iconSize={section.iconSize ?? "md"}
+              iconAnim={section.iconAnimation ?? "none"}
+              animations={section.animations}
+              bodySize={bodySize}
+              isSuccess={isSuccess}
+              sectionType={section.type as string}
+              shadowSize={shadowSize}
+            />
           )}
 
-        {section.video?.url && (
-          <VideoEmbedBlock
-            url={section.video.url}
-            compact={compact}
-            anim={animOf(section.animations, "video", "zoom-in")}
-            shadowSize={shadowSize}
-          />
+        {(section.video?.url || resolvedImage) && (
+          <>
+            {section.video?.url && (
+              <VideoEmbedBlock
+                url={section.video.url}
+                compact={compact}
+                anim={animOf(section.animations, "video", "zoom-in")}
+                shadowSize={shadowSize}
+              />
+            )}
+            {resolvedImage && section.image && (
+              <ImageBlock
+                image={{
+                  ...section.image,
+                  url: resolvedImage.url,
+                  alt: resolvedImage.alt,
+                }}
+                fallbackAnim={animOf(section.animations, "image", "fade-in")}
+                shadowSize={shadowSize}
+                centered={isSuccess}
+              />
+            )}
+          </>
         )}
 
-        {hasUploadedImage && (
-          <ImageBlock
-            image={section.image!}
-            fallbackAnim={animOf(section.animations, "image", "fade-in")}
-            shadowSize={shadowSize}
+        {/* Timers de la section — affichés avant le CTA */}
+        {extractTimers(section).map((timer) => (
+          <TimerRenderer
+            key={timer.id}
+            timer={timer}
+            funnelId={funnel.meta?.tunnelGroupId || "default"}
+            pageId={section.id}
+            language={funnel.language}
           />
-        )}
-
-        {isForm && (
-          <div data-ff-shadow={shadowAttr}>
-            <FormRenderer section={section} />
-          </div>
-        )}
+        ))}
 
         {!isForm && section.cta?.label && (
           <div className="ff-cta-wrap inline-flex items-center gap-2">
@@ -911,14 +1139,202 @@ function SectionBlock({
               cta={section.cta}
               className="text-sm mt-2"
               anim={animOf(section.animations, "cta", "fade-up")}
+              pageLinks={pageLinks}
+              slugLinks={slugLinks}
             />
             <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
+          </div>
+        )}
+
+        {isForm && (
+          <div data-ff-shadow={shadowAttr}>
+            <FormRenderer section={section} funnel={funnel} page={activePage} />
           </div>
         )}
       </div>
     </section>
   );
 }
+
+function SpecializedContent({
+  section,
+  bodySize,
+  compact,
+}: {
+  section: FunnelSection;
+  bodySize: string;
+  compact: boolean;
+}) {
+  const sectionType = section.type as string;
+  if (sectionType === "faq")
+    return <FaqRenderer section={section} bodySize={bodySize} />;
+  if (sectionType === "testimonials" || sectionType === "proof")
+    return (
+      <TestimonialsRenderer
+        section={section}
+        bodySize={bodySize}
+        compact={compact}
+      />
+    );
+  if (sectionType === "pricing" || sectionType === "offer")
+    return (
+      <PricingRenderer
+        section={section}
+        bodySize={bodySize}
+        compact={compact}
+      />
+    );
+  if (sectionType === "bonus")
+    return (
+      <BonusRenderer
+        section={section}
+        bodySize={bodySize}
+        compact={compact}
+      />
+    );
+  if (sectionType === "guarantee")
+    return <GuaranteeRenderer section={section} bodySize={bodySize} />;
+  return null;
+}
+
+/* ─── BulletsList : 3 modes (list / grid / inline-strip) ──────────────── */
+
+function BulletsList({
+  bullets,
+  bulletIcons,
+  defaultIconName,
+  iconSize,
+  iconAnim,
+  animations,
+  bodySize,
+  isSuccess,
+  sectionType,
+  shadowSize,
+}: {
+  bullets: string[];
+  bulletIcons?: string[];
+  defaultIconName: string;
+  iconSize: string;
+  iconAnim: string;
+  animations?: SectionAnimations;
+  bodySize: string;
+  isSuccess: boolean;
+  sectionType: string;
+  shadowSize?: ShadowSize;
+}) {
+  const DefaultBulletIcon = getIconByName(defaultIconName);
+  const mode = decideBulletsMode(sectionType, bullets, isSuccess);
+  const shadowAttr =
+    shadowSize && shadowSize !== "none" ? shadowSize : undefined;
+
+  const modeClass =
+    mode === "grid"
+      ? "ff-bullets--grid"
+      : mode === "inline-strip"
+        ? "ff-bullets--inline-strip"
+        : "";
+
+  /* ─── Mode "inline-strip" (stats / kpi) ─── */
+  if (mode === "inline-strip") {
+    return (
+      <ul
+        data-ff-bullets="stagger"
+        data-ff-bullets-mode="inline-strip"
+        className={`ff-bullets ${modeClass} list-none pl-0`}
+      >
+        {bullets.map((bullet, i) => {
+          const split = splitBulletValueLabel(bullet);
+          const value = split?.value ?? bullet;
+          const label = split?.label ?? "";
+          return (
+            <li
+              key={i}
+              data-ff-anim={animOf(animations, "bullets", "fade-up")}
+            >
+              <span
+                className="ff-strip-value"
+                style={{ color: "var(--ff-accent, #31845C)" }}
+              >
+                {value}
+              </span>
+              {label && <span className="ff-strip-label">{label}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  /* ─── Mode "grid" (benefits / features cards) ─── */
+  if (mode === "grid") {
+    return (
+      <ul
+        data-ff-bullets="stagger"
+        data-ff-bullets-mode="grid"
+        data-ff-shadow={shadowAttr}
+        className={`ff-bullets ${modeClass} list-none pl-0`}
+      >
+        {bullets.map((bullet, i) => {
+          const PerBulletIcon = bulletIcons?.[i]
+            ? getIconByName(bulletIcons[i] as string)
+            : DefaultBulletIcon;
+          return (
+            <li
+              key={i}
+              data-ff-anim={animOf(animations, "bullets", "fade-up")}
+              className={bodySize}
+            >
+              <PerBulletIcon
+                data-ff-icon-size={iconSize}
+                data-ff-icon-anim={iconAnim}
+                className="ff-bullet-ic shrink-0"
+                style={{ color: "var(--ff-accent, #31845C)" }}
+                aria-hidden="true"
+              />
+              <RichText as="span" text={bullet} />
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  /* ─── Mode "list" (par défaut) ─── */
+  return (
+    <ul
+      data-ff-bullets="stagger"
+      data-ff-bullets-mode="list"
+      className={`ff-bullets space-y-2 mb-3 list-none pl-0 ${
+        isSuccess ? "inline-block text-left" : ""
+      }`}
+    >
+      {bullets.map((bullet, i) => {
+        const PerBulletIcon = bulletIcons?.[i]
+          ? getIconByName(bulletIcons[i] as string)
+          : DefaultBulletIcon;
+        return (
+          <li
+            key={i}
+            data-ff-anim={animOf(animations, "bullets", "fade-up")}
+            className={`flex items-start gap-2 ${bodySize}`}
+            style={{ opacity: 0.95 }}
+          >
+            <PerBulletIcon
+              data-ff-icon-size={iconSize}
+              data-ff-icon-anim={iconAnim}
+              className="ff-bullet-ic shrink-0 mt-0.5 w-4 h-4"
+              style={{ color: "var(--ff-accent, #31845C)" }}
+              aria-hidden="true"
+            />
+            <RichText as="span" text={bullet} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/* ─── Image / Vidéo / CTA ─────────────────────────────────────────────── */
 
 function VideoEmbedBlock({
   url,
@@ -939,7 +1355,7 @@ function VideoEmbedBlock({
       data-ff-shadow={
         shadowSize && shadowSize !== "none" ? shadowSize : undefined
       }
-      className={`overflow-hidden rounded-lg ${compact ? "my-3" : "my-5"}`}
+      className={`overflow-hidden rounded-lg ${compact ? "my-2" : "my-3"}`}
       style={{ border: "1px solid var(--ff-border, rgba(0,0,0,0.08))" }}
     >
       <div className="relative aspect-video w-full bg-black">
@@ -959,10 +1375,12 @@ function ImageBlock({
   image,
   fallbackAnim,
   shadowSize,
+  centered = false,
 }: {
   image: NonNullable<FunnelSection["image"]>;
   fallbackAnim: AnimationPreset;
   shadowSize: ShadowSize;
+  centered?: boolean;
 }) {
   const transparent = image.transparentBg === true;
   const size = image.size ?? "lg";
@@ -993,6 +1411,9 @@ function ImageBlock({
     figureStyle.maxWidth = `${customWidth}px`;
     figureStyle.marginLeft = "auto";
     figureStyle.marginRight = "auto";
+  } else if (centered) {
+    figureStyle.marginLeft = "auto";
+    figureStyle.marginRight = "auto";
   }
 
   return (
@@ -1005,7 +1426,7 @@ function ImageBlock({
       data-ff-img-transparent={transparent ? "true" : undefined}
       data-ff-img-anim={loopAnim}
       className={[
-        "ff-image-wrap mt-4 mb-2",
+        "ff-image-wrap mt-3 mb-1",
         transparent ? "" : "overflow-hidden rounded-lg",
       ].join(" ")}
       style={figureStyle}
@@ -1025,15 +1446,54 @@ function CtaLink({
   cta,
   className = "",
   anim,
+  pageLinks,
+  slugLinks,
 }: {
   cta: NonNullable<FunnelSection["cta"]>;
   className?: string;
   anim?: AnimationPreset;
+  pageLinks: Map<string, string>;
+  slugLinks: Map<string, string>;
 }) {
-  const href = ctaHref(cta);
-  const target = ctaTarget(cta);
-  const rel = ctaRel(cta);
-  const external = ctaIsExternal(cta);
+  let href = ctaHref(cta);
+  let target = ctaTarget(cta);
+  let rel = ctaRel(cta);
+  let external = ctaIsExternal(cta);
+
+  const ctaAny = cta as unknown as {
+    mode?: string;
+    pageId?: string;
+    pageSlug?: string;
+    url?: string;
+  };
+
+  if (ctaAny.pageId && pageLinks.has(ctaAny.pageId)) {
+    href = pageLinks.get(ctaAny.pageId) ?? href;
+    target = "_self";
+    rel = "";
+    external = false;
+  } else if (ctaAny.pageSlug) {
+    const cleaned = ctaAny.pageSlug.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (slugLinks.has(cleaned)) {
+      href = slugLinks.get(cleaned) ?? href;
+      target = "_self";
+      rel = "";
+      external = false;
+    }
+  } else if (ctaAny.url && ctaAny.mode === "redirect") {
+    const rawUrl = ctaAny.url.trim();
+    const isAbsolute = /^https?:\/\//i.test(rawUrl) || rawUrl.startsWith("//");
+    const isMailto = rawUrl.startsWith("mailto:") || rawUrl.startsWith("tel:");
+    if (!isAbsolute && !isMailto) {
+      const cleaned = rawUrl.replace(/^\/+/, "").replace(/\/+$/, "");
+      if (slugLinks.has(cleaned)) {
+        href = slugLinks.get(cleaned) ?? href;
+        target = "_self";
+        rel = "";
+        external = false;
+      }
+    }
+  }
 
   return (
     <a
@@ -1042,7 +1502,7 @@ function CtaLink({
       rel={rel}
       data-ff-anim={anim ?? "fade-up"}
       data-ff-cta
-      className={`ff-btn inline-flex items-center gap-2 px-5 py-2.5 font-bold no-underline ${className}`}
+      className={`ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg ${className}`}
     >
       {cta.label}
       {external && <ExternalLink size={13} />}

@@ -10,9 +10,12 @@ type State =
   | { status: "found"; funnel: Funnel }
   | { status: "not-found" };
 
-type Props = { slug: string };
+type Props = {
+  slug: string;
+  activePageSlug?: string;
+};
 
-export function PublicFunnelClient({ slug }: Props) {
+export function PublicFunnelClient({ slug, activePageSlug }: Props) {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
@@ -47,12 +50,17 @@ export function PublicFunnelClient({ slug }: Props) {
             Tunnel introuvable
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Ce tunnel n'existe pas ou n'a pas encore été publié sur cet appareil
+            Ce tunnel n&apos;existe pas ou n&apos;a pas encore été publié sur cet appareil
           </p>
         </div>
       </main>
     );
   }
 
-  return <PublicFunnelView funnel={state.funnel} />;
+  return (
+    <PublicFunnelView
+      funnel={state.funnel}
+      activePageSlug={activePageSlug}
+    />
+  );
 }

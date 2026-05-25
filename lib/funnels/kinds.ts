@@ -5,114 +5,123 @@ export type FunnelKindOption = {
   id: FunnelKind;
   label: { fr: string; en: string; es: string };
   hint: { fr: string; en: string; es: string };
+  /** Émotion dominante affichée dans le wizard (Lot B1+) */
+  emotion?: { fr: string; en: string; es: string };
   // Si true, l'étape Vidéo est proposée dans le wizard
   needsVideo: boolean;
   // Suggestion de template par défaut (id de funnelTemplates)
   suggestedTemplateId?: string;
 };
 
+/**
+ * 6 types de tunnels exposés dans le wizard (Lot B1).
+ * Les anciennes valeurs (vsl, formation, service, saas, thank-you) restent
+ * supportées en lecture (rétrocompat) mais ne sont plus proposées à l'utilisateur.
+ */
 export const FUNNEL_KINDS: FunnelKindOption[] = [
   {
     id: "lead-magnet",
     label: { fr: "Lead magnet", en: "Lead magnet", es: "Lead magnet" },
     hint: {
-      fr: "Capturer des emails avec une ressource gratuite",
-      en: "Capture emails with a free resource",
-      es: "Capturar emails con un recurso gratuito",
+      fr: "Capturer des emails avec une ressource gratuite (ebook, checklist, template)",
+      en: "Capture emails with a free resource (ebook, checklist, template)",
+      es: "Capturar emails con un recurso gratuito (ebook, checklist, plantilla)",
     },
+    emotion: { fr: "Confiance, clarté", en: "Trust, clarity", es: "Confianza, claridad" },
     needsVideo: false,
     suggestedTemplateId: "ebook-lead-magnet",
   },
   {
-    id: "vsl",
-    label: { fr: "Vidéo de vente (VSL)", en: "Video sales letter (VSL)", es: "Video de venta (VSL)" },
+    id: "digital-product",
+    label: { fr: "Vente produit digital", en: "Digital product sale", es: "Venta producto digital" },
     hint: {
-      fr: "Page centrée sur une vidéo de vente",
-      en: "Page focused on a sales video",
-      es: "Página centrada en un video de venta",
+      fr: "Vendre ebook, formation, template, ressource premium",
+      en: "Sell ebook, course, template, premium resource",
+      es: "Vender ebook, formación, plantilla, recurso premium",
     },
+    emotion: { fr: "Valeur, transformation", en: "Value, transformation", es: "Valor, transformación" },
     needsVideo: true,
     suggestedTemplateId: "premium-ebook",
   },
   {
     id: "webinar",
-    label: { fr: "Webinaire", en: "Webinar", es: "Webinar" },
+    label: { fr: "Webinaire / Masterclass", en: "Webinar / Masterclass", es: "Webinar / Masterclass" },
     hint: {
       fr: "Inscriptions à une session live ou automatisée",
       en: "Sign-ups for a live or automated session",
       es: "Inscripciones a una sesión en vivo o automatizada",
     },
+    emotion: { fr: "Crédibilité, anticipation", en: "Credibility, anticipation", es: "Credibilidad, anticipación" },
     needsVideo: true,
     suggestedTemplateId: "webinar",
   },
   {
-    id: "formation",
-    label: { fr: "Formation", en: "Course", es: "Formación" },
-    hint: {
-      fr: "Vendre une formation avec programme et bonus",
-      en: "Sell a course with curriculum and bonuses",
-      es: "Vender una formación con programa y bonos",
-    },
-    needsVideo: false,
-    suggestedTemplateId: "digital-course",
-  },
-  {
-    id: "service",
-    label: { fr: "Service", en: "Service", es: "Servicio" },
-    hint: {
-      fr: "Vendre une prestation avec preuve et process",
-      en: "Sell a service with proof and process",
-      es: "Vender un servicio con prueba y proceso",
-    },
-    needsVideo: false,
-    suggestedTemplateId: "ebook-creation-service",
-  },
-  {
-    id: "digital-product",
-    label: { fr: "Produit digital", en: "Digital product", es: "Producto digital" },
-    hint: {
-      fr: "Vendre un ebook, un kit, un template",
-      en: "Sell an ebook, kit or template",
-      es: "Vender un ebook, kit o plantilla",
-    },
-    needsVideo: false,
-    suggestedTemplateId: "premium-ebook",
-  },
-  {
     id: "booking",
-    label: { fr: "Prise de rendez-vous", en: "Booking", es: "Cita" },
+    label: { fr: "Prise de rendez-vous", en: "Booking", es: "Reserva de cita" },
     hint: {
-      fr: "Déclencher un appel ou une consultation",
-      en: "Trigger a call or consultation",
-      es: "Activar una llamada o consulta",
+      fr: "Réserver un appel découverte ou une consultation (agences, freelances, consultants)",
+      en: "Book a discovery call or consultation (agencies, freelancers, consultants)",
+      es: "Reservar una llamada o consulta (agencias, freelancers, consultores)",
     },
+    emotion: { fr: "Autorité, simplicité", en: "Authority, simplicity", es: "Autoridad, simplicidad" },
     needsVideo: false,
     suggestedTemplateId: "free-consultation",
   },
   {
-    id: "saas",
-    label: { fr: "SaaS", en: "SaaS", es: "SaaS" },
+    id: "coaching-high-ticket",
+    label: { fr: "Coaching high ticket", en: "High-ticket coaching", es: "Coaching high ticket" },
     hint: {
-      fr: "Présenter une application avec essai gratuit",
-      en: "Showcase an app with a free trial",
-      es: "Presentar una aplicación con prueba gratuita",
+      fr: "Vendre un accompagnement premium avec qualification (statut, exclusivité)",
+      en: "Sell premium coaching with qualification (status, exclusivity)",
+      es: "Vender acompañamiento premium con calificación (estatus, exclusividad)",
     },
+    emotion: { fr: "Statut, exclusivité", en: "Status, exclusivity", es: "Estatus, exclusividad" },
     needsVideo: false,
-    suggestedTemplateId: "high-ticket-service",
+    suggestedTemplateId: "coaching-premium",
   },
   {
-    id: "thank-you",
-    label: { fr: "Page de remerciement", en: "Thank-you page", es: "Página de gracias" },
+    id: "challenge",
+    label: { fr: "Challenge / Bootcamp", en: "Challenge / Bootcamp", es: "Reto / Bootcamp" },
     hint: {
-      fr: "Page d'arrivée après une conversion",
-      en: "Landing page after a conversion",
-      es: "Página de llegada después de una conversión",
+      fr: "Lancer un défi sur plusieurs jours (fitness, business, productivité)",
+      en: "Launch a multi-day challenge (fitness, business, productivity)",
+      es: "Lanzar un reto de varios días (fitness, negocio, productividad)",
     },
-    needsVideo: false,
+    emotion: { fr: "Énergie, urgence, momentum", en: "Energy, urgency, momentum", es: "Energía, urgencia, momento" },
+    needsVideo: true,
+    suggestedTemplateId: "ebook-lead-magnet",
   },
 ];
 
+/**
+ * Mapping legacy : convertit les anciens FunnelKind vers les 6 nouveaux.
+ * Utilisé au chargement pour normaliser les funnels stockés en localStorage.
+ */
+const LEGACY_KIND_MAP: Partial<Record<FunnelKind, FunnelKind>> = {
+  vsl: "digital-product",
+  formation: "digital-product",
+  service: "booking",
+  saas: "digital-product",
+  "thank-you": "lead-magnet",
+};
+
+/**
+ * Normalise un FunnelKind legacy vers un kind moderne.
+ * Retourne le kind tel quel si déjà moderne ou inconnu.
+ */
+export function normalizeFunnelKind(kind?: FunnelKind | string): FunnelKind | undefined {
+  if (!kind) return undefined;
+  const k = kind as FunnelKind;
+  if (LEGACY_KIND_MAP[k]) return LEGACY_KIND_MAP[k]!;
+  return k;
+}
+
+/**
+ * Retourne l'option FunnelKindOption correspondant à un id.
+ * Applique automatiquement la normalisation legacy.
+ */
 export function getFunnelKind(id?: FunnelKind | string): FunnelKindOption | undefined {
   if (!id) return undefined;
-  return FUNNEL_KINDS.find((k) => k.id === id);
+  const normalized = normalizeFunnelKind(id);
+  return FUNNEL_KINDS.find((k) => k.id === normalized);
 }

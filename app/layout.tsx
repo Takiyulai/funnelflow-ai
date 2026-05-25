@@ -8,6 +8,9 @@ import {
 } from "next/font/google";
 // @ts-ignore
 import "./globals.css";
+// CSS dédié à la preview FunnelFlow (sélecteurs [data-ff-template]).
+// L'export Systeme.io utilise sa propre source (lib/export/theme-css.ts)
+// injectée par html.ts au moment de l'export — aucun conflit.
 // @ts-ignore
 import "./funnel-theme.css";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -24,10 +27,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="fr" className={`${inter.variable} ${playfair.variable} ${bricolage.variable} ${spaceGrotesk.variable}`}>
-      <body className={`${inter.className} font-sans antialiased`}>
-        <ToastProvider>{children}</ToastProvider>
-      </body>
+    <html
+      lang="fr"
+      className={`${inter.variable} ${playfair.variable} ${bricolage.variable} ${spaceGrotesk.variable}`}
+    >
+      <body
+  className={`${inter.className} font-sans antialiased`}
+  suppressHydrationWarning
+>
+  <ToastProvider>{children}</ToastProvider>
+</body>
+
     </html>
   );
 }

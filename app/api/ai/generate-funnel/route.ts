@@ -1,9 +1,14 @@
 // app/api/ai/generate-funnel/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateFunnelWithAI, AiGenerationError } from "@/lib/ai/generate";
+import {
+  generateMultiPageFunnelWithAI,
+  AiGenerationError,
+} from "@/lib/ai/generate";
+import type { FunnelSectionType } from "@/lib/funnels/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // 60 secondes pour la génération multi-pages
 
 const ctaConfigSchema = z.object({
   label: z.string().min(1),
@@ -12,10 +17,53 @@ const ctaConfigSchema = z.object({
   target: z.enum(["_self", "_blank"]).optional(),
   anchorId: z.string().optional(),
   popupId: z.string().optional(),
+  popupProvider: z.enum(["internal", "systeme"]).optional(),
+  systemePopupId: z.string().optional(),
+});
+
+const copywritingPrefsSchema = z.object({
+  tone: z.enum(["direct", "empathique", "storytelling", "expert", "amical", "premium"]).optional(),
+  length: z.enum(["concise", "balanced", "detailed"]).optional(),
+  exampleSentence: z.string().optional(),
+  avoidWords: z.array(z.string()).optional(),
+});
+
+// ⚠️ Doit refléter EXACTEMENT le type FunnelSectionType de lib/funnels/types.ts
+// "footer" retiré car non défini dans le type.
+const FUNNEL_SECTION_TYPES = [
+  "hero",
+  "about",
+  "problem",
+  "solution",
+  "benefits",
+  "proof",
+  "testimonials",
+  "offer",
+  "bonus",
+  "guarantee",
+  "pricing",
+  "process",
+  "program",
+  "video",
+  "faq",
+  "cta",
+  "form",
+  "thank_you",
+  "webinar",
+  "qualification",
+] as const satisfies readonly FunnelSectionType[];
+
+const mediaItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["image", "video"]),
+  url: z.string(),
+  description: z.string().optional(),
+  sectionHint: z.enum(FUNNEL_SECTION_TYPES).optional(),
+  alt: z.string().optional(),
+  fileName: z.string().optional(),
 });
 
 const briefSchema = z.object({
-  // Champs historiques
   brandName: z.string().min(1),
   offerName: z.string().min(1),
   price: z.string().min(1),
@@ -29,16 +77,19 @@ const briefSchema = z.object({
   primaryCta: ctaConfigSchema.optional(),
   defaultImageMode: z.enum(["none", "upload", "ai-suggested"]).optional(),
 
-  // Nouveaux champs optionnels
   funnelKind: z
     .enum([
-      "vsl",
+      // 6 nouveaux (Lot B1)
       "lead-magnet",
+      "digital-product",
       "webinar",
+      "booking",
+      "coaching-high-ticket",
+      "challenge",
+      // Legacy (mappés automatiquement)
+      "vsl",
       "formation",
       "service",
-      "digital-product",
-      "booking",
       "saas",
       "thank-you",
     ])
@@ -46,23 +97,24 @@ const briefSchema = z.object({
   creationMode: z.enum(["guided", "free"]).optional(),
   templateId: z.string().optional(),
   moodId: z
-    .enum(["premium-calm", "energetic", "institutional-trust", "creative-warm"])
-    .optional(),
-  mainColor: z.string().optional(),
+  .enum(["premium-calm", "modern-minimal", "energetic", "institutional-trust", "creative-warm"])
+  .optional(),  mainColor: z.string().optional(),
   secondaryColor: z.string().optional(),
   logoUrl: z.string().optional(),
   videoUrl: z.string().optional(),
   aboutText: z.string().optional(),
+
+  medias: z.array(mediaItemSchema).optional(),
+  copywritingPrefs: copywritingPrefsSchema.optional(),
 });
 
-// Mappe AiErrorReason vers un statut HTTP cohérent
 function statusForReason(reason: string): number {
   switch (reason) {
     case "missing-key":
     case "invalid-key":
-      return 503; // service indisponible côté config
+      return 503;
     case "insufficient-quota":
-      return 402; // payment required
+      return 402;
     case "rate-limit":
       return 429;
     case "network-error":
@@ -70,7 +122,7 @@ function statusForReason(reason: string): number {
     case "empty-response":
     case "invalid-json":
     case "schema-mismatch":
-      return 502; // upstream a renvoyé du contenu inutilisable
+      return 502;
     default:
       return 500;
   }
@@ -86,6 +138,7 @@ export async function POST(request: Request) {
 
   const parsed = briefSchema.safeParse(json);
   if (!parsed.success) {
+    console.error("[generate-funnel] validation failed:", parsed.error.format());
     return NextResponse.json(
       {
         error: "invalid-brief",
@@ -96,13 +149,27 @@ export async function POST(request: Request) {
     );
   }
 
+  const startTime = Date.now();
+  console.info(`[generate-funnel] START generation for brand="${parsed.data.brandName}" offer="${parsed.data.offerName}"`);
+
   try {
-    const funnel = await generateFunnelWithAI(parsed.data);
-    return NextResponse.json({ funnel });
+    const funnel = await generateMultiPageFunnelWithAI(parsed.data);
+
+    const duration = Date.now() - startTime;
+    console.info(`[generate-funnel] SUCCESS in ${duration}ms. Pages: ${funnel.pages?.length ?? 1}`);
+
+    return NextResponse.json({
+      funnel,
+      pagesGenerated: funnel.pages?.length ?? 1,
+      schemaVersion: funnel.meta?.schemaVersion ?? 1,
+    });
   } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[generate-funnel] FAILED after ${duration}ms:`, error);
+    
     if (error instanceof AiGenerationError) {
       console.warn(
-        `[generate-funnel] AI error reason=${error.reason} details=${error.details ?? "none"}`
+        `[generate-funnel] AI failure after ${duration}ms reason=${error.reason} details=${error.details ?? "none"}`
       );
       return NextResponse.json(
         {
@@ -114,7 +181,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("[generate-funnel] unexpected error", error);
+    console.error(`[generate-funnel] UNEXPECTED error after ${duration}ms:`, error);
     return NextResponse.json(
       {
         error: "ai-generation-failed",

@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { Funnel } from "@/lib/funnels/types";
+import type { Funnel, FunnelIntegrations } from "@/lib/funnels/types";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 
 type Props = {
@@ -12,8 +12,6 @@ type Props = {
 
 type ButtonAnim = "lift" | "glow" | "pulse" | "shine";
 
-// Type étendu (les nouveaux champs Lot 3 sont aussi typés ici en attendant
-// que tu valides la mise à jour de Funnel["design"] dans types.ts).
 type DesignExt = Funnel["design"] & {
   animationsEnabled?: boolean;
   buttonAnim?: ButtonAnim;
@@ -49,7 +47,6 @@ const SCALE_MIN = 0.85;
 const SCALE_MAX = 1.25;
 const SCALE_STEP = 0.05;
 
-/** Templates dont le fond est neutre et donc personnalisable */
 const CUSTOM_BG_TEMPLATES = new Set(["clean-light", "clean-dark"]);
 
 export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
@@ -68,8 +65,17 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
   const customBgEnabled = design.customBgEnabled === true;
   const customBg = design.customBg ?? "#ffffff";
 
+  const integrations: FunnelIntegrations = funnel.integrations ?? {};
+  const systemeIoScript = integrations.systemeIoScriptId ?? "";
+
   const updateDesign = (patch: Partial<DesignExt>) => {
     onChange({ design: { ...design, ...patch } as Funnel["design"] });
+  };
+
+  const updateIntegrations = (patch: Partial<FunnelIntegrations>) => {
+    onChange({
+      integrations: { ...integrations, ...patch },
+    });
   };
 
   return (
@@ -143,7 +149,7 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
             </select>
           </Field>
 
-          {/* === Tailles (Lot 3) === */}
+          {/* === Tailles === */}
           <SectionTitle>Tailles</SectionTitle>
 
           <Field label={`Taille du texte · ${formatScale(textScale)}`}>
@@ -168,7 +174,7 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
             </p>
           </Field>
 
-          {/* === Fond du tunnel (templates clean uniquement) === */}
+          {/* === Fond du tunnel === */}
           {customBgSupported && (
             <>
               <SectionTitle>Fond du tunnel</SectionTitle>
@@ -284,8 +290,6 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
-
 function clampScale(n: number): number {
   if (Number.isNaN(n)) return 1;
   return Math.min(SCALE_MAX, Math.max(SCALE_MIN, n));
@@ -308,9 +312,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -319,6 +325,7 @@ function Field({
         {label}
       </label>
       {children}
+      {hint && <p className="mt-1 text-[10px] text-white/40">{hint}</p>}
     </div>
   );
 }

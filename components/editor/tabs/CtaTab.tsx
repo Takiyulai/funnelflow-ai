@@ -5,12 +5,28 @@ import type {
   Language,
   CtaConfig,
   CtaMode,
+  CtaIcon,
+  CtaSpacing,
+  PopupProvider,
 } from "@/lib/funnels/types";
 
 type Props = {
   section: FunnelSection;
   language: Language;
   onChange: (patch: Partial<FunnelSection>) => void;
+};
+
+const ICON_OPTIONS: { value: CtaIcon; label: string }[] = [
+  { value: "none", label: "Aucune" },
+  { value: "arrow-right", label: "→ Flèche droite" },
+  { value: "arrow-down", label: "↓ Flèche bas" },
+  { value: "external", label: "↗ Lien externe" },
+];
+
+const DEFAULT_SPACING: CtaSpacing = {
+  marginTop: 18,
+  paddingX: 22,
+  paddingY: 0,
 };
 
 export function CtaTab({ section, onChange }: Props) {
@@ -25,6 +41,8 @@ export function CtaTab({ section, onChange }: Props) {
           label: "Je veux y accéder",
           anchorId: "lead-form",
           target: "_self",
+          icon: "none",
+          spacing: { ...DEFAULT_SPACING },
         },
       });
     } else {
@@ -37,13 +55,30 @@ export function CtaTab({ section, onChange }: Props) {
     onChange({ cta: { ...cta, ...patch } });
   };
 
+  const updateSpacing = (patch: Partial<CtaSpacing>) => {
+    if (!cta) return;
+    const next: CtaSpacing = { ...(cta.spacing ?? DEFAULT_SPACING), ...patch };
+    onChange({ cta: { ...cta, spacing: next } });
+  };
+
+  const resetSpacing = () => {
+    if (!cta) return;
+    onChange({ cta: { ...cta, spacing: { ...DEFAULT_SPACING } } });
+  };
+
   const setMode = (mode: CtaMode) => {
     if (!cta) return;
+    // Préserver icon + spacing dans tous les cas
+    const preserved = {
+      label: cta.label,
+      icon: cta.icon,
+      spacing: cta.spacing,
+    };
     if (mode === "redirect") {
       onChange({
         cta: {
+          ...preserved,
           mode: "redirect",
-          label: cta.label,
           url: cta.url ?? "",
           target: cta.target ?? "_blank",
         },
@@ -51,8 +86,8 @@ export function CtaTab({ section, onChange }: Props) {
     } else if (mode === "anchor") {
       onChange({
         cta: {
+          ...preserved,
           mode: "anchor",
-          label: cta.label,
           anchorId: cta.anchorId ?? "lead-form",
           target: "_self",
         },
@@ -60,18 +95,27 @@ export function CtaTab({ section, onChange }: Props) {
     } else if (mode === "popup") {
       onChange({
         cta: {
+          ...preserved,
           mode: "popup",
-          label: cta.label,
+          popupProvider: cta.popupProvider ?? "internal",
           popupId: cta.popupId ?? `popup-${section.id}`,
           popupTitle: cta.popupTitle ?? "Recevez votre accès",
           popupBody:
             cta.popupBody ??
             "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
           popupEmbed: cta.popupEmbed ?? "",
+          systemePopupId: cta.systemePopupId ?? "",
         },
       });
     }
   };
+
+  const setPopupProvider = (provider: PopupProvider) => {
+    if (!cta || cta.mode !== "popup") return;
+    updateCta({ popupProvider: provider });
+  };
+
+  const spacing = cta?.spacing ?? DEFAULT_SPACING;
 
   return (
     <div className="space-y-4">
@@ -174,63 +218,197 @@ export function CtaTab({ section, onChange }: Props) {
           {/* Mode POPUP */}
           {cta.mode === "popup" && (
             <>
-              <div className="rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5 text-[11px] text-amber-100/80">
-                Le popup est <strong>embarqué dans le bloc HTML exporté</strong>.
-                Aucune configuration systeme.io supplémentaire nécessaire — collez
-                le bloc, ça fonctionne.
-              </div>
-
-              <Field label="Titre du popup" required>
-                <input
-                  type="text"
-                  value={cta.popupTitle ?? ""}
-                  onChange={(e) => updateCta({ popupTitle: e.target.value })}
-                  className={inputClass}
-                  placeholder="Recevez votre accès"
-                />
+              <Field label="Type de popup">
+                <div className="flex flex-wrap gap-1.5">
+                  <ModeBtn
+                    active={(cta.popupProvider ?? "internal") === "internal"}
+                    onClick={() => setPopupProvider("internal")}
+                  >
+                    🧩 FunnelFlow (intégré)
+                  </ModeBtn>
+                  <ModeBtn
+                    active={cta.popupProvider === "systeme"}
+                    onClick={() => setPopupProvider("systeme")}
+                  >
+                    ⚡ Systeme.io
+                  </ModeBtn>
+                </div>
               </Field>
 
-              <Field label="Texte d'introduction" hint="1 à 2 phrases courtes">
-                <textarea
-                  value={cta.popupBody ?? ""}
-                  onChange={(e) => updateCta({ popupBody: e.target.value })}
-                  className={`${inputClass} min-h-[60px] resize-y py-2`}
-                  placeholder="Laissez vos coordonnées, l'accès vous est envoyé immédiatement."
-                />
-              </Field>
+              {/* === Popup FunnelFlow interne === */}
+              {(cta.popupProvider ?? "internal") === "internal" && (
+                <>
+                  <div className="rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5 text-[11px] text-amber-100/80">
+                    Le popup est <strong>embarqué dans le bloc HTML exporté</strong>.
+                    Aucune configuration systeme.io supplémentaire nécessaire — collez
+                    le bloc, ça fonctionne.
+                  </div>
 
-              <Field
-                label="Code d'embed formulaire systeme.io"
-                hint="Dans systeme.io : Formulaires → votre formulaire → Code d'intégration → copier/coller ici. Laissez vide pour un formulaire de démonstration."
-              >
-                <textarea
-                  value={cta.popupEmbed ?? ""}
-                  onChange={(e) => updateCta({ popupEmbed: e.target.value })}
-                  className={`${inputClass} min-h-[100px] resize-y py-2 font-mono text-[11px]`}
-                  placeholder={'<form action="https://systeme.io/..." method="POST">\n  ...\n</form>'}
-                />
-              </Field>
+                  <Field label="Titre du popup" required>
+                    <input
+                      type="text"
+                      value={cta.popupTitle ?? ""}
+                      onChange={(e) => updateCta({ popupTitle: e.target.value })}
+                      className={inputClass}
+                      placeholder="Recevez votre accès"
+                    />
+                  </Field>
 
-              <Field
-                label="Identifiant technique"
-                hint="Généré automatiquement, modifiez seulement si nécessaire"
-              >
-                <input
-                  type="text"
-                  value={cta.popupId ?? ""}
-                  onChange={(e) =>
-                    updateCta({
-                      popupId: e.target.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9-]/g, "-"),
-                    })
-                  }
-                  className={inputClass}
-                  placeholder={`popup-${section.id}`}
-                />
-              </Field>
+                  <Field label="Texte d'introduction" hint="1 à 2 phrases courtes">
+                    <textarea
+                      value={cta.popupBody ?? ""}
+                      onChange={(e) => updateCta({ popupBody: e.target.value })}
+                      className={`${inputClass} min-h-[60px] resize-y py-2`}
+                      placeholder="Laissez vos coordonnées, l'accès vous est envoyé immédiatement."
+                    />
+                  </Field>
+
+                  <Field
+                    label="Code d'embed formulaire systeme.io"
+                    hint="Dans systeme.io : Formulaires → votre formulaire → Code d'intégration → copier/coller ici. Laissez vide pour un formulaire de démonstration."
+                  >
+                    <textarea
+                      value={cta.popupEmbed ?? ""}
+                      onChange={(e) => updateCta({ popupEmbed: e.target.value })}
+                      className={`${inputClass} min-h-[100px] resize-y py-2 font-mono text-[11px]`}
+                      placeholder={
+                        '<form action="https://systeme.io/..." method="POST">\n  ...\n</form>'
+                      }
+                    />
+                  </Field>
+
+                  <Field
+                    label="Identifiant technique"
+                    hint="Généré automatiquement, modifiez seulement si nécessaire"
+                  >
+                    <input
+                      type="text"
+                      value={cta.popupId ?? ""}
+                      onChange={(e) =>
+                        updateCta({
+                          popupId: e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-]/g, "-"),
+                        })
+                      }
+                      className={inputClass}
+                      placeholder={`popup-${section.id}`}
+                    />
+                  </Field>
+                </>
+              )}
+
+              {/* === Popup Systeme.io === */}
+              {cta.popupProvider === "systeme" && (
+                <>
+                  <div className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2.5 text-[11px] text-violet-100/85">
+                    <p className="mb-1.5 font-semibold text-violet-200">
+                      Procédure Systeme.io
+                    </p>
+                    <ol className="ml-3 list-decimal space-y-1 text-violet-100/75">
+                      <li>
+                        Dans Systeme.io, créez une étape « Formulaire » et notez son
+                        <strong> ID</strong> (ex : 24034535).
+                      </li>
+                      <li>
+                        Copiez le <code className="text-amber-200">&lt;script id="form-script-tag-…"&gt;</code> fourni.
+                      </li>
+                      <li>
+                        Collez-le dans <strong>Style global → Intégrations → Script Systeme.io</strong>.
+                      </li>
+                      <li>Renseignez ci-dessous l'ID du popup à ouvrir.</li>
+                    </ol>
+                  </div>
+
+                  <Field
+                    label="ID du popup Systeme.io"
+                    required
+                    hint="Chiffres uniquement, ex : 24034535 (visible dans l'URL ou les paramètres du formulaire)"
+                  >
+                    <input
+                      type="text"
+                      value={cta.systemePopupId ?? ""}
+                      onChange={(e) =>
+                        updateCta({
+                          systemePopupId: e.target.value.replace(/[^0-9]/g, ""),
+                        })
+                      }
+                      className={inputClass}
+                      placeholder="24034535"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                </>
+              )}
             </>
           )}
+
+          {/* === Icône du bouton === */}
+          <Field label="Icône" hint="Affichée à droite du texte">
+            <div className="flex flex-wrap gap-1.5">
+              {ICON_OPTIONS.map((opt) => (
+                <ModeBtn
+                  key={opt.value}
+                  active={(cta.icon ?? "none") === opt.value}
+                  onClick={() => updateCta({ icon: opt.value })}
+                >
+                  {opt.label}
+                </ModeBtn>
+              ))}
+            </div>
+          </Field>
+
+          {/* === Espacement du CTA === */}
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-white/60">
+                Espacement
+              </div>
+              <button
+                type="button"
+                onClick={resetSpacing}
+                className="rounded border border-white/10 bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-white/60 hover:border-white/20 hover:text-white"
+              >
+                Reset
+              </button>
+            </div>
+
+            <Field label={`Marge au-dessus : ${spacing.marginTop ?? 18}px`}>
+              <input
+                type="range"
+                min={0}
+                max={80}
+                step={2}
+                value={spacing.marginTop ?? 18}
+                onChange={(e) => updateSpacing({ marginTop: Number(e.target.value) })}
+                className="w-full accent-amber-300"
+              />
+            </Field>
+
+            <Field label={`Padding horizontal : ${spacing.paddingX ?? 22}px`}>
+              <input
+                type="range"
+                min={16}
+                max={48}
+                step={1}
+                value={spacing.paddingX ?? 22}
+                onChange={(e) => updateSpacing({ paddingX: Number(e.target.value) })}
+                className="w-full accent-amber-300"
+              />
+            </Field>
+
+            <Field label={`Padding vertical : ${spacing.paddingY ?? 0}px (0 = auto)`}>
+              <input
+                type="range"
+                min={0}
+                max={32}
+                step={1}
+                value={spacing.paddingY ?? 0}
+                onChange={(e) => updateSpacing({ paddingY: Number(e.target.value) })}
+                className="w-full accent-amber-300"
+              />
+            </Field>
+          </div>
         </>
       )}
     </div>

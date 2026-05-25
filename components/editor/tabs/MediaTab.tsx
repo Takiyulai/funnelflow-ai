@@ -9,8 +9,9 @@ import {
   Loader2,
   Layers,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import type {
+  Funnel,
   FunnelSection,
   Language,
   ImageMode,
@@ -21,15 +22,17 @@ import type {
   VideoSource,
 } from "@/lib/funnels/types";
 import { compressImage, formatBytes } from "@/lib/images/compress";
+import { materializeSectionImage } from "@/lib/funnels/resolveMedia";
 
 type Props = {
   section: FunnelSection;
   language: Language;
+  funnel: Funnel;
   onChange: (patch: Partial<FunnelSection>) => void;
 };
 
-const MAX_INPUT_SIZE = 8 * 1024 * 1024; // 8 Mo pour image principale
-const MAX_BG_SIZE = 6 * 1024 * 1024; // 6 Mo pour image de fond
+const MAX_INPUT_SIZE = 8 * 1024 * 1024;
+const MAX_BG_SIZE = 6 * 1024 * 1024;
 
 const SIZE_OPTIONS: { value: ImageSize; label: string; hint: string }[] = [
   { value: "sm", label: "S", hint: "320px" },
@@ -61,7 +64,7 @@ const BG_POSITION_OPTIONS: {
   { value: "right", label: "Droite" },
 ];
 
-export function MediaTab({ section, onChange }: Props) {
+export function MediaTab({ section, funnel, onChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -71,8 +74,28 @@ export function MediaTab({ section, onChange }: Props) {
   const [lastSize, setLastSize] = useState<number | null>(null);
   const [lastBgSize, setLastBgSize] = useState<number | null>(null);
 
-  // ── Image principale ───────────────────────────────────────────
-  const image = section.image;
+  // ── Image principale — résolution mediaRef → url ──────────────
+  // Si le wizard a posé section.image.mediaRef sans url, on matérialise
+  // l'URL depuis funnel.media[] et on patch la section au montage.
+  useEffect(() => {
+    if (!section.image) return;
+    if (section.image.url) return; // déjà résolu
+    if (!section.image.mediaRef) return; // rien à résoudre
+    const materialized = materializeSectionImage(section.image, funnel);
+    if (materialized && materialized.url && materialized.url !== section.image.url) {
+      onChange({ image: materialized });
+    }
+    // On veut résoudre seulement quand mediaRef change, pas à chaque render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section.image?.mediaRef, section.image?.url]);
+
+  // Pour l'affichage immédiat (avant que le patch ait pris effet), on
+  // utilise la version matérialisée sans la sauvegarder.
+  const resolvedImage: SectionImage | undefined = materializeSectionImage(
+    section.image,
+    funnel
+  );
+  const image = resolvedImage ?? section.image;
   const imageMode: ImageMode = image?.mode ?? "none";
   const imageUrl = image?.url ?? "";
   const imageAlt = image?.alt ?? "";
@@ -96,7 +119,7 @@ export function MediaTab({ section, onChange }: Props) {
     }
     if (file.size > MAX_INPUT_SIZE) {
       setUploadError(
-        `Image trop lourde (${formatBytes(file.size)}). Limite : 8 Mo.`,
+        `Image trop lourde (${formatBytes(file.size)}). Limite : 8 Mo.`
       );
       return;
     }
@@ -123,17 +146,16 @@ export function MediaTab({ section, onChange }: Props) {
         },
       });
     } catch (e) {
-  console.error("[MediaTab] handleFile error:", e);
-  const msg = e instanceof Error ? e.message : "Erreur inconnue";
-  setUploadError(
-    `Ce fichier ne peut pas être lu par le navigateur. ` +
-    `Ouvre-le dans Paint ou Photos et ré-enregistre-le en JPEG, ` +
-    `puis ré-essaie. (Détail : ${msg})`
-  );
-} finally {
-  setUploading(false);
-}
-
+      console.error("[MediaTab] handleFile error:", e);
+      const msg = e instanceof Error ? e.message : "Erreur inconnue";
+      setUploadError(
+        `Ce fichier ne peut pas être lu par le navigateur. ` +
+          `Ouvre-le dans Paint ou Photos et ré-enregistre-le en JPEG, ` +
+          `puis ré-essaie. (Détail : ${msg})`
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   const removeImage = () => {
@@ -190,7 +212,7 @@ export function MediaTab({ section, onChange }: Props) {
     }
     if (file.size > MAX_BG_SIZE) {
       setBgError(
-        `Image trop lourde (${formatBytes(file.size)}). Limite : 6 Mo.`,
+        `Image trop lourde (${formatBytes(file.size)}). Limite : 6 Mo.`
       );
       return;
     }
@@ -200,18 +222,18 @@ export function MediaTab({ section, onChange }: Props) {
         maxWidth: 1920,
         maxHeight: 1280,
         quality: 0.82,
-        mimeType: "preserve", // ← tous formats + transparence préservée
+        mimeType: "preserve",
       });
       setLastBgSize(result.sizeBytes);
       updateBackground({ imageUrl: result.dataUrl });
     } catch (e) {
-  console.error("[MediaTab.handleBackgroundFile]", e);
-  setBgError(
-    e instanceof Error ? e.message : "Échec de la compression de l'image",
-  );
-} finally {
-  setBgUploading(false);
-}
+      console.error("[MediaTab.handleBackgroundFile]", e);
+      setBgError(
+        e instanceof Error ? e.message : "Échec de la compression de l'image"
+      );
+    } finally {
+      setBgUploading(false);
+    }
   };
 
   const removeBackground = () => {
@@ -609,7 +631,6 @@ export function MediaTab({ section, onChange }: Props) {
         )}
       </section>
 
-      {/* Damier de transparence pour l'aperçu */}
       <style jsx>{`
         :global(.ff-checker) {
           background-image:

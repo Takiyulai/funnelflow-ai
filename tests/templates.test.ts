@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { funnelTemplates } from "@/lib/funnels/templates";
+import type { FunnelSectionType } from "@/lib/funnels/types";
 
 describe("Funnel templates catalogue", () => {
   it("ships a non-empty list of templates", () => {
@@ -28,26 +29,31 @@ describe("Funnel templates catalogue", () => {
   });
 
   it("each section has a known type", () => {
-    const knownTypes = new Set([
+    const knownTypes = new Set<FunnelSectionType>([
       "hero",
+      "about",
       "problem",
       "solution",
-      "method",
       "benefits",
       "proof",
       "offer",
       "bonus",
       "guarantee",
-      "form",
       "faq",
       "cta",
+      "form",
+      "thank_you",
+      "program",
+      "pricing",
+      "process",
+      "webinar",
+      "video",
       "qualification",
-      "thankyou"
+      "testimonials",
     ]);
     funnelTemplates.forEach((template) => {
       template.sections.forEach((section) => {
-        const type = typeof section === "string" ? section : section.type;
-        expect(knownTypes.has(type)).toBe(true);
+        expect(knownTypes.has(section)).toBe(true);
       });
     });
   });

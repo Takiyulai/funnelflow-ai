@@ -64,43 +64,43 @@ export function PricingRenderer({
             className={[
               "ff-pricing-card",
               highlighted ? "ff-card-elevated" : "ff-card",
-              "relative rounded-2xl p-6 flex flex-col",
-              "transition-transform duration-300",
-              !compact && highlighted ? "md:scale-[1.04]" : "",
-              "hover:-translate-y-1",
+              "relative rounded-2xl p-8 flex flex-col",
+              "transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)",
+              highlighted ? "ring-1 ring-inset ring-[var(--ff-accent)]/20" : "",
+              "hover:-translate-y-2 hover:shadow-2xl",
             ]
               .filter(Boolean)
               .join(" ")}
           >
             {highlighted && (
               <div
-                className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap z-10"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full px-4 py-1 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap z-10"
                 style={{
                   background: "var(--ff-accent)",
                   color: "var(--ff-accent-ink, #ffffff)",
                   boxShadow:
-                    "0 4px 12px color-mix(in srgb, var(--ff-accent) 40%, transparent)",
+                    "0 10px 20px -5px color-mix(in srgb, var(--ff-accent) 50%, transparent)",
                 }}
               >
                 <Star
-                  className="h-3 w-3"
+                  className="h-3.5 w-3.5"
                   fill="currentColor"
                   aria-hidden="true"
                 />
-                {item.data.badge || "Populaire"}
+                {item.data.badge || "Recommandé"}
               </div>
             )}
 
-            <div className="mb-4">
+            <div className="mb-6">
               <h3
-                className="text-lg font-bold mb-1"
+                className="text-xl font-bold mb-2"
                 style={{ color: "var(--ff-ink)" }}
               >
                 {item.data.name || `Plan ${idx + 1}`}
               </h3>
               {item.data.description && (
                 <p
-                  className="text-sm"
+                  className="text-sm leading-relaxed"
                   style={{ color: "var(--ff-ink-soft, var(--ff-ink))" }}
                 >
                   {item.data.description}
@@ -108,21 +108,21 @@ export function PricingRenderer({
               )}
             </div>
 
-            <div className="mb-5 flex items-baseline gap-1">
+            <div className="mb-8 flex items-baseline gap-1.5">
               <span
-                className="text-4xl font-black"
+                className="text-5xl font-black tracking-tighter"
                 style={{
-                  color: highlighted ? "var(--ff-accent)" : "var(--ff-ink)",
+                  color: "var(--ff-ink)",
                 }}
               >
                 {item.data.price || "—"}
               </span>
               {item.data.period && (
                 <span
-                  className="text-sm"
+                  className="text-sm font-medium"
                   style={{
                     color: "var(--ff-ink-soft, var(--ff-ink))",
-                    opacity: 0.8,
+                    opacity: 0.6,
                   }}
                 >
                   {item.data.period}
@@ -131,25 +131,26 @@ export function PricingRenderer({
             </div>
 
             {item.data.features && item.data.features.length > 0 && (
-              <ul className="space-y-2.5 mb-6 flex-1">
+              <ul className="space-y-4 mb-8 flex-1">
                 {item.data.features.map((feat, fIdx) => (
                   <li
                     key={fIdx}
-                    className={`flex items-start gap-2 ${bodySize}`}
+                    className={`flex items-start gap-3 ${bodySize}`}
                     style={{ color: "var(--ff-ink)" }}
                   >
                     <span
-                      className="shrink-0 mt-0.5 flex items-center justify-center"
+                      className="shrink-0 mt-1 flex items-center justify-center p-0.5 rounded-full bg-[var(--ff-accent)]/10"
                       style={{
-                        color: featureIconConfig?.color ?? "var(--ff-accent)",
+                        color: "var(--ff-accent)",
                       }}
                     >
                       <IconRenderer
                         config={featureIconConfig}
                         fallbackName="check"
+                        className="w-3.5 h-3.5"
                       />
                     </span>
-                    <span className="flex-1">{feat}</span>
+                    <span className="flex-1 opacity-90">{feat}</span>
                   </li>
                 ))}
               </ul>

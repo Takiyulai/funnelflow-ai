@@ -9,6 +9,7 @@ import {
   GripVertical,
   Palette,
   Layout,
+  Link2,
 } from "lucide-react";
 import type { FunnelSection } from "@/lib/funnels/types";
 import { AddSectionMenu } from "@/components/editor/AddSectionMenu";
@@ -25,7 +26,7 @@ type Props = {
   onAdd: (section: FunnelSection) => void;
   onOpenGlobalStyle: () => void;
   onOpenHeader: () => void;
-
+  onOpenSioLinking: () => void;
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -60,6 +61,7 @@ export function EditorSidebar({
   onAdd,
   onOpenGlobalStyle,
   onOpenHeader,
+  onOpenSioLinking,
 }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -125,6 +127,14 @@ export function EditorSidebar({
             className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
           >
             <Palette className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSioLinking}
+            title="Liaison Systeme.io"
+            className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
+          >
+            <Link2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

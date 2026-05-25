@@ -2,8 +2,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Funnel, FunnelBrief } from "@/lib/funnels/types";
+import type { Funnel, FunnelBrief, FunnelPage } from "@/lib/funnels/types";
+import { FUNNEL_SCHEMA_VERSION, makePageId } from "@/lib/funnels/types";
 import { migrateAllSections } from "@/lib/funnels/sectionItems";
+import { normalizeFunnelKind } from "@/lib/funnels/kinds";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -24,7 +26,7 @@ const PUBLISHED_PREFIX = "ff:public:";
 const INDEX_KEY = "ff:funnel-index";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Event bus pour notifier les hooks React des changements
+// Event bus
 // ─────────────────────────────────────────────────────────────────────────────
 
 const bus = typeof window !== "undefined" ? new EventTarget() : null;
@@ -38,7 +40,6 @@ function subscribe(handler: () => void): () => void {
   if (!bus) return () => {};
   const wrapped = () => handler();
   bus.addEventListener("ff:funnel-changed", wrapped);
-  // Synchro entre onglets via storage event natif
   const onStorage = (e: StorageEvent) => {
     if (e.key && (e.key.startsWith(STORAGE_PREFIX) || e.key === INDEX_KEY)) {
       handler();
@@ -73,7 +74,7 @@ function uniqueSlug(base: string, existingSlugs: Set<string>): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Index : on garde une liste plate des ids pour itérer rapidement
+// Index
 // ─────────────────────────────────────────────────────────────────────────────
 
 function readIndex(): string[] {
@@ -94,30 +95,125 @@ function writeIndex(ids: string[]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Migration auto (Livraison B)
-// Bullets des sections FAQ/témoignages/pricing/bonus/garantie → items typés.
-// Idempotente : si la section a déjà des items non vides, ne touche pas.
+// 🆕 LOT B1 — Migration multi-pages
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Convertit un funnel ancien format (sections[] à la racine, pas de pages[])
+ * vers le nouveau format multi-pages (1 page "Accueil" contenant les sections).
+ *
+ * Idempotente : si le funnel a déjà pages[], retourne tel quel.
+ *
+ * Cette migration est transparente pour l'utilisateur et préserve toutes
+ * les données existantes (sections, design, meta, etc.).
+ */
+function migrateFunnelToMultiPage(funnel: Funnel): Funnel {
+  // Déjà migré ?
+  if (funnel.pages && funnel.pages.length > 0) {
+    return funnel;
+  }
+
+  const legacySections = funnel.sections ?? [];
+
+  // Crée une page "Accueil" qui contient toutes les sections existantes
+  const homePage: FunnelPage = {
+    id: makePageId(),
+    slug: "/",
+    name: "Accueil",
+    role: "landing",
+    sections: legacySections,
+    visible: true,
+    isHome: true,
+    seo: {
+      title: funnel.seo?.title,
+      description: funnel.seo?.description,
+    },
+    meta: {
+      createdAt: new Date().toISOString(),
+    },
+  };
+
+  return {
+    ...funnel,
+    pages: [homePage],
+    // ✅ On conserve sections[] pour la rétrocompat (alias de pages[0].sections)
+    sections: legacySections,
+    meta: {
+      ...(funnel.meta ?? {}),
+      schemaVersion: FUNNEL_SCHEMA_VERSION,
+    },
+  };
+}
+
+/**
+ * Synchronise funnel.sections avec funnel.pages[home].sections.
+ * Garantit la cohérence du champ legacy après modification des pages.
+ */
+function syncLegacySections(funnel: Funnel): Funnel {
+  if (!funnel.pages || funnel.pages.length === 0) return funnel;
+  const home = funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+  if (!home) return funnel;
+  return { ...funnel, sections: home.sections };
+}
+
+/**
+ * Normalise les FunnelKind legacy (vsl → digital-product, etc.).
+ */
+function normalizeLegacyKind(funnel: Funnel): Funnel {
+  if (!funnel.meta?.funnelKind) return funnel;
+  const normalized = normalizeFunnelKind(funnel.meta.funnelKind);
+  if (normalized === funnel.meta.funnelKind) return funnel;
+  return {
+    ...funnel,
+    meta: { ...funnel.meta, funnelKind: normalized },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Migration globale (chaînée)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function applyMigrations(stored: StoredFunnel): StoredFunnel {
-  if (!stored.funnel || !Array.isArray(stored.funnel.sections)) {
-    return stored;
+  if (!stored.funnel) return stored;
+
+  let funnel = stored.funnel;
+
+  // Migration 1 : sections items (Livraison B)
+  if (Array.isArray(funnel.sections)) {
+    const migratedSections = migrateAllSections(funnel.sections);
+    const hasChanged = migratedSections.some((s, i) => s !== funnel.sections[i]);
+    if (hasChanged) {
+      funnel = { ...funnel, sections: migratedSections };
+    }
   }
-  const migratedSections = migrateAllSections(stored.funnel.sections);
 
-  // Évite de créer un nouvel objet si rien n'a changé (référence stable)
-  const hasChanged = migratedSections.some(
-    (s, i) => s !== stored.funnel.sections[i]
-  );
-  if (!hasChanged) return stored;
+  // 🆕 Migration 2 : multi-pages (Lot B1)
+  const beforePages = funnel.pages;
+  funnel = migrateFunnelToMultiPage(funnel);
+  const wasMigratedToMultiPage = beforePages !== funnel.pages;
 
-  return {
-    ...stored,
-    funnel: {
-      ...stored.funnel,
-      sections: migratedSections,
-    },
-  };
+  // 🆕 Migration 3 : normalisation des FunnelKind legacy
+  funnel = normalizeLegacyKind(funnel);
+
+  // Sync legacy sections (au cas où pages[home].sections a été modifié ailleurs)
+  funnel = syncLegacySections(funnel);
+
+  // Si rien n'a changé, retourne l'original (référence stable)
+  if (funnel === stored.funnel) return stored;
+
+  const migrated = { ...stored, funnel };
+
+  // 🆕 Si on vient de migrer en multi-pages, on persiste immédiatement
+  // pour éviter de re-migrer à chaque load (perf + cohérence)
+  if (wasMigratedToMultiPage && typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STORAGE_PREFIX + stored.id, JSON.stringify(migrated));
+    } catch {
+      // Ignore les erreurs de stockage (quota, etc.)
+    }
+  }
+
+  return migrated;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,16 +249,19 @@ export function listFunnels(): StoredFunnel[] {
     const f = loadFunnel(id);
     if (f) items.push(f);
   }
-  // Tri par updatedAt desc
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function saveFunnel(stored: StoredFunnel): void {
   if (typeof window === "undefined") return;
-  const updated = { ...stored, updatedAt: new Date().toISOString() };
-  window.localStorage.setItem(STORAGE_PREFIX + stored.id, JSON.stringify(updated));
+  // 🆕 On synchronise toujours legacy sections avant sauvegarde
+  const synced: StoredFunnel = {
+    ...stored,
+    funnel: syncLegacySections(stored.funnel),
+    updatedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced));
 
-  // Met à jour l'index si nouvel id
   const ids = readIndex();
   if (!ids.includes(stored.id)) {
     ids.unshift(stored.id);
@@ -175,7 +274,6 @@ export function deleteFunnel(id: string): void {
   if (typeof window === "undefined") return;
   const stored = loadFunnel(id);
   window.localStorage.removeItem(STORAGE_PREFIX + id);
-  // Supprime aussi la version publiée si elle existe
   if (stored?.slug) {
     window.localStorage.removeItem(PUBLISHED_PREFIX + stored.slug);
   }
@@ -208,15 +306,78 @@ export function createFunnelFromAi(funnel: Funnel, brief: FunnelBrief): StoredFu
     updatedAt: now,
   };
 
-  // Migration appliquée immédiatement à la création (cas où l'IA produit déjà
-  // des sections FAQ avec uniquement des bullets)
+  // Migration appliquée immédiatement (transforme sections[] en pages[home])
   const migrated = applyMigrations(stored);
   saveFunnel(migrated);
   return migrated;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Publication (copie sous ff:public:<slug>)
+// 🆕 LOT B1 — Helpers de manipulation des pages
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Met à jour les sections d'une page spécifique d'un funnel.
+ * Synchronise automatiquement legacy sections si c'est la page d'accueil.
+ */
+export function updatePageSections(
+  funnel: Funnel,
+  pageId: string,
+  sections: Funnel["sections"]
+): Funnel {
+  if (!funnel.pages) return funnel;
+  const pages = funnel.pages.map((p) =>
+    p.id === pageId ? { ...p, sections } : p
+  );
+  return syncLegacySections({ ...funnel, pages });
+}
+
+/**
+ * Ajoute une page à un funnel. La page est insérée à la position spécifiée
+ * (ou à la fin si position non fournie).
+ */
+export function addPage(
+  funnel: Funnel,
+  page: Omit<FunnelPage, "id">,
+  position?: number
+): Funnel {
+  const newPage: FunnelPage = { ...page, id: makePageId() };
+  const pages = [...(funnel.pages ?? [])];
+  if (typeof position === "number") {
+    pages.splice(position, 0, newPage);
+  } else {
+    pages.push(newPage);
+  }
+  return { ...funnel, pages };
+}
+
+/**
+ * Supprime une page d'un funnel. Refuse de supprimer la page d'accueil.
+ */
+export function removePage(funnel: Funnel, pageId: string): Funnel {
+  if (!funnel.pages) return funnel;
+  const target = funnel.pages.find((p) => p.id === pageId);
+  if (!target || target.isHome) return funnel;
+  const pages = funnel.pages.filter((p) => p.id !== pageId);
+  return syncLegacySections({ ...funnel, pages });
+}
+
+/**
+ * Réordonne les pages d'un funnel.
+ */
+export function reorderPages(funnel: Funnel, orderedIds: string[]): Funnel {
+  if (!funnel.pages) return funnel;
+  const byId = new Map(funnel.pages.map((p) => [p.id, p]));
+  const reordered = orderedIds
+    .map((id) => byId.get(id))
+    .filter((p): p is FunnelPage => Boolean(p));
+  // Préserver les pages absentes de la liste (sécurité)
+  const missing = funnel.pages.filter((p) => !orderedIds.includes(p.id));
+  return syncLegacySections({ ...funnel, pages: [...reordered, ...missing] });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Publication
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function publishFunnel(id: string): StoredFunnel | null {
@@ -249,29 +410,18 @@ export function loadPublishedFunnel(slug: string): StoredFunnel | null {
 // Hooks React
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Hook : retourne la liste des funnels stockés, réactif aux changements
- * (création, suppression, mise à jour, synchro inter-onglets via storage event).
- */
 export function useFunnelList(): StoredFunnel[] {
   const [list, setList] = useState<StoredFunnel[]>([]);
-
   useEffect(() => {
     setList(listFunnels());
     const unsub = subscribe(() => setList(listFunnels()));
     return unsub;
   }, []);
-
   return list;
 }
 
-/**
- * Hook : retourne un funnel par id, réactif aux changements externes.
- * Utilisé par la page éditeur pour rester synchro entre onglets.
- */
 export function useFunnel(id: string | undefined): StoredFunnel | null {
   const [stored, setStored] = useState<StoredFunnel | null>(null);
-
   useEffect(() => {
     if (!id) {
       setStored(null);
@@ -281,6 +431,5 @@ export function useFunnel(id: string | undefined): StoredFunnel | null {
     const unsub = subscribe(() => setStored(loadFunnel(id)));
     return unsub;
   }, [id]);
-
   return stored;
 }

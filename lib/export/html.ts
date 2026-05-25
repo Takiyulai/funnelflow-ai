@@ -1,4 +1,41 @@
 // lib/export/html.ts
+//
+// Export HTML d'un funnel. Stratégie : émettre une structure DOM simple
+// (.ff-page > .ff-section > .ff-section-inner) compatible avec les
+// contraintes de Systeme.io. Le CSS est fourni par theme-css.ts et
+// applique les 9 thèmes visuels via variables CSS sur data-ff-theme.
+//
+// Structure DOM émise :
+//
+//   <div class="ff-page" data-ff-theme="{themeId}" data-ff-export="true">
+//     <div class="ff-brand-bar ff-brand-bar--sticky ff-brand-bar--transparent"
+//          data-ff-brand-type="text|logo|both"
+//          data-ff-brand-has-cta="true|false">
+//       <div class="ff-brand-bar-inner">…</div>
+//     </div>
+//     <section id="…" class="ff-section ff-{type} ff-layout-{layout} [ff-has-shadow]"
+//              style="…; --ff-shadow: …">
+//       <div class="ff-section-inner">…</div>
+//     </section>
+//     <footer class="ff-footer">…</footer>
+//   </div>
+//
+// Deux modes :
+//   1) renderFunnelHtml(funnel)    → page complète
+//   2) createSystemeBlocks(funnel) → un bloc HTML autonome par section,
+//      CSS scopé sous .ffblk-xxx (préfixage automatique du theme).
+//
+// Notes :
+// - L'ancien FF_SYSTEME_POPUP_FIX a été supprimé. Il cassait l'iframe au 2e clic.
+// - Tous les CTA (header inclus) passent par `ctaAttrs()` pour que la classe
+//   `systeme-show-popup-{id}` soit posée systématiquement quand mode=popup
+//   provider=systeme. Cela corrige le bug "popup ne s'ouvre que sur hero/benefits".
+// - L'ombrage par section (section.style.shadow = { size, color }) est appliqué
+//   via la classe `ff-has-shadow` + la variable CSS `--ff-shadow` posée en
+//   inline sur le <section>. Les règles correspondantes sont dans theme-css.ts.
+// - 🆕 Timers : rendu HTML statique + script vanilla JS injecté pour faire
+//   décompter en temps réel côté navigateur (compatible Systeme.io).
+
 import { strToU8, zipSync } from "fflate";
 import type {
   Funnel,
@@ -10,22 +47,118 @@ import type {
   IconName,
   IconConfig,
   SectionColors,
+  SectionStyle,
   AnimationPreset,
   FunnelHeader,
+  CtaIcon,
+  CtaSpacing,
+  TimerItem,
 } from "@/lib/funnels/types";
 import { normalizeIconName, resolveIconSizePx } from "@/lib/funnels/types";
+import {
+  materializeSectionImage,
+  effectiveLayoutVariant,
+} from "@/lib/funnels/resolveMedia";
+import {
+  getFunnelThemeCss,
+  getScopedFunnelThemeCss,
+  buildThemeRootAttrs,
+} from "./theme-css";
 import { createReadme } from "./readme";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper : sérialise dataAttrs en chaîne d'attributs HTML
+// ─────────────────────────────────────────────────────────────────────────────
+function serializeDataAttrs(dataAttrs: Record<string, string>): string {
+  return Object.entries(dataAttrs)
+    .map(([k, v]) => `${k}="${escapeAttr(v)}"`)
+    .join(" ");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sélection de la page à exporter
+// ─────────────────────────────────────────────────────────────────────────────
+function resolveExportPage(
+  funnel: Funnel,
+  targetPageId?: string,
+): {
+  sections: FunnelSection[];
+  role?: string;
+  slug?: string;
+  isHome: boolean;
+  pageId?: string;
+} {
+  const pages = funnel.pages ?? [];
+
+  if (targetPageId) {
+    const page = pages.find((p) => p.id === targetPageId);
+    if (page) {
+      return {
+        sections: page.sections ?? [],
+        role: page.role,
+        slug: page.slug,
+        isHome: !!page.isHome,
+        pageId: page.id,
+      };
+    }
+  }
+
+  const home = pages.find((p) => p.isHome) ?? pages[0];
+  if (home) {
+    return {
+      sections: home.sections ?? funnel.sections ?? [],
+      role: home.role,
+      slug: home.slug,
+      isHome: !!home.isHome,
+      pageId: home.id,
+    };
+  }
+
+  return {
+    sections: funnel.sections ?? [],
+    isHome: true,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers HTML
 // ─────────────────────────────────────────────────────────────────────────────
-function escapeHtml(value = "") {
+function escapeHtml(value = ""): string {
   const entities: Record<string, string> = {
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
   };
   return value.replace(/[&<>"']/g, (c) => entities[c] ?? c);
 }
 const escapeAttr = escapeHtml;
+
+/**
+ * Applique les "highlights" inline sur du texte deja escape.
+ *
+ * Convention de syntaxe :
+ *   [[texte]]              → mot accentue avec la couleur accent du theme
+ *   [[texte|#hexcolor]]    → mot accentue avec une couleur custom
+ */
+function applyInlineHighlights(escaped: string): string {
+  if (!escaped || escaped.indexOf("[[") === -1) return escaped;
+  return escaped.replace(
+    /\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g,
+    (match, text: string, color?: string) => {
+      const safeText = (text || "").trim();
+      if (!safeText) return match;
+      if (color) {
+        const c = color.trim();
+        if (/^#[0-9a-fA-F]{3,8}$/.test(c)) {
+          return `<span class="ff-hl" style="color:${c}">${safeText}</span>`;
+        }
+      }
+      return `<span class="ff-hl">${safeText}</span>`;
+    },
+  );
+}
 
 function isSafeUrl(url: string): boolean {
   if (!url) return false;
@@ -34,7 +167,9 @@ function isSafeUrl(url: string): boolean {
   try {
     const u = new URL(t);
     return ["http:", "https:", "mailto:", "tel:"].includes(u.protocol);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function safeId(value: string, fallback: string): string {
@@ -42,61 +177,229 @@ function safeId(value: string, fallback: string): string {
   return c || fallback;
 }
 
-function clamp(n: number, min: number, max: number) {
+function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Couleurs : helpers (remplacent color-mix, non supporté par SIO)
+// Ombrage par section (section.style.shadow)
 // ─────────────────────────────────────────────────────────────────────────────
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  if (!hex) return null;
-  let h = hex.trim().replace(/^#/, "");
-  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
-  if (h.length !== 6) return null;
-  const num = parseInt(h, 16);
-  if (Number.isNaN(num)) return null;
-  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
-}
+const SHADOW_PRESETS: Record<string, string> = {
+  sm: "0 1px 2px 0 {C}33, 0 1px 2px -1px {C}33",
+  md: "0 4px 6px -1px {C}40, 0 2px 4px -2px {C}40",
+  lg: "0 10px 15px -3px {C}4D, 0 4px 6px -4px {C}4D",
+  xl: "0 20px 25px -5px {C}59, 0 8px 10px -6px {C}59",
+};
 
-function colorWithAlpha(color: string, alpha: number): string {
-  const a = clamp(alpha, 0, 1);
-  if (!color) return `rgba(0,0,0,${a})`;
-  const c = color.trim();
-  if (c.startsWith("rgb")) {
-    // rgb(r,g,b) ou rgba(r,g,b,a) → on remplace alpha
-    const m = c.match(/rgba?\(([^)]+)\)/);
-    if (m) {
-      const parts = m[1].split(",").map((s) => s.trim());
-      const [r, g, b] = parts;
-      return `rgba(${r},${g},${b},${a})`;
-    }
+function normalizeHexColor(input?: string): string | null {
+  if (!input) return null;
+  const v = input.trim().toLowerCase();
+  const m3 = /^#([0-9a-f]{3})$/.exec(v);
+  if (m3) {
+    const [r, g, b] = m3[1].split("");
+    return `#${r}${r}${g}${g}${b}${b}`;
   }
-  const rgb = hexToRgb(c);
-  if (rgb) return `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`;
-  return c;
+  const m6 = /^#([0-9a-f]{6})$/.exec(v);
+  if (m6) return `#${m6[1]}`;
+  const m8 = /^#([0-9a-f]{8})$/.exec(v);
+  if (m8) return `#${m8[1].slice(0, 6)}`;
+  return null;
+}
+
+function buildShadowStyle(
+  style?: SectionStyle,
+): { className: string; inline: string } {
+  const shadow = (style as { shadow?: { size?: string; color?: string } } | undefined)
+    ?.shadow;
+  const size = shadow?.size;
+  if (!size || size === "none") return { className: "", inline: "" };
+
+  const tpl = SHADOW_PRESETS[size];
+  if (!tpl) return { className: "", inline: "" };
+
+  const color = normalizeHexColor(shadow?.color) ?? "#000000";
+  const value = tpl.replace(/\{C\}/g, color);
+
+  return {
+    className: " ff-has-shadow",
+    inline: `--ff-shadow:${value};`,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CTA (pas de popup actif côté SIO : on retombe sur #lead-form)
+// Mapping animations preset → classe CSS
 // ─────────────────────────────────────────────────────────────────────────────
+function animClass(anim?: AnimationPreset | string): string {
+  if (!anim || anim === "none") return "";
+  const allowed: Record<string, string> = {
+    "fade-in": "ff-anim-fade-in",
+    "fade-up": "ff-anim-fade-up",
+    "fade-down": "ff-anim-fade-down",
+    "slide-left": "ff-anim-slide-left",
+    "slide-right": "ff-anim-slide-right",
+    "zoom-in": "ff-anim-zoom-in",
+    "zoom-out": "ff-anim-zoom-out",
+    pulse: "ff-anim-pulse",
+  };
+  return allowed[anim] ?? "";
+}
+
+function animOf(
+  section: FunnelSection,
+  target:
+    | "eyebrow"
+    | "headline"
+    | "subheadline"
+    | "body"
+    | "bullets"
+    | "image"
+    | "video"
+    | "cta",
+  fallback: AnimationPreset = "fade-up",
+): AnimationPreset {
+  const a = section.animations?.[target];
+  return a ?? fallback;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTA — href + attrs (anchor, redirect, popup internal/systeme)
+// ─────────────────────────────────────────────────────────────────────────────
+function isSystemePopup(cta: CtaConfig): boolean {
+  return (
+    cta.mode === "popup" &&
+    cta.popupProvider === "systeme" &&
+    !!cta.systemePopupId
+  );
+}
+
 function ctaHref(cta: CtaConfig): string {
-  if (cta.mode === "anchor") return `#${safeId(cta.anchorId ?? "lead-form", "lead-form")}`;
-  if (cta.mode === "popup") return `#lead-form`;
+  if (cta.mode === "anchor") {
+    return `#${safeId(cta.anchorId ?? "lead-form", "lead-form")}`;
+  }
+  if (cta.mode === "popup") {
+    if (isSystemePopup(cta)) return "#";
+    return `#${safeId(cta.anchorId ?? "lead-form", "lead-form")}`;
+  }
   if (cta.mode === "redirect" && cta.url && isSafeUrl(cta.url)) return cta.url;
   return "#lead-form";
 }
 
 function ctaAttrs(cta: CtaConfig): string {
   const href = ctaHref(cta);
-  const isExternal = cta.mode === "redirect" && cta.target === "_blank" && isSafeUrl(cta.url ?? "");
+  const isExternal =
+    cta.mode === "redirect" && cta.target === "_blank" && isSafeUrl(cta.url ?? "");
   const target = isExternal ? "_blank" : "_self";
   const rel = isExternal ? ' rel="noopener noreferrer"' : "";
-  return ` href="${escapeAttr(href)}" target="${target}"${rel}`;
+
+  let classExtra = "";
+  if (isSystemePopup(cta)) {
+    const id = String(cta.systemePopupId).trim();
+    if (id) classExtra = ` class="systeme-show-popup-${escapeAttr(id)}"`;
+  }
+
+  return ` href="${escapeAttr(href)}" target="${target}"${rel}${classExtra}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Icônes SVG inline (Lucide-like)
+// CTA — icon + rendu
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCtaIcon(icon?: CtaIcon): string {
+  if (!icon || icon === "none") return "";
+  const sz = 18;
+  if (icon === "arrow-right") {
+    return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>`;
+  }
+  if (icon === "arrow-down") {
+    return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/></svg></span>`;
+  }
+  if (icon === "external") {
+    return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>`;
+  }
+  return "";
+}
+
+function ctaInlineStyle(spacing?: CtaSpacing): string {
+  if (!spacing) return "";
+  const parts: string[] = [];
+  if (typeof spacing.paddingX === "number") {
+    parts.push(
+      `padding-left:${clamp(spacing.paddingX, 12, 60)}px;padding-right:${clamp(spacing.paddingX, 12, 60)}px`,
+    );
+  }
+  if (typeof spacing.paddingY === "number") {
+    parts.push(
+      `padding-top:${clamp(spacing.paddingY, 8, 40)}px;padding-bottom:${clamp(spacing.paddingY, 8, 40)}px`,
+    );
+  }
+  return parts.join(";");
+}
+
+function ctaWrapInlineStyle(spacing?: CtaSpacing): string {
+  if (!spacing) return "";
+  if (typeof spacing.marginTop !== "number") return "";
+  return `margin-top:${clamp(spacing.marginTop, 0, 80)}px`;
+}
+
+function renderCtaButton(
+  cta: CtaConfig,
+  extraClass = "",
+  anim: AnimationPreset = "fade-up",
+): string {
+  const iconHtml = renderCtaIcon(cta.icon);
+  const styleStr = ctaInlineStyle(cta.spacing);
+  const styleAttr = styleStr ? ` style="${escapeAttr(styleStr)}"` : "";
+  const baseAttrs = ctaAttrs(cta);
+  const hasClass = / class="/.test(baseAttrs);
+  const aCls = animClass(anim);
+  const cls = ["ff-btn", "ff-cta", extraClass, aCls].filter(Boolean).join(" ");
+  let finalAttrs = baseAttrs;
+  if (hasClass) {
+    finalAttrs = baseAttrs.replace(/ class="([^"]*)"/, ` class="${cls} $1"`);
+  } else {
+    finalAttrs = `${baseAttrs} class="${cls}"`;
+  }
+  return `<a${finalAttrs}${styleAttr}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
+}
+
+function renderBrandCtaButton(cta: CtaConfig): string {
+  const iconHtml = renderCtaIcon(cta.icon);
+  const baseAttrs = ctaAttrs(cta);
+  const hasClass = / class="/.test(baseAttrs);
+  const cls = "ff-brand-cta ff-btn";
+  let finalAttrs = baseAttrs;
+  if (hasClass) {
+    finalAttrs = baseAttrs.replace(/ class="([^"]*)"/, ` class="${cls} $1"`);
+  } else {
+    finalAttrs = `${baseAttrs} class="${cls}"`;
+  }
+  return `<a${finalAttrs}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page contient‑elle un CTA Systeme.io ?
+// ─────────────────────────────────────────────────────────────────────────────
+function pageHasSystemePopup(
+  sections: FunnelSection[],
+  funnel: Funnel,
+): boolean {
+  const headerCta = funnel.header?.cta;
+  if (headerCta && isSystemePopup(headerCta)) return true;
+  for (const s of sections) {
+    if (s.visible === false) continue;
+    if (s.cta && isSystemePopup(s.cta)) return true;
+    if (Array.isArray(s.items)) {
+      for (const it of s.items) {
+        if (it.kind === "pricing" && it.data.cta && isSystemePopup(it.data.cta)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icônes SVG inline
 // ─────────────────────────────────────────────────────────────────────────────
 const SVG_PATHS: Record<IconName, string> = {
   check: `<polyline points="20 6 9 17 4 12"/>`,
@@ -134,7 +437,11 @@ const SVG_PATHS: Record<IconName, string> = {
   fileText: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>`,
 };
 
-function renderIconSvg(name: IconName, sizePx = 20, color?: string): string {
+function renderIconSvg(
+  name: IconName,
+  sizePx = 20,
+  color?: string,
+): string {
   const path = SVG_PATHS[name] ?? SVG_PATHS.check;
   const stroke = color ? escapeAttr(color) : "currentColor";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
@@ -144,150 +451,363 @@ function renderIcon(config?: IconConfig, fallback: IconName = "check"): string {
   const name = normalizeIconName(config?.name ?? fallback);
   const size = resolveIconSizePx(config);
   const color = config?.color;
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:0;">${renderIconSvg(name, size, color)}</span>`;
+  return renderIconSvg(name, size, color);
 }
 
-function renderIconByName(name?: IconName | string, sizePx = 20, color?: string): string {
+function renderIconByName(name?: IconName | string, sizePx = 20): string {
   const n = normalizeIconName(typeof name === "string" ? name : name);
-  return renderIconSvg(n, sizePx, color);
+  return renderIconSvg(n, sizePx);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Image
 // ─────────────────────────────────────────────────────────────────────────────
-const IMG_SIZE_PX: Record<string, number> = { sm: 320, md: 480, lg: 720, full: 1040 };
-
-function renderImage(image?: SectionImage, animClass = ""): string {
+function renderImage(
+  rawImage: SectionImage | undefined,
+  funnel: Funnel,
+  fallbackAnim: AnimationPreset = "fade-in",
+): string {
+  const image = materializeSectionImage(rawImage, funnel);
   if (!image || image.mode === "none" || !image.url) return "";
+
   const alt = escapeAttr(image.alt ?? "");
+  const transparent = image.transparentBg === true;
+
+  const cls = ["ff-image"];
+  if (transparent) cls.push("ff-image--transparent");
+  const aCls = animClass(image.animation ?? fallbackAnim);
+  if (aCls) cls.push(aCls);
+
   const credit = image.credit
-    ? `<span class="ff-image-credit">${escapeHtml(image.credit)}</span>` : "";
+    ? `<figcaption class="ff-image-credit">${escapeHtml(image.credit)}</figcaption>`
+    : "";
 
-  const sizeKey = image.size ?? "lg";
-  let widthStyle = "";
-  if (sizeKey === "custom" && image.customWidth) {
-    widthStyle = `max-width:${clamp(image.customWidth, 80, 1600)}px;`;
-  } else if (sizeKey === "full") {
-    widthStyle = `max-width:100%;`;
-  } else if (IMG_SIZE_PX[sizeKey]) {
-    widthStyle = `max-width:${IMG_SIZE_PX[sizeKey]}px;`;
-  }
-  const transparent = image.transparentBg ? " ff-image--transparent" : "";
-  const ownAnim = image.animation && image.animation !== "none" ? ` ff-anim-${image.animation}` : "";
-  const cls = `ff-image${transparent}${ownAnim || animClass}`;
-  const imgStyle = widthStyle ? ` style="${widthStyle}"` : "";
-
-  return `<figure class="${cls}"><img src="${escapeAttr(image.url)}" alt="${alt}" loading="lazy"${imgStyle} />${credit}</figure>`;
+  return `<figure class="${cls.join(" ")}"><img src="${escapeAttr(image.url)}" alt="${alt}" loading="lazy" />${credit}</figure>`;
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Section helpers
+// Video — parsing robuste (YouTube, Vimeo, fichier direct)
+// Retourne soit une iframe (YT/Vimeo), soit un <video> natif (mp4/webm/…)
+// Compatible Systeme.io : pas d'aspect-ratio CSS, fallback inline si besoin.
+// ─────────────────────────────────────────────────────────────────────────────
+type ParsedVideo = { kind: "iframe" | "file"; src: string } | null;
+
+function parseVideoUrl(raw: string): ParsedVideo {
+  if (!raw) return null;
+  const url = raw.trim();
+  if (!url) return null;
+
+  // Fichier direct
+  if (/\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(url)) {
+    return { kind: "file", src: url };
+  }
+
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+
+  // YouTube : watch / youtu.be / shorts / embed / live
+  if (
+    host === "youtube.com" ||
+    host === "m.youtube.com" ||
+    host === "youtube-nocookie.com" ||
+    host === "youtu.be"
+  ) {
+    let id = "";
+    if (host === "youtu.be") {
+      id = u.pathname.replace(/^\//, "").split("/")[0];
+    } else if (u.pathname.startsWith("/shorts/")) {
+      id = u.pathname.replace("/shorts/", "").split("/")[0];
+    } else if (u.pathname.startsWith("/embed/")) {
+      id = u.pathname.replace("/embed/", "").split("/")[0];
+    } else if (u.pathname.startsWith("/live/")) {
+      id = u.pathname.replace("/live/", "").split("/")[0];
+    } else if (u.pathname === "/watch") {
+      id = u.searchParams.get("v") || "";
+    }
+    if (!id) return null;
+
+    const params = new URLSearchParams();
+    const t = u.searchParams.get("t") || u.searchParams.get("start");
+    if (t) {
+      const sec = /^\d+$/.test(t)
+        ? t
+        : String(
+            parseInt(/(\d+)h/.exec(t)?.[1] || "0", 10) * 3600 +
+              parseInt(/(\d+)m/.exec(t)?.[1] || "0", 10) * 60 +
+              parseInt(/(\d+)s/.exec(t)?.[1] || "0", 10),
+          );
+      if (sec && sec !== "0") params.set("start", sec);
+    }
+    const qs = params.toString();
+    return {
+      kind: "iframe",
+      src: `https://www.youtube.com/embed/${id}${qs ? `?${qs}` : ""}`,
+    };
+  }
+
+  // Vimeo : vimeo.com/123, vimeo.com/123/hash, player.vimeo.com/video/123[/hash]
+  if (host === "vimeo.com" || host === "player.vimeo.com") {
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (host === "player.vimeo.com") {
+      const vIdx = segs.indexOf("video");
+      if (vIdx >= 0 && segs[vIdx + 1]) {
+        const id = segs[vIdx + 1];
+        const hash = segs[vIdx + 2];
+        return {
+          kind: "iframe",
+          src: `https://player.vimeo.com/video/${id}${hash ? `?h=${hash}` : ""}`,
+        };
+      }
+      return null;
+    }
+    const id = segs[0];
+    const hash = segs[1];
+    if (!id || !/^\d+$/.test(id)) return null;
+    return {
+      kind: "iframe",
+      src: `https://player.vimeo.com/video/${id}${hash ? `?h=${hash}` : ""}`,
+    };
+  }
+
+  // Inconnu : tenter une iframe
+  return { kind: "iframe", src: url };
+}
+
+function renderVideo(
+  url?: string,
+  anim: AnimationPreset = "zoom-in",
+  posterUrl?: string,
+): string {
+  if (!url) return "";
+  const parsed = parseVideoUrl(url);
+  if (!parsed) return "";
+  const aCls = animClass(anim);
+  const cls = ["ff-video", aCls].filter(Boolean).join(" ");
+
+  if (parsed.kind === "file") {
+    const poster = posterUrl
+      ? ` poster="${escapeAttr(posterUrl)}"`
+      : "";
+    return `<div class="${cls}"><div class="ff-video-inner">
+  <video controls preload="metadata"${poster} style="display:block;width:100%;height:auto;">
+    <source src="${escapeAttr(parsed.src)}" />
+  </video>
+</div></div>`;
+  }
+
+  return `<div class="${cls}"><div class="ff-video-inner">
+  <iframe src="${escapeAttr(parsed.src)}" title="Vidéo" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</div></div>`;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section colors & background
 // ─────────────────────────────────────────────────────────────────────────────
 function getSectionColors(section: FunnelSection): SectionColors {
-  const style = (section.style ?? {}) as { colors?: SectionColors; userColorsOverride?: boolean };
+  const style = (section.style ?? {}) as {
+    colors?: SectionColors;
+    userColorsOverride?: boolean;
+  };
   const colors: SectionColors = style.colors ?? {};
   if (style.userColorsOverride) return colors;
-  const hasExplicitBg = typeof colors.bg === "string" && colors.bg.trim().length > 0;
+
+  const hasExplicitBg =
+    typeof colors.bg === "string" && colors.bg.trim().length > 0;
   if (hasExplicitBg) return colors;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { bg: _ignored, ...rest } = colors;
   return rest;
 }
 
-function buildSectionStyle(section: FunnelSection): string {
-  const styles: string[] = [];
+function buildSectionInlineStyle(section: FunnelSection): string {
+  const parts: string[] = [];
   const colors = getSectionColors(section);
+  const bg = section.background;
 
-  if (colors.bg) styles.push(`background:${colors.bg}`);
-  if (colors.ink) styles.push(`color:${colors.ink}`);
-
-  if (!colors.ink && section.style?.textColor) styles.push(`color:${section.style.textColor}`);
-
-  if (section.style?.align === "center") styles.push("text-align:center");
-  else if (section.style?.align === "right") styles.push("text-align:right");
-
-  const bgImg = section.background?.imageUrl;
-  if (bgImg) {
-    const pos = section.background?.position ?? "center";
-    const size = section.background?.size ?? "cover";
-    styles.push(`background-image:url('${bgImg.replace(/'/g, "%27")}')`);
-    styles.push(`background-size:${size}`);
-    styles.push(`background-position:${pos}`);
-    styles.push(`background-repeat:no-repeat`);
-    styles.push(`position:relative`);
+  if (colors.bg) {
+    parts.push(`background-color:${colors.bg}`);
+  }
+  if (colors.ink) {
+    parts.push(`color:${colors.ink}`);
+  }
+  if (colors.accent) {
+    parts.push(`--ff-accent:${colors.accent}`);
   }
 
-  // shadow inline (compat SIO : pas de data-* + CSS attr selector)
-  const sh = section.style?.shadow;
-  if (sh && sh.size && sh.size !== "none") {
-    const map: Record<string, string> = {
-      sm: "0 2px 8px",
-      md: "0 8px 24px",
-      lg: "0 16px 40px",
-      xl: "0 24px 60px",
-    };
-    const color = sh.color || "rgba(15,23,42,0.15)";
-    styles.push(`box-shadow:${map[sh.size] ?? map.md} ${color}`);
+  if (bg?.imageUrl) {
+    parts.push(
+      `background-image:url('${bg.imageUrl.replace(/'/g, "%27")}')`,
+      `background-size:${bg.size ?? "cover"}`,
+      `background-position:${bg.position ?? "center"}`,
+      `background-repeat:no-repeat`,
+    );
   }
 
-  return styles.join(";");
+  return parts.join(";");
 }
 
-function sectionSpacingClass(section: FunnelSection): string {
-  return section.style?.spacing ? ` ff-spacing-${section.style.spacing}` : "";
-}
-
-function sectionLayoutClass(section: FunnelSection): string {
-  const v = section.layoutVariant;
-  if (!v) return "";
-  return ` ff-layout-${v}`;
-}
-
-function animClassFor(preset?: AnimationPreset): string {
-  if (!preset || preset === "none") return "";
-  return ` ff-anim-${preset}`;
-}
-
-function renderBackgroundOverlay(section: FunnelSection): string {
+function sectionOverlay(section: FunnelSection): string {
   const bg = section.background;
   if (!bg?.imageUrl) return "";
-  const overlay = typeof bg.overlay === "number" ? clamp(bg.overlay, 0, 1) : 0.4;
+  const overlay = bg.overlay ?? 0;
   if (overlay <= 0) return "";
-  return `<div class="ff-section-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,${overlay});pointer-events:none;z-index:0;"></div>`;
+  return `<div aria-hidden="true" class="ff-section-overlay" style="position:absolute;inset:0;pointer-events:none;background:rgba(0,0,0,${clamp(overlay, 0, 1)});"></div>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Specialized renderers
+// Bullets
 // ─────────────────────────────────────────────────────────────────────────────
+const BULLET_LAYOUT_SECTIONS = new Set([
+  "benefits",
+  "features",
+  "advantages",
+  "proof",
+  "trust",
+  "stats",
+]);
+
+const BULLET_LIST_ONLY_SECTIONS = new Set([
+  "hero",
+  "form",
+  "thankyou",
+  "delivery",
+  "confirmation",
+]);
+
+function splitBulletValueLabel(
+  raw: string,
+): { value: string; label?: string } {
+  const t = (raw || "").trim();
+  const pipeIdx = t.indexOf("|");
+  if (pipeIdx > 0 && pipeIdx < t.length - 1) {
+    return {
+      value: t.slice(0, pipeIdx).trim(),
+      label: t.slice(pipeIdx + 1).trim(),
+    };
+  }
+  const nlIdx = t.indexOf("\n");
+  if (nlIdx > 0 && nlIdx < t.length - 1) {
+    return {
+      value: t.slice(0, nlIdx).trim(),
+      label: t.slice(nlIdx + 1).trim(),
+    };
+  }
+  return { value: t };
+}
+
+function bulletsFitInlineStrip(bullets: string[]): boolean {
+  if (bullets.length < 2 || bullets.length > 4) return false;
+  return bullets.every((b) => {
+    const { value, label } = splitBulletValueLabel(b);
+    const main = label ? value : value;
+    return main.length > 0 && main.length <= 32;
+  });
+}
+
+function renderBullets(section: FunnelSection): string {
+  if (!section.bullets?.length) return "";
+  const defaultIconName = section.iconName || "check";
+  const sectionType = String(section.type || "");
+
+  const isListOnly = BULLET_LIST_ONLY_SECTIONS.has(sectionType);
+  const isLayoutCompatible =
+    !isListOnly && BULLET_LAYOUT_SECTIONS.has(sectionType);
+
+  let mode: "list" | "grid" | "strip" = "list";
+  if (isLayoutCompatible) {
+    if (bulletsFitInlineStrip(section.bullets)) {
+      mode = "strip";
+    } else {
+      mode = "grid";
+    }
+  }
+
+  const ulClasses = ["ff-bullets"];
+  if (mode === "grid") ulClasses.push("ff-bullets--grid");
+  if (mode === "strip") ulClasses.push("ff-bullets--inline-strip");
+
+  const itemsHtml = section.bullets
+    .map((bullet, i) => {
+      const name = (section.bulletIcons?.[i] as string) ?? defaultIconName;
+      const svg = renderIconByName(name, 18);
+
+      if (mode === "strip") {
+        const { value, label } = splitBulletValueLabel(bullet);
+        if (label) {
+          return `<li><span class="ff-strip-value">${applyInlineHighlights(escapeHtml(value))}</span><span class="ff-strip-label">${applyInlineHighlights(escapeHtml(label))}</span></li>`;
+        }
+        return `<li><span class="ff-strip-value">${applyInlineHighlights(escapeHtml(value))}</span></li>`;
+      }
+
+      return `<li><span class="ff-bullet-ic">${svg}</span><span class="ff-bullet-text">${applyInlineHighlights(escapeHtml(bullet))}</span></li>`;
+    })
+    .join("");
+
+  return `<ul class="${ulClasses.join(" ")}" data-ff-bullets-mode="${mode}">${itemsHtml}</ul>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Renderers spécialisés
+// ─────────────────────────────────────────────────────────────────────────────
+function gridClass(count: number): string {
+  const cols = clamp(count, 1, 3);
+  return `ff-grid-${cols}`;
+}
+
 function renderPricing(section: FunnelSection): string {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "pricing" } => it.kind === "pricing");
+    (it): it is SectionItem & { kind: "pricing" } => it.kind === "pricing",
+  );
   if (items.length === 0) return "";
-  const gridCls = items.length === 1 ? "ff-grid-1" : items.length === 2 ? "ff-grid-2" : "ff-grid-3";
 
-  return `<div class="ff-pricing ${gridCls}">
-${items.map((item, idx) => {
-  const d = item.data;
-  const highlighted = !!d.highlighted;
-  const cls = `ff-pricing-card ff-card${highlighted ? " ff-pricing-card--highlighted ff-card-elevated" : ""}`;
-  const ctaHtml = d.cta?.label
-    ? `<a class="ff-btn ff-pricing-cta"${ctaAttrs(d.cta)}>${escapeHtml(d.cta.label)}</a>` : "";
-  const badge = highlighted ? `<div class="ff-pricing-badge">★ ${escapeHtml(d.badge ?? "Populaire")}</div>` : "";
-  const desc = d.description ? `<p class="ff-pricing-desc">${escapeHtml(d.description)}</p>` : "";
-  const period = d.period ? `<span class="ff-pricing-period">${escapeHtml(d.period)}</span>` : "";
-  const featureIconSize = resolveIconSizePx(d.featureIcon);
-  const featureIconHtml = d.featureIcon
-    ? renderIconSvg(normalizeIconName(d.featureIcon.name), featureIconSize, d.featureIcon.color)
-    : renderIconSvg("check", 16);
-  const features = d.features?.length
-    ? `<ul class="ff-pricing-features">
+  const cards = items
+    .map((item, idx) => {
+      const d = item.data;
+      const highlighted = !!d.highlighted;
+      const cardCls = highlighted
+        ? "ff-pricing-card ff-card ff-card-elevated ff-pricing-card--highlighted"
+        : "ff-pricing-card ff-card";
+
+      const badge = highlighted
+        ? `<div class="ff-pricing-badge">★ ${escapeHtml(d.badge ?? "Populaire")}</div>`
+        : "";
+      const desc = d.description
+        ? `<p class="ff-pricing-desc">${escapeHtml(d.description)}</p>`
+        : "";
+      const period = d.period
+        ? `<span class="ff-pricing-period">${escapeHtml(d.period)}</span>`
+        : "";
+      const featureIconSize = d.featureIcon
+        ? resolveIconSizePx(d.featureIcon)
+        : 16;
+      const featureIconHtml = d.featureIcon
+        ? renderIconSvg(
+            normalizeIconName(d.featureIcon.name),
+            featureIconSize,
+            d.featureIcon.color,
+          )
+        : renderIconSvg("check", 16);
+      const features = d.features?.length
+        ? `<ul class="ff-pricing-features">
 ${d.features.map((f) => `  <li><span class="ff-feat-check">${featureIconHtml}</span><span>${escapeHtml(f)}</span></li>`).join("\n")}
-</ul>` : "";
-  return `  <div class="${cls}">
+</ul>`
+        : "";
+      const ctaHtml = d.cta?.label
+        ? renderCtaButton(d.cta, "ff-pricing-cta", "fade-up")
+        : "";
+
+      return `  <div class="${cardCls}">
     ${badge}
-    <div class="ff-pricing-head">
-      <h3 class="ff-pricing-name">${escapeHtml(d.name || `Plan ${idx + 1}`)}</h3>
-      ${desc}
-    </div>
+    <h3 class="ff-pricing-name">${escapeHtml(d.name || `Plan ${idx + 1}`)}</h3>
+    ${desc}
     <div class="ff-pricing-price">
       <span class="ff-pricing-amount">${escapeHtml(d.price || "—")}</span>
       ${period}
@@ -295,27 +815,40 @@ ${d.features.map((f) => `  <li><span class="ff-feat-check">${featureIconHtml}</s
     ${features}
     ${ctaHtml}
   </div>`;
-}).join("\n")}
+    })
+    .join("\n");
+
+  return `<div class="ff-pricing ${gridClass(items.length)}">
+${cards}
 </div>`;
 }
 
 function renderBonus(section: FunnelSection): string {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "bonus" } => it.kind === "bonus");
+    (it): it is SectionItem & { kind: "bonus" } => it.kind === "bonus",
+  );
   if (items.length === 0) return "";
-  const gridCls = items.length === 1 ? "ff-grid-1" : items.length === 2 ? "ff-grid-2" : "ff-grid-3";
 
-  return `<div class="ff-bonus ${gridCls}">
-${items.map((item, idx) => {
-  const d = item.data;
-  const iconConfig: IconConfig = d.icon ?? { name: normalizeIconName(d.iconName ?? "gift") };
-  const iconSize = resolveIconSizePx(iconConfig);
-  const iconSvg = renderIconSvg(normalizeIconName(iconConfig.name), iconSize, iconConfig.color);
-  const value = d.value ? `<span class="ff-bonus-value">${escapeHtml(d.value)}</span>` : "";
-  const desc = d.description ? `<p class="ff-bonus-desc">${escapeHtml(d.description)}</p>` : "";
-  return `  <div class="ff-bonus-card ff-card">
+  const cards = items
+    .map((item, idx) => {
+      const d = item.data;
+      const iconConfig: IconConfig =
+        d.icon ?? { name: normalizeIconName(d.iconName ?? "gift") };
+      const iconSize = resolveIconSizePx(iconConfig);
+      const iconSvg = renderIconSvg(
+        normalizeIconName(iconConfig.name),
+        iconSize,
+        iconConfig.color,
+      );
+      const value = d.value
+        ? `<span class="ff-bonus-value">${escapeHtml(d.value)}</span>`
+        : "";
+      const desc = d.description
+        ? `<p class="ff-bonus-desc">${escapeHtml(d.description)}</p>`
+        : "";
+      return `  <div class="ff-bonus-card">
     <div class="ff-bonus-icon">${iconSvg}</div>
-    <div class="ff-bonus-body">
+    <div>
       <div class="ff-bonus-head">
         <h3 class="ff-bonus-title">${escapeHtml(d.title || `Bonus ${idx + 1}`)}</h3>
         ${value}
@@ -323,28 +856,109 @@ ${items.map((item, idx) => {
       ${desc}
     </div>
   </div>`;
-}).join("\n")}
+    })
+    .join("\n");
+
+  return `<div class="ff-bonus ${gridClass(items.length)}">
+${cards}
+</div>`;
+}
+
+function renderTestimonialMedia(media: {
+  kind: "image" | "video";
+  url: string;
+  alt?: string;
+  posterUrl?: string;
+}): string {
+  if (!media.url) return "";
+
+  if (media.kind === "image") {
+    return `<div class="ff-testimonial-media ff-testimonial-media--image">
+  <img src="${escapeAttr(media.url)}" alt="${escapeAttr(media.alt || "")}" loading="lazy" />
+</div>`;
+  }
+
+  const parsed = parseVideoUrl(media.url);
+  if (!parsed) return "";
+
+  if (parsed.kind === "file") {
+    const poster = media.posterUrl ? ` poster="${escapeAttr(media.posterUrl)}"` : "";
+    return `<div class="ff-testimonial-media ff-testimonial-media--video">
+  <video controls preload="metadata"${poster} style="display:block;width:100%;height:auto;">
+    <source src="${escapeAttr(parsed.src)}" />
+  </video>
+</div>`;
+  }
+
+  return `<div class="ff-testimonial-media ff-testimonial-media--video">
+  <div class="ff-testimonial-media-frame" style="position:relative;width:100%;padding-bottom:56.25%;height:0;overflow:hidden;">
+    <iframe src="${escapeAttr(parsed.src)}" title="${escapeAttr(media.alt || "Témoignage vidéo")}" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe>
+  </div>
+</div>`;
+}
+
+function renderTestimonialMediaGallery(
+  medias: Array<{
+    id: string;
+    kind: "image" | "video";
+    url: string;
+    alt?: string;
+    posterUrl?: string;
+  }>,
+): string {
+  const list = medias.filter((m) => !!m.url);
+  if (list.length === 0) return "";
+  const colsClass =
+    list.length === 1
+      ? "ff-tm-cols-1"
+      : list.length === 2
+        ? "ff-tm-cols-2"
+        : "ff-tm-cols-3";
+  const cells = list.map((m) => renderTestimonialMedia(m)).join("\n");
+  // grid responsive en inline (compat SIO sans dépendre du CSS thème)
+  return `<div class="ff-testimonial-media-gallery ${colsClass}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+${cells}
 </div>`;
 }
 
 function renderTestimonials(section: FunnelSection): string {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "testimonial" } => it.kind === "testimonial");
+    (it): it is SectionItem & { kind: "testimonial" } => it.kind === "testimonial",
+  );
   if (items.length === 0) return "";
-  const gridCls = items.length === 1 ? "ff-grid-1" : items.length === 2 ? "ff-grid-2" : "ff-grid-3";
 
-  return `<div class="ff-testimonials ${gridCls}">
-${items.map((item) => {
-  const d = item.data;
-  const initials = (d.authorName || "?").split(" ").map((s) => s[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-  const rating = d.rating && d.rating > 0
-    ? `<div class="ff-testimonial-rating">${"★".repeat(clamp(d.rating, 0, 5))}${"☆".repeat(5 - clamp(d.rating, 0, 5))}</div>` : "";
-  const quote = d.quote ? `<blockquote class="ff-testimonial-quote">« ${escapeHtml(d.quote)} »</blockquote>` : "";
-  const avatar = d.avatarUrl
-    ? `<img class="ff-testimonial-avatar" src="${escapeAttr(d.avatarUrl)}" alt="${escapeAttr(d.authorName || "")}" loading="lazy" />`
-    : `<div class="ff-testimonial-avatar ff-testimonial-avatar--initials">${escapeHtml(initials)}</div>`;
-  const role = d.authorRole ? `<div class="ff-testimonial-role">${escapeHtml(d.authorRole)}</div>` : "";
-  return `  <div class="ff-testimonial-card ff-card">
+  const cards = items
+    .map((item) => {
+      const d = item.data;
+      const initials = (d.authorName || "?")
+        .split(" ")
+        .map((s) => s[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join("")
+        .toUpperCase();
+
+      // 🆕 Médias additionnels (Option D : au-dessus de la citation)
+      const mediasHtml = Array.isArray(d.medias) && d.medias.length > 0
+        ? renderTestimonialMediaGallery(d.medias)
+        : "";
+
+      const rating =
+        d.rating && d.rating > 0
+          ? `<div class="ff-testimonial-rating">${"★".repeat(clamp(d.rating, 0, 5))}${"☆".repeat(5 - clamp(d.rating, 0, 5))}</div>`
+          : "";
+      const quote = d.quote
+        ? `<blockquote class="ff-testimonial-quote">« ${escapeHtml(d.quote)} »</blockquote>`
+        : "";
+      const avatar = d.avatarUrl
+        ? `<img class="ff-testimonial-avatar" src="${escapeAttr(d.avatarUrl)}" alt="${escapeAttr(d.authorName || "")}" loading="lazy" />`
+        : `<div class="ff-testimonial-avatar ff-testimonial-avatar--initials">${escapeHtml(initials)}</div>`;
+      const role = d.authorRole
+        ? `<div class="ff-testimonial-role">${escapeHtml(d.authorRole)}</div>`
+        : "";
+
+      return `  <div class="ff-testimonial-card ff-card">
+    ${mediasHtml}
     ${rating}
     ${quote}
     <div class="ff-testimonial-author">
@@ -355,43 +969,66 @@ ${items.map((item) => {
       </div>
     </div>
   </div>`;
-}).join("\n")}
+    })
+    .join("\n");
+
+  return `<div class="ff-testimonials ${gridClass(items.length)}">
+${cards}
 </div>`;
 }
 
-// FAQ : <details>/<summary> natif, pas de JS — compat SIO totale
+
 function renderFaq(section: FunnelSection): string {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "faq" } => it.kind === "faq");
+    (it): it is SectionItem & { kind: "faq" } => it.kind === "faq",
+  );
   if (items.length === 0) return "";
-  const list = items.map((item, idx) => {
-    const d = item.data;
-    const iconHtml = d.icon ? `<span class="ff-faq-icon">${renderIcon(d.icon, "lightbulb")}</span>` : "";
-    return `  <details class="ff-faq-item">
+
+  const list = items
+    .map((item, idx) => {
+      const d = item.data;
+      const iconHtml = d.icon
+        ? `<span class="ff-faq-icon">${renderIcon(d.icon, "lightbulb")}</span>`
+        : "";
+      return `  <details class="ff-faq-item">
     <summary class="ff-faq-q">
-      ${iconHtml}<span class="ff-faq-q-text">${escapeHtml(d.question || `Question ${idx + 1}`)}</span>
-      <span class="ff-faq-chevron">▾</span>
+      <span class="ff-faq-q-text">${iconHtml}${escapeHtml(d.question || `Question ${idx + 1}`)}</span>
+      <svg class="ff-faq-chevron" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </summary>
     <div class="ff-faq-a"><p>${escapeHtml(d.answer || "")}</p></div>
   </details>`;
-  }).join("\n");
-  return `<div class="ff-faq-list">\n${list}\n</div>`;
+    })
+    .join("\n");
+
+  return `<div class="ff-faq-list">
+${list}
+</div>`;
 }
 
 function renderGuarantee(section: FunnelSection): string {
   const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "guarantee" } => it.kind === "guarantee");
+    (it): it is SectionItem & { kind: "guarantee" } => it.kind === "guarantee",
+  );
   const item = items[0];
   if (!item) return "";
   const d = item.data;
-  const iconConfig: IconConfig = d.icon ?? { name: normalizeIconName(d.iconName ?? "shield") };
+  const iconConfig: IconConfig =
+    d.icon ?? { name: normalizeIconName(d.iconName ?? "shield") };
   const iconSize = Math.max(28, resolveIconSizePx(iconConfig));
-  const iconSvg = renderIconSvg(normalizeIconName(iconConfig.name), iconSize, iconConfig.color);
-  const duration = d.duration ? `<span class="ff-guarantee-duration">${escapeHtml(d.duration)}</span>` : "";
-  const desc = d.description ? `<p class="ff-guarantee-desc">${escapeHtml(d.description)}</p>` : "";
-  return `<div class="ff-guarantee ff-card-elevated">
+  const iconSvg = renderIconSvg(
+    normalizeIconName(iconConfig.name),
+    iconSize,
+    iconConfig.color,
+  );
+  const duration = d.duration
+    ? `<span class="ff-guarantee-duration">${escapeHtml(d.duration)}</span>`
+    : "";
+  const desc = d.description
+    ? `<p class="ff-guarantee-desc">${escapeHtml(d.description)}</p>`
+    : "";
+  return `<div class="ff-guarantee">
   <div class="ff-guarantee-icon">${iconSvg}</div>
-  <div class="ff-guarantee-body">
+  <div>
     <div class="ff-guarantee-head">
       <h3 class="ff-guarantee-title">${escapeHtml(d.title || "Notre garantie")}</h3>
       ${duration}
@@ -401,9 +1038,459 @@ function renderGuarantee(section: FunnelSection): string {
 </div>`;
 }
 
-function renderFormFields(section: FunnelSection, language: Funnel["language"]): string {
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Timer — Rendu HTML statique (SIO)
+//
+// Le HTML émis reproduit fidèlement le DOM de TimerRenderer.tsx (mêmes classes
+// ff-timer / ff-timer--cards / --digital / --inline / --seats, mêmes styles
+// inline pour les couleurs et tailles).
+//
+// Toute la config dynamique est posée en data-attrs sur le conteneur racine
+// pour que le script vanilla (FF_TIMER_SCRIPT, plus bas) puisse :
+//   - calculer le temps restant côté navigateur,
+//   - mettre à jour chaque seconde les <span data-ff-timer-field="…">,
+//   - gérer localStorage pour le mode "countdown-duration",
+//   - cacher / remplacer le timer à expiration.
+//
+// Important : les chiffres initiaux sont calculés ici en JS au moment de
+// l'export → le visiteur voit immédiatement un timer plausible, puis le
+// script ajuste en temps réel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIMER_SIZE_CONFIG: Record<
+  NonNullable<TimerItem["size"]>,
+  { numFs: string; lblFs: string; gap: string; padX: string; padY: string }
+> = {
+  sm: { numFs: "1.25rem", lblFs: "0.625rem",  gap: "0.375rem", padX: "0.5rem",  padY: "0.375rem" },
+  md: { numFs: "2rem",    lblFs: "0.75rem",   gap: "0.5rem",   padX: "0.75rem", padY: "0.625rem" },
+  lg: { numFs: "3rem",    lblFs: "0.8125rem", gap: "0.75rem",  padX: "1rem",    padY: "0.875rem" },
+  xl: { numFs: "4rem",    lblFs: "0.875rem",  gap: "1rem",     padX: "1.25rem", padY: "1.125rem" },
+};
+
+const TIMER_DEFAULT_LABELS: Record<
+  string,
+  { days: string; hours: string; minutes: string; seconds: string }
+> = {
+  fr: { days: "Jours", hours: "Heures", minutes: "Minutes", seconds: "Secondes" },
+  en: { days: "Days",  hours: "Hours",  minutes: "Minutes", seconds: "Seconds"  },
+  es: { days: "Días",  hours: "Horas",  minutes: "Minutos", seconds: "Segundos" },
+};
+
+function pad2(n: number): string {
+  return String(Math.max(0, n)).padStart(2, "0");
+}
+
+function computeInitialTimeLeft(timer: TimerItem): {
+  days: number; hours: number; minutes: number; seconds: number;
+} {
+  let totalMs = 0;
+  if (timer.mode === "countdown-date" && timer.targetDate) {
+    const t = new Date(timer.targetDate).getTime();
+    if (!isNaN(t)) totalMs = Math.max(0, t - Date.now());
+  } else if (timer.mode === "countdown-duration" && timer.durationHours) {
+    totalMs = Math.max(0, timer.durationHours * 60 * 60 * 1000);
+  }
+  return {
+    days: Math.floor(totalMs / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((totalMs / (1000 * 60 * 60)) % 24),
+    minutes: Math.floor((totalMs / (1000 * 60)) % 60),
+    seconds: Math.floor((totalMs / 1000) % 60),
+  };
+}
+
+function buildTimerDataAttrs(
+  timer: TimerItem,
+  funnelId: string,
+  pageId: string,
+  language: string,
+): string {
+  const attrs: Record<string, string> = {
+    "data-ff-timer": "true",
+    "data-ff-timer-id": timer.id,
+    "data-ff-timer-mode": timer.mode,
+    "data-ff-timer-style": timer.style ?? "cards",
+    "data-ff-timer-size": timer.size ?? "md",
+    "data-ff-timer-on-expire": timer.onExpire ?? "keep-zero",
+    "data-ff-timer-show-days": timer.showDays ? "true" : "false",
+    "data-ff-timer-scope": `${funnelId}_${pageId}`,
+    "data-ff-timer-lang": language,
+  };
+  if (timer.mode === "countdown-duration" && timer.durationHours) {
+    attrs["data-ff-timer-duration-ms"] = String(
+      Math.max(1, timer.durationHours) * 60 * 60 * 1000,
+    );
+  }
+  if (timer.mode === "countdown-date" && timer.targetDate) {
+    const t = new Date(timer.targetDate).getTime();
+    if (!isNaN(t)) attrs["data-ff-timer-target-ms"] = String(t);
+  }
+  if (timer.mode === "seats-counter") {
+    attrs["data-ff-timer-seats-total"] = String(timer.seatsTotal ?? 100);
+    attrs["data-ff-timer-seats-remaining"] = String(timer.seatsRemaining ?? 0);
+  }
+  if (timer.expiredMessage) {
+    attrs["data-ff-timer-expired-msg"] = timer.expiredMessage;
+  }
+  return Object.entries(attrs)
+    .map(([k, v]) => `${k}="${escapeAttr(v)}"`)
+    .join(" ");
+}
+
+function renderTimer(
+  timer: TimerItem,
+  funnel: Funnel,
+  pageId: string,
+): string {
+  const lang = (funnel.language || "fr") as "fr" | "en" | "es";
+  const labels = {
+    ...TIMER_DEFAULT_LABELS[lang],
+    ...(timer.labels ?? {}),
+  };
+  const sizeConf = TIMER_SIZE_CONFIG[timer.size ?? "md"];
+  const accentColor = timer.color ?? "var(--ff-accent, #2563eb)";
+  const scopeId = (funnel.funnelName || "default")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .toLowerCase();
+  const dataAttrs = buildTimerDataAttrs(timer, scopeId, pageId, lang);
+
+  /* ─── Mode "seats-counter" ─── */
+  if (timer.mode === "seats-counter") {
+    const remaining = timer.seatsRemaining ?? 0;
+    const total = timer.seatsTotal ?? 100;
+    const pct = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
+    const labelHtml = timer.label
+      ? `<div class="ff-timer-label" style="text-align:center;font-weight:500;font-size:${sizeConf.lblFs};margin-bottom:0.5rem;">${escapeHtml(timer.label)}</div>`
+      : "";
+    return `<div class="ff-timer ff-timer--seats" ${dataAttrs} style="margin-top:1rem;margin-bottom:1rem;">
+  ${labelHtml}
+  <div style="display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+    <div style="font-weight:700;font-size:${sizeConf.numFs};color:${escapeAttr(accentColor)};">
+      <span data-ff-timer-field="seats-remaining">${escapeHtml(String(remaining))}</span> / <span data-ff-timer-field="seats-total">${escapeHtml(String(total))}</span>
+    </div>
+    <div style="height:0.5rem;width:100%;max-width:28rem;overflow:hidden;border-radius:9999px;background:rgba(0,0,0,0.08);">
+      <div data-ff-timer-field="seats-bar" style="height:100%;border-radius:9999px;width:${pct}%;background:${escapeAttr(accentColor)};transition:width .7s ease;"></div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  /* ─── Countdown : pré-calcul SSR ─── */
+  const t0 = computeInitialTimeLeft(timer);
+  const units: Array<{ value: number; label: string; key: string }> = [];
+  if (timer.showDays) units.push({ value: t0.days, label: labels.days, key: "days" });
+  units.push({ value: t0.hours, label: labels.hours, key: "hours" });
+  units.push({ value: t0.minutes, label: labels.minutes, key: "minutes" });
+  units.push({ value: t0.seconds, label: labels.seconds, key: "seconds" });
+
+  const style = timer.style ?? "cards";
+
+  /* ─── Style "inline" ─── */
+  if (style === "inline") {
+    const labelHtml = timer.label
+      ? `<span style="font-size:${sizeConf.lblFs};margin-right:0.5rem;opacity:0.85;">${escapeHtml(timer.label)}</span>`
+      : "";
+    const inner = units
+      .map((u) => `<span data-ff-timer-field="${u.key}">${pad2(u.value)}</span>`)
+      .join(`<span style="opacity:0.5;"> : </span>`);
+    return `<div class="ff-timer ff-timer--inline" ${dataAttrs} style="margin-top:1rem;margin-bottom:1rem;text-align:center;">
+  ${labelHtml}<span style="font-size:${sizeConf.numFs};font-weight:700;font-variant-numeric:tabular-nums;color:${escapeAttr(accentColor)};">${inner}</span>
+</div>`;
+  }
+
+  /* ─── Style "digital" ─── */
+  if (style === "digital") {
+    const bgStyle = timer.backgroundColor
+      ? `background:${escapeAttr(timer.backgroundColor)};padding:1rem;border-radius:12px;`
+      : "";
+    const labelHtml = timer.label
+      ? `<div style="text-align:center;font-weight:500;font-size:${sizeConf.lblFs};opacity:0.85;margin-bottom:0.5rem;">${escapeHtml(timer.label)}</div>`
+      : "";
+    const cells = units
+      .map(
+        (u, i) =>
+          `<div style="display:flex;align-items:center;gap:${sizeConf.gap};">
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <span data-ff-timer-field="${u.key}" style="font-size:${sizeConf.numFs};font-weight:800;color:${escapeAttr(accentColor)};line-height:1;font-family:'Courier New',monospace;letter-spacing:0.05em;">${pad2(u.value)}</span>
+    <span style="font-size:${sizeConf.lblFs};opacity:0.7;margin-top:0.25rem;">${escapeHtml(u.label)}</span>
+  </div>
+  ${i < units.length - 1 ? `<span style="font-size:${sizeConf.numFs};font-weight:800;color:${escapeAttr(accentColor)};opacity:0.5;line-height:1;">:</span>` : ""}
+</div>`,
+      )
+      .join("");
+    return `<div class="ff-timer ff-timer--digital" ${dataAttrs} style="margin-top:1rem;margin-bottom:1rem;${bgStyle}">
+  ${labelHtml}
+  <div style="display:flex;align-items:center;justify-content:center;gap:${sizeConf.gap};font-variant-numeric:tabular-nums;">
+    ${cells}
+  </div>
+</div>`;
+  }
+
+  /* ─── Style "cards" (défaut) ─── */
+  const bgStyle = timer.backgroundColor
+    ? `background:${escapeAttr(timer.backgroundColor)};padding:1rem;border-radius:12px;`
+    : "";
+  const labelHtml = timer.label
+    ? `<div style="text-align:center;font-weight:500;font-size:${sizeConf.lblFs};opacity:0.85;margin-bottom:0.75rem;">${escapeHtml(timer.label)}</div>`
+    : "";
+  const cardBg = timer.backgroundColor
+    ? "rgba(255,255,255,0.08)"
+    : "color-mix(in srgb, currentColor 6%, transparent)";
+  const cards = units
+    .map(
+      (u) =>
+        `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:0.5rem;min-width:calc(${sizeConf.numFs} * 1.6);padding:${sizeConf.padY} ${sizeConf.padX};background:${cardBg};border:1px solid color-mix(in srgb, currentColor 12%, transparent);">
+  <span data-ff-timer-field="${u.key}" style="font-size:${sizeConf.numFs};font-weight:800;color:${escapeAttr(accentColor)};line-height:1;">${pad2(u.value)}</span>
+  <span style="font-size:${sizeConf.lblFs};opacity:0.7;margin-top:0.25rem;">${escapeHtml(u.label)}</span>
+</div>`,
+    )
+    .join("");
+  return `<div class="ff-timer ff-timer--cards" ${dataAttrs} style="margin-top:1rem;margin-bottom:1rem;${bgStyle}">
+  ${labelHtml}
+  <div style="display:flex;align-items:stretch;justify-content:center;flex-wrap:wrap;gap:${sizeConf.gap};font-variant-numeric:tabular-nums;">
+    ${cards}
+  </div>
+</div>`;
+}
+
+function extractTimers(section: FunnelSection): TimerItem[] {
+  if (!Array.isArray(section.items)) return [];
+  return section.items
+    .filter((it): it is SectionItem & { kind: "timer" } => it.kind === "timer")
+    .map((it) => it.data);
+}
+
+function renderSectionTimers(
+  section: FunnelSection,
+  funnel: Funnel,
+  pageId: string,
+): string {
+  const timers = extractTimers(section);
+  if (timers.length === 0) return "";
+  return timers.map((t) => renderTimer(t, funnel, pageId)).join("\n");
+}
+
+function pageHasTimer(sections: FunnelSection[]): boolean {
+  for (const s of sections) {
+    if (s.visible === false) continue;
+    if (extractTimers(s).length > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Script vanilla JS qui pilote tous les timers de la page.
+ * Auto-exécuté au DOMContentLoaded. Guard contre double-boot.
+ */
+const FF_TIMER_SCRIPT = `
+<script>
+(function(){
+  if (window.__ffTimerBooted) return;
+  window.__ffTimerBooted = true;
+  function pad2(n){ return String(Math.max(0, n|0)).padStart(2, "0"); }
+  function getStart(scope, id){
+    try{
+      var k = "ff_timer_" + scope + "_" + id;
+      var v = window.localStorage.getItem(k);
+      if (v) { var p = parseInt(v, 10); if (!isNaN(p)) return p; }
+      var now = Date.now();
+      window.localStorage.setItem(k, String(now));
+      return now;
+    } catch(e){ return Date.now(); }
+  }
+  function computeTarget(el){
+    var mode = el.getAttribute("data-ff-timer-mode");
+    if (mode === "countdown-date") {
+      var t = parseInt(el.getAttribute("data-ff-timer-target-ms") || "0", 10);
+      return isNaN(t) ? 0 : t;
+    }
+    if (mode === "countdown-duration") {
+      var dur = parseInt(el.getAttribute("data-ff-timer-duration-ms") || "0", 10);
+      if (isNaN(dur) || dur <= 0) return 0;
+      var scope = el.getAttribute("data-ff-timer-scope") || "default";
+      var id = el.getAttribute("data-ff-timer-id") || "t";
+      return getStart(scope, id) + dur;
+    }
+    return 0;
+  }
+  function updateFields(el, total){
+    var showDays = el.getAttribute("data-ff-timer-show-days") === "true";
+    var days = Math.floor(total / 86400000);
+    var hours = Math.floor((total / 3600000) % 24);
+    var minutes = Math.floor((total / 60000) % 60);
+    var seconds = Math.floor((total / 1000) % 60);
+    if (!showDays) { hours = hours + days * 24; }
+    var f = el.querySelectorAll("[data-ff-timer-field]");
+    for (var i = 0; i < f.length; i++) {
+      var k = f[i].getAttribute("data-ff-timer-field");
+      if (k === "days") f[i].textContent = pad2(days);
+      else if (k === "hours") f[i].textContent = pad2(hours);
+      else if (k === "minutes") f[i].textContent = pad2(minutes);
+      else if (k === "seconds") f[i].textContent = pad2(seconds);
+    }
+  }
+  function handleExpire(el){
+    var behavior = el.getAttribute("data-ff-timer-on-expire") || "keep-zero";
+    if (behavior === "hide") { el.style.display = "none"; return; }
+    if (behavior === "show-message") {
+      var msg = el.getAttribute("data-ff-timer-expired-msg") || "";
+      el.className = "ff-timer ff-timer--expired";
+      el.style.textAlign = "center";
+      var safe = String(msg).replace(/[<>]/g, "");
+      el.innerHTML = '<span style="font-weight:600;color:var(--ff-accent,#2563eb);">' + safe + '</span>';
+      return;
+    }
+    updateFields(el, 0);
+  }
+  function bootTimer(el){
+    var mode = el.getAttribute("data-ff-timer-mode");
+    if (mode === "seats-counter") return;
+    var target = computeTarget(el);
+    if (!target) return;
+    var itv;
+    function tick(){
+      var total = Math.max(0, target - Date.now());
+      if (total === 0) { handleExpire(el); clearInterval(itv); return; }
+      updateFields(el, total);
+    }
+    tick();
+    itv = setInterval(tick, 1000);
+  }
+  function boot(){
+    var nodes = document.querySelectorAll("[data-ff-timer]");
+    for (var i = 0; i < nodes.length; i++) bootTimer(nodes[i]);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else { boot(); }
+})();
+</script>`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// renderSection — la balise <section> et son contenu
+// ─────────────────────────────────────────────────────────────────────────────
+type SectionContext = {
+  funnel: Funnel;
+  isSuccess: boolean;
+  /** 🆕 pour scoper le localStorage des timers (par page) */
+  pageId?: string;
+};
+
+function resolveLayout(
+  section: FunnelSection,
+  ctx: SectionContext,
+): string {
+  if (ctx.isSuccess) return "centered";
+  const raw = effectiveLayoutVariant(section, ctx.funnel);
+  if (raw === "split-text-image" || raw === "split-image-text") return "split";
+  if (raw === "left-aligned") return "left-aligned";
+  if (raw === "wide-banner") return "wide-banner";
+  if (raw === "stacked-card") return "stacked-card";
+  return "centered";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero icon pour les pages succès / confirmation / livraison
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSectionHeroIcon(
+  section: FunnelSection,
+  ctx: SectionContext,
+): string {
+  if (!ctx.isSuccess) return "";
+
+  const s = section as FunnelSection & {
+    iconSize?: "sm" | "md" | "lg";
+    iconAnimation?: string;
+  };
+
+  const name: IconName = normalizeIconName(section.iconName ?? "checkCircle");
+
+  const sizeMap: Record<string, number> = { sm: 56, md: 72, lg: 96 };
+  const px = sizeMap[s.iconSize ?? "md"];
+
+  const anim =
+    s.iconAnimation && s.iconAnimation !== "none"
+      ? s.iconAnimation
+      : animOf(section, "image", "zoom-in");
+  const animCls = animClass(anim);
+
+  const svg = renderIconSvg(name, px);
+
+  return `<div class="ff-section-hero-icon ${animCls}" aria-hidden="true">${svg}</div>`;
+}
+
+function renderSectionInnerContent(
+  section: FunnelSection,
+  ctx: SectionContext,
+): string {
+  const heroIcon = renderSectionHeroIcon(section, ctx);
+
+  const eyebrow = section.eyebrow
+    ? `<span class="ff-eyebrow ${animClass(animOf(section, "eyebrow", "fade-in"))}">${applyInlineHighlights(escapeHtml(section.eyebrow))}</span>`
+    : "";
+  const headline = section.headline
+    ? `<h2 class="ff-headline ${animClass(animOf(section, "headline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.headline))}</h2>`
+    : "";
+  const subheadline = section.subheadline
+    ? `<p class="ff-subheadline ${animClass(animOf(section, "subheadline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.subheadline))}</p>`
+    : "";
+  const body = section.body
+    ? `<p class="ff-body ${animClass(animOf(section, "body", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.body))}</p>`
+    : "";
+
+  const type = section.type as string;
+  const hasItems = Array.isArray(section.items) && section.items.length > 0;
+  let specialized = "";
+  if (hasItems) {
+    if (type === "pricing" || type === "offer") specialized = renderPricing(section);
+    else if (type === "bonus") specialized = renderBonus(section);
+    else if (type === "testimonials" || type === "proof")
+      specialized = renderTestimonials(section);
+    else if (type === "faq") specialized = renderFaq(section);
+    else if (type === "guarantee") specialized = renderGuarantee(section);
+  }
+
+  const bullets =
+    !specialized && section.bullets?.length ? renderBullets(section) : "";
+
+  const formHtml =
+    type === "form" ? renderFormFields(section, ctx.funnel.language) : "";
+
+  const image = renderImage(
+    section.image,
+    ctx.funnel,
+    animOf(section, "image", "fade-in"),
+  );
+  const video = renderVideo(
+    section.video?.url,
+    animOf(section, "video", "zoom-in"),
+  );
+
+  // 🆕 Timers de la section (rendus juste avant le CTA)
+  const timersHtml = renderSectionTimers(
+    section,
+    ctx.funnel,
+    ctx.pageId ?? "default",
+  );
+
+  const ctaWrapStyle = ctaWrapInlineStyle(section.cta?.spacing);
+  const ctaStyleAttr = ctaWrapStyle
+    ? ` style="${escapeAttr(ctaWrapStyle)}"`
+    : "";
+  const cta =
+    section.cta?.label && type !== "form"
+      ? `<div class="ff-cta-wrap ${animClass(animOf(section, "cta", "fade-up"))}"${ctaStyleAttr}>${renderCtaButton(section.cta, "", animOf(section, "cta", "fade-up"))}</div>`
+      : "";
+
+  return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}`;
+}
+
+function renderFormFields(
+  section: FunnelSection,
+  language: Funnel["language"],
+): string {
   const fields = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "formField" } => it.kind === "formField");
+    (it): it is SectionItem & { kind: "formField" } => it.kind === "formField",
+  );
   const labels = {
     fr: { submit: "Envoyer" },
     en: { submit: "Submit" },
@@ -415,27 +1502,33 @@ function renderFormFields(section: FunnelSection, language: Funnel["language"]):
     ? fields.map((f) => f.data)
     : [{ name: "email", label: "Email", type: "email", required: true, width: "full" }];
 
-  const fieldsHtml = list.map((f, idx) => {
-    const widthCls = f.width === "half" ? "ff-field ff-field--half" : "ff-field";
-    const name = escapeAttr(f.name || `field_${idx}`);
-    const label = f.label
-      ? `<label class="ff-field-label" for="${name}">${escapeHtml(f.label)}${f.required ? " *" : ""}</label>` : "";
-    const ph = escapeAttr(f.placeholder || "");
-    const req = f.required ? " required" : "";
-    let input = "";
-    if (f.type === "textarea") {
-      input = `<textarea class="ff-input" id="${name}" name="${name}" placeholder="${ph}" rows="4"${req}></textarea>`;
-    } else if (f.type === "select") {
-      const opts = (f.options || []).map((o) => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join("");
-      input = `<select class="ff-input" id="${name}" name="${name}"${req}><option value="">${escapeHtml(f.placeholder || "—")}</option>${opts}</select>`;
-    } else if (f.type === "checkbox") {
-      input = `<label class="ff-checkbox"><input type="checkbox" id="${name}" name="${name}"${req} /><span>${escapeHtml(f.placeholder || f.label || "")}</span></label>`;
-      return `<div class="${widthCls}">${input}</div>`;
-    } else {
-      input = `<input class="ff-input" type="${f.type}" id="${name}" name="${name}" placeholder="${ph}"${req} />`;
-    }
-    return `<div class="${widthCls}">${label}${input}</div>`;
-  }).join("\n");
+  const fieldsHtml = list
+    .map((f, idx) => {
+      const isHalf = f.width === "half";
+      const wrapCls = `ff-field${isHalf ? " ff-field--half" : ""}`;
+      const name = escapeAttr(f.name || `field_${idx}`);
+      const label = f.label
+        ? `<label class="ff-field-label" for="${name}">${escapeHtml(f.label)}${f.required ? " *" : ""}</label>`
+        : "";
+      const ph = escapeAttr(f.placeholder || "");
+      const req = f.required ? " required" : "";
+      let input = "";
+      if (f.type === "textarea") {
+        input = `<textarea class="ff-input" id="${name}" name="${name}" placeholder="${ph}" rows="4"${req}></textarea>`;
+      } else if (f.type === "select") {
+        const opts = (f.options || [])
+          .map((o) => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`)
+          .join("");
+        input = `<select class="ff-input" id="${name}" name="${name}"${req}><option value="">${escapeHtml(f.placeholder || "—")}</option>${opts}</select>`;
+      } else if (f.type === "checkbox") {
+        input = `<label class="ff-checkbox"><input type="checkbox" id="${name}" name="${name}"${req} /><span>${escapeHtml(f.placeholder || f.label || "")}</span></label>`;
+        return `<div class="${wrapCls}">${input}</div>`;
+      } else {
+        input = `<input class="ff-input" type="${f.type}" id="${name}" name="${name}" placeholder="${ph}"${req} />`;
+      }
+      return `<div class="${wrapCls}">${label}${input}</div>`;
+    })
+    .join("\n");
 
   return `<form class="ff-form-fields" action="#" method="post">
 ${fieldsHtml}
@@ -443,109 +1536,80 @@ ${fieldsHtml}
 </form>`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Video (sans aspect-ratio — padding-bottom 56.25%)
-// ─────────────────────────────────────────────────────────────────────────────
-function getVideoEmbedUrl(url: string): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, "");
-    if (host === "youtube.com" || host === "m.youtube.com") {
-      const v = u.searchParams.get("v");
-      if (v) return `https://www.youtube.com/embed/${v}`;
-    }
-    if (host === "youtu.be") {
-      const id = u.pathname.replace(/^\//, "");
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-    if (host === "vimeo.com") {
-      const id = u.pathname.replace(/^\//, "");
-      if (id) return `https://player.vimeo.com/video/${id}`;
-    }
-    return url;
-  } catch { return null; }
-}
+function renderSection(
+  section: FunnelSection,
+  ctx: SectionContext,
+  isFirst: boolean,
+): string {
+  const layout = resolveLayout(section, ctx);
+  const isHero = section.type === "hero" || isFirst;
+  const hasVideo = !!section.video?.url;
+  const hasImage = !!section.image && section.image.mode !== "none";
 
-function renderVideo(url?: string, animClass = ""): string {
-  if (!url) return "";
-  const embed = getVideoEmbedUrl(url);
-  if (!embed) return "";
-  const cls = `ff-video${animClass}`;
-  return `<div class="${cls}"><div class="ff-video-inner">
-  <iframe src="${escapeAttr(embed)}" title="Vidéo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-</div></div>`;
-}
+  const shadow = buildShadowStyle(section.style);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bullets
-// ─────────────────────────────────────────────────────────────────────────────
-function renderBullets(section: FunnelSection): string {
-  if (!section.bullets?.length) return "";
-  return `<ul class="ff-bullets">${section.bullets.map((b, i) => {
-    const iconName = section.bulletIcons?.[i] ?? section.iconName ?? "check";
-    const svg = renderIconByName(iconName, 18);
-    return `<li><span class="ff-bullet-ic">${svg}</span><span>${escapeHtml(b)}</span></li>`;
-  }).join("")}</ul>`;
-}
+  const classes = [
+    "ff-section",
+    `ff-${section.type}`,
+    `ff-layout-${layout}`,
+  ];
+  if (isHero) classes.push("ff-hero");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Section inner
-// ─────────────────────────────────────────────────────────────────────────────
-function renderSectionInner(section: FunnelSection, language: Funnel["language"]): string {
-  const anims = section.animations ?? {};
-  const eyebrow = section.eyebrow
-    ? `<span class="ff-eyebrow${animClassFor(anims.eyebrow)}">${escapeHtml(section.eyebrow)}</span>` : "";
-  const headline = section.headline
-    ? `<h2 class="ff-headline${animClassFor(anims.headline)}">${escapeHtml(section.headline)}</h2>` : "";
-  const subheadline = section.subheadline
-    ? `<p class="ff-subheadline${animClassFor(anims.subheadline)}">${escapeHtml(section.subheadline)}</p>` : "";
-  const body = section.body
-    ? `<p class="ff-body${animClassFor(anims.body)}">${escapeHtml(section.body)}</p>` : "";
-
-  const type = section.type as string;
-  const hasItems = Array.isArray(section.items) && section.items.length > 0;
-
-  let specialized = "";
-  if (hasItems) {
-    if (type === "pricing" || type === "offer") specialized = renderPricing(section);
-    else if (type === "bonus") specialized = renderBonus(section);
-    else if (type === "testimonials" || type === "proof") specialized = renderTestimonials(section);
-    else if (type === "faq") specialized = renderFaq(section);
-    else if (type === "guarantee") specialized = renderGuarantee(section);
-  }
-  if (specialized) {
-    const cls = animClassFor(anims.bullets);
-    specialized = cls ? `<div class="${cls.trim()}">${specialized}</div>` : specialized;
+  if (hasVideo && layout === "split") {
+    classes.push("ff-layout-video-stack");
   }
 
-  let formHtml = "";
-  if (type === "form") formHtml = renderFormFields(section, language);
+  const spacing = (section.style as { spacing?: string } | undefined)?.spacing;
+  if (spacing === "compact") classes.push("ff-spacing-compact");
+  if (spacing === "large") classes.push("ff-spacing-large");
 
-  const bullets = !specialized && section.bullets?.length
-    ? (() => {
-        const cls = animClassFor(anims.bullets);
-        return cls ? `<div class="${cls.trim()}">${renderBullets(section)}</div>` : renderBullets(section);
-      })()
+  if (shadow.className) classes.push(shadow.className.trim());
+
+  const baseInlineStyle = buildSectionInlineStyle(section);
+  const mergedInlineStyle = [baseInlineStyle, shadow.inline]
+    .filter((s) => s && s.length > 0)
+    .join(";")
+    .replace(/;;+/g, ";");
+  const styleAttr = mergedInlineStyle
+    ? ` style="${escapeAttr(mergedInlineStyle)}"`
     : "";
 
-  const image = renderImage(section.image, animClassFor(anims.image));
-  const video = renderVideo(section.video?.url, animClassFor(anims.video));
+  const overlay = sectionOverlay(section);
 
-  const cta = section.cta?.label && type !== "form"
-    ? `<div class="ff-cta-wrap${animClassFor(anims.cta)}"><a class="ff-btn ff-cta"${ctaAttrs(section.cta)}>${escapeHtml(section.cta.label)}</a></div>` : "";
-
-  const variant = section.layoutVariant;
-  const isSplit = variant === "split-text-image" || variant === "split-image-text";
-
-  if (isSplit) {
-    const textCol = `<div class="ff-split-text">${eyebrow}${headline}${subheadline}${body}${bullets}${cta}</div>`;
-    const mediaCol = `<div class="ff-split-media">${image}${video}${specialized}${formHtml}</div>`;
-    const order = variant === "split-image-text" ? `${mediaCol}${textCol}` : `${textCol}${mediaCol}`;
-    return `<div class="ff-split-grid">${order}</div>`;
+  let inner = "";
+  if (layout === "split" && hasImage && !hasVideo) {
+    const textBlock = renderSectionInnerContent(
+      { ...section, image: undefined, video: undefined } as FunnelSection,
+      ctx,
+    );
+    const mediaBlock = renderImage(
+      section.image,
+      ctx.funnel,
+      animOf(section, "image", "fade-in"),
+    );
+    const variant = effectiveLayoutVariant(section, ctx.funnel);
+    const order =
+      variant === "split-image-text"
+        ? `<div class="ff-split-media">${mediaBlock}</div><div class="ff-split-text">${textBlock}</div>`
+        : `<div class="ff-split-text">${textBlock}</div><div class="ff-split-media">${mediaBlock}</div>`;
+    inner = `<div class="ff-section-inner"><div class="ff-split-grid">${order}</div></div>`;
+  } else if (hasVideo) {
+    const textBlock = renderSectionInnerContent(
+      { ...section, image: undefined } as FunnelSection,
+      ctx,
+    );
+    const videoBlock = renderVideo(
+      section.video?.url,
+      animOf(section, "video", "zoom-in"),
+    );
+    inner = `<div class="ff-section-inner"><div class="ff-split-grid"><div class="ff-split-text">${textBlock}</div>${videoBlock ? `<div class="ff-split-media">${videoBlock}</div>` : ""}</div></div>`;
+  } else {
+    inner = `<div class="ff-section-inner">${renderSectionInnerContent(section, ctx)}</div>`;
   }
 
-  return `${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${cta}`;
+  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-layout="${layout}"${hasVideo ? ' data-ff-has-video="true"' : ""}>
+${overlay}${inner}
+</section>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -554,7 +1618,10 @@ function renderSectionInner(section: FunnelSection, language: Funnel["language"]
 function extractBrandName(fullName: string): string {
   if (!fullName) return "";
   const seps = [" - ", " – ", " — ", " | ", " : "];
-  for (const s of seps) { const i = fullName.indexOf(s); if (i > 0) return fullName.slice(0, i).trim(); }
+  for (const s of seps) {
+    const i = fullName.indexOf(s);
+    if (i > 0) return fullName.slice(0, i).trim();
+  }
   return fullName.trim();
 }
 
@@ -572,10 +1639,16 @@ function renderHeader(funnel: Funnel): string {
   if (h.sticky) classes.push("ff-brand-bar--sticky");
   if (h.transparent) classes.push("ff-brand-bar--transparent");
 
-  const ctaHtml = h.cta?.label
-    ? `<a class="ff-brand-cta ff-btn"${ctaAttrs(h.cta)}>${escapeHtml(h.cta.label)}</a>` : "";
+  let brandType: "text" | "logo" | "both" = "text";
+  if (showLogo && showName) brandType = "both";
+  else if (showLogo) brandType = "logo";
+  else if (showName) brandType = "text";
 
-  return `<div class="${classes.join(" ")}">
+  const hasCta = !!h.cta?.label;
+
+  const ctaHtml = h.cta?.label ? renderBrandCtaButton(h.cta) : "";
+
+  return `<div class="${classes.join(" ")}" data-ff-brand-type="${brandType}" data-ff-brand-has-cta="${hasCta ? "true" : "false"}">
   <div class="ff-brand-bar-inner">
     <div class="ff-brand-id">
       ${showLogo ? `<img src="${escapeAttr(logo!)}" alt="" />` : ""}
@@ -592,7 +1665,8 @@ function renderFooter(funnel: Funnel): string {
   const legalNotice = meta?.legalNotice?.trim();
   const contactEmail = meta?.contactEmail?.trim();
   const year = new Date().getFullYear();
-  const displayName = businessName || extractBrandName(funnel.funnelName) || "FunnelFlow";
+  const displayName =
+    businessName || extractBrandName(funnel.funnelName) || "FunnelFlow";
 
   return `<footer class="ff-footer">
   <div class="ff-footer-inner">
@@ -605,298 +1679,87 @@ function renderFooter(funnel: Funnel): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Template presets (sans @import — fallback système, polices Google chargées par SIO si dispo)
+// MODE 1 — Page complète standalone
 // ─────────────────────────────────────────────────────────────────────────────
-type TemplatePreset = { font: string; headlineFont?: string };
-const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
-  "premium-elegant": {
-    font: `Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`,
-    headlineFont: `"Playfair Display", Georgia, "Times New Roman", serif`,
-  },
-  "tech-modern": {
-    font: `Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`,
-    headlineFont: `"Space Grotesk", Inter, system-ui, sans-serif`,
-  },
-  "warm-storytelling": {
-    font: `Georgia, "Times New Roman", serif`,
-    headlineFont: `"Lora", Georgia, "Times New Roman", serif`,
-  },
-  "bold-action": {
-    font: `Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`,
-    headlineFont: `"Archivo Black", Impact, "Arial Black", sans-serif`,
-  },
-  "clean-corporate": {
-    font: `Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`,
-  },
+export type RenderFunnelHtmlOptions = {
+  targetPageId?: string;
+  fullDocument?: boolean;
 };
 
-function getTemplatePreset(funnel: Funnel): TemplatePreset {
-  const id = funnel.meta?.templateId;
-  if (id && TEMPLATE_PRESETS[id]) return TEMPLATE_PRESETS[id];
-  return { font: `Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` };
-}
+export function renderFunnelHtml(
+  funnel: Funnel,
+  options: RenderFunnelHtmlOptions = {},
+): string {
+  const themeCss = getFunnelThemeCss();
+  const rootAttrs = buildThemeRootAttrs(funnel);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CSS — scopé sous .ff-page, sans color-mix, sans aspect-ratio, sans @import
-// ─────────────────────────────────────────────────────────────────────────────
-export function renderFunnelCss(funnel: Funnel): string {
-  const primary = funnel.design.primaryColor || "#0f172a";
-  const gold = funnel.design.secondaryColor || "#D4A537";
-  const accent = funnel.design.accentColor || gold;
-  const textScale = clamp(funnel.design.textScale ?? 1, 0.85, 1.25);
-  const buttonScale = clamp(funnel.design.buttonScale ?? 1, 0.85, 1.25);
-  const customBg = funnel.design.customBgEnabled && funnel.design.customBg
-    ? funnel.design.customBg : "#ffffff";
-  const preset = getTemplatePreset(funnel);
-  const buttonAnim = funnel.design.buttonAnim;
+  const { sections: pageSections, role, isHome, pageId } = resolveExportPage(
+    funnel,
+    options.targetPageId,
+  );
 
-  // Pré-calcul couleurs dérivées (au lieu de color-mix)
-  const accent12 = colorWithAlpha(accent, 0.12);
-  const accent08 = colorWithAlpha(accent, 0.08);
-  const accent06 = colorWithAlpha(accent, 0.06);
-  const accent25 = colorWithAlpha(accent, 0.25);
-  const accent30 = colorWithAlpha(accent, 0.30);
-  const ink03 = colorWithAlpha("#0f172a", 0.03);
+  const ctx: SectionContext = {
+    funnel,
+    isSuccess:
+      role === "thankyou" || role === "delivery" || role === "confirmation",
+    pageId,
+  };
 
-  const headlineFont = preset.headlineFont ?? preset.font;
-  const baseFontSize = 16 * textScale;
-  const btnMinH = Math.round(46 * buttonScale);
-  const btnPad = Math.round(22 * buttonScale);
-  const btnFont = Math.round(15 * buttonScale);
+  const visibleSections = pageSections.filter((s) => s.visible !== false);
 
-  // Animations boutons (CSS pur)
-  let buttonAnimCss = "";
-  if (buttonAnim === "pulse") {
-    buttonAnimCss = `.ff-page .ff-btn, .ff-page .ff-cta { animation: ff-btn-pulse 2.4s ease-in-out infinite; }
-@keyframes ff-btn-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }`;
-  } else if (buttonAnim === "glow") {
-    buttonAnimCss = `.ff-page .ff-btn, .ff-page .ff-cta { animation: ff-btn-glow 2.2s ease-in-out infinite; }
-@keyframes ff-btn-glow { 0%,100% { box-shadow: 0 0 0 0 ${colorWithAlpha(accent, 0.5)}; } 50% { box-shadow: 0 0 0 10px ${colorWithAlpha(accent, 0)}; } }`;
-  } else if (buttonAnim === "shine") {
-    buttonAnimCss = `.ff-page .ff-btn, .ff-page .ff-cta { position: relative; overflow: hidden; }
-.ff-page .ff-btn::after, .ff-page .ff-cta::after { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%); transform: translateX(-100%); animation: ff-btn-shine 2.6s ease-in-out infinite; }
-@keyframes ff-btn-shine { 0% { transform: translateX(-100%); } 60%,100% { transform: translateX(100%); } }`;
-  } else if (buttonAnim === "lift") {
-    buttonAnimCss = `.ff-page .ff-btn:hover, .ff-page .ff-cta:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,0.18); }`;
-  }
+  const sectionsHtml = visibleSections
+    .map((section, idx) => renderSection(section, ctx, idx === 0))
+    .join("\n");
 
-  return `.ff-page { font-family: ${preset.font}; color: #0f172a; background: ${customBg}; }
-.ff-page, .ff-page *, .ff-page *::before, .ff-page *::after { box-sizing: border-box; }
+  const needsSystemeScript = pageHasSystemePopup(visibleSections, funnel);
+  const systemeIntegrationScript =
+    needsSystemeScript && funnel.integrations?.systemeIoScriptId
+      ? `\n${funnel.integrations.systemeIoScriptId.trim()}\n`
+      : "";
 
-/* Brand bar */
-.ff-page .ff-brand-bar { background: #0f172a; color: #fff; }
-.ff-page .ff-brand-bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; max-width: 1180px; margin: 0 auto; }
-.ff-page .ff-brand-id { display: flex; align-items: center; gap: 10px; }
-.ff-page .ff-brand-bar img { height: 28px; width: auto; }
-.ff-page .ff-brand-bar span { font-weight: 700; font-size: 14px; color: #fff; }
-.ff-page .ff-brand-bar--sticky { position: sticky; top: 0; z-index: 50; }
-.ff-page .ff-brand-bar--transparent { background: rgba(255,255,255,0.92); color: #0f172a; border-bottom: 1px solid rgba(0,0,0,0.06); }
-.ff-page .ff-brand-bar--transparent span { color: #0f172a; }
-.ff-page .ff-brand-cta { margin: 0; min-height: 38px; padding: 0 16px; font-size: 13px; }
+  // 🆕 Script vanilla pour les timers (injecté une seule fois si nécessaire)
+  const timerScript = pageHasTimer(visibleSections) ? FF_TIMER_SCRIPT : "";
 
-/* Sections */
-.ff-page .ff-section { padding: 64px 20px; position: relative; }
-.ff-page .ff-section-inner { max-width: 1040px; margin: 0 auto; position: relative; z-index: 1; }
-.ff-page .ff-spacing-compact { padding-top: 40px; padding-bottom: 40px; }
-.ff-page .ff-spacing-large { padding-top: 96px; padding-bottom: 96px; }
+  const styleAttr = rootAttrs.inlineStyle
+    ? ` style="${escapeAttr(rootAttrs.inlineStyle)}"`
+    : "";
 
-/* Layout variants */
-.ff-page .ff-layout-centered .ff-section-inner { text-align: center; }
-.ff-page .ff-layout-left-aligned .ff-section-inner { text-align: left; }
-.ff-page .ff-layout-wide-banner .ff-section-inner { max-width: 1180px; }
-.ff-page .ff-split-grid { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; }
-@media (min-width: 860px) { .ff-page .ff-split-grid { grid-template-columns: 1fr 1fr; gap: 48px; } }
-.ff-page .ff-split-media .ff-image { margin: 0; }
-.ff-page .ff-split-media .ff-image img { max-width: 100%; }
+  const pageRoleAttr = role ? ` data-ff-page-role="${escapeAttr(role)}"` : "";
+  const pageHomeAttr = isHome ? ` data-ff-page-home="true"` : "";
 
-/* Typo */
-.ff-page .ff-eyebrow { display: inline-block; color: ${accent}; font-weight: 700; text-transform: uppercase; font-size: ${Math.round(11 * textScale)}px; letter-spacing: 0.12em; margin-bottom: 12px; padding: 4px 10px; border-radius: 999px; background: ${accent12}; }
-.ff-page .ff-layout-centered .ff-eyebrow { margin-left: auto; margin-right: auto; }
-.ff-page .ff-headline { margin: 0 0 14px; font-family: ${headlineFont}; font-size: ${Math.round(28 * textScale)}px; line-height: 1.15; font-weight: 800; color: inherit; }
-@media (min-width: 640px) { .ff-page .ff-headline { font-size: ${Math.round(36 * textScale)}px; } }
-@media (min-width: 1024px) { .ff-page .ff-headline { font-size: ${Math.round(44 * textScale)}px; } }
-.ff-page .ff-subheadline { font-size: ${Math.round(17 * textScale)}px; line-height: 1.65; opacity: 0.85; max-width: 720px; margin: 0 0 14px; }
-.ff-page .ff-layout-centered .ff-subheadline, .ff-page .ff-layout-centered .ff-body { margin-left: auto; margin-right: auto; }
-.ff-page .ff-body { font-size: ${Math.round(baseFontSize)}px; line-height: 1.7; opacity: 0.9; max-width: 720px; margin: 0 0 14px; white-space: pre-line; }
+  const dataAttrsHtml = serializeDataAttrs(rootAttrs.dataAttrs);
 
-/* Bullets */
-.ff-page .ff-bullets { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 10px; }
-.ff-page .ff-layout-centered .ff-bullets { display: inline-grid; text-align: left; }
-.ff-page .ff-bullets li { display: flex; align-items: flex-start; gap: 10px; font-size: ${Math.round(15 * textScale)}px; }
-.ff-page .ff-bullet-ic { color: ${accent}; flex-shrink: 0; display: inline-flex; line-height: 0; margin-top: 2px; }
-
-/* Buttons */
-.ff-page .ff-btn, .ff-page .ff-cta { display: inline-flex; align-items: center; justify-content: center; min-height: ${btnMinH}px; padding: 0 ${btnPad}px; margin-top: 14px; border-radius: 8px; color: #ffffff !important; background: ${accent}; text-decoration: none; font-weight: 700; font-size: ${btnFont}px; cursor: pointer; border: none; transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease; }
-.ff-page .ff-btn:hover, .ff-page .ff-cta:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
-.ff-page .ff-cta-wrap { margin-top: 18px; }
-${buttonAnimCss}
-
-/* Image */
-.ff-page .ff-image { margin: 22px 0 8px; }
-.ff-page .ff-image img { width: 100%; height: auto; border-radius: 12px; display: block; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-.ff-page .ff-image--transparent img { box-shadow: none; border-radius: 0; background: transparent; }
-.ff-page .ff-image-credit { display: block; font-size: 11px; opacity: 0.6; margin-top: 6px; text-align: center; }
-
-/* Video (sans aspect-ratio, compat SIO) */
-.ff-page .ff-video { margin: 22px auto; max-width: 720px; }
-.ff-page .ff-video-inner { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); background: #000; }
-.ff-page .ff-video-inner iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; display: block; }
-
-/* Grids */
-.ff-page .ff-grid-1, .ff-page .ff-grid-2, .ff-page .ff-grid-3 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 24px; }
-@media (min-width: 760px) {
-  .ff-page .ff-grid-2 { grid-template-columns: 1fr 1fr; }
-  .ff-page .ff-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-}
-
-/* Cards */
-.ff-page .ff-card { background: ${ink03}; border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; padding: 22px; }
-.ff-page .ff-card-elevated { box-shadow: 0 14px 36px rgba(15,23,42,0.10); }
-
-/* Pricing */
-.ff-page .ff-pricing-card { position: relative; display: flex; flex-direction: column; }
-.ff-page .ff-pricing-card--highlighted { background: ${accent08}; border: 2px solid ${accent}; }
-.ff-page .ff-pricing-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: ${accent}; color: #fff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 12px; border-radius: 999px; }
-.ff-page .ff-pricing-name { margin: 0 0 6px; font-size: 18px; font-weight: 700; color: inherit; }
-.ff-page .ff-pricing-desc { margin: 0 0 14px; font-size: 13px; opacity: 0.65; }
-.ff-page .ff-pricing-price { display: flex; align-items: baseline; gap: 6px; margin-bottom: 20px; }
-.ff-page .ff-pricing-amount { font-size: 36px; font-weight: 900; color: inherit; }
-.ff-page .ff-pricing-card--highlighted .ff-pricing-amount { color: ${accent}; }
-.ff-page .ff-pricing-period { font-size: 14px; opacity: 0.6; }
-.ff-page .ff-pricing-features { list-style: none; padding: 0; margin: 0 0 20px; display: grid; gap: 8px; flex: 1; }
-.ff-page .ff-pricing-features li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; opacity: 0.85; }
-.ff-page .ff-feat-check { color: ${accent}; flex-shrink: 0; display: inline-flex; line-height: 0; margin-top: 2px; }
-.ff-page .ff-pricing-cta { width: 100%; margin-top: auto; }
-
-/* Bonus */
-.ff-page .ff-bonus-card { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border-radius: 12px; background: ${accent06}; border: 1px solid ${accent25}; }
-.ff-page .ff-bonus-icon { width: 42px; height: 42px; border-radius: 10px; background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.ff-page .ff-bonus-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.ff-page .ff-bonus-title { margin: 0; font-size: 15px; font-weight: 700; color: inherit; }
-.ff-page .ff-bonus-value { background: ${accent}; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-.ff-page .ff-bonus-desc { margin: 0; font-size: 14px; opacity: 0.8; line-height: 1.5; }
-
-/* Testimonials */
-.ff-page .ff-testimonial-card { padding: 18px; }
-.ff-page .ff-testimonial-rating { color: #f59e0b; margin-bottom: 10px; font-size: 16px; letter-spacing: 1px; }
-.ff-page .ff-testimonial-quote { margin: 0 0 14px; font-size: 14px; line-height: 1.6; opacity: 0.9; font-style: italic; }
-.ff-page .ff-testimonial-author { display: flex; align-items: center; gap: 10px; }
-.ff-page .ff-testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-.ff-page .ff-testimonial-avatar--initials { background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-.ff-page .ff-testimonial-name { font-size: 13px; font-weight: 700; color: inherit; }
-.ff-page .ff-testimonial-role { font-size: 12px; opacity: 0.6; }
-
-/* FAQ (natif <details>) */
-.ff-page .ff-faq-list { max-width: 720px; margin: 24px auto 0; }
-.ff-page .ff-faq-item { border-bottom: 1px solid rgba(0,0,0,0.08); }
-.ff-page .ff-faq-item:first-child { border-top: 1px solid rgba(0,0,0,0.08); }
-.ff-page .ff-faq-q { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 0; cursor: pointer; font-size: 15px; font-weight: 600; color: inherit; list-style: none; }
-.ff-page .ff-faq-q::-webkit-details-marker { display: none; }
-.ff-page .ff-faq-q-text { flex: 1; }
-.ff-page .ff-faq-icon { display: inline-flex; color: ${accent}; line-height: 0; }
-.ff-page .ff-faq-chevron { color: ${accent}; transition: transform 0.25s ease; flex-shrink: 0; }
-.ff-page .ff-faq-item[open] .ff-faq-chevron { transform: rotate(180deg); }
-.ff-page .ff-faq-a { padding: 0 28px 16px 0; font-size: 14px; line-height: 1.6; opacity: 0.85; }
-.ff-page .ff-faq-a p { margin: 0; white-space: pre-line; }
-
-/* Guarantee */
-.ff-page .ff-guarantee { max-width: 720px; margin: 24px auto 0; padding: 24px; border-radius: 16px; background: ${accent08}; border: 2px solid ${accent30}; display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; }
-@media (min-width: 640px) { .ff-page .ff-guarantee { flex-direction: row; text-align: left; } }
-.ff-page .ff-guarantee-icon { width: 64px; height: 64px; border-radius: 50%; background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.ff-page .ff-guarantee-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; justify-content: center; }
-@media (min-width: 640px) { .ff-page .ff-guarantee-head { justify-content: flex-start; } }
-.ff-page .ff-guarantee-title { margin: 0; font-size: 20px; font-weight: 900; color: inherit; }
-.ff-page .ff-guarantee-duration { background: ${accent}; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
-.ff-page .ff-guarantee-desc { margin: 0; font-size: 14px; line-height: 1.6; opacity: 0.85; }
-
-/* Form */
-.ff-page .ff-form-fields { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 520px; margin: 18px auto 0; }
-@media (min-width: 640px) { .ff-page .ff-form-fields { grid-template-columns: 1fr 1fr; } }
-.ff-page .ff-field { display: flex; flex-direction: column; gap: 6px; grid-column: 1 / -1; text-align: left; }
-.ff-page .ff-field--half { grid-column: span 1; }
-.ff-page .ff-field-label { font-size: 13px; font-weight: 600; color: inherit; }
-.ff-page .ff-input { min-height: 46px; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; padding: 0 14px; font: inherit; background: #fff; color: #0f172a; width: 100%; }
-.ff-page textarea.ff-input { padding: 12px 14px; min-height: 100px; resize: vertical; }
-.ff-page .ff-checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; color: inherit; }
-.ff-page .ff-form-submit { grid-column: 1 / -1; }
-
-/* Scroll-reveal en CSS pur (animation au chargement avec léger délai) */
-.ff-page .ff-anim-fade-in,
-.ff-page .ff-anim-fade-up,
-.ff-page .ff-anim-fade-down,
-.ff-page .ff-anim-slide-left,
-.ff-page .ff-anim-slide-right,
-.ff-page .ff-anim-zoom-in,
-.ff-page .ff-anim-zoom-out,
-.ff-page .ff-anim-pulse {
-  opacity: 0;
-  animation-duration: 0.7s;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  animation-fill-mode: forwards;
-  animation-delay: 0.1s;
-}
-.ff-page .ff-anim-fade-in { animation-name: ff-fade-in; }
-.ff-page .ff-anim-fade-up { animation-name: ff-fade-up; }
-.ff-page .ff-anim-fade-down { animation-name: ff-fade-down; }
-.ff-page .ff-anim-slide-left { animation-name: ff-slide-left; }
-.ff-page .ff-anim-slide-right { animation-name: ff-slide-right; }
-.ff-page .ff-anim-zoom-in { animation-name: ff-zoom-in; }
-.ff-page .ff-anim-zoom-out { animation-name: ff-zoom-out; }
-.ff-page .ff-anim-pulse { animation-name: ff-fade-in; }
-@keyframes ff-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ff-fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ff-fade-down { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ff-slide-left { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes ff-slide-right { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes ff-zoom-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
-@keyframes ff-zoom-out { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) {
-  .ff-page [class*="ff-anim-"] { opacity: 1 !important; animation: none !important; transform: none !important; }
-}
-
-/* Footer */
-.ff-page .ff-footer { background: #0f172a; color: rgba(255,255,255,0.85); padding: 32px 20px; text-align: center; border-top: 1px solid rgba(255,255,255,0.08); }
-.ff-page .ff-footer-inner { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
-.ff-page .ff-footer-brand { font-weight: 700; font-size: 15px; color: #fff; }
-.ff-page .ff-footer-legal { font-size: 13px; opacity: 0.7; line-height: 1.5; }
-.ff-page .ff-footer-link { color: ${accent}; text-decoration: none; font-weight: 500; }
-.ff-page .ff-footer-copy { opacity: 0.5; font-size: 12px; margin-top: 8px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
-
-@media (min-width: 760px) { .ff-page .ff-section { padding: 88px 32px; } }`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODE 1 — Page complète scopée sous .ff-page
-// ─────────────────────────────────────────────────────────────────────────────
-export function renderFunnelHtml(funnel: Funnel): string {
-  const css = renderFunnelCss(funnel);
-
-  const sections = funnel.sections
-    .filter((s) => s.visible !== false)
-    .map((section) => {
-      const styleAttrs = buildSectionStyle(section);
-      const styleProp = styleAttrs ? ` style="${escapeAttr(styleAttrs)}"` : "";
-      return `  <section id="${escapeAttr(section.id)}" class="ff-section ff-${section.type}${sectionSpacingClass(section)}${sectionLayoutClass(section)}"${styleProp}>
-    ${renderBackgroundOverlay(section)}
-    <div class="ff-section-inner">
-      ${renderSectionInner(section, funnel.language)}
-    </div>
-  </section>`;
-    }).join("\n");
-
-  return `<style>
-${css}
+  const body = `<style>
+${themeCss}
 </style>
+<div class="ff-page"
+     data-ff-export="true"
+     ${dataAttrsHtml}${pageRoleAttr}${pageHomeAttr}${styleAttr}>
 
-<div class="ff-page">
 ${renderHeader(funnel)}
-${sections}
+${sectionsHtml}
 ${renderFooter(funnel)}
-</div>`;
+</div>
+${systemeIntegrationScript}${timerScript}`;
+
+  if (!options.fullDocument) return body;
+
+  const title = escapeHtml(funnel.funnelName || "Funnel");
+  return `<!doctype html>
+<html lang="${escapeAttr(funnel.language || "fr")}">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>${title}</title>
+</head>
+<body>
+${body}
+</body>
+</html>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODE 2 — Blocs individuels autonomes
+// MODE 2 — Blocs individuels autonomes (Systeme.io)
 // ─────────────────────────────────────────────────────────────────────────────
 export type SystemeBlock = {
   id: string;
@@ -905,228 +1768,188 @@ export type SystemeBlock = {
   html: string;
 };
 
-export function createSystemeBlocks(funnel: Funnel): SystemeBlock[] {
-  const preset = getTemplatePreset(funnel);
-  const textScale = clamp(funnel.design.textScale ?? 1, 0.85, 1.25);
-  const buttonScale = clamp(funnel.design.buttonScale ?? 1, 0.85, 1.25);
+export type CreateSystemeBlocksOptions = {
+  targetPageId?: string;
+};
 
-  return funnel.sections
+function makeBlockScopeClass(section: FunnelSection): string {
+  const raw = `ffblk-${section.type}-${section.id}`;
+  return raw.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+}
+
+export function createSystemeBlocks(
+  funnel: Funnel,
+  options: CreateSystemeBlocksOptions = {},
+): SystemeBlock[] {
+  const rootAttrs = buildThemeRootAttrs(funnel);
+  const { sections: pageSections, role, pageId } = resolveExportPage(
+    funnel,
+    options.targetPageId,
+  );
+
+  const ctx: SectionContext = {
+    funnel,
+    isSuccess:
+      role === "thankyou" || role === "delivery" || role === "confirmation",
+    pageId,
+  };
+
+  return pageSections
     .filter((s) => s.visible !== false)
-    .map((section) => {
-      const rawCls = `ff-${section.type}-${section.id}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-      const cls = rawCls;
+    .map((section, idx) => {
+      const scopeClass = makeBlockScopeClass(section);
+      const scopedTheme = getScopedFunnelThemeCss(scopeClass);
 
-      const colors = getSectionColors(section);
-      const accent = colors.accent || section.style?.accentColor || funnel.design.accentColor || funnel.design.secondaryColor || "#D4A537";
-      const ink = colors.ink || section.style?.textColor || "#0f172a";
-      const bg = colors.bg || "transparent";
+      const sectionHtml = renderSection(section, ctx, idx === 0);
 
-      const accent12 = colorWithAlpha(accent, 0.12);
-      const accent08 = colorWithAlpha(accent, 0.08);
-      const accent06 = colorWithAlpha(accent, 0.06);
-      const accent25 = colorWithAlpha(accent, 0.25);
-      const accent30 = colorWithAlpha(accent, 0.30);
-      const ink03 = colorWithAlpha(ink, 0.03);
+      const sectionHasSystemePopup =
+        (section.cta && isSystemePopup(section.cta)) ||
+        (Array.isArray(section.items) &&
+          section.items.some(
+            (it) =>
+              it.kind === "pricing" &&
+              it.data.cta &&
+              isSystemePopup(it.data.cta),
+          ));
+      const systemeIntegrationScript =
+        sectionHasSystemePopup && funnel.integrations?.systemeIoScriptId
+          ? `\n${funnel.integrations.systemeIoScriptId.trim()}\n`
+          : "";
 
-      const bgImg = section.background?.imageUrl;
-      const bgImgCss = bgImg
-        ? `background-image:url('${bgImg.replace(/'/g, "%27")}');background-size:${section.background?.size ?? "cover"};background-position:${section.background?.position ?? "center"};background-repeat:no-repeat;`
+      // 🆕 Si ce bloc contient un timer, on injecte le script vanilla.
+      // La garde window.__ffTimerBooted empêche le double-boot si plusieurs
+      // blocs avec timer cohabitent sur la même page SIO.
+      const sectionHasTimer = extractTimers(section).length > 0;
+      const timerScript = sectionHasTimer ? FF_TIMER_SCRIPT : "";
+
+      const styleAttr = rootAttrs.inlineStyle
+        ? ` style="${escapeAttr(rootAttrs.inlineStyle)}"`
         : "";
 
-      const shadowKey = section.style?.shadow?.size;
-      const shadowColor = section.style?.shadow?.color ?? "rgba(15,23,42,0.15)";
-      const shadowMap: Record<string, string> = { sm: "0 2px 8px", md: "0 8px 24px", lg: "0 16px 40px", xl: "0 24px 60px" };
-      const shadowCss = shadowKey && shadowKey !== "none" ? `box-shadow:${shadowMap[shadowKey] ?? shadowMap.md} ${shadowColor};` : "";
-
-      const headlineFont = preset.headlineFont ?? preset.font;
-      const btnMinH = Math.round(46 * buttonScale);
-      const btnPad = Math.round(22 * buttonScale);
-      const btnFont = Math.round(15 * buttonScale);
-
-      const css = `.${cls} { font-family: ${preset.font}; color: ${ink}; background: ${bg}; padding: 56px 20px; ${bgImgCss}${shadowCss} position: relative; }
-.${cls}, .${cls} *, .${cls} *::before, .${cls} *::after { box-sizing: border-box; }
-.${cls} .ff-section-inner { max-width: 1040px; margin: 0 auto; position: relative; z-index: 1; }
-.${cls} .ff-section-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
-.${cls} .ff-eyebrow { display: inline-block; color: ${accent}; font-weight: 700; text-transform: uppercase; font-size: ${Math.round(11 * textScale)}px; letter-spacing: 0.12em; margin-bottom: 12px; padding: 4px 10px; border-radius: 999px; background: ${accent12}; }
-.${cls} .ff-headline { margin: 0 0 14px; font-family: ${headlineFont}; font-size: ${Math.round(28 * textScale)}px; line-height: 1.15; font-weight: 800; color: inherit; }
-@media (min-width: 640px) { .${cls} .ff-headline { font-size: ${Math.round(36 * textScale)}px; } }
-@media (min-width: 1024px) { .${cls} .ff-headline { font-size: ${Math.round(44 * textScale)}px; } }
-.${cls} .ff-subheadline { font-size: ${Math.round(17 * textScale)}px; line-height: 1.65; opacity: 0.85; margin: 0 0 14px; }
-.${cls} .ff-body { font-size: ${Math.round(16 * textScale)}px; line-height: 1.7; opacity: 0.9; margin: 0 0 14px; white-space: pre-line; }
-.${cls} .ff-bullets { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 10px; }
-.${cls} .ff-bullets li { display: flex; align-items: flex-start; gap: 10px; }
-.${cls} .ff-bullet-ic { color: ${accent}; flex-shrink: 0; display: inline-flex; line-height: 0; margin-top: 2px; }
-.${cls} .ff-btn, .${cls} .ff-cta { display: inline-flex; align-items: center; justify-content: center; min-height: ${btnMinH}px; padding: 0 ${btnPad}px; margin-top: 14px; border-radius: 8px; color: #fff !important; background: ${accent}; text-decoration: none; font-weight: 700; font-size: ${btnFont}px; cursor: pointer; border: none; transition: opacity 0.18s ease, transform 0.18s ease; }
-.${cls} .ff-btn:hover, .${cls} .ff-cta:hover { opacity: 0.92; transform: translateY(-1px); }
-.${cls} .ff-cta-wrap { margin-top: 18px; }
-.${cls} .ff-split-grid { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; }
-@media (min-width: 860px) { .${cls} .ff-split-grid { grid-template-columns: 1fr 1fr; gap: 48px; } }
-.${cls} .ff-image { margin: 22px 0 8px; }
-.${cls} .ff-image img { width: 100%; height: auto; border-radius: 12px; display: block; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-.${cls} .ff-image--transparent img { box-shadow: none; border-radius: 0; background: transparent; }
-.${cls} .ff-video { margin: 22px auto; max-width: 720px; }
-.${cls} .ff-video-inner { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); background: #000; }
-.${cls} .ff-video-inner iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
-.${cls} .ff-grid-1, .${cls} .ff-grid-2, .${cls} .ff-grid-3 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 24px; }
-@media (min-width: 760px) { .${cls} .ff-grid-2 { grid-template-columns: 1fr 1fr; } .${cls} .ff-grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
-.${cls} .ff-card { background: ${ink03}; border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; padding: 22px; }
-.${cls} .ff-card-elevated { box-shadow: 0 14px 36px rgba(15,23,42,0.10); }
-.${cls} .ff-pricing-card { position: relative; display: flex; flex-direction: column; }
-.${cls} .ff-pricing-card--highlighted { background: ${accent08}; border: 2px solid ${accent}; }
-.${cls} .ff-pricing-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: ${accent}; color: #fff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 12px; border-radius: 999px; }
-.${cls} .ff-pricing-name { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
-.${cls} .ff-pricing-desc { margin: 0 0 14px; font-size: 13px; opacity: 0.65; }
-.${cls} .ff-pricing-price { display: flex; align-items: baseline; gap: 6px; margin-bottom: 20px; }
-.${cls} .ff-pricing-amount { font-size: 36px; font-weight: 900; }
-.${cls} .ff-pricing-card--highlighted .ff-pricing-amount { color: ${accent}; }
-.${cls} .ff-pricing-period { font-size: 14px; opacity: 0.6; }
-.${cls} .ff-pricing-features { list-style: none; padding: 0; margin: 0 0 20px; display: grid; gap: 8px; flex: 1; }
-.${cls} .ff-pricing-features li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; opacity: 0.85; }
-.${cls} .ff-feat-check { color: ${accent}; display: inline-flex; line-height: 0; margin-top: 2px; flex-shrink: 0; }
-.${cls} .ff-pricing-cta { width: 100%; margin-top: auto; }
-.${cls} .ff-bonus-card { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border-radius: 12px; background: ${accent06}; border: 1px solid ${accent25}; }
-.${cls} .ff-bonus-icon { width: 42px; height: 42px; border-radius: 10px; background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.${cls} .ff-bonus-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.${cls} .ff-bonus-title { margin: 0; font-size: 15px; font-weight: 700; }
-.${cls} .ff-bonus-value { background: ${accent}; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-.${cls} .ff-bonus-desc { margin: 0; font-size: 14px; opacity: 0.8; line-height: 1.5; }
-.${cls} .ff-testimonial-card { padding: 18px; }
-.${cls} .ff-testimonial-rating { color: #f59e0b; margin-bottom: 10px; font-size: 16px; letter-spacing: 1px; }
-.${cls} .ff-testimonial-quote { margin: 0 0 14px; font-size: 14px; line-height: 1.6; opacity: 0.9; font-style: italic; }
-.${cls} .ff-testimonial-author { display: flex; align-items: center; gap: 10px; }
-.${cls} .ff-testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-.${cls} .ff-testimonial-avatar--initials { background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-.${cls} .ff-testimonial-name { font-size: 13px; font-weight: 700; }
-.${cls} .ff-testimonial-role { font-size: 12px; opacity: 0.6; }
-.${cls} .ff-faq-list { max-width: 720px; margin: 24px auto 0; }
-.${cls} .ff-faq-item { border-bottom: 1px solid rgba(0,0,0,0.08); }
-.${cls} .ff-faq-item:first-child { border-top: 1px solid rgba(0,0,0,0.08); }
-.${cls} .ff-faq-q { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 0; cursor: pointer; font-size: 15px; font-weight: 600; color: inherit; list-style: none; }
-.${cls} .ff-faq-q::-webkit-details-marker { display: none; }
-.${cls} .ff-faq-q-text { flex: 1; }
-.${cls} .ff-faq-chevron { color: ${accent}; transition: transform 0.25s ease; flex-shrink: 0; }
-.${cls} .ff-faq-item[open] .ff-faq-chevron { transform: rotate(180deg); }
-.${cls} .ff-faq-a { padding: 0 28px 16px 0; font-size: 14px; line-height: 1.6; opacity: 0.85; }
-.${cls} .ff-faq-a p { margin: 0; white-space: pre-line; }
-.${cls} .ff-guarantee { max-width: 720px; margin: 24px auto 0; padding: 24px; border-radius: 16px; background: ${accent08}; border: 2px solid ${accent30}; display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; }
-@media (min-width: 640px) { .${cls} .ff-guarantee { flex-direction: row; text-align: left; } }
-.${cls} .ff-guarantee-icon { width: 64px; height: 64px; border-radius: 50%; background: ${accent}; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.${cls} .ff-guarantee-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.${cls} .ff-guarantee-title { margin: 0; font-size: 20px; font-weight: 900; }
-.${cls} .ff-guarantee-duration { background: ${accent}; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
-.${cls} .ff-guarantee-desc { margin: 0; font-size: 14px; line-height: 1.6; opacity: 0.85; }
-.${cls} .ff-form-fields { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 520px; margin: 18px auto 0; }
-@media (min-width: 640px) { .${cls} .ff-form-fields { grid-template-columns: 1fr 1fr; } }
-.${cls} .ff-field { display: flex; flex-direction: column; gap: 6px; grid-column: 1 / -1; text-align: left; }
-.${cls} .ff-field--half { grid-column: span 1; }
-.${cls} .ff-field-label { font-size: 13px; font-weight: 600; }
-.${cls} .ff-input { min-height: 46px; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; padding: 0 14px; font: inherit; background: #fff; color: ${ink}; width: 100%; }
-.${cls} textarea.ff-input { padding: 12px 14px; min-height: 100px; resize: vertical; }
-.${cls} .ff-form-submit { grid-column: 1 / -1; }
-.${cls} .ff-anim-fade-in, .${cls} .ff-anim-fade-up, .${cls} .ff-anim-fade-down, .${cls} .ff-anim-slide-left, .${cls} .ff-anim-slide-right, .${cls} .ff-anim-zoom-in, .${cls} .ff-anim-zoom-out, .${cls} .ff-anim-pulse { opacity: 0; animation-duration: 0.7s; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); animation-fill-mode: forwards; animation-delay: 0.1s; }
-.${cls} .ff-anim-fade-in { animation-name: ff-fade-in-${cls}; }
-.${cls} .ff-anim-fade-up { animation-name: ff-fade-up-${cls}; }
-.${cls} .ff-anim-fade-down { animation-name: ff-fade-down-${cls}; }
-.${cls} .ff-anim-slide-left { animation-name: ff-slide-left-${cls}; }
-.${cls} .ff-anim-slide-right { animation-name: ff-slide-right-${cls}; }
-.${cls} .ff-anim-zoom-in { animation-name: ff-zoom-in-${cls}; }
-.${cls} .ff-anim-zoom-out { animation-name: ff-zoom-out-${cls}; }
-.${cls} .ff-anim-pulse { animation-name: ff-fade-in-${cls}; }
-@keyframes ff-fade-in-${cls} { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ff-fade-up-${cls} { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ff-fade-down-${cls} { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ff-slide-left-${cls} { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes ff-slide-right-${cls} { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes ff-zoom-in-${cls} { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
-@keyframes ff-zoom-out-${cls} { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: scale(1); } }`;
-
-      const inner = renderSectionInner(section, funnel.language);
-      const overlay = renderBackgroundOverlay(section);
+      const dataAttrsHtml = serializeDataAttrs(rootAttrs.dataAttrs);
 
       const html = `<style>
-${css}
+${scopedTheme}
 </style>
-
-<section class="${cls}">
-${overlay}
-<div class="ff-section-inner">
-${inner}
+<div class="${scopeClass} ff-page"
+     data-ff-export="true"
+     ${dataAttrsHtml}${styleAttr}>
+${sectionHtml}
 </div>
-</section>`;
+${systemeIntegrationScript}${timerScript}`;
 
-      return { id: section.id, label: section.headline, type: section.type, html };
+      return {
+        id: section.id,
+        label: section.headline || section.type,
+        type: section.type,
+        html,
+      };
     });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bloc formulaire final
+// Bloc formulaire final (lead-form autonome)
 // ─────────────────────────────────────────────────────────────────────────────
 export function createSystemeFormBlock(funnel: Funnel): SystemeBlock {
-  const cls = "ff-form-block";
-  const accent = funnel.design.accentColor || funnel.design.secondaryColor || "#D4A537";
+  const scopeClass = "ffblk-lead-form";
+  const scopedTheme = getScopedFunnelThemeCss(scopeClass);
+  const rootAttrs = buildThemeRootAttrs(funnel);
+
   const labels = {
-    fr: { title: "Recevoir les détails", name: "Votre nom", email: "Email", submit: "Continuer" },
-    en: { title: "Get the details", name: "Your name", email: "Email", submit: "Continue" },
-    es: { title: "Recibir los detalles", name: "Tu nombre", email: "Email", submit: "Continuar" },
+    fr: {
+      title: "Recevoir les détails",
+      name: "Votre nom",
+      email: "Email",
+      submit: "Continuer",
+    },
+    en: {
+      title: "Get the details",
+      name: "Your name",
+      email: "Email",
+      submit: "Continue",
+    },
+    es: {
+      title: "Recibir los detalles",
+      name: "Tu nombre",
+      email: "Email",
+      submit: "Continuar",
+    },
   } as const;
   const l = labels[funnel.language] ?? labels.fr;
 
-  const css = `.${cls} { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; padding: 48px 20px; max-width: 560px; margin: 0 auto; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; }
-.${cls}, .${cls} *, .${cls} *::before, .${cls} *::after { box-sizing: border-box; }
-.${cls} h2 { margin: 0 0 16px; font-size: 24px; line-height: 1.2; font-weight: 800; }
-@media (min-width: 640px) { .${cls} h2 { font-size: 30px; } }
-.${cls} form { display: grid; gap: 12px; }
-.${cls} input { min-height: 46px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 0 14px; font: inherit; }
-.${cls} button { min-height: 46px; border: none; border-radius: 8px; background: ${accent}; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; transition: opacity 0.18s ease, transform 0.18s ease; }
-.${cls} button:hover { opacity: 0.92; transform: translateY(-1px); }`;
+  const styleAttr = rootAttrs.inlineStyle
+    ? ` style="${escapeAttr(rootAttrs.inlineStyle)}"`
+    : "";
+
+  const dataAttrsHtml = serializeDataAttrs(rootAttrs.dataAttrs);
 
   const html = `<style>
-${css}
+${scopedTheme}
 </style>
+<div class="${scopeClass} ff-page"
+     data-ff-export="true"
+     ${dataAttrsHtml}${styleAttr}>
 
-<section id="lead-form" class="${cls}">
-<h2>${escapeHtml(l.title)}</h2>
-<form action="#" method="post">
-<input type="text" name="name" placeholder="${escapeAttr(l.name)}" required />
-<input type="email" name="email" placeholder="${escapeAttr(l.email)}" required />
-<button type="submit">${escapeHtml(l.submit)}</button>
-</form>
-</section>`;
+  <section id="lead-form" class="ff-section ff-form ff-layout-centered">
+    <div class="ff-section-inner">
+      <h2 class="ff-headline ff-anim-fade-up">${escapeHtml(l.title)}</h2>
+      <form class="ff-form-fields" action="#" method="post">
+        <div class="ff-field"><label class="ff-field-label" for="lf-name">${escapeHtml(l.name)} *</label><input class="ff-input" type="text" id="lf-name" name="name" required /></div>
+        <div class="ff-field"><label class="ff-field-label" for="lf-email">${escapeHtml(l.email)} *</label><input class="ff-input" type="email" id="lf-email" name="email" required /></div>
+        <button type="submit" class="ff-btn ff-form-submit">${escapeHtml(l.submit)}</button>
+      </form>
+    </div>
+  </section>
+</div>`;
 
-  return { id: "lead-form", label: l.title, type: "form", html };
+  return {
+    id: "lead-form",
+    label: l.title,
+    type: "form",
+    html,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Guide d'import
+// Guide d'import (texte simple, multilingue)
 // ─────────────────────────────────────────────────────────────────────────────
 export function createImportGuide(language: Funnel["language"] = "fr"): string {
   const guides = {
     fr: [
-      "Guide d'import dans systeme.io", "",
+      "Guide d'import dans systeme.io",
+      "",
       "1. Ouvrez systeme.io et créez un nouveau tunnel",
       "2. Ajoutez la page de capture ou de vente correspondant à votre objectif",
       "3. Glissez un bloc HTML personnalisé dans la section voulue",
       "4. Collez le contenu de funnel-complet.html (mode complet) OU collez chaque bloc de blocs/ un par un dans l'ordre indiqué",
-      "5. Vérifiez que vos liens CTA pointent vers vos pages de paiement, formulaires ou rendez-vous",
-      "6. Prévisualisez la page sur mobile avant publication",
+      "5. Aucun ajustement de marge n'est nécessaire",
+      "6. Vérifiez que vos liens CTA pointent vers vos pages de paiement, formulaires ou rendez-vous",
+      "7. Pour les CTA popup Systeme.io : créez d'abord une étape « Formulaire » dans Systeme.io, copiez le script <script id=\"form-script-tag-…\"> et collez-le dans Paramètres du funnel → Liaison Systeme.io → Script Systeme.io. Renseignez ensuite l'ID du popup dans chaque CTA concerné.",
+      "8. Prévisualisez la page sur mobile avant publication",
     ],
     en: [
-      "systeme.io import guide", "",
+      "systeme.io import guide",
+      "",
       "1. Open systeme.io and create a new funnel",
       "2. Add the capture or sales page that matches your goal",
       "3. Drag a Custom HTML block into the target section",
       "4. Paste the content of funnel-complete.html (full mode) OR paste each file from blocks/ one by one in order",
-      "5. Make sure your CTA links point to your payment pages, forms or booking links",
-      "6. Preview the page on mobile before publishing",
+      "5. No margin adjustment needed",
+      "6. Make sure your CTA links point to your payment pages, forms or booking links",
+      "7. For Systeme.io popup CTAs: first create a Form step in Systeme.io, copy the <script id=\"form-script-tag-…\"> and paste it into Funnel settings → Systeme.io Link → Systeme.io script. Then fill the popup ID in each CTA.",
+      "8. Preview the page on mobile before publishing",
     ],
     es: [
-      "Guía de importación en systeme.io", "",
+      "Guía de importación en systeme.io",
+      "",
       "1. Abre systeme.io y crea un nuevo embudo",
       "2. Añade la página de captura o de venta que corresponda a tu objetivo",
       "3. Arrastra un bloque HTML personalizado en la sección deseada",
       "4. Pega el contenido de embudo-completo.html (modo completo) O pega cada archivo de bloques/ uno a uno en orden",
-      "5. Comprueba que tus enlaces CTA apuntan a tus páginas de pago, formularios o citas",
-      "6. Previsualiza la página en móvil antes de publicar",
+      "5. No es necesario ajustar márgenes",
+      "6. Comprueba que tus enlaces CTA apuntan a tus páginas de pago, formularios o citas",
+      "7. Para CTAs popup de Systeme.io: crea primero un paso de Formulario en Systeme.io, copia el <script id=\"form-script-tag-…\"> y pégalo en Ajustes del embudo → Enlace Systeme.io → Script Systeme.io. Luego rellena el ID del popup en cada CTA.",
+      "8. Previsualiza la página en móvil antes de publicar",
     ],
   } as const;
   return (guides[language] ?? guides.fr).join("\n");
@@ -1136,19 +1959,26 @@ export function createImportGuide(language: Funnel["language"] = "fr"): string {
 // ZIP exports
 // ─────────────────────────────────────────────────────────────────────────────
 export function createHtmlZipBase64(funnel: Funnel): string {
-  const fullHtml = renderFunnelHtml(funnel);
+  const fullHtml = renderFunnelHtml(funnel, { fullDocument: true });
   const blocks = createSystemeBlocks(funnel);
   const formBlock = createSystemeFormBlock(funnel);
   const guide = createImportGuide(funnel.language);
 
-  const fileNames = { fr: "funnel-complet.html", en: "funnel-complete.html", es: "embudo-completo.html" } as const;
+  const fileNames = {
+    fr: "funnel-complet.html",
+    en: "funnel-complete.html",
+    es: "embudo-completo.html",
+  } as const;
 
   const files: Record<string, Uint8Array> = {
     [fileNames[funnel.language] ?? "funnel-complete.html"]: strToU8(fullHtml),
     "guide-import-systeme.txt": strToU8(guide),
   };
+
   blocks.forEach((b, i) => {
-    const safe = `${String(i + 1).padStart(2, "0")}-${b.type}-${b.id}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const safe = `${String(i + 1).padStart(2, "0")}-${b.type}-${b.id}`
+      .replace(/[^a-z0-9-]/gi, "-")
+      .toLowerCase();
     files[`blocs/${safe}.html`] = strToU8(b.html);
   });
   files[`blocs/99-form-${formBlock.id}.html`] = strToU8(formBlock.html);
@@ -1158,42 +1988,69 @@ export function createHtmlZipBase64(funnel: Funnel): string {
 }
 
 export function createSystemeIoZipBase64(funnel: Funnel): string {
-  const fullHtml = renderFunnelHtml(funnel);
+  const fullHtml = renderFunnelHtml(funnel, { fullDocument: true });
   const blocks = createSystemeBlocks(funnel);
   const formBlock = createSystemeFormBlock(funnel);
 
-  const previewName = { fr: "apercu-complet.html", en: "funnel-complete.html", es: "embudo-completo.html" } as const;
+  const { sections: activeSections } = resolveExportPage(funnel);
+
+  const previewName = {
+    fr: "apercu-complet.html",
+    en: "funnel-complete.html",
+    es: "embudo-completo.html",
+  } as const;
 
   const blockEntries = blocks.map((b, i) => {
-    const safe = `${String(i + 1).padStart(2, "0")}-${b.type}-${b.id}`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const safe = `${String(i + 1).padStart(2, "0")}-${b.type}-${b.id}`
+      .replace(/[^a-z0-9-]/gi, "-")
+      .toLowerCase();
     const fileName = `${safe}.html`;
-    const section = funnel.sections.find((s) => s.id === b.id);
+    const section = activeSections.find((s) => s.id === b.id);
     const hasPopup = section?.cta?.mode === "popup";
     return {
       fileName: `blocs-systeme-io/${fileName}`,
-      type: b.type, label: b.label, hasPopup,
-      _zipPath: `blocs-systeme-io/${fileName}`, _html: b.html,
+      type: b.type,
+      label: b.label,
+      hasPopup,
+      _zipPath: `blocs-systeme-io/${fileName}`,
+      _html: b.html,
     };
   });
 
-  const formFileName = `99-form-${formBlock.id}.html`.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const formFileName = `99-form-${formBlock.id}.html`
+    .replace(/[^a-z0-9-]/gi, "-")
+    .toLowerCase();
   blockEntries.push({
     fileName: `blocs-systeme-io/${formFileName}`,
-    type: "form", label: formBlock.label, hasPopup: false,
-    _zipPath: `blocs-systeme-io/${formFileName}`, _html: formBlock.html,
+    type: "form",
+    label: formBlock.label,
+    hasPopup: false,
+    _zipPath: `blocs-systeme-io/${formFileName}`,
+    _html: formBlock.html,
   });
 
-  const readme = createReadme(funnel, blockEntries.map((b) => ({
-    fileName: b.fileName.replace("blocs-systeme-io/", ""),
-    type: b.type, label: b.label, hasPopup: b.hasPopup,
-  })));
+  const readme = createReadme(
+    funnel,
+    blockEntries.map((b) => ({
+      fileName: b.fileName.replace("blocs-systeme-io/", ""),
+      type: b.type,
+      label: b.label,
+      hasPopup: b.hasPopup,
+    })),
+  );
 
   const files: Record<string, Uint8Array> = {
     "README.md": strToU8(readme),
     [previewName[funnel.language] ?? "apercu-complet.html"]: strToU8(fullHtml),
   };
-  blockEntries.forEach((b) => { files[b._zipPath] = strToU8(b._html); });
+  blockEntries.forEach((b) => {
+    files[b._zipPath] = strToU8(b._html);
+  });
 
   const zipped = zipSync(files);
   return Buffer.from(zipped).toString("base64");
+}
+
+export function renderFunnelCss(_funnel?: Funnel): string {
+  return getFunnelThemeCss();
 }

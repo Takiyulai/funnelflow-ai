@@ -39,6 +39,10 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     const animationsOff =
       tplEl?.getAttribute("data-ff-animations") === "off";
 
+    if (tplEl) {
+      tplEl.classList.add("ff-anim-ready");
+    }
+
     const collect = () =>
       Array.from(container.querySelectorAll<HTMLElement>("[data-ff-anim]"));
 
@@ -52,20 +56,20 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       return;
     }
 
-    const scrollRoot = findScrollRoot(container);
+    // 🆕 Recalcule le scroll root à chaque scan (peut changer si le DOM
+    // est encore en train de se stabiliser au premier rendu).
+    const getScrollRoot = () => findScrollRoot(container);
 
-    // Calcule la zone réellement visible du scroll root.
-    const getViewportRect = () => {
+    const getViewportRect = (scrollRoot: HTMLElement | null) => {
       if (scrollRoot) return scrollRoot.getBoundingClientRect();
       const w = window.innerWidth || document.documentElement.clientWidth;
       const h = window.innerHeight || document.documentElement.clientHeight;
       return { top: 0, left: 0, bottom: h, right: w } as DOMRect;
     };
 
-    const isVisibleNow = (el: HTMLElement) => {
+    const isVisibleNow = (el: HTMLElement, scrollRoot: HTMLElement | null) => {
       const r = el.getBoundingClientRect();
-      const vp = getViewportRect();
-      // L'élément doit recouper la fenêtre visible (pas juste le DOM du scroll).
+      const vp = getViewportRect(scrollRoot);
       return (
         r.bottom > vp.top + 4 &&
         r.top < vp.bottom - 4 &&
@@ -74,57 +78,106 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       );
     };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0.05) {
-            activate(entry.target as HTMLElement);
-            observer.unobserve(entry.target);
+    let observer: IntersectionObserver | null = null;
+
+    const buildObserver = (scrollRoot: HTMLElement | null) => {
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting && entry.intersectionRatio > 0.05) {
+              activate(entry.target as HTMLElement);
+              observer?.unobserve(entry.target);
+            }
           }
-        }
-      },
-      {
-        root: scrollRoot,
-        rootMargin: "0px 0px -8% 0px",
-        threshold: [0, 0.1, 0.25],
-      },
-    );
+        },
+        {
+          root: scrollRoot,
+          rootMargin: "0px 0px -8% 0px",
+          threshold: [0, 0.1, 0.25],
+        },
+      );
+    };
 
     const observed = new WeakSet<Element>();
 
-    const prep = (el: HTMLElement) => {
+    const prep = (el: HTMLElement, scrollRoot: HTMLElement | null) => {
       if (observed.has(el)) return;
       observed.add(el);
 
-      // Si l'élément est DÉJÀ visible à l'écran maintenant => on l'active
-      // immédiatement (above-the-fold). Sinon on le met en "pending" et on
-      // laisse l'IntersectionObserver le déclencher au scroll.
-      if (isVisibleNow(el)) {
+      if (isVisibleNow(el, scrollRoot)) {
         activate(el);
       } else {
         el.classList.add("ff-anim-pending");
-        observer.observe(el);
+        observer?.observe(el);
       }
     };
 
     const scan = () => {
+      const scrollRoot = getScrollRoot();
+      if (!observer) buildObserver(scrollRoot);
       collect().forEach((el) => {
-        if (!el.classList.contains("ff-anim-active")) prep(el);
+        if (!el.classList.contains("ff-anim-active")) prep(el, scrollRoot);
       });
     };
 
-    // Premier passage après que le layout soit stable.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(scan);
-    });
+    // 🆕 Multi-passages : au premier mount, les dimensions ne sont pas
+    // toujours stables (images en cours de chargement, polices custom,
+    // transform: scale du desktop stage). On scanne plusieurs fois
+    // pour rattraper les éléments above-the-fold qui auraient été ratés.
+    const rafs: number[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // Re-scan si l'éditeur modifie le DOM.
+    rafs.push(
+      requestAnimationFrame(() => {
+        rafs.push(requestAnimationFrame(scan));
+      }),
+    );
+    timers.push(setTimeout(scan, 80));
+    timers.push(setTimeout(scan, 250));
+    timers.push(setTimeout(scan, 600));
+
+    // 🆕 Filet de sécurité ULTIME : au bout de 1.2s, on force l'activation
+    // de tous les éléments qui sont encore en pending. Cela évite un écran
+    // vide définitif si jamais l'IntersectionObserver ne se déclenche pas.
+    timers.push(
+      setTimeout(() => {
+        collect().forEach((el) => {
+          if (!el.classList.contains("ff-anim-active")) {
+            activate(el);
+          }
+        });
+      }, 1200),
+    );
+
+    // 🆕 Re-scan au load complet (images + polices)
+    const onLoad = () => scan();
+    if (document.readyState !== "complete") {
+      window.addEventListener("load", onLoad, { once: true });
+    }
+
+    // 🆕 Re-scan quand les polices custom finissent de charger
+    if (typeof document !== "undefined" && (document as Document & { fonts?: FontFaceSet }).fonts) {
+      (document as Document & { fonts: FontFaceSet }).fonts.ready
+        .then(() => scan())
+        .catch(() => {});
+    }
+
+    // Re-scan si l'éditeur modifie le DOM (changement de section, etc.)
     const mo = new MutationObserver(() => scan());
     mo.observe(container, { childList: true, subtree: true });
 
+    // 🆕 Re-scan au resize (changement viewport mobile/desktop)
+    const onResize = () => scan();
+    window.addEventListener("resize", onResize);
+
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
       mo.disconnect();
+      rafs.forEach((id) => cancelAnimationFrame(id));
+      timers.forEach((id) => clearTimeout(id));
+      window.removeEventListener("load", onLoad);
+      window.removeEventListener("resize", onResize);
     };
   }, []);
 

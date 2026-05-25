@@ -2,6 +2,8 @@
 
 import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
 import { getIconByName } from "@/components/editor/IconPicker";
+import { RichText } from "@/components/funnel/RichText";
+
 
 type Props = {
   section: FunnelSection;
@@ -51,12 +53,12 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
 
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap mb-1">
-                <h3
-                  className="font-bold"
-                  style={{ color: "var(--ff-ink, #0f172a)" }}
-                >
-                  {item.data.title || `Bonus ${idx + 1}`}
-                </h3>
+                <RichText
+                    as="p"
+                    className={`${bodySize} leading-relaxed`}
+                    text={item.data.description}
+                  />
+
                 {item.data.value && (
                   <span
                     className="text-xs font-semibold rounded-full px-2 py-0.5"

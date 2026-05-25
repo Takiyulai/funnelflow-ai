@@ -7,7 +7,7 @@ import {
   MousePointerClick,
   Palette,
 } from "lucide-react";
-import type { FunnelSection, Language } from "@/lib/funnels/types";
+import type { FunnelSection, Language, Funnel } from "@/lib/funnels/types";
 import { ContentTab } from "@/components/editor/tabs/ContentTab";
 import { MediaTab } from "@/components/editor/tabs/MediaTab";
 import { CtaTab } from "@/components/editor/tabs/CtaTab";
@@ -19,8 +19,10 @@ type TabId = "content" | "media" | "cta" | "style";
 type Props = {
   section: FunnelSection;
   language: Language;
+  funnel: Funnel;
   onChange: (patch: Partial<FunnelSection>) => void;
 };
+
 
 const TABS: { id: TabId; label: string; icon: typeof FileText }[] = [
   { id: "content", label: "Contenu", icon: FileText },
@@ -50,7 +52,7 @@ const SECTION_LABELS: Record<string, string> = {
   qualification: "Qualification",
 };
 
-export function SectionEditor({ section, language, onChange }: Props) {
+export function SectionEditor({ section, language, funnel, onChange }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("content");
   const sectionLabel = SECTION_LABELS[section.type] ?? section.type;
 
@@ -99,8 +101,9 @@ export function SectionEditor({ section, language, onChange }: Props) {
           <ContentTab section={section} language={language} onChange={onChange} />
         )}
         {activeTab === "media" && (
-          <MediaTab section={section} language={language} onChange={onChange} />
+        <MediaTab section={section} language={language} funnel={funnel} onChange={onChange} />
         )}
+
         {activeTab === "cta" && (
           <CtaTab section={section} language={language} onChange={onChange} />
         )}

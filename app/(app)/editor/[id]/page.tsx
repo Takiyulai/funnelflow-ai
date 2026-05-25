@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
+import { PageSelector } from "@/components/editor/PageSelector";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { GlobalStylePanel } from "@/components/editor/GlobalStylePanel";
 import { SectionEditorDrawer } from "@/components/editor/SectionEditorDrawer";
@@ -22,9 +23,12 @@ import {
   saveFunnel,
   publishFunnel,
   loadFunnelBySlug,
+  updatePageSections,
   type StoredFunnel,
 } from "@/lib/store/funnelStore";
-import type { Funnel, FunnelSection } from "@/lib/funnels/types";
+import type { Funnel, FunnelPage, FunnelSection } from "@/lib/funnels/types";
+import SioLinkingTab from "@/components/editor/SioLinkingTab";
+import { InlineColorToolbar } from "@/components/editor/InlineColorToolbar";
 
 type HistoryState = {
   past: Funnel[];
@@ -43,6 +47,34 @@ function extractBrandName(fullName: string): string {
     if (idx > 0) return fullName.slice(0, idx).trim();
   }
   return fullName.trim();
+}
+
+function resolveActivePage(
+  funnel: Funnel,
+  selectedPageId: string | null
+): FunnelPage | null {
+  if (!funnel.pages || funnel.pages.length === 0) return null;
+  if (selectedPageId) {
+    const found = funnel.pages.find((p) => p.id === selectedPageId);
+    if (found) return found;
+  }
+  return funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+}
+
+function buildPreviewUrl(
+  funnelSlug: string,
+  page: FunnelPage | null
+): string {
+  const base = `/tunnel/${funnelSlug}`;
+  if (!page || page.isHome) return base;
+
+  const cleanPageSlug = (page.slug ?? "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .trim();
+
+  if (!cleanPageSlug || cleanPageSlug === "/") return base;
+  return `${base}/${cleanPageSlug}`;
 }
 
 export default function EditorPage() {
@@ -65,6 +97,7 @@ export default function EditorPage() {
     present: null,
     future: [],
   });
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showGlobalStyle, setShowGlobalStyle] = useState(false);
   const [headerOpen, setHeaderOpen] = useState(false);
@@ -73,15 +106,14 @@ export default function EditorPage() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Onglet actif sur mobile/tablette (< lg). Sur desktop, les deux panneaux sont visibles.
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
+  const [sioLinkingOpen, setSioLinkingOpen] = useState(false);
 
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoadRef = useRef(true);
 
-  // ─── Initial load ───────────────────────────────────────────────
   useEffect(() => {
     if (loading) return;
     if (!stored) {
@@ -91,7 +123,17 @@ export default function EditorPage() {
     }
     if (isInitialLoadRef.current) {
       setHistory({ past: [], present: stored.funnel, future: [] });
-      setSelectedSectionId(stored.funnel.sections[0]?.id ?? null);
+
+      const homePage =
+        stored.funnel.pages?.find((p) => p.isHome) ??
+        stored.funnel.pages?.[0] ??
+        null;
+      setSelectedPageId(homePage?.id ?? null);
+
+      const firstSection =
+        homePage?.sections[0] ?? stored.funnel.sections[0] ?? null;
+      setSelectedSectionId(firstSection?.id ?? null);
+
       setLastSavedAt(new Date(stored.updatedAt).getTime());
       isInitialLoadRef.current = false;
     }
@@ -99,7 +141,21 @@ export default function EditorPage() {
 
   const funnel = history.present;
 
-  // ─── Auto-save ──────────────────────────────────────────────────
+  const activePage = useMemo<FunnelPage | null>(
+    () => (funnel ? resolveActivePage(funnel, selectedPageId) : null),
+    [funnel, selectedPageId]
+  );
+
+  const activeSections: FunnelSection[] = useMemo(() => {
+    if (activePage) return activePage.sections;
+    return funnel?.sections ?? [];
+  }, [activePage, funnel]);
+
+  const previewFunnel = useMemo<Funnel | null>(() => {
+    if (!funnel) return null;
+    return { ...funnel, sections: activeSections };
+  }, [funnel, activeSections]);
+
   useEffect(() => {
     if (!funnel || !stored || isInitialLoadRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -128,7 +184,6 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [funnel]);
 
-  // ─── History helpers ────────────────────────────────────────────
   const pushHistory = useCallback((next: Funnel) => {
     setHistory((h) => {
       if (!h.present) return { past: [], present: next, future: [] };
@@ -178,7 +233,6 @@ export default function EditorPage() {
     }
   }, [funnel, stored, toast]);
 
-  // ─── Keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -204,90 +258,90 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [undo, redo, handleManualSave]);
 
-  // ─── Section CRUD ───────────────────────────────────────────────
-  const updateSection = useCallback(
-    (sectionId: string, patch: Partial<FunnelSection>) => {
-      if (!funnel) return;
-      const next: Funnel = {
-        ...funnel,
-        sections: funnel.sections.map((s) =>
-          s.id === sectionId ? { ...s, ...patch } : s,
-        ),
-      };
+  const mutateActivePageSections = useCallback(
+    (transform: (sections: FunnelSection[]) => FunnelSection[]) => {
+      if (!funnel || !activePage) return;
+      const nextSections = transform(activePage.sections);
+      const next = updatePageSections(funnel, activePage.id, nextSections);
       pushHistory(next);
     },
-    [funnel, pushHistory],
+    [funnel, activePage, pushHistory]
+  );
+
+  const updateSection = useCallback(
+    (sectionId: string, patch: Partial<FunnelSection>) => {
+      mutateActivePageSections((sections) =>
+        sections.map((s) => (s.id === sectionId ? { ...s, ...patch } : s))
+      );
+    },
+    [mutateActivePageSections]
   );
 
   const reorderSections = useCallback(
     (orderedIds: string[]) => {
-      if (!funnel) return;
-      const map = new Map(funnel.sections.map((s) => [s.id, s]));
-      const reordered = orderedIds
-        .map((id) => map.get(id))
-        .filter((s): s is FunnelSection => Boolean(s));
-      if (reordered.length !== funnel.sections.length) return;
-      pushHistory({ ...funnel, sections: reordered });
+      mutateActivePageSections((sections) => {
+        const map = new Map(sections.map((s) => [s.id, s]));
+        const reordered = orderedIds
+          .map((id) => map.get(id))
+          .filter((s): s is FunnelSection => Boolean(s));
+        return reordered.length === sections.length ? reordered : sections;
+      });
     },
-    [funnel, pushHistory],
+    [mutateActivePageSections]
   );
 
   const toggleVisibility = useCallback(
     (sectionId: string) => {
-      if (!funnel) return;
-      const next: Funnel = {
-        ...funnel,
-        sections: funnel.sections.map((s) =>
+      mutateActivePageSections((sections) =>
+        sections.map((s) =>
           s.id === sectionId
             ? { ...s, visible: s.visible === false ? true : false }
-            : s,
-        ),
-      };
-      pushHistory(next);
+            : s
+        )
+      );
     },
-    [funnel, pushHistory],
+    [mutateActivePageSections]
   );
 
   const duplicateSection = useCallback(
     (sectionId: string) => {
-      if (!funnel) return;
-      const idx = funnel.sections.findIndex((s) => s.id === sectionId);
+      if (!activePage) return;
+      const idx = activePage.sections.findIndex((s) => s.id === sectionId);
       if (idx < 0) return;
-      const original = funnel.sections[idx];
+      const original = activePage.sections[idx];
       const copy: FunnelSection = {
         ...original,
         id: `${original.id}-copy-${Date.now().toString(36)}`,
       };
-      const sections = [...funnel.sections];
-      sections.splice(idx + 1, 0, copy);
-      pushHistory({ ...funnel, sections });
+      mutateActivePageSections((sections) => {
+        const next = [...sections];
+        next.splice(idx + 1, 0, copy);
+        return next;
+      });
       setSelectedSectionId(copy.id);
     },
-    [funnel, pushHistory],
+    [activePage, mutateActivePageSections]
   );
 
   const deleteSection = useCallback(
     (sectionId: string) => {
-      if (!funnel) return;
-      const sections = funnel.sections.filter((s) => s.id !== sectionId);
-      pushHistory({ ...funnel, sections });
+      mutateActivePageSections((sections) => sections.filter((s) => s.id !== sectionId));
       if (selectedSectionId === sectionId) {
-        setSelectedSectionId(sections[0]?.id ?? null);
+        const remaining = activePage?.sections.filter((s) => s.id !== sectionId) ?? [];
+        setSelectedSectionId(remaining[0]?.id ?? null);
         setDrawerOpen(false);
       }
     },
-    [funnel, pushHistory, selectedSectionId],
+    [mutateActivePageSections, selectedSectionId, activePage]
   );
 
   const addSection = useCallback(
     (newSection: FunnelSection) => {
-      if (!funnel) return;
-      const sections = [...funnel.sections, newSection];
-      pushHistory({ ...funnel, sections });
+      mutateActivePageSections((sections) => [...sections, newSection]);
       setSelectedSectionId(newSection.id);
       setDrawerOpen(true);
     },
-    [funnel, pushHistory],
+    [mutateActivePageSections]
   );
 
   const updateSlug = useCallback(
@@ -318,7 +372,7 @@ export default function EditorPage() {
       saveFunnel(updated);
       toast.show({ title: "Slug mis à jour", variant: "success" });
     },
-    [stored, toast],
+    [stored, toast]
   );
 
   const updateFunnelMeta = useCallback(
@@ -326,7 +380,7 @@ export default function EditorPage() {
       if (!funnel) return;
       pushHistory({ ...funnel, ...patch });
     },
-    [funnel, pushHistory],
+    [funnel, pushHistory]
   );
 
   const handlePublish = useCallback(() => {
@@ -358,11 +412,22 @@ export default function EditorPage() {
     });
   }, [stored]);
 
-  // ─── Lot E + F : scroll preview + ouverture du drawer ───────────
+  const handlePageSelect = useCallback(
+    (pageId: string) => {
+      if (!funnel || pageId === selectedPageId) return;
+      const targetPage = funnel.pages?.find((p) => p.id === pageId);
+      if (!targetPage) return;
+      setSelectedPageId(pageId);
+      setSelectedSectionId(targetPage.sections[0]?.id ?? null);
+      setDrawerOpen(false);
+      setMobileTab("preview");
+    },
+    [funnel, selectedPageId]
+  );
+
   const scrollToSection = useCallback((sectionId: string) => {
     setSelectedSectionId(sectionId);
     setDrawerOpen(true);
-    // Sur mobile, bascule automatiquement sur l'onglet Aperçu pour montrer la section
     setMobileTab("preview");
 
     requestAnimationFrame(() => {
@@ -372,7 +437,7 @@ export default function EditorPage() {
       const target =
         wrapper.querySelector<HTMLElement>(`#${CSS.escape(sectionId)}`) ??
         wrapper.querySelector<HTMLElement>(
-          `[data-ff-section][id="${CSS.escape(sectionId)}"]`,
+          `[data-ff-section][id="${CSS.escape(sectionId)}"]`
         );
       if (!target) return;
 
@@ -421,7 +486,7 @@ export default function EditorPage() {
     };
   }, []);
 
-  if (loading || !funnel || !stored) {
+  if (loading || !funnel || !stored || !previewFunnel) {
     return (
       <AppShell>
         <div className="flex h-[60vh] items-center justify-center text-white/60">
@@ -433,16 +498,17 @@ export default function EditorPage() {
   }
 
   const selectedSection =
-    funnel.sections.find((s) => s.id === selectedSectionId) ?? null;
+    activeSections.find((s) => s.id === selectedSectionId) ?? null;
   const isPublished = Boolean(stored.publishedAt);
   const brandName = extractBrandName(funnel.funnelName);
+  const pages = funnel.pages ?? [];
+
+  const previewHref = buildPreviewUrl(stored.slug, activePage);
 
   return (
     <AppShell>
-      {/* ───────── Toolbar pro ───────── */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 md:-mx-8 md:-mt-8 min-w-0">
         <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-8 min-w-0">
-          {/* Bloc titre + slug */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
             <Link
               href="/dashboard"
@@ -467,7 +533,6 @@ export default function EditorPage() {
                     Brouillon
                   </span>
                 )}
-                {/* Version compacte du badge sur mobile : juste un point coloré */}
                 <span
                   className={`sm:hidden inline-block h-2 w-2 rounded-full shrink-0 ${
                     isPublished ? "bg-emerald-400" : "bg-zinc-500"
@@ -475,7 +540,6 @@ export default function EditorPage() {
                   aria-label={isPublished ? "Publié" : "Brouillon"}
                 />
               </div>
-              {/* Slug : caché sur mobile pour gagner de la place */}
               <div className="hidden md:flex items-center gap-1 text-[11px] text-zinc-500 min-w-0">
                 <span className="shrink-0">/tunnel/</span>
                 <input
@@ -498,14 +562,11 @@ export default function EditorPage() {
             </div>
           </div>
 
-          {/* SaveIndicator : visible uniquement sur desktop */}
           <div className="ml-2 hidden lg:flex items-center justify-center shrink-0">
             <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
           </div>
 
-          {/* Actions à droite */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Undo / Redo : toujours visibles mais compacts sur mobile */}
             <div className="flex items-center rounded-md border border-zinc-800 bg-zinc-900">
               <button
                 onClick={undo}
@@ -526,7 +587,6 @@ export default function EditorPage() {
               </button>
             </div>
 
-            {/* Bouton Enregistrer : desktop only (sur mobile, l'auto-save suffit + Ctrl+S si clavier) */}
             <button
               onClick={handleManualSave}
               title="Enregistrer (Ctrl+S)"
@@ -536,21 +596,22 @@ export default function EditorPage() {
               Enregistrer
             </button>
 
-            {/* Export Systeme.io : toujours visible */}
-            <SystemeIoExportMenu funnel={funnel} />
-
-            {/* Aperçu (lien externe) : desktop only */}
+            <SystemeIoExportMenu funnel={funnel} activePage={activePage} />
             <Link
-              href={`/tunnel/${stored.slug}`}
+              href={previewHref}
               target="_blank"
               rel="noopener noreferrer"
+              title={
+                activePage && !activePage.isHome
+                  ? `Aperçu : ${activePage.slug}`
+                  : "Aperçu : page d'accueil"
+              }
               className="hidden lg:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Aperçu
             </Link>
 
-            {/* Publier : toujours visible */}
             <button
               onClick={handlePublish}
               className="flex h-8 items-center gap-1 sm:gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-2.5 sm:px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition"
@@ -563,13 +624,11 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Indicateur de sauvegarde sur mobile/tablette : en dessous de la toolbar */}
         <div className="lg:hidden flex items-center justify-center pb-2 px-3 min-w-0">
           <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
         </div>
       </div>
 
-      {/* ───────── Onglets mobile/tablette (cachés sur lg+) ───────── */}
       <div className="lg:hidden mb-4 min-w-0">
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-900/60 p-1 ring-1 ring-white/5">
           <button
@@ -584,7 +643,7 @@ export default function EditorPage() {
             <Layers className="h-3.5 w-3.5" />
             Sections
             <span className="ml-1 rounded-full bg-zinc-700/80 px-1.5 text-[10px] font-bold text-zinc-300">
-              {funnel.sections.length}
+              {activeSections.length}
             </span>
           </button>
           <button
@@ -602,16 +661,20 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* ───────── Layout principal ───────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(380px,38fr)_minmax(0,62fr)] min-w-0">
-        {/* Panneau Sections */}
         <div
           className={`flex flex-col gap-4 min-w-0 ${
             mobileTab === "preview" ? "hidden lg:flex" : ""
           }`}
         >
+          <PageSelector
+            pages={pages}
+            selectedPageId={selectedPageId}
+            onSelect={handlePageSelect}
+          />
+
           <EditorSidebar
-            sections={funnel.sections}
+            sections={activeSections}
             selectedId={selectedSectionId}
             onSelect={scrollToSection}
             onReorder={reorderSections}
@@ -621,30 +684,34 @@ export default function EditorPage() {
             onAdd={addSection}
             onOpenGlobalStyle={() => setShowGlobalStyle(true)}
             onOpenHeader={() => setHeaderOpen(true)}
+            onOpenSioLinking={() => setSioLinkingOpen(true)}
           />
         </div>
 
-        {/* Panneau Aperçu */}
         <div
-          className={`min-w-0 ${
-            mobileTab === "sections" ? "hidden lg:block" : ""
-          }`}
-        >
-          <div
-            className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0"
-            ref={previewWrapperRef}
-          >
-            <FunnelPreview
-              funnel={funnel}
-              defaultMode="desktop"
-              showToolbar={true}
-              viewportHeight="calc(100vh - 7rem)"
-            />
-          </div>
-        </div>
+  className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
+  ref={previewWrapperRef}
+>
+  <FunnelPreview
+  key={activePage?.id ?? "default"}
+  funnel={previewFunnel}
+  defaultMode="desktop"
+  showToolbar={true}
+  viewportHeight="calc(100vh - 7rem)"
+  pageRole={activePage?.role}
+/>
+
+  <InlineColorToolbar
+    previewRootRef={previewWrapperRef}
+    funnel={previewFunnel}
+    updateSection={updateSection}
+    debug={true}
+  />
+</div>
+
+
       </div>
 
-      {/* ───────── Drawer d'édition de section (Lot F) ───────── */}
       <SectionEditorDrawer
         open={drawerOpen && !!selectedSection}
         onClose={() => setDrawerOpen(false)}
@@ -655,6 +722,7 @@ export default function EditorPage() {
             key={selectedSection.id}
             section={selectedSection}
             language={funnel.language}
+            funnel={funnel}
             onChange={(patch: Partial<FunnelSection>) =>
               updateSection(selectedSection.id, patch)
             }
@@ -670,7 +738,14 @@ export default function EditorPage() {
         />
       )}
 
-      {/* ───────── Modale Header (Lot M) ───────── */}
+      {sioLinkingOpen && (
+        <SioLinkingTab
+          funnel={funnel}
+          onChange={updateFunnelMeta}
+          onClose={() => setSioLinkingOpen(false)}
+        />
+      )}
+
       {headerOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"

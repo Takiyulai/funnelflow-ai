@@ -1,14 +1,18 @@
 "use client";
 
 import { CtaButton } from "@/components/funnel/CtaButton";
+import { RichText } from "@/components/funnel/RichText";
+import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
 import type {
   AnimationPreset,
+  Funnel,
   FunnelSection,
   SectionLayoutVariant,
 } from "@/lib/funnels/types";
 
 type Props = {
   section: FunnelSection;
+  funnel?: Funnel;
   /**
    * Mode de rendu :
    *  - "preview" : utilisé dans la preview wizard (CTA non actifs)
@@ -21,25 +25,44 @@ type Props = {
 
 const DEFAULT_ANIM: AnimationPreset = "fade-up";
 
-export function SectionRenderer({ section, mode = "public", videoEmbedUrl }: Props) {
-  const layout: SectionLayoutVariant = section.layoutVariant ?? "centered";
+type AnimKey =
+  | "eyebrow"
+  | "headline"
+  | "subheadline"
+  | "body"
+  | "bullets"
+  | "image"
+  | "video"
+  | "cta";
+
+type AnimOf = (key: AnimKey) => AnimationPreset;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section root
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function SectionRenderer({
+  section,
+  funnel,
+  mode = "public",
+  videoEmbedUrl,
+}: Props) {
+  const layout = effectiveLayoutVariant(section, funnel) as SectionLayoutVariant;
   const anims = section.animations ?? {};
   const visible = section.visible !== false;
   if (!visible) return null;
 
   const sectionId = section.id || section.type;
-
-  const animOf = (key: keyof typeof anims): AnimationPreset =>
-    anims[key] ?? "none";
+  const animOf: AnimOf = (key) => anims[key] ?? "none";
 
   return (
     <section
       id={sectionId}
       data-ff-section={section.type}
       data-ff-layout={layout}
-      className={layoutClass(layout)}
+      className={`ff-section ff-${section.type} ff-layout-${layout}`}
     >
-      <div className={containerClass(layout)}>
+      <div className="ff-section-inner">
         <LayoutBody
           section={section}
           layout={layout}
@@ -53,124 +76,75 @@ export function SectionRenderer({ section, mode = "public", videoEmbedUrl }: Pro
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Choix du layout
+// Layout switch
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LayoutBody({
-  section,
-  layout,
-  mode,
-  videoEmbedUrl,
-  animOf,
-}: {
+type LayoutBodyProps = {
   section: FunnelSection;
   layout: SectionLayoutVariant;
   mode: "preview" | "public";
   videoEmbedUrl: string | null;
-  animOf: (
-    key:
-      | "eyebrow"
-      | "headline"
-      | "subheadline"
-      | "body"
-      | "bullets"
-      | "image"
-      | "video"
-      | "cta"
-  ) => AnimationPreset;
-}) {
-  switch (layout) {
+  animOf: AnimOf;
+};
+
+function LayoutBody(props: LayoutBodyProps) {
+  switch (props.layout) {
     case "split-text-image":
-      return (
-        <SplitLayout
-          section={section}
-          reverse={false}
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <SplitLayout {...props} reverse={false} />;
     case "split-image-text":
-      return (
-        <SplitLayout
-          section={section}
-          reverse={true}
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <SplitLayout {...props} reverse={true} />;
     case "feature-grid":
-      return <FeatureGridLayout section={section} mode={mode} animOf={animOf} />;
+      return <FeatureGridLayout {...props} />;
     case "stacked-card":
-      return (
-        <StackedCardLayout
-          section={section}
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <StackedCardLayout {...props} />;
     case "wide-banner":
-      return (
-        <WideBannerLayout
-          section={section}
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <WideBannerLayout {...props} />;
     case "dense-list":
-      return <DenseListLayout section={section} mode={mode} animOf={animOf} />;
+      return <DenseListLayout {...props} />;
     case "left-aligned":
-      return (
-        <CenteredLayout
-          section={section}
-          align="left"
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <CenteredLayout {...props} align="left" />;
     case "centered":
     default:
-      return (
-        <CenteredLayout
-          section={section}
-          align="center"
-          mode={mode}
-          videoEmbedUrl={videoEmbedUrl}
-          animOf={animOf}
-        />
-      );
+      return <CenteredLayout {...props} align="center" />;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Layouts
+// Layouts — DOM sémantique aligné sur theme-css.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CenteredLayout({ section, align, mode, videoEmbedUrl, animOf }: any) {
-  const alignClass =
-    align === "left" ? "text-left items-start" : "text-center items-center";
+function CenteredLayout({
+  section,
+  mode,
+  videoEmbedUrl,
+  animOf,
+}: LayoutBodyProps & { align: "left" | "center" }) {
   return (
-    <div className={`flex flex-col gap-4 ${alignClass}`}>
+    <>
       <Eyebrow section={section} animOf={animOf} />
       <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
       {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
       <Body section={section} animOf={animOf} />
-      <Bullets section={section} animOf={animOf} center={align !== "left"} />
+      <Bullets section={section} animOf={animOf} />
       <CtaBlock section={section} mode={mode} animOf={animOf} />
-    </div>
+    </>
   );
 }
 
-function SplitLayout({ section, reverse, mode, videoEmbedUrl, animOf }: any) {
-  const order = reverse ? "md:flex-row-reverse" : "md:flex-row";
+function SplitLayout({
+  section,
+  mode,
+  videoEmbedUrl,
+  animOf,
+  reverse,
+}: LayoutBodyProps & { reverse: boolean }) {
+  // Le sens visuel (image gauche/droite) est géré en CSS via .ff-layout-split-image-text
+  // (flex-direction: row-reverse). On garde le markup identique pour les deux.
+  void reverse;
   return (
-    <div className={`flex flex-col ${order} items-center gap-8`}>
-      <div className="flex-1 flex flex-col gap-4">
+    <div className="ff-split-grid">
+      <div className="ff-split-text">
         <Eyebrow section={section} animOf={animOf} />
         <Headline section={section} animOf={animOf} />
         <Subheadline section={section} animOf={animOf} />
@@ -178,7 +152,7 @@ function SplitLayout({ section, reverse, mode, videoEmbedUrl, animOf }: any) {
         <Bullets section={section} animOf={animOf} />
         <CtaBlock section={section} mode={mode} animOf={animOf} />
       </div>
-      <div className="flex-1 w-full">
+      <div className="ff-split-media">
         {videoEmbedUrl ? (
           <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />
         ) : section.image?.url ? (
@@ -191,191 +165,223 @@ function SplitLayout({ section, reverse, mode, videoEmbedUrl, animOf }: any) {
   );
 }
 
-function FeatureGridLayout({ section, mode, animOf }: any) {
+function FeatureGridLayout({ section, mode, animOf }: LayoutBodyProps) {
   const bullets: string[] = section.bullets ?? [];
   return (
-    <div className="flex flex-col gap-6 text-center items-center">
+    <>
       <Eyebrow section={section} animOf={animOf} />
       <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
       <Body section={section} animOf={animOf} />
       {bullets.length > 0 && (
-        <div
-          data-ff-bullets="stagger"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full"
-        >
+        <div className="ff-feature-grid" data-ff-bullets="stagger">
           {bullets.map((b, i) => (
-            <div
+            <RichText
               key={i}
-              data-ff-anim={animOf("bullets") || DEFAULT_ANIM}
-              className="ff-card rounded-xl p-5 text-left"
-            >
-              <p className="ff-body text-sm leading-relaxed">{b}</p>
-            </div>
+              as="div"
+              className="ff-feature-card"
+              text={b}
+              dataAnim={animOf("bullets") || DEFAULT_ANIM}
+            />
           ))}
         </div>
       )}
       <CtaBlock section={section} mode={mode} animOf={animOf} />
-    </div>
+    </>
   );
 }
 
-function StackedCardLayout({ section, mode, videoEmbedUrl, animOf }: any) {
+function StackedCardLayout({
+  section,
+  mode,
+  videoEmbedUrl,
+  animOf,
+}: LayoutBodyProps) {
   return (
-    <div className="flex justify-center">
-      <div
-        data-ff-anim={animOf("headline") || DEFAULT_ANIM}
-        className="ff-card-elevated w-full max-w-2xl rounded-2xl p-8 flex flex-col gap-4 text-center items-center"
-      >
-        <Eyebrow section={section} animOf={animOf} />
-        <Headline section={section} animOf={animOf} />
-        <Subheadline section={section} animOf={animOf} />
-        {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
-        <Body section={section} animOf={animOf} />
-        <Bullets section={section} animOf={animOf} center />
-        <CtaBlock section={section} mode={mode} animOf={animOf} />
-      </div>
-    </div>
-  );
-}
-
-function WideBannerLayout({ section, mode, videoEmbedUrl, animOf }: any) {
-  return (
-    <div className="flex flex-col gap-6 items-center text-center">
+    <div
+      data-ff-anim={animOf("headline") || DEFAULT_ANIM}
+      className="ff-stacked-card"
+    >
       <Eyebrow section={section} animOf={animOf} />
-      <Headline section={section} animOf={animOf} large />
+      <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
-      {videoEmbedUrl && (
-        <div className="w-full max-w-4xl">
-          <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />
-        </div>
-      )}
+      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
       <Body section={section} animOf={animOf} />
-      <Bullets section={section} animOf={animOf} center />
+      <Bullets section={section} animOf={animOf} />
       <CtaBlock section={section} mode={mode} animOf={animOf} />
     </div>
   );
 }
 
-function DenseListLayout({ section, mode, animOf }: any) {
+function WideBannerLayout({
+  section,
+  mode,
+  videoEmbedUrl,
+  animOf,
+}: LayoutBodyProps) {
+  return (
+    <>
+      <Eyebrow section={section} animOf={animOf} />
+      <Headline section={section} animOf={animOf} />
+      <Subheadline section={section} animOf={animOf} />
+      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
+      <Body section={section} animOf={animOf} />
+      <Bullets section={section} animOf={animOf} />
+      <CtaBlock section={section} mode={mode} animOf={animOf} />
+    </>
+  );
+}
+
+function DenseListLayout({ section, mode, animOf }: LayoutBodyProps) {
   const bullets: string[] = section.bullets ?? [];
   return (
-    <div className="flex flex-col gap-4 max-w-2xl mx-auto">
+    <>
       <Headline section={section} animOf={animOf} />
       <Body section={section} animOf={animOf} />
       {bullets.length > 0 && (
-        <ul data-ff-bullets="stagger" className="ff-divide-list flex flex-col">
+        <ul className="ff-dense-list" data-ff-bullets="stagger">
           {bullets.map((b, i) => (
-            <li
+            <RichText
               key={i}
-              data-ff-anim={animOf("bullets") || DEFAULT_ANIM}
-              className="ff-body py-3 text-sm leading-relaxed"
-            >
-              {b}
-            </li>
+              as="li"
+              text={b}
+              dataAnim={animOf("bullets") || DEFAULT_ANIM}
+            />
           ))}
         </ul>
       )}
       <CtaBlock section={section} mode={mode} animOf={animOf} />
-    </div>
+    </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sous-blocs réutilisables — utilisent les CSS variables du thème
+// Sous-blocs réutilisables — classes sémantiques uniquement
+// 🆕 Tous les textes passent désormais par <RichText> pour parser
+//     la syntaxe de surlignage [[texte]] / [[texte|#hex]].
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Eyebrow({ section, animOf }: any) {
+function Eyebrow({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   if (!section.eyebrow) return null;
   return (
-    <span
-      data-ff-anim={animOf("eyebrow") || DEFAULT_ANIM}
-      className="ff-eyebrow text-[11px] font-semibold uppercase tracking-[0.2em]"
-    >
-      {section.eyebrow}
-    </span>
+    <RichText
+      as="span"
+      className="ff-eyebrow"
+      text={section.eyebrow}
+      dataAnim={animOf("eyebrow") || DEFAULT_ANIM}
+    />
   );
 }
 
-function Headline({ section, animOf, large }: any) {
+function Headline({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   if (!section.headline) return null;
   return (
-    <h2
-      data-ff-anim={animOf("headline") || DEFAULT_ANIM}
-      className="ff-headline ff-headline-scaled leading-tight"
-    >
-      {section.headline}
-    </h2>
+    <RichText
+      as="h2"
+      className="ff-headline"
+      text={section.headline}
+      dataAnim={animOf("headline") || DEFAULT_ANIM}
+    />
   );
 }
 
-
-function Subheadline({ section, animOf }: any) {
+function Subheadline({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   if (!section.subheadline) return null;
   return (
-    <p
-      data-ff-anim={animOf("subheadline") || DEFAULT_ANIM}
-      className="ff-subheadline text-base md:text-lg max-w-2xl"
-    >
-      {section.subheadline}
-    </p>
+    <RichText
+      as="p"
+      className="ff-subheadline"
+      text={section.subheadline}
+      dataAnim={animOf("subheadline") || DEFAULT_ANIM}
+    />
   );
 }
 
-function Body({ section, animOf }: any) {
+function Body({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   if (!section.body) return null;
   return (
-    <p
-      data-ff-anim={animOf("body") || DEFAULT_ANIM}
-      className="ff-body text-sm md:text-base leading-relaxed max-w-2xl whitespace-pre-line"
-    >
-      {section.body}
-    </p>
+    <RichText
+      as="p"
+      className="ff-body"
+      text={section.body}
+      dataAnim={animOf("body") || DEFAULT_ANIM}
+    />
   );
 }
 
-function Bullets({ section, animOf, center }: any) {
+function Bullets({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   const bullets: string[] = section.bullets ?? [];
   if (bullets.length === 0) return null;
   return (
-    <ul
-      data-ff-bullets="stagger"
-      className={`flex flex-col gap-2 ${
-        center ? "items-center text-center" : "items-start text-left"
-      }`}
-    >
+    <ul className="ff-bullets" data-ff-bullets="stagger">
       {bullets.map((b, i) => (
-        <li
+        <RichText
           key={i}
-          data-ff-anim={animOf("bullets") || DEFAULT_ANIM}
-          className="ff-body text-sm md:text-base max-w-2xl"
-        >
-          • {b}
-        </li>
+          as="li"
+          text={b}
+          dataAnim={animOf("bullets") || DEFAULT_ANIM}
+        />
       ))}
     </ul>
   );
 }
 
-function ImageBlock({ section, animOf }: any) {
+function ImageBlock({
+  section,
+  animOf,
+}: {
+  section: FunnelSection;
+  animOf: AnimOf;
+}) {
   if (!section.image?.url) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={section.image.url}
-      alt={section.image.alt ?? ""}
+    <figure
+      className="ff-image-wrap"
       data-ff-anim={animOf("image") || "fade-in"}
-      className="ff-image w-full h-auto rounded-2xl object-cover"
-    />
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={section.image.url}
+        alt={section.image.alt ?? ""}
+        className="ff-image"
+      />
+    </figure>
   );
 }
 
 function ImagePlaceholder({ anim }: { anim: AnimationPreset }) {
   return (
-    <div
-      data-ff-anim={anim || "fade-in"}
-      className="ff-image-placeholder w-full aspect-video rounded-2xl grid place-items-center text-xs"
-    >
+    <div data-ff-anim={anim || "fade-in"} className="ff-image-placeholder">
       Visuel
     </div>
   );
@@ -383,52 +389,33 @@ function ImagePlaceholder({ anim }: { anim: AnimationPreset }) {
 
 function VideoEmbed({ url, anim }: { url: string; anim: AnimationPreset }) {
   return (
-    <div
-      data-ff-anim={anim || "zoom-in"}
-      className="ff-video relative w-full aspect-video rounded-2xl overflow-hidden bg-black"
-    >
+    <div data-ff-anim={anim || "zoom-in"} className="ff-video">
       <iframe
         src={url}
         title="Video"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        className="absolute inset-0 w-full h-full"
       />
     </div>
   );
 }
 
-function CtaBlock({ section, mode, animOf }: any) {
+function CtaBlock({
+  section,
+  mode,
+  animOf,
+}: {
+  section: FunnelSection;
+  mode: "preview" | "public";
+  animOf: AnimOf;
+}) {
   if (!section.cta) return null;
   return (
-    <div data-ff-anim={animOf("cta") || DEFAULT_ANIM} className="ff-cta-wrap mt-2">
+    <div
+      data-ff-anim={animOf("cta") || DEFAULT_ANIM}
+      className="ff-cta-wrap"
+    >
       <CtaButton cta={section.cta} disabled={mode === "preview"} />
     </div>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Classes Tailwind par layout (espacement section)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function layoutClass(_layout: SectionLayoutVariant): string {
-  // L'espacement vertical vient du thème via --ff-section-py
-  return "ff-section py-[var(--ff-section-py)] md:py-[var(--ff-section-py-md)] px-6";
-}
-
-function containerClass(layout: SectionLayoutVariant): string {
-  switch (layout) {
-    case "wide-banner":
-    case "feature-grid":
-    case "split-text-image":
-    case "split-image-text":
-      return "max-w-6xl mx-auto";
-    case "stacked-card":
-    case "dense-list":
-      return "max-w-3xl mx-auto";
-    case "centered":
-    case "left-aligned":
-    default:
-      return "max-w-3xl mx-auto";
-  }
 }

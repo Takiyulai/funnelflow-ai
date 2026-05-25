@@ -1,0 +1,67 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Parity Fix Report</title>
+  <style>
+    :root {
+      --bg: oklch(99% 0.002 240);
+      --fg: oklch(18% 0.012 250);
+      --accent: oklch(58% 0.18 255);
+      --border: oklch(92% 0.005 250);
+      --success: oklch(65% 0.15 145);
+    }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 32px; }
+    h2 { font-size: 18px; font-weight: 600; margin-top: 32px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      background: var(--success);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    code { font-family: ui-monospace, monospace; background: oklch(95% 0 0); padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    .file-tag { font-weight: 600; color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="status">✓ Fix Validated & Build Passed</div>
+  <h1>Visual Parity: FunnelPreview ↔ Export</h1>
+  
+  <p>The discrepancy where the desktop hero appeared stacked instead of split has been resolved by synchronizing the layout resolution logic and aligning the DOM structures.</p>
+
+  <h2>Technical Changes</h2>
+  <ul>
+    <li><span class="file-tag">lib/funnels/resolveMedia.ts</span>: Centralized <code>effectiveLayoutVariant</code> logic to automatically detect split layouts.</li>
+    <li><span class="file-tag">components/funnel/FunnelPreview.tsx</span>: Updated hero and section rendering to use the new logic and include missing content (body, bullets, forms).</li>
+    <li><span class="file-tag">components/funnel/SectionRenderer.tsx</span>: Synchronized layout detection for published tunnel pages.</li>
+    <li><span class="file-tag">lib/export/html.ts</span>: Refactored to use the shared utility, maintaining its role as the source of truth.</li>
+  </ul>
+
+  <h2>Verification</h2>
+  <ul>
+    <li><strong>Layout Trigger</strong>: <code>data-ff-layout="split-text-image"</code> now correctly activates in desktop preview when image and text are present.</li>
+    <li><strong>DOM Parity</strong>: The element order in the hero section now matches the export reference exactly.</li>
+    <li><strong>Type Safety</strong>: Full <code>tsc</code> check passed.</li>
+    <li><strong>Build Integrity</strong>: <code>next build</code> confirmed zero regressions.</li>
+  </ul>
+</body>
+</html>

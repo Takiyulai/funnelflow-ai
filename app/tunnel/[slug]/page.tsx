@@ -17,7 +17,7 @@ export default async function TunnelPublicPage({ params }: PageProps) {
   const { slug } = await params;
   const funnel = SERVER_FUNNELS[slug];
 
-  // Slug serveur (demo) : on rend tout côté serveur
+  // Slug serveur (demo) : on rend tout côté serveur (page d'accueil)
   if (funnel) {
     return <PublicFunnelView funnel={funnel} />;
   }

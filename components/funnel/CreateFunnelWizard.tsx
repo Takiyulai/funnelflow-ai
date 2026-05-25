@@ -57,7 +57,7 @@ const initialBrief: FunnelBrief = {
   defaultImageMode: "none",
   funnelKind: undefined,
   creationMode: "guided",
-  templateId: DEFAULT_PREMIUM_TEMPLATE_ID,
+  templateId: "coaching-premium",
   moodId: "premium-calm",
   mainColor: "#080E1A",
   secondaryColor: "#C7A436",
@@ -251,10 +251,11 @@ export function CreateFunnelWizard() {
         router.push(`/editor/${stored.id}`);
       }, 600);
 
-    } catch {
+    } catch (err) {
+      console.error("[wizard] generate fetch error:", err);
       setErrorReason("network-error");
       setErrorMessage(
-        "Impossible de joindre le serveur. Vérifiez que npm run dev tourne bien et réessayez"
+        "La connexion a été interrompue par le navigateur ou le serveur (Timeout). Nous avons optimisé la vitesse, réessayez une fois. Si cela persiste, vérifiez votre connexion internet."
       );
       setFunnel(null);
     } finally {

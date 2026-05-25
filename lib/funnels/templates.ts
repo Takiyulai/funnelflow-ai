@@ -148,9 +148,9 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
       es: "Fondo oscuro neutro, totalmente personalizable después de la generación",
     },
     bestFor: ["digital-product", "saas", "service", "vsl"],
-    defaultMoodId: "energetic",
+    defaultMoodId: "premium-calm",
     badge: "Fond personnalisable",
-    previewColors: ["#18181B", "#10B981", "#FAFAFA"],
+    previewColors: ["#09090B", "#3B82F6", "#FAFAFA"],
     customizable: true,
     sections: [
       {
@@ -357,20 +357,20 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 3. Premium Minimal
+  // 3. Premium Minimal — L'élégance à la Apple / Stripe
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "premium-minimal",
-    name: "Premium Minimal",
+    name: "Elite Minimal",
     personality: {
-      fr: "Espace blanc généreux et typographie éditoriale, pour offres haut de gamme et marques sobres",
-      en: "Generous white space and editorial typography, for high-end offers and sober brands",
-      es: "Espacio en blanco generoso y tipografía editorial, para ofertas premium y marcas sobrias",
+      fr: "Inspiré par Apple et Stripe : blanc pur, typographie éditoriale Newsreader et espaces généreux.",
+      en: "Apple & Stripe inspired: pure white, Newsreader editorial typography, and generous spacing.",
+      es: "Inspirado en Apple y Stripe: blanco puro, tipografía editorial Newsreader y espacios generosos.",
     },
-    bestFor: ["service", "digital-product", "saas"],
+    bestFor: ["service", "digital-product", "saas", "booking"],
     defaultMoodId: "premium-calm",
-    badge: "Premium",
-    previewColors: ["#1F0A12", "#E8C08A", "#FBF0F4"],
+    badge: "Elite",
+    previewColors: ["#FFFFFF", "#000000", "#F8F9FA"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -378,8 +378,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
         animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
       },
       {
-        type: "about", id: "about", required: false,
-        includeIf: { has: "about" },
+        type: "proof", id: "proof", required: false,
         layoutVariant: "centered",
         animations: { headline: "fade-up", body: "fade-up" },
       },
@@ -387,12 +386,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
         type: "benefits", id: "benefits", required: true,
         layoutVariant: "feature-grid",
         animations: { headline: "fade-up", bullets: "fade-up" },
-        defaultBulletIcon: "star",
-      },
-      {
-        type: "proof", id: "proof", required: false,
-        layoutVariant: "centered",
-        animations: { headline: "fade-up", body: "fade-up" },
+        defaultBulletIcon: "check",
       },
       {
         type: "offer", id: "offer", required: true,
@@ -400,9 +394,9 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
         animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", cta: "fade-up" },
       },
       {
-        type: "guarantee", id: "guarantee", required: false,
-        layoutVariant: "centered",
-        animations: { headline: "fade-up", body: "fade-up" },
+        type: "testimonials", id: "testimonials", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
       },
       {
         type: "form", id: "form", required: true,
@@ -413,13 +407,76 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     layoutRules: [
       { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
     ],
-    bulletAnimation: "uniform",
+    bulletAnimation: "stagger",
     density: "airy",
     decor: { style: "halo", intensity: "subtle" },
     typography: {
-      headlineScale: "md",
+      headlineScale: "lg",
+      headlineWeight: 400,
+      headlineTracking: "tight",
+      headlineFamily: "serif",
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3b. Coaching Premium — L'exclusivité oklch
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "coaching-premium",
+    name: "Coaching Premium",
+    personality: {
+      fr: "Atmosphère immersive et sombre, accents dorés, pour un positionnement haut de gamme et exclusif.",
+      en: "Immersive dark atmosphere, gold accents, for high-end and exclusive positioning.",
+      es: "Atmósfera inmersiva y oscura, acentos dorados, para un posicionamiento de alta gama y exclusivo.",
+    },
+    bestFor: ["coaching-high-ticket", "service", "digital-product"],
+    defaultMoodId: "premium-calm",
+    badge: "Luxe",
+    previewColors: ["#0A0A0A", "#D4AF37", "#1A1A1A"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "about", id: "about", required: false,
+        includeIf: { has: "about" },
+        layoutVariant: "split-text-image",
+        animations: { headline: "fade-up", body: "fade-up", image: "zoom-in" },
+      },
+      {
+        type: "process", id: "process", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "crown",
+      },
+      {
+        type: "proof", id: "proof", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "pricing", id: "pricing", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "gradient", intensity: "medium" },
+    typography: {
+      headlineScale: "xl",
       headlineWeight: 500,
-      headlineTracking: "wide",
+      headlineTracking: "tight",
       headlineFamily: "serif",
     },
   },
@@ -652,6 +709,7 @@ export const TEMPLATE_BUTTON_ANIMATION: Record<
   "story-sell": "shine",
   "bold-energy": "pulse",
   "premium-minimal": "lift",
+  "coaching-premium": "shine",
   "sharp-launch": "glow",
   "trust-pro": "lift",
   "lead-snap": "pulse",
