@@ -2,12 +2,18 @@
 import type {
   FunnelBrief,
   FunnelSection,
-  FunnelSectionType,
   Language,
-  MediaItem,
   CopywritingPrefs,
+  FunnelKind,
+  PageRole,
 } from "@/lib/funnels/types";
 import type { PageBlueprint } from "@/lib/funnels/pageCatalogs";
+import {
+  getPageBlueprint,
+  getCopywritingFrameworks,
+  getHeroMediaPolicy,
+  type CopywritingFramework,
+} from "@/lib/funnels/pageCatalogs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de langue
@@ -19,6 +25,39 @@ function langName(lang: Language): string {
 
 function tr<T extends Record<Language, string>>(map: T, lang: Language): string {
   return map[lang] ?? map.fr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Helper : résolution du rôle d'accueil selon le type de tunnel
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Retourne le PageRole de la page d'accueil pour un FunnelKind donné.
+ * (Aucun PageRole "home" n'existe ; chaque type de tunnel a son rôle d'entrée.)
+ */
+function getHomeRoleForKind(kind: FunnelKind): PageRole {
+  switch (kind) {
+    case "lead-magnet":
+      return "optin";
+    case "webinar":
+      return "registration";
+    case "digital-product":
+    case "vsl":
+    case "formation":
+    case "saas":
+      return "sales";
+    case "booking":
+    case "service":
+      return "landing";
+    case "coaching-high-ticket":
+      return "application";
+    case "challenge":
+      return "challenge-landing";
+    case "thank-you":
+      return "thankyou";
+    default:
+      return "optin";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,66 +115,67 @@ function copywritingPrefsBlock(prefs?: CopywritingPrefs, lang: Language = "fr"):
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bloc : médias fournis par l'utilisateur
+// Bloc : médias fournis par l'utilisateur — placement déterministe via sectionHint
 // ─────────────────────────────────────────────────────────────────────────────
 
-function mediasBlock(medias?: MediaItem[], lang: Language = "fr"): string {
+export interface MediaInput {
+  id?: string;
+  url?: string;
+  mediaRef?: string;
+  kind?: "image" | "video";
+  description?: string;
+  alt?: string;
+  filename?: string;
+  /** Section cible explicite définie par l'utilisateur dans MediasStep */
+  sectionHint?: string;
+}
+
+export function mediasBlock(
+  medias: MediaInput[] | undefined,
+  language: Language = "fr",
+): string {
   if (!medias || medias.length === 0) return "";
 
-  const header = tr(
-    {
-      fr: "MÉDIAS FOURNIS PAR L'UTILISATEUR (utilise-les obligatoirement) :",
-      en: "MEDIA PROVIDED BY THE USER (you MUST use them):",
-      es: "MEDIOS PROPORCIONADOS POR EL USUARIO (debes usarlos obligatoriamente):",
-    },
-    lang,
+  const lang: Language = language === "en" || language === "es" ? language : "fr";
+
+  const heading =
+    lang === "en" ? "USER-PROVIDED MEDIAS — strict placement rules"
+    : lang === "es" ? "MEDIAS PROPORCIONADOS POR EL USUARIO — reglas estrictas de colocación"
+    : "MÉDIAS FOURNIS PAR L'UTILISATEUR — règles strictes de placement";
+
+  const intro =
+    lang === "en"
+      ? "Each media below MUST appear in the funnel. Use the `sectionHint` as the authoritative target when provided. Otherwise, infer placement from the `description` and `kind` field."
+      : lang === "es"
+        ? "Cada media debe aparecer en el funnel. Use `sectionHint` como destino autoritativo si está presente. Si no, inferir el destino del `description` y `kind`."
+        : "Chaque média ci-dessous DOIT apparaître dans le tunnel. La `sectionHint` est l'instruction prioritaire quand elle est fournie. Sinon, déduisez le placement depuis la `description` et le `kind`.";
+
+  const lines: string[] = [`## ${heading}`, "", intro, ""];
+
+  medias.forEach((m, i) => {
+    const ref = m.mediaRef || m.url || m.id || `media_${i + 1}`;
+    const kind = m.kind || (m.url?.match(/\.(mp4|webm|mov)$/i) ? "video" : "image");
+    lines.push(`### Média ${i + 1}`);
+    lines.push(`- ref: \`${ref}\``);
+    lines.push(`- type: ${kind}`);
+    if (m.sectionHint) {
+      lines.push(`- 🎯 **sectionHint (PRIORITAIRE) : \`${m.sectionHint}\`** — placez ce média dans une section de type \`${m.sectionHint}\`, sans exception.`);
+    }
+    if (m.description) lines.push(`- description : ${m.description}`);
+    if (m.alt) lines.push(`- alt : ${m.alt}`);
+    if (m.filename) lines.push(`- filename : ${m.filename}`);
+    lines.push("");
+  });
+
+  lines.push(
+    lang === "en"
+      ? "**Mapping convention (when no sectionHint):** keywords like *coach, founder, about me, portrait* → `about` section; *testimonial, review, screenshot, customer* → `testimonials` section; *product, mockup, cover* → `pricing` or `bonus` section; *demo, walkthrough* → `video` section. A user portrait NEVER goes in the same hero as a video."
+      : lang === "es"
+        ? "**Convención (sin sectionHint):** palabras como *coach, fundador, retrato* → `about`; *testimonio, captura, cliente* → `testimonials`; *producto, mockup* → `pricing`/`bonus`; *demo* → `video`."
+        : "**Convention de mapping (sans sectionHint) :** mots-clés comme *coach, fondateur, à propos, portrait, photo de moi* → section `about` ; *témoignage, avis, capture, client, screenshot* → section `testimonials` ; *produit, mockup, couverture* → section `pricing` ou `bonus` ; *démo, présentation* → section `video`. Un portrait du coach ne va JAMAIS dans le même hero qu'une vidéo.",
   );
 
-  const instructions = tr(
-    {
-      fr: [
-        "Pour CHAQUE média ci-dessous, place-le dans la section la PLUS pertinente sémantiquement :",
-        "- Photo du fondateur, dirigeant, équipe → section \"about\" (de préférence) ou \"proof\".",
-        "- Photo du produit, du livrable, de la couverture d'un ebook → section \"hero\" ou \"offer\".",
-        "- Photo de résultats clients, avant/après → section \"proof\" ou \"testimonials\".",
-        "- Vidéo de présentation → section \"video\" ou \"hero\".",
-        "Dans le JSON de la section choisie, utilise OBLIGATOIREMENT le format :",
-        "  \"image\": { \"mode\": \"upload\", \"mediaRef\": \"<id du média>\", \"alt\": \"<description courte>\" }",
-        "Ne mets JAMAIS la même image dans deux sections différentes.",
-      ].join("\n"),
-      en: [
-        "For EACH media below, place it in the MOST semantically relevant section:",
-        "- Founder/team photo → \"about\" section (preferred) or \"proof\".",
-        "- Product/deliverable/ebook cover → \"hero\" or \"offer\".",
-        "- Client results, before/after → \"proof\" or \"testimonials\".",
-        "- Presentation video → \"video\" or \"hero\".",
-        "In the chosen section JSON, you MUST use the format:",
-        "  \"image\": { \"mode\": \"upload\", \"mediaRef\": \"<media id>\", \"alt\": \"<short description>\" }",
-        "NEVER place the same image in two different sections.",
-      ].join("\n"),
-      es: [
-        "Para CADA medio a continuación, ubícalo en la sección MÁS relevante semánticamente:",
-        "- Foto del fundador/equipo → sección \"about\" (preferida) o \"proof\".",
-        "- Foto del producto/portada de ebook → \"hero\" u \"offer\".",
-        "- Resultados de clientes, antes/después → \"proof\" o \"testimonials\".",
-        "- Video de presentación → \"video\" o \"hero\".",
-        "En el JSON de la sección elegida, USA OBLIGATORIAMENTE el formato:",
-        "  \"image\": { \"mode\": \"upload\", \"mediaRef\": \"<id del medio>\", \"alt\": \"<descripción corta>\" }",
-        "NUNCA pongas la misma imagen en dos secciones diferentes.",
-      ].join("\n"),
-    },
-    lang,
-  );
-
-  const items = medias
-    .map((m, i) => {
-      const hint = m.sectionHint ? ` — suggested section: "${m.sectionHint}"` : "";
-      const desc = m.description ? ` — description: "${m.description}"` : "";
-      return `  ${i + 1}. id="${m.id}" (${m.kind})${desc}${hint}`;
-    })
-    .join("\n");
-
-  return [header, instructions, "", items].join("\n");
+  return lines.join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,98 +214,48 @@ function strictSectionRequirementsBlock(lang: Language = "fr"): string {
         "   - body ≥ 30 mots OU bullets ≥ 3 entrées pertinentes.",
         "   - N'INVENTE JAMAIS de section hors whitelist.",
         "   - Ne LAISSE JAMAIS une section listée vide.",
-        "",
-        "EXEMPLE CORRECT COMPLET :",
-        "{",
-        "  \"type\": \"benefits\",",
-        "  \"eyebrow\": \"POURQUOI CETTE MÉTHODE\",",
-        "  \"headline\": \"Transformez votre activité en 30 jours\",",
-        "  \"subheadline\": \"Une méthode éprouvée par plus de 500 entrepreneurs pour scaler sans s'épuiser.\",",
-        "  \"body\": \"Vous obtenez un système clé en main, des outils et un accompagnement pour appliquer dès aujourd'hui.\",",
-        "  \"bullets\": [",
-        "    \"Stratégie clé en main appliquée dès le jour 1\",",
-        "    \"Modèles et scripts prêts à l'emploi\",",
-        "    \"Communauté privée d'entrepreneurs\",",
-        "    \"Coaching de groupe hebdomadaire\"",
-        "  ]",
-        "}",
       ].join("\n"),
       en: [
         "STRICT CONTENT REQUIREMENTS (NEVER produce empty sections):",
         "",
         "1. EYEBROW (REQUIRED for EVERY section):",
         "   - 2 to 5 words, preferably UPPERCASE.",
-        "   - Valid examples: \"WHY US\", \"STEP 1\", \"EXCLUSIVE BONUS\", \"OUR GUARANTEE\".",
-        "   - FORBIDDEN: empty, null, or missing eyebrow. If unsure, use a label tied to the section type.",
+        "   - FORBIDDEN: empty, null, or missing eyebrow.",
         "",
         "2. HEADLINE (REQUIRED):",
         "   - At least 5 meaningful words. NEVER placeholders like \"BRAND — type\".",
         "",
-        "3. SUBHEADLINE (recommended, ≥ 4 words): expands the headline.",
+        "3. SUBHEADLINE (recommended, ≥ 4 words).",
         "",
         "4. BODY:",
         "   - Short free text (1 to 3 sentences).",
-        "   - ABSOLUTELY FORBIDDEN: NEVER use dashes \"-\", bullets \"•\" or \"*\", or lists inside body.",
-        "   - To list items, you MUST use the \"bullets\" field (string array).",
+        "   - FORBIDDEN: dashes, bullets, or lists inside body.",
         "",
         "5. BULLETS (when relevant):",
         "   - Array of 3 to 6 short strings (5 to 12 words each).",
-        "   - Each string is a benefit / key point, WITHOUT any leading dash or bullet character.",
-        "   - CORRECT: bullets: [\"Instant access to the training\", \"7-day support\", \"30-day guarantee\"]",
-        "   - INCORRECT: bullets: [\"- Instant access\", \"• Support\"]",
-        "   - INCORRECT: body: \"- Instant access\\n- Support\\n- Guarantee\"",
         "",
         "6. MINIMUM CONTENT:",
         "   - body ≥ 30 words OR bullets ≥ 3 relevant entries.",
-        "   - NEVER invent a section that is not in the whitelist.",
-        "   - NEVER leave a listed section empty.",
       ].join("\n"),
       es: [
         "REQUISITOS ESTRICTOS DE CONTENIDO (NUNCA producir secciones vacías):",
         "",
-        "1. EYEBROW (OBLIGATORIO para CADA sección):",
-        "   - 2 a 5 palabras, preferentemente en MAYÚSCULAS.",
-        "   - Ejemplos válidos: \"POR QUÉ NOSOTROS\", \"PASO 1\", \"BONO EXCLUSIVO\", \"NUESTRA GARANTÍA\".",
-        "   - PROHIBIDO: eyebrow vacío, null o ausente.",
-        "",
-        "2. HEADLINE (OBLIGATORIO):",
-        "   - Al menos 5 palabras significativas. NUNCA placeholder tipo \"MARCA — tipo\".",
-        "",
-        "3. SUBHEADLINE (recomendado, ≥ 4 palabras): desarrolla el titular.",
-        "",
-        "4. BODY:",
-        "   - Texto libre corto (1 a 3 frases).",
-        "   - ABSOLUTAMENTE PROHIBIDO: NUNCA uses guiones \"-\", viñetas \"•\" o \"*\", ni listas dentro de body.",
-        "   - Para listar, DEBES usar el campo \"bullets\" (array de strings).",
-        "",
-        "5. BULLETS (cuando sea relevante):",
-        "   - Array de 3 a 6 strings cortas (5 a 12 palabras cada una).",
-        "   - Cada string es un beneficio / punto clave, SIN guion ni viñeta como prefijo.",
-        "",
-        "6. CONTENIDO MÍNIMO:",
-        "   - body ≥ 30 palabras O bullets ≥ 3 entradas relevantes.",
-        "   - NUNCA inventes una sección fuera de la whitelist.",
-        "   - NUNCA dejes una sección listada vacía.",
+        "1. EYEBROW (OBLIGATORIO para CADA sección): 2 a 5 palabras en MAYÚSCULAS.",
+        "2. HEADLINE (OBLIGATORIO): al menos 5 palabras significativas.",
+        "3. SUBHEADLINE (recomendado, ≥ 4 palabras).",
+        "4. BODY: 1 a 3 frases, sin guiones ni listas.",
+        "5. BULLETS: array de 3 a 6 strings cortas.",
+        "6. CONTENIDO MÍNIMO: body ≥ 30 palabras O bullets ≥ 3 entradas.",
       ].join("\n"),
     },
     lang,
   );
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 🆕 Bloc : règles sémantiques de CTA par rôle de page
+// Bloc : règles sémantiques de CTA par rôle de page
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Bloc CRITIQUE pour éviter les CTA incohérents :
- *  - "Télécharger le guide" sur une page Remerciement après opt-in email
- *  - "Confirmer mon email" sur une page de livraison directe
- *  - etc.
- *
- * Inséré dans mainPagePrompt et secondaryPagesPrompt avec le rôle exact
- * de la (ou des) page(s) à générer.
- */
 function roleSemanticsBlock(roles: string[], lang: Language): string {
   if (roles.length === 0) return "";
 
@@ -282,40 +272,34 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
     optin: [
       "Rôle \"optin\" : page de capture du lead magnet GRATUIT.",
       "- Objectif : convaincre de laisser son email.",
-      "- CTA principal : doit pointer vers le formulaire de la page (mode \"anchor\", anchorId=\"lead-form\"), label type \"Recevoir mon guide gratuit\", \"Télécharger gratuitement\", \"Je veux le guide\".",
-      "- INTERDIT : CTA qui simule un téléchargement direct alors qu'aucun fichier n'est lié.",
+      "- CTA principal : doit pointer vers le formulaire de la page (mode \"anchor\", anchorId=\"lead-form\"), label type \"Recevoir mon guide gratuit\".",
     ],
     thankyou: [
       "Rôle \"thankyou\" : page de remerciement APRÈS opt-in. Le lead magnet est ENVOYÉ PAR EMAIL.",
-      "- INTERDIT ABSOLU : CTA \"Télécharger maintenant\", \"Download\", \"Accéder au guide\" (le guide n'est PAS téléchargeable depuis cette page, il arrive par email).",
+      "- INTERDIT ABSOLU : CTA \"Télécharger maintenant\" (le guide arrive par email, pas via la page).",
       "- CTA principal RECOMMANDÉ : { \"label\": \"Ouvrir ma boîte Gmail\", \"mode\": \"redirect\", \"url\": \"https://mail.google.com\", \"target\": \"_blank\" }",
-      "  OU : { \"label\": \"Vérifier ma boîte mail\", \"mode\": \"redirect\", \"url\": \"mailto:\" }",
-      "- Headline type : \"Merci ! Votre guide arrive dans votre boîte mail\", \"Inscription confirmée 🎉\" (sans emoji).",
       "- Body doit expliquer : (1) l'email arrive dans les 2 minutes, (2) vérifier les spams, (3) ajouter l'expéditeur aux contacts.",
     ],
     delivery: [
-      "Rôle \"delivery\" : page de livraison DIRECTE du produit/ressource. C'est ICI que le téléchargement réel a lieu.",
-      "- CTA principal AUTORISÉ : { \"label\": \"Télécharger mon guide\", \"mode\": \"redirect\", \"url\": \"#download\" } ou URL réelle du fichier.",
-      "- Headline type : \"Votre guide est prêt\", \"Voici votre accès\".",
-      "- Body doit donner des instructions claires sur l'utilisation de la ressource.",
+      "Rôle \"delivery\" : page de livraison DIRECTE du produit/ressource.",
+      "- CTA principal AUTORISÉ : \"Télécharger mon guide\" avec URL réelle du fichier.",
     ],
     confirmation: [
-      "Rôle \"confirmation\" : page de validation (double opt-in, inscription webinaire, réservation booking).",
-      "- CTA principal : doit pointer vers l'étape suivante du tunnel (page d'accès, contenu, ressource).",
-      "- Headline type : \"C'est confirmé !\", \"Inscription validée\".",
+      "Rôle \"confirmation\" : page de validation (inscription webinaire, réservation booking).",
+      "- CTA principal : étape suivante du tunnel.",
       "- INTERDIT : reproduire un formulaire d'opt-in.",
     ],
     sales: [
       "Rôle \"sales\" : page de vente principale.",
-      "- CTA principal : achat de l'offre, label type \"Je commande maintenant\", \"Accéder à l'offre\".",
+      "- CTA principal : achat de l'offre.",
     ],
     checkout: [
       "Rôle \"checkout\" : page de paiement.",
-      "- CTA principal : finalisation de l'achat. Pas de CTA \"En savoir plus\" : on est au moment de l'achat.",
+      "- CTA principal : finalisation de l'achat.",
     ],
     registration: [
       "Rôle \"registration\" : inscription webinaire.",
-      "- CTA principal : pointe vers le formulaire (anchor lead-form), label type \"Réserver ma place\".",
+      "- CTA principal : pointe vers le formulaire (anchor lead-form).",
     ],
     replay: [
       "Rôle \"replay\" : page de replay vidéo.",
@@ -326,8 +310,8 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
       "- CTA principal : pointe vers la prise de RDV ou la qualification.",
     ],
     booking: [
-      "Rôle \"booking\" : page de prise de RDV (intégration calendrier).",
-      "- CTA principal : pointe vers le widget calendrier ou le formulaire.",
+      "Rôle \"booking\" : page de prise de RDV.",
+      "- CTA principal : pointe vers le widget calendrier.",
     ],
     "case-studies": [
       "Rôle \"case-studies\" : études de cas.",
@@ -339,7 +323,7 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
     ],
     "challenge-landing": [
       "Rôle \"challenge-landing\" : inscription challenge.",
-      "- CTA principal : inscription (anchor lead-form), label type \"Je participe\", \"Je rejoins le challenge\".",
+      "- CTA principal : inscription (anchor lead-form).",
     ],
     "challenge-day": [
       "Rôle \"challenge-day\" : journée du challenge.",
@@ -347,8 +331,6 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
     ],
   };
 
-  // Pour EN et ES : on garde les règles FR comme base et on traduit le header.
-  // Les exemples de labels FR servent de modèle ; l'IA adapte au langName(lang).
   const lines: string[] = [];
   for (const role of roles) {
     const rules = rulesFr[role];
@@ -362,8 +344,8 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
   const localizedNote = tr(
     {
       fr: "",
-      en: "\n(Note: examples are written in French to be concrete — translate the CTA labels and headlines to the output language while keeping the same intent.)",
-      es: "\n(Nota: los ejemplos están en francés para ser concretos — traduce las etiquetas CTA y los titulares al idioma de salida manteniendo la misma intención.)",
+      en: "\n(Note: examples are in French — translate CTA labels to the output language, keep the intent.)",
+      es: "\n(Nota: ejemplos en francés — traduce las etiquetas CTA al idioma de salida.)",
     },
     lang,
   );
@@ -372,7 +354,7 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🆕 Lot B3 : Bloc — Sections riches (faq, testimonials, pricing, bonus, etc.)
+// Bloc — Sections riches (faq, testimonials, pricing, bonus, etc.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function richSectionsBlock(brief: FunnelBrief): string {
@@ -395,11 +377,9 @@ function richSectionsBlock(brief: FunnelBrief): string {
       ].join("\n"),
       en: [
         "For these sections, DO NOT put content in `body` or `bullets`. You MUST use the `items[]` array with the correct `kind` and `data` structure.",
-        "If you use `items[]`, do NOT put `body` or `bullets` in the section (they would be ignored).",
       ].join("\n"),
       es: [
-        "Para estas secciones, NO pongas el contenido en `body` o `bullets`. DEBES usar el array `items[]` con el `kind` y la estructura `data` correctos.",
-        "Si usas `items[]`, NO pongas `body` ni `bullets` en la sección (serían ignorados).",
+        "Para estas secciones, NO pongas el contenido en `body` o `bullets`. DEBES usar el array `items[]`.",
       ].join("\n"),
     },
     lang,
@@ -409,31 +389,27 @@ function richSectionsBlock(brief: FunnelBrief): string {
     "",
     "─── faq (minimum 5 items) ───",
     `"items": [`,
-    `  {"kind":"faq","data":{"question":"Combien de temps avant de recevoir l'accès ?","answer":"Immédiatement après votre inscription, par email."}},`,
-    `  {"kind":"faq","data":{"question":"Est-ce que ça fonctionne sur mobile ?","answer":"Oui, tous les contenus sont 100% compatibles mobile et tablette."}}`,
+    `  {"kind":"faq","data":{"question":"Combien de temps avant de recevoir l'accès ?","answer":"Immédiatement après votre inscription, par email."}}`,
     `]`,
     "",
     "─── testimonials / proof (minimum 3 items) ───",
     `"items": [`,
-    `  {"kind":"testimonial","data":{"quote":"Résultat visible en 2 semaines, je recommande sans hésiter.","authorName":"Claire D.","authorRole":"Maman de 2 enfants","rating":5}},`,
-    `  {"kind":"testimonial","data":{"quote":"Enfin un guide clair et actionnable. Bravo !","authorName":"Marc L.","authorRole":"Entrepreneur","rating":5}}`,
+    `  {"kind":"testimonial","data":{"quote":"Résultat visible en 2 semaines.","authorName":"Claire D.","rating":5}}`,
     `]`,
     "",
     "─── pricing / offer (1 à 3 items) ───",
     `"items": [`,
-    `  {"kind":"pricing","data":{"name":"Accès complet","price":"${brief.price}","period":"paiement unique","description":"L'ebook + les bonus","features":["Ebook PDF (60+ pages)","3 bonus exclusifs","Garantie satisfait ou remboursé 30 jours","Accès à vie aux mises à jour"],"highlighted":true,"badge":"Recommandé","cta":{"label":"Je veux l'accès","mode":"anchor","anchorId":"lead-form"}}}`,
+    `  {"kind":"pricing","data":{"name":"Accès complet","price":"${brief.price}","period":"paiement unique","description":"L'ebook + les bonus","features":["Ebook PDF (60+ pages)","3 bonus exclusifs","Garantie 30 jours","Accès à vie aux mises à jour"],"highlighted":true,"badge":"Recommandé","cta":{"label":"Je veux l'accès","mode":"anchor","anchorId":"lead-form"}}}`,
     `]`,
     "",
     "─── bonus (minimum 3 items) ───",
     `"items": [`,
-    `  {"kind":"bonus","data":{"title":"Checklist actionnable","description":"Une liste pas-à-pas pour appliquer dès aujourd'hui.","value":"Valeur 19€","iconName":"checkCircle"}},`,
-    `  {"kind":"bonus","data":{"title":"Vidéo bonus exclusive","description":"30 min pour aller plus loin sur le sujet.","value":"Valeur 29€","iconName":"play"}},`,
-    `  {"kind":"bonus","data":{"title":"Modèles à copier","description":"Templates prêts à l'emploi.","value":"Valeur 15€","iconName":"download"}}`,
+    `  {"kind":"bonus","data":{"title":"Checklist actionnable","description":"Une liste pas-à-pas pour appliquer dès aujourd'hui.","value":"Valeur 19€","iconName":"checkCircle"}}`,
     `]`,
     "",
     "─── guarantee (exactement 1 item) ───",
     `"items": [`,
-    `  {"kind":"guarantee","data":{"title":"Satisfait ou remboursé","description":"Si dans les 30 jours vous n'êtes pas satisfait, demandez votre remboursement, sans justification.","duration":"30 jours","iconName":"shield"}}`,
+    `  {"kind":"guarantee","data":{"title":"Satisfait ou remboursé","description":"Si dans les 30 jours vous n'êtes pas satisfait, demandez votre remboursement.","duration":"30 jours","iconName":"shield"}}`,
     `]`,
   ].join("\n");
 
@@ -442,32 +418,31 @@ function richSectionsBlock(brief: FunnelBrief): string {
       fr: [
         "",
         "RÈGLES :",
-        "- faq : MINIMUM 5 paires question/réponse, chaque réponse fait au moins 1 phrase complète (15+ mots).",
-        "- testimonials / proof : MINIMUM 3 témoignages. Chaque `authorName` doit être plausible (prénom + initiale ou prénom + ville). `quote` au moins 12 mots.",
-        "- pricing / offer : 1 plan suffit pour un lead-magnet, mais le tableau `features` doit contenir au moins 4 éléments concrets.",
-        "- bonus : MINIMUM 3 bonus distincts avec valeur (€) si possible et icône (checkCircle, play, download, gift, star, sparkles, award, zap, rocket).",
-        "- guarantee : exactement 1 item, avec une `duration` claire (\"30 jours\", \"14 jours\").",
-        "- Tous les `quote`, `description`, `answer` doivent être en " + langName(lang) + ".",
+        "- faq : MINIMUM 5 paires question/réponse, chaque réponse 15+ mots.",
+        "- testimonials / proof : MINIMUM 3 témoignages. authorName plausible. quote 12+ mots.",
+        "- pricing / offer : features ≥ 4 éléments concrets.",
+        "- bonus : MINIMUM 3 bonus avec icône (checkCircle, play, download, gift, star, sparkles, award, zap, rocket).",
+        "- guarantee : exactement 1 item avec duration claire.",
+        "- Tous les textes en " + langName(lang) + ".",
       ].join("\n"),
       en: [
         "",
         "RULES:",
-        "- faq: MINIMUM 5 question/answer pairs, each answer at least 1 full sentence (15+ words).",
-        "- testimonials / proof: MINIMUM 3 testimonials. Each `authorName` must be plausible (first name + initial or first name + city). `quote` at least 12 words.",
-        "- pricing / offer: 1 plan is enough for a lead-magnet, but the `features` array must contain at least 4 concrete items.",
-        "- bonus: MINIMUM 3 distinct bonuses with value if possible and icon (checkCircle, play, download, gift, star, sparkles, award, zap, rocket).",
-        "- guarantee: exactly 1 item, with a clear `duration` (\"30 days\", \"14 days\").",
-        "- All `quote`, `description`, `answer` must be in " + langName(lang) + ".",
+        "- faq: MINIMUM 5 Q&A pairs, each answer 15+ words.",
+        "- testimonials / proof: MINIMUM 3 testimonials, quote 12+ words.",
+        "- pricing / offer: features ≥ 4 concrete items.",
+        "- bonus: MINIMUM 3 bonuses with icon.",
+        "- guarantee: exactly 1 item with clear duration.",
+        "- All texts in " + langName(lang) + ".",
       ].join("\n"),
       es: [
         "",
         "REGLAS:",
-        "- faq: MÍNIMO 5 pares pregunta/respuesta, cada respuesta al menos 1 oración completa (15+ palabras).",
-        "- testimonials / proof: MÍNIMO 3 testimonios. Cada `authorName` plausible (nombre + inicial o nombre + ciudad). `quote` al menos 12 palabras.",
-        "- pricing / offer: 1 plan basta para un lead-magnet, pero `features` debe contener al menos 4 elementos concretos.",
-        "- bonus: MÍNIMO 3 bonos distintos con valor si es posible e icono (checkCircle, play, download, gift, star, sparkles, award, zap, rocket).",
-        "- guarantee: exactamente 1 item, con `duration` clara (\"30 días\", \"14 días\").",
-        "- Todos los `quote`, `description`, `answer` en " + langName(lang) + ".",
+        "- faq: MÍNIMO 5 pares pregunta/respuesta.",
+        "- testimonials / proof: MÍNIMO 3 testimonios.",
+        "- pricing / offer: features ≥ 4 elementos.",
+        "- bonus: MÍNIMO 3 bonos con icono.",
+        "- guarantee: exactamente 1 item.",
       ].join("\n"),
     },
     lang,
@@ -477,7 +452,7 @@ function richSectionsBlock(brief: FunnelBrief): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schéma JSON attendu (commun à plusieurs prompts)
+// Schéma JSON attendu
 // ─────────────────────────────────────────────────────────────────────────────
 
 function commonJsonSchemaBlock(lang: Language = "fr"): string {
@@ -495,10 +470,8 @@ function commonJsonSchemaBlock(lang: Language = "fr"): string {
       "headline": "string-obligatoire",
       "subheadline": "string-optionnel",
       "body": "string-optionnel (interdit si items[] présent)",
-      "bullets": ["string"] /* interdit si items[] présent */,
-      "items": [ /* OBLIGATOIRE pour faq/testimonials/proof/pricing/offer/bonus/guarantee */
-        { "kind": "faq" | "testimonial" | "pricing" | "bonus" | "guarantee", "data": { ... } }
-      ],
+      "bullets": ["string"],
+      "items": [{ "kind": "faq" | "testimonial" | "pricing" | "bonus" | "guarantee", "data": { ... } }],
       "cta": { "label": "string", "mode": "anchor" | "redirect", "url": "...", "anchorId": "lead-form", "target": "_self" | "_blank" },
       "image": { "mode": "none" | "upload" | "ai-suggested", "mediaRef": "id-optionnel", "alt": "string-optionnel" },
       "visible": true
@@ -509,56 +482,25 @@ function commonJsonSchemaBlock(lang: Language = "fr"): string {
   "seo": { "title": "...", "description": "..." },
   "design": { "primaryColor": "#hex", "secondaryColor": "#hex", "accentColor": "#hex", "style": "premium" }
 }`,
-      en: `EXPECTED JSON STRUCTURE (respond ONLY with this JSON, no markdown, no surrounding text):
+      en: `EXPECTED JSON STRUCTURE (respond ONLY with this JSON):
 {
   "funnelName": "string",
   "language": "fr" | "en" | "es",
-  "sections": [
-    {
-      "id": "optional-string",
-      "type": "hero" | "about" | "problem" | "solution" | "benefits" | "proof" | "testimonials" | "offer" | "bonus" | "guarantee" | "pricing" | "process" | "program" | "video" | "faq" | "cta" | "form",
-      "eyebrow": "optional",
-      "headline": "required",
-      "subheadline": "optional",
-      "body": "optional (forbidden if items[] present)",
-      "bullets": ["string"] /* forbidden if items[] present */,
-      "items": [ /* REQUIRED for faq/testimonials/proof/pricing/offer/bonus/guarantee */
-        { "kind": "faq" | "testimonial" | "pricing" | "bonus" | "guarantee", "data": { ... } }
-      ],
-      "cta": { "label": "...", "mode": "anchor" | "redirect", "url": "...", "anchorId": "lead-form", "target": "_self" | "_blank" },
-      "image": { "mode": "none" | "upload" | "ai-suggested", "mediaRef": "optional-id", "alt": "optional" },
-      "visible": true
-    }
-  ],
-  "thankYouPage": { "headline": "...", "body": "...", "cta": {...} },
+  "sections": [...],
+  "thankYouPage": {...},
   "emails": [],
-  "seo": { "title": "...", "description": "..." },
-  "design": { "primaryColor": "#hex", "secondaryColor": "#hex", "accentColor": "#hex", "style": "premium" }
+  "seo": {...},
+  "design": {...}
 }`,
-      es: `ESTRUCTURA JSON ESPERADA (responde SOLO con este JSON, sin markdown, sin texto alrededor):
+      es: `ESTRUCTURA JSON ESPERADA (responde SOLO con este JSON):
 {
   "funnelName": "string",
   "language": "fr" | "en" | "es",
-  "sections": [
-    {
-      "id": "opcional",
-      "type": "hero" | "about" | "problem" | "solution" | "benefits" | "proof" | "testimonials" | "offer" | "bonus" | "guarantee" | "pricing" | "process" | "program" | "video" | "faq" | "cta" | "form",
-      "headline": "obligatorio",
-      "subheadline": "opcional",
-      "body": "opcional (prohibido si items[] presente)",
-      "bullets": ["string"] /* prohibido si items[] presente */,
-      "items": [
-        { "kind": "faq" | "testimonial" | "pricing" | "bonus" | "guarantee", "data": { ... } }
-      ],
-      "cta": { "label": "...", "mode": "anchor" | "redirect", "anchorId": "lead-form", "target": "_self" | "_blank" },
-      "image": { "mode": "none" | "upload" | "ai-suggested", "mediaRef": "opcional", "alt": "opcional" },
-      "visible": true
-    }
-  ],
-  "thankYouPage": { "headline": "...", "body": "...", "cta": {...} },
+  "sections": [...],
+  "thankYouPage": {...},
   "emails": [],
-  "seo": { "title": "...", "description": "..." },
-  "design": { "primaryColor": "#hex", "secondaryColor": "#hex", "accentColor": "#hex", "style": "premium" }
+  "seo": {...},
+  "design": {...}
 }`,
     },
     lang,
@@ -586,21 +528,21 @@ function whitelistBlock(blueprint: PageBlueprint, lang: Language): string {
         "",
         "RÈGLES IMPORTANTES :",
         "- Génère EXACTEMENT ces sections, dans cet ordre.",
-        "- N'AJOUTE AUCUNE autre section (pas de problem/solution/offer si elles ne sont pas listées).",
+        "- N'AJOUTE AUCUNE autre section.",
         "- N'OMETS AUCUNE section listée.",
       ].join("\n"),
       en: [
         "",
         "IMPORTANT RULES:",
         "- Generate EXACTLY these sections, in this order.",
-        "- Do NOT ADD any other section (no problem/solution/offer if not listed).",
+        "- Do NOT ADD any other section.",
         "- Do NOT OMIT any listed section.",
       ].join("\n"),
       es: [
         "",
         "REGLAS IMPORTANTES:",
-        "- Genera EXACTAMENTE estas secciones, en este orden.",
-        "- NO AÑADAS otra sección (sin problem/solution/offer si no están listadas).",
+        "- Genera EXACTAMENTE estas secciones en este orden.",
+        "- NO AÑADAS otra sección.",
         "- NO OMITAS ninguna sección listada.",
       ].join("\n"),
     },
@@ -618,27 +560,24 @@ function antiHypeBlock(lang: Language): string {
     {
       fr: [
         "STYLE D'ÉCRITURE :",
-        "- Écris en " + langName(lang) + " uniquement (fr).",
-        "- Pas d'emoji, sans emoji, aucun emoji.",
-        "- Pas de hype (\"révolutionnaire\", \"incroyable\", \"magique\"). Reste concret et crédible.",
+        "- Écris en " + langName(lang) + " uniquement.",
+        "- Pas d'emoji.",
+        "- Pas de hype. Reste concret et crédible.",
         "- Phrases courtes et claires. Bénéfices concrets.",
-        "- Cible le lecteur en \"vous\" (ou \"tu\" si le ton l'exige).",
+        "- Cible le lecteur en \"vous\".",
       ].join("\n"),
       en: [
         "WRITING STYLE:",
-        "- Write in " + langName(lang) + " only (en).",
-        "- No emoji, no emoji, no emoji.",
-        "- No hype (\"revolutionary\", \"incredible\", \"magical\"). Stay concrete and credible.",
-        "- Short, clear sentences. Concrete benefits.",
-        "- Address the reader directly.",
+        "- Write in " + langName(lang) + " only.",
+        "- No emoji.",
+        "- No hype. Stay concrete and credible.",
+        "- Short, clear sentences.",
       ].join("\n"),
       es: [
         "ESTILO DE ESCRITURA:",
-        "- Escribe en " + langName(lang) + " solamente (es).",
-        "- Sin emoji, sin emoji, sin emoji.",
-        "- Sin hype (\"revolucionario\", \"increíble\", \"mágico\"). Sé concreto y creíble.",
-        "- Frases cortas y claras. Beneficios concretos.",
-        "- Dirígete al lector directamente.",
+        "- Escribe en " + langName(lang) + " solamente.",
+        "- Sin emoji.",
+        "- Sin hype. Sé concreto y creíble.",
       ].join("\n"),
     },
     lang,
@@ -653,11 +592,166 @@ function systemeIoBlock(lang: Language): string {
   return tr(
     {
       fr: "CIBLE D'EXPORT PRIORITAIRE : systeme.io (le tunnel doit être exportable en HTML compatible systeme.io).",
-      en: "PRIORITY EXPORT TARGET: systeme.io (the funnel must be exportable as HTML compatible with systeme.io).",
-      es: "OBJETIVO DE EXPORTACIÓN PRIORITARIO: systeme.io (el embudo debe ser exportable como HTML compatible con systeme.io).",
+      en: "PRIORITY EXPORT TARGET: systeme.io.",
+      es: "OBJETIVO DE EXPORTACIÓN PRIORITARIO: systeme.io.",
     },
     lang,
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FRAMEWORKS DE COPYWRITING
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FRAMEWORK_DESCRIPTIONS: Record<CopywritingFramework, { fr: string; en: string; es: string }> = {
+  AIDA: {
+    fr: "AIDA (Attention → Intérêt → Désir → Action) : hero accrocheur qui capte l'attention en 3 secondes, sections suivantes qui développent l'intérêt par les bénéfices concrets, créent le désir via preuves sociales et résultats tangibles, puis CTA clair et unique.",
+    en: "AIDA (Attention → Interest → Desire → Action): hook in 3 seconds in the hero, build interest via concrete benefits, create desire through social proof and tangible results, then end with one clear CTA.",
+    es: "AIDA (Atención → Interés → Deseo → Acción): gancho en 3 segundos, beneficios concretos, deseo mediante prueba social, CTA único y claro.",
+  },
+  PAS: {
+    fr: "PAS (Problème → Agitation → Solution) : commencer par nommer précisément le problème du prospect, amplifier la douleur et les conséquences de l'inaction, puis présenter la solution comme le chemin évident.",
+    en: "PAS (Problem → Agitation → Solution): name the prospect's exact problem, agitate the pain and consequences of inaction, then introduce the solution as the obvious path.",
+    es: "PAS (Problema → Agitación → Solución): nombrar el problema, amplificar el dolor, presentar la solución.",
+  },
+  "PAS-FOMO": {
+    fr: "PAS + FOMO : structure PAS classique enrichie d'une urgence réelle (replay disponible 48h, places limitées, bonus expirant). Le ton doit créer la crainte de manquer l'opportunité sans tomber dans le mensonge.",
+    en: "PAS + FOMO: classic PAS structure enhanced with real urgency (48h replay window, limited seats, expiring bonus). Create fear of missing out without lying.",
+    es: "PAS + FOMO: estructura PAS con urgencia real (replay limitado, plazas limitadas).",
+  },
+  "4P": {
+    fr: "4P (Picture → Promise → Proof → Push) : peindre une image vivante de la transformation, faire une promesse claire et mesurable, prouver par des résultats vérifiables, pousser à l'action.",
+    en: "4P (Picture → Promise → Proof → Push): paint a vivid picture of the transformation, make a clear measurable promise, prove with verifiable results, push to action.",
+    es: "4P (Imagen → Promesa → Prueba → Empuje): imagen vívida, promesa medible, prueba verificable, empuje a la acción.",
+  },
+  BAB: {
+    fr: "BAB (Before → After → Bridge) : décrire la situation actuelle douloureuse du prospect (Before), montrer la situation rêvée après transformation (After), puis présenter la méthode/offre comme le pont entre les deux (Bridge).",
+    en: "BAB (Before → After → Bridge): describe the painful current state, the dreamed future state, and present the offer as the bridge.",
+    es: "BAB (Antes → Después → Puente): situación actual dolorosa, situación soñada, oferta como puente.",
+  },
+  FAB: {
+    fr: "FAB (Features → Advantages → Benefits) : pour chaque caractéristique, expliquer l'avantage technique puis traduire en bénéfice émotionnel concret.",
+    en: "FAB (Features → Advantages → Benefits): for each feature, explain the advantage and translate into a concrete emotional benefit.",
+    es: "FAB (Características → Ventajas → Beneficios): para cada característica, ventaja técnica y beneficio emocional.",
+  },
+  REASSURANCE: {
+    fr: "RASSURANCE : confirmer immédiatement que l'action est bien enregistrée, valoriser la décision prise, rappeler ce qui va se passer et lever toute anxiété résiduelle. Ton chaleureux, jamais commercial.",
+    en: "REASSURANCE: immediately confirm the action is registered, validate the decision, recap what happens next, remove residual anxiety. Warm tone, never salesy.",
+    es: "TRANQUILIDAD: confirmar la acción, validar la decisión, explicar los próximos pasos, tono cálido.",
+  },
+  "NEXT-STEPS": {
+    fr: "NEXT-STEPS : liste numérotée et actionnable de ce que le prospect doit faire maintenant. Chaque étape doit être concrète, courte et orientée action.",
+    en: "NEXT-STEPS: numbered actionable list of what the prospect must do now. Each step concrete, short, action-oriented.",
+    es: "PRÓXIMOS PASOS: lista numerada accionable, cada paso corto y concreto.",
+  },
+  STAR: {
+    fr: "STAR (Situation → Task → Action → Result) : idéal pour les études de cas et témoignages détaillés.",
+    en: "STAR (Situation → Task → Action → Result): ideal for case studies and detailed testimonials.",
+    es: "STAR (Situación → Tarea → Acción → Resultado): casos de estudio detallados.",
+  },
+  QUEST: {
+    fr: "QUEST (Qualify → Understand → Educate → Stimulate → Transition) : qualifier l'audience dès le hero, comprendre sa douleur, éduquer, stimuler le désir, transitionner vers l'offre.",
+    en: "QUEST (Qualify → Understand → Educate → Stimulate → Transition).",
+    es: "QUEST (Calificar → Comprender → Educar → Estimular → Transicionar).",
+  },
+  "SCARCITY-URGENCY": {
+    fr: "RARETÉ + URGENCE : intégrer des éléments d'urgence légitime (compte à rebours réel, places restantes, deadline de bonus). Toujours basé sur des faits vrais.",
+    en: "SCARCITY + URGENCY: integrate legitimate urgency (real countdown, remaining seats, bonus deadline). Always fact-based.",
+    es: "ESCASEZ + URGENCIA: urgencia legítima basada en hechos reales.",
+  },
+};
+
+export function copywritingFrameworkBlock(
+  funnelKind: FunnelKind,
+  role: PageRole,
+  language: Language = "fr",
+): string {
+  const frameworks = getCopywritingFrameworks(funnelKind, role);
+  if (frameworks.length === 0) return "";
+
+  const lang: Language = language === "en" || language === "es" ? language : "fr";
+
+  const heading =
+    lang === "en" ? "COPYWRITING FRAMEWORKS TO APPLY (mandatory)"
+    : lang === "es" ? "FRAMEWORKS DE COPYWRITING A APLICAR (obligatorio)"
+    : "FRAMEWORKS DE COPYWRITING À APPLIQUER (obligatoire)";
+
+  const principal = frameworks[0];
+  const secondary = frameworks.slice(1);
+
+  const principalLabel =
+    lang === "en" ? "PRIMARY framework"
+    : lang === "es" ? "Framework PRINCIPAL"
+    : "Framework PRINCIPAL";
+
+  const secondaryLabel =
+    lang === "en" ? "Secondary frameworks to layer in"
+    : lang === "es" ? "Frameworks secundarios complementarios"
+    : "Frameworks secondaires à combiner";
+
+  const lines: string[] = [];
+  lines.push(`## ${heading}`);
+  lines.push("");
+  lines.push(`**${principalLabel}: ${principal}**`);
+  lines.push(FRAMEWORK_DESCRIPTIONS[principal][lang]);
+
+  if (secondary.length > 0) {
+    lines.push("");
+    lines.push(`**${secondaryLabel}: ${secondary.join(", ")}**`);
+    for (const f of secondary) {
+      lines.push(`- ${f}: ${FRAMEWORK_DESCRIPTIONS[f][lang]}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RÈGLE STRICTE : hero ≤ 1 média
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function heroSingleMediaBlock(
+  funnelKind: FunnelKind,
+  role: PageRole,
+  language: Language = "fr",
+): string {
+  const policy = getHeroMediaPolicy(funnelKind, role);
+  const lang: Language = language === "en" || language === "es" ? language : "fr";
+
+  const policyText: Record<typeof policy, { fr: string; en: string; es: string }> = {
+    "prefer-video": {
+      fr: "Si vous avez à la fois une vidéo et une image disponibles, placez UNIQUEMENT la vidéo dans le hero. L'image doit aller dans une section `about`, `proof` ou `testimonials` séparée.",
+      en: "If both a video and an image are available, place ONLY the video in the hero. The image must go into a separate `about`, `proof` or `testimonials` section.",
+      es: "Si hay vídeo e imagen, solo el vídeo va en el hero. La imagen en una sección `about`, `proof` o `testimonials`.",
+    },
+    "prefer-image": {
+      fr: "Si vous avez à la fois une vidéo et une image disponibles, placez UNIQUEMENT l'image dans le hero. La vidéo doit aller dans une section `video` séparée placée juste après le hero.",
+      en: "If both a video and an image are available, place ONLY the image in the hero. The video must go into a separate `video` section right after the hero.",
+      es: "Si hay vídeo e imagen, solo la imagen va en el hero. El vídeo en una sección `video` separada.",
+    },
+    "single-only": {
+      fr: "Le hero ne doit contenir qu'UN SEUL média maximum (image OU vidéo, jamais les deux). Si plusieurs médias sont disponibles, gardez le plus pertinent et placez les autres dans des sections appropriées.",
+      en: "The hero must contain AT MOST ONE media (image OR video, never both). Place additional medias in appropriate sections.",
+      es: "El hero contiene como máximo UN media. Otros medias van en secciones apropiadas.",
+    },
+  };
+
+  const heading =
+    lang === "en" ? "STRICT RULE — HERO MEDIA"
+    : lang === "es" ? "REGLA ESTRICTA — MEDIA DEL HERO"
+    : "RÈGLE STRICTE — MÉDIA DU HERO";
+
+  return [
+    `## ${heading}`,
+    "",
+    `⚠️ ${policyText[policy][lang]}`,
+    "",
+    lang === "en"
+      ? "This rule is non-negotiable. A hero with both an image and a video creates visual overlap and is unprofessional."
+      : lang === "es"
+        ? "Esta regla no es negociable. Un hero con imagen y vídeo crea solapamiento visual y no es profesional."
+        : "Cette règle est non-négociable. Un hero contenant à la fois une image et une vidéo crée un chevauchement visuel et n'est pas professionnel.",
+  ].join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -666,6 +760,11 @@ function systemeIoBlock(lang: Language): string {
 
 export function completeFunnelPrompt(brief: FunnelBrief): string {
   const lang = brief.language;
+  const kind = brief.funnelKind;
+  const homeRole = kind ? getHomeRoleForKind(kind) : undefined;
+
+  const frameworkBlock = kind && homeRole ? copywritingFrameworkBlock(kind, homeRole, lang) : "";
+  const heroRule = kind && homeRole ? heroSingleMediaBlock(kind, homeRole, lang) : "";
 
   return [
     tr(
@@ -681,7 +780,11 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
     "",
     copywritingPrefsBlock(brief.copywritingPrefs, lang),
     "",
-    mediasBlock(brief.medias, lang),
+    frameworkBlock,
+    "",
+    heroRule,
+    "",
+    mediasBlock(brief.medias as MediaInput[] | undefined, lang),
     "",
     strictSectionRequirementsBlock(lang),
     "",
@@ -763,24 +866,16 @@ export function importInspirationPrompt(args: {
       {
         fr: `Tu es un expert copywriter. Inspire-toi UNIQUEMENT de la STRUCTURE de la page ci-dessous (pas du contenu) pour générer un funnel ORIGINAL en ${langName(lang)} pour la marque ${brief.brandName}.`,
         en: `You are an expert copywriter. Take inspiration ONLY from the STRUCTURE of the page below (not the content) to generate an ORIGINAL funnel in ${langName(lang)} for the brand ${brief.brandName}.`,
-        es: `Eres un copywriter experto. Inspírate SOLO en la ESTRUCTURA de la página de abajo (no el contenido) para generar un embudo ORIGINAL en ${langName(lang)} para la marca ${brief.brandName}.`,
+        es: `Eres un copywriter experto. Inspírate SOLO en la ESTRUCTURA de la página de abajo para generar un embudo ORIGINAL en ${langName(lang)} para la marca ${brief.brandName}.`,
       },
       lang,
     ),
     "",
     tr(
       {
-        fr: "INTERDICTIONS :",
-        en: "FORBIDDEN:",
-        es: "PROHIBIDO:",
-      },
-      lang,
-    ),
-    tr(
-      {
-        fr: "- Sans copier de texte exact. Reformule TOUT, écris du contenu ORIGINAL.",
-        en: "- Do not copy any phrase verbatim. Rewrite EVERYTHING, write ORIGINAL content.",
-        es: "- No copies ninguna frase. Reformula TODO, escribe contenido ORIGINAL.",
+        fr: "INTERDICTIONS : Ne copie aucun texte exact. Reformule TOUT.",
+        en: "FORBIDDEN: Do not copy any phrase verbatim. Rewrite EVERYTHING.",
+        es: "PROHIBIDO: No copies ninguna frase. Reformula TODO.",
       },
       lang,
     ),
@@ -817,8 +912,8 @@ export function emailSequencePrompt(brief: FunnelBrief): string {
     tr(
       {
         fr: `Tu es un expert email marketing. Génère une séquence de 3 (trois) emails de nurturing en ${langName(lang)} pour l'offre ${brief.offerName}.`,
-        en: `You are an email marketing expert. Generate a sequence of 3 (three) nurturing emails in ${langName(lang)} for the offer ${brief.offerName}.`,
-        es: `Eres un experto en email marketing. Genera una secuencia de 3 (tres) emails de nurturing en ${langName(lang)} para la oferta ${brief.offerName}.`,
+        en: `You are an email marketing expert. Generate a sequence of 3 nurturing emails in ${langName(lang)} for the offer ${brief.offerName}.`,
+        es: `Eres un experto en email marketing. Genera 3 emails de nurturing en ${langName(lang)} para la oferta ${brief.offerName}.`,
       },
       lang,
     ),
@@ -829,21 +924,21 @@ export function emailSequencePrompt(brief: FunnelBrief): string {
       {
         fr: [
           "STRUCTURE DES 3 EMAILS :",
-          "1. Email J+0 : remerciement + livraison de la ressource + amorce de la suite.",
-          "2. Email J+2 : storytelling, contexte du problème, autorité.",
+          "1. Email J+0 : remerciement + livraison de la ressource.",
+          "2. Email J+2 : storytelling, contexte du problème.",
           "3. Email J+5 : présentation de l'offre payante avec CTA clair.",
         ].join("\n"),
         en: [
           "STRUCTURE OF THE 3 EMAILS:",
-          "1. Email Day 0: thank you + resource delivery + teaser for next.",
-          "2. Email Day 2: storytelling, problem context, authority.",
-          "3. Email Day 5: paid offer presentation with clear CTA.",
+          "1. Day 0: thank you + resource delivery.",
+          "2. Day 2: storytelling, problem context.",
+          "3. Day 5: paid offer presentation with clear CTA.",
         ].join("\n"),
         es: [
-          "ESTRUCTURA DE LOS 3 EMAILS:",
-          "1. Email Día 0: agradecimiento + entrega del recurso + adelanto.",
-          "2. Email Día 2: storytelling, contexto del problema, autoridad.",
-          "3. Email Día 5: presentación de la oferta de pago con CTA claro.",
+          "ESTRUCTURA:",
+          "1. Día 0: agradecimiento + entrega.",
+          "2. Día 2: storytelling, contexto del problema.",
+          "3. Día 5: presentación de la oferta de pago.",
         ].join("\n"),
       },
       lang,
@@ -853,9 +948,9 @@ export function emailSequencePrompt(brief: FunnelBrief): string {
     "",
     tr(
       {
-        fr: `Réponds avec un JSON : { "emails": [ {"subject":"...","html":"...","text":"...","cta":{"label":"...","mode":"redirect","url":"..."}}, ... ] }`,
-        en: `Reply with a JSON: { "emails": [ {"subject":"...","html":"...","text":"...","cta":{...}}, ... ] }`,
-        es: `Responde con un JSON: { "emails": [ {"subject":"...","html":"...","text":"...","cta":{...}}, ... ] }`,
+        fr: `Réponds avec un JSON : { "emails": [ {"subject":"...","html":"...","text":"...","cta":{...}}, ... ] }`,
+        en: `Reply with a JSON: { "emails": [ ... ] }`,
+        es: `Responde con un JSON: { "emails": [ ... ] }`,
       },
       lang,
     ),
@@ -872,161 +967,151 @@ export function exportSystemePrompt(args: { funnelName: string; lang: Language }
   const { funnelName, lang } = args;
   return tr(
     {
-      fr: `Génère un mapping d'export systeme.io pour le tunnel "${funnelName}". Retourne un JSON avec la structure attendue par l'API systeme.io.`,
-      en: `Generate a systeme.io export mapping for the funnel "${funnelName}". Return a JSON with the structure expected by the systeme.io API.`,
-      es: `Genera un mapeo de exportación systeme.io para el embudo "${funnelName}". Devuelve un JSON con la estructura esperada por la API systeme.io.`,
+      fr: `Génère un mapping d'export systeme.io pour le tunnel "${funnelName}".`,
+      en: `Generate a systeme.io export mapping for the funnel "${funnelName}".`,
+      es: `Genera un mapeo de exportación systeme.io para el embudo "${funnelName}".`,
     },
     lang,
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🆕 PROMPT 6 : Page principale (multi-pages) — avec règles sémantiques
+// PROMPT 6 : Page principale (multi-pages)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function mainPagePrompt(args: {
-  brief: FunnelBrief;
-  blueprint: PageBlueprint;
+  brand: string;
+  offer: string;
+  audience?: string;
+  funnelKind: FunnelKind;
+  language?: Language;
+  medias?: MediaInput[];
+  cta?: { primary?: string; secondary?: string };
+  extraContext?: string;
 }): string {
-  const { brief, blueprint } = args;
-  const lang = brief.language;
+  const lang: Language = args.language || "fr";
+  const langLabel =
+    lang === "en" ? "English" : lang === "es" ? "Spanish" : "French";
 
-  return [
-    tr(
-      {
-        fr: `Tu es un expert copywriter de tunnels de vente. Génère la PAGE PRINCIPALE (role="${blueprint.role}") en ${langName(lang)}.`,
-        en: `You are an expert sales funnel copywriter. Generate the MAIN PAGE (role="${blueprint.role}") in ${langName(lang)}.`,
-        es: `Eres un copywriter experto. Genera la PÁGINA PRINCIPAL (role="${blueprint.role}") en ${langName(lang)}.`,
-      },
-      lang,
-    ),
-    "",
-    productRuleBlock(brief),
-    "",
-    copywritingPrefsBlock(brief.copywritingPrefs, lang),
-    "",
-    mediasBlock(brief.medias, lang),
-    "",
-    whitelistBlock(blueprint, lang),
-    "",
-    // 🆕 Règles sémantiques par rôle (CTA cohérents)
-    roleSemanticsBlock([blueprint.role], lang),
-    "",
-    strictSectionRequirementsBlock(lang),
-    "",
-    richSectionsBlock(brief),
-    "",
-    antiHypeBlock(lang),
-    "",
-    systemeIoBlock(lang),
-    "",
-    commonJsonSchemaBlock(lang),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const homeRole = getHomeRoleForKind(args.funnelKind);
+  const bp = getPageBlueprint(args.funnelKind, homeRole);
+  const recommendedSections = bp?.defaultSectionTypes.join(", ") || "hero, benefits, testimonials, cta";
+  const minSections = bp?.minSections ?? 5;
+
+  return `# Génération de la page principale du tunnel
+
+## Contexte
+- Marque : ${args.brand}
+- Offre : ${args.offer}
+${args.audience ? `- Audience : ${args.audience}` : ""}
+- Type de tunnel : ${args.funnelKind}
+- Rôle de page : ${homeRole}
+- Langue : ${langLabel}
+
+## Sections recommandées
+${recommendedSections} (minimum ${minSections} sections riches)
+
+${copywritingFrameworkBlock(args.funnelKind, homeRole, lang)}
+
+${heroSingleMediaBlock(args.funnelKind, homeRole, lang)}
+
+${roleSemanticsBlock([homeRole], lang)}
+
+${mediasBlock(args.medias, lang)}
+
+## Règle de titre
+Le titre du hero doit être une **promesse claire et spécifique** orientée résultat pour l'audience. Pas de slogan vague. Maximum 12 mots.
+
+${args.extraContext || ""}
+
+## Format de sortie
+Objet JSON strict avec la clé \`sections\`. Aucun texte hors JSON.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🆕 PROMPT 7 : Pages secondaires — avec règles sémantiques par rôle
+// PROMPT 7 : Pages secondaires
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function secondaryPagesPrompt(args: {
-  brief: FunnelBrief;
-  mainPageHeadline: string;
-  mainPagePromise: string;
-  blueprints: PageBlueprint[];
+  brand: string;
+  offer: string;
+  funnelKind: FunnelKind;
+  language?: Language;
+  pages: Array<{ role: PageRole; slug: string; name: string }>;
+  medias?: MediaInput[];
+  cta?: { primary?: string; secondary?: string };
+  extraContext?: string;
 }): string {
-  const { brief, mainPageHeadline, mainPagePromise, blueprints } = args;
-  const lang = brief.language;
+  const lang: Language = args.language || "fr";
+  const langLabel =
+    lang === "en" ? "English" : lang === "es" ? "Spanish" : "French";
 
-  const pagesBlocks = blueprints
-    .map((bp) => {
-      const list = bp.defaultSectionTypes.map((t, i) => `      ${i + 1}. "${t}"`).join("\n");
-      return [
-        `  ─── Page role="${bp.role}" (slug="${bp.slug}") ───`,
-        `    Whitelist:`,
-        list,
-        `    Description: ${bp.description[lang] ?? bp.description.fr}`,
-      ].join("\n");
+  const pagesDescription = args.pages
+    .map((p) => {
+      const bp = getPageBlueprint(args.funnelKind, p.role);
+      const sections = bp?.defaultSectionTypes.join(", ") || "hero, cta";
+      const minSections = bp?.minSections ?? 3;
+      return `- **${p.role}** (slug: \`${p.slug}\`) — sections recommandées : ${sections} — minimum ${minSections} sections`;
     })
-    .join("\n\n");
-
-  // 🆕 Collecte des rôles uniques pour le bloc sémantique
-  const roles = Array.from(new Set(blueprints.map((bp) => bp.role)));
-
-  return [
-    tr(
-      {
-        fr: `Tu es un expert copywriter. Génère les PAGES SECONDAIRES d'un tunnel en ${langName(lang)}, dans la continuité de la page principale.`,
-        en: `You are an expert copywriter. Generate the SECONDARY PAGES of a funnel in ${langName(lang)}, in line with the main page.`,
-        es: `Eres un copywriter experto. Genera las PÁGINAS SECUNDARIAS de un embudo en ${langName(lang)}, en línea con la página principal.`,
-      },
-      lang,
-    ),
-    "",
-    productRuleBlock(brief),
-    "",
-    tr(
-      {
-        fr: `CONTEXTE DE LA PAGE PRINCIPALE :\n- Headline : "${mainPageHeadline}"\n- Promesse : "${mainPagePromise}"`,
-        en: `MAIN PAGE CONTEXT:\n- Headline: "${mainPageHeadline}"\n- Promise: "${mainPagePromise}"`,
-        es: `CONTEXTO DE LA PÁGINA PRINCIPAL:\n- Titular: "${mainPageHeadline}"\n- Promesa: "${mainPagePromise}"`,
-      },
-      lang,
-    ),
-    "",
-    tr(
-      {
-        fr: "PAGES À GÉNÉRER (whitelist STRICTE par page) :",
-        en: "PAGES TO GENERATE (STRICT whitelist per page):",
-        es: "PÁGINAS A GENERAR (whitelist ESTRICTA por página):",
-      },
-      lang,
-    ),
-    pagesBlocks,
-    "",
-    // 🆕 Règles sémantiques par rôle pour TOUTES les pages secondaires demandées
-    roleSemanticsBlock(roles, lang),
-    "",
-    strictSectionRequirementsBlock(lang),
-    "",
-    richSectionsBlock(brief),
-    "",
-    antiHypeBlock(lang),
-    "",
-    tr(
-      {
-        fr: `STRUCTURE JSON ATTENDUE (réponds UNIQUEMENT avec ce JSON, sans markdown) :
-{
-  "pages": [
-    {
-      "role": "thankyou" /* ou autre rôle listé */,
-      "sections": [ /* sections respectant la whitelist de cette page */ ]
-    }
-  ]
-}`,
-        en: `EXPECTED JSON STRUCTURE (respond ONLY with this JSON, no markdown):
-{
-  "pages": [
-    {
-      "role": "thankyou" /* or other listed role */,
-      "sections": [ /* sections matching this page's whitelist */ ]
-    }
-  ]
-}`,
-        es: `ESTRUCTURA JSON ESPERADA (responde SOLO con este JSON, sin markdown):
-{
-  "pages": [
-    {
-      "role": "thankyou" /* u otro rol listado */,
-      "sections": [ /* secciones respetando la whitelist de esta página */ ]
-    }
-  ]
-}`,
-      },
-      lang,
-    ),
-  ]
-    .filter(Boolean)
     .join("\n");
+
+  const frameworksByPage = args.pages
+    .map((p) => {
+      const block = copywritingFrameworkBlock(args.funnelKind, p.role, lang);
+      const heroRule = heroSingleMediaBlock(args.funnelKind, p.role, lang);
+      return `\n---\n### Instructions pour la page \`${p.role}\`\n\n${block}\n\n${heroRule}`;
+    })
+    .join("\n");
+
+  const roles = args.pages.map((p) => p.role as string);
+
+  return `# Génération des pages secondaires du tunnel
+
+## Contexte
+- Marque : ${args.brand}
+- Offre : ${args.offer}
+- Type de tunnel : ${args.funnelKind}
+- Langue de rédaction : ${langLabel}
+
+## Pages à générer
+${pagesDescription}
+
+## ⚠️ RÈGLE DE TITRES (CRITIQUE)
+Les **titres de hero** des pages secondaires NE DOIVENT JAMAIS contenir le nom de la marque ni un format générique du type "${args.brand} — Page de X" ou "Page de X".
+
+❌ INTERDIT : "${args.brand} — Page de replay", "Page de confirmation", "ABA — Merci"
+✅ ATTENDU : "Votre place est réservée", "Le replay est disponible (48h)", "On a bien reçu votre candidature", "Votre ressource vous attend"
+
+Le titre doit être **orienté bénéfice ou état du prospect**, écrit comme un message direct à la 2e personne, sans préfixe de marque.
+
+${roleSemanticsBlock(roles, lang)}
+
+${frameworksByPage}
+
+${mediasBlock(args.medias, lang)}
+
+${args.extraContext || ""}
+
+## Format de sortie
+Retournez UNIQUEMENT un objet JSON valide :
+\`\`\`json
+{
+  "pages": [
+    {
+      "role": "confirmation",
+      "slug": "confirmation",
+      "title": "Votre place est réservée",
+      "sections": [ /* sections selon la whitelist */ ]
+    }
+  ]
 }
+\`\`\`
+
+Aucun texte hors JSON. Pas de markdown autour. Pas de commentaires.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Re-exports utilitaires
+// ─────────────────────────────────────────────────────────────────────────────
+
+export { whitelistBlock };

@@ -1,419 +1,520 @@
 // lib/funnels/pageCatalogs.ts
 import type {
   FunnelKind,
-  FunnelSectionType,
-  Language,
   PageRole,
+  FunnelSectionType,
 } from "@/lib/funnels/types";
-import { normalizeFunnelKind } from "@/lib/funnels/kinds";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PageBlueprint — squelette d'une page d'un tunnel
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Blueprint = définition d'une page standard pour un FunnelKind donné.
- *
- * - `slug` : segment URL relatif AU TUNNEL.
- *   ⚠️ Convention :
- *     - Page d'accueil (isHome=true) → "/"
- *     - Autres pages → segment SANS slash initial (ex: "merci", "acces").
- *   Cela évite tout double slash dans /tunnel/<funnelSlug>/<pageSlug>.
+ * Frameworks de copywriting supportés.
+ * Utilisés par les prompts IA (lib/ai/prompts.ts) pour adapter le ton et la structure.
  */
-export type PageBlueprint = {
+export type CopywritingFramework =
+  | "AIDA"
+  | "PAS"
+  | "PAS-FOMO"
+  | "4P"
+  | "BAB"
+  | "FAB"
+  | "REASSURANCE"
+  | "NEXT-STEPS"
+  | "STAR"
+  | "QUEST"
+  | "SCARCITY-URGENCY";
+
+/**
+ * Politique de gestion des médias dans le hero d'une page.
+ * Lue par enforceHeroSingleMedia() dans lib/ai/generate.ts.
+ */
+export type HeroMediaPolicy = "prefer-video" | "prefer-image" | "single-only";
+
+export interface PageBlueprint {
   role: PageRole;
+  /** Slug par défaut (normalisé) */
   slug: string;
-  name: { fr: string; en: string; es: string };
-  isHome: boolean;
-  description: { fr: string; en: string; es: string };
+  /** Nom interne (utilisé pour le titre par défaut si pas de PAGE_COPY) */
+  name: string;
+  /** Sections par défaut quand l'IA ne renvoie rien */
   defaultSectionTypes: FunnelSectionType[];
-  nextLabel?: { fr: string; en: string; es: string };
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers de traduction interne
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function blueprintName(bp: PageBlueprint, lang: Language): string {
-  return bp.name[lang] ?? bp.name.fr;
+  /** Sections autorisées (whitelist) — toute section hors liste est filtrée */
+  allowedSectionTypes?: FunnelSectionType[];
+  /** Framework de copywriting principal à appliquer */
+  copywritingFramework?: CopywritingFramework;
+  /** Frameworks secondaires (combinables) */
+  secondaryFrameworks?: CopywritingFramework[];
+  /** Politique média du hero */
+  heroMediaPolicy?: HeroMediaPolicy;
+  /** Nombre minimum de sections (pour le fallback) */
+  minSections?: number;
+  /** La page est-elle indexable / publiquement liée ? */
+  publiclyLinked?: boolean;
 }
 
-export function blueprintDescription(bp: PageBlueprint, lang: Language): string {
-  return bp.description[lang] ?? bp.description.fr;
+export interface FunnelBlueprint {
+  kind: FunnelKind;
+  pages: PageBlueprint[];
 }
 
-export function blueprintNextLabel(bp: PageBlueprint, lang: Language): string {
-  return bp.nextLabel?.[lang] ?? bp.nextLabel?.fr ?? "Suivant";
+/* ------------------------------------------------------------------ */
+/*  Catalogues par type de tunnel                                      */
+/* ------------------------------------------------------------------ */
+
+const LEAD_MAGNET: FunnelBlueprint = {
+  kind: "lead-magnet",
+  pages: [
+    {
+      role: "optin",
+      slug: "accueil",
+      name: "Page d'inscription",
+      defaultSectionTypes: ["hero", "benefits", "testimonials", "faq", "cta"],
+      allowedSectionTypes: [
+        "hero", "benefits", "testimonials", "faq", "cta",
+        "about", "proof", "process", "video", "guarantee",
+      ],
+      copywritingFramework: "AIDA",
+      secondaryFrameworks: ["FAB"],
+      heroMediaPolicy: "prefer-image",
+      minSections: 4,
+      publiclyLinked: true,
+    },
+    {
+      role: "thankyou",
+      slug: "merci",
+      name: "Page de remerciement",
+      // next-steps → process, reminder → about
+      defaultSectionTypes: ["hero", "process", "about", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "cta",
+        "testimonials", "video", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
+      role: "delivery",
+      slug: "ressource",
+      name: "Page de livraison",
+      // download → offer, next-steps → process
+      defaultSectionTypes: ["hero", "offer", "process", "cta"],
+      allowedSectionTypes: [
+        "hero", "offer", "process", "cta",
+        "about", "video", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+const WEBINAR: FunnelBlueprint = {
+  kind: "webinar",
+  pages: [
+    {
+      role: "registration",
+      slug: "inscription",
+      name: "Page d'inscription au webinaire",
+      // agenda → program, speaker → about
+      defaultSectionTypes: ["hero", "benefits", "program", "about", "testimonials", "faq", "cta"],
+      allowedSectionTypes: [
+        "hero", "benefits", "program", "about", "testimonials",
+        "faq", "cta", "proof", "video", "guarantee", "webinar",
+      ],
+      copywritingFramework: "AIDA",
+      secondaryFrameworks: ["BAB", "SCARCITY-URGENCY"],
+      heroMediaPolicy: "prefer-image",
+      minSections: 5,
+      publiclyLinked: true,
+    },
+    {
+      role: "confirmation",
+      slug: "confirmation",
+      name: "Page de confirmation",
+      defaultSectionTypes: ["hero", "process", "about", "program", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "program", "cta",
+        "video", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+    {
+      role: "replay",
+      slug: "replay",
+      name: "Page de replay",
+      defaultSectionTypes: ["hero", "video", "benefits", "cta", "faq"],
+      allowedSectionTypes: [
+        "hero", "video", "benefits", "cta", "faq",
+        "about", "testimonials", "guarantee", "proof", "offer",
+      ],
+      copywritingFramework: "PAS-FOMO",
+      secondaryFrameworks: ["SCARCITY-URGENCY", "4P"],
+      // ⚠️ Sur le replay d'un webinaire, la VIDÉO prime sur tout
+      heroMediaPolicy: "prefer-video",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+const DIGITAL_PRODUCT: FunnelBlueprint = {
+  kind: "digital-product",
+  pages: [
+    {
+      role: "sales",
+      slug: "offre",
+      name: "Page de vente",
+      defaultSectionTypes: [
+        "hero", "benefits", "video", "testimonials",
+        "pricing", "bonus", "guarantee", "faq", "cta",
+      ],
+      allowedSectionTypes: [
+        "hero", "benefits", "video", "testimonials", "pricing",
+        "bonus", "guarantee", "faq", "cta", "about", "proof", "process",
+        "offer", "problem", "solution",
+      ],
+      copywritingFramework: "PAS",
+      secondaryFrameworks: ["4P", "FAB", "SCARCITY-URGENCY"],
+      heroMediaPolicy: "prefer-video",
+      minSections: 6,
+      publiclyLinked: true,
+    },
+    {
+      role: "checkout",
+      slug: "commande",
+      name: "Page de commande",
+      defaultSectionTypes: ["hero", "pricing", "guarantee", "testimonials", "cta"],
+      allowedSectionTypes: [
+        "hero", "pricing", "guarantee", "testimonials", "cta",
+        "about", "faq", "bonus", "form",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["SCARCITY-URGENCY"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
+      role: "thankyou",
+      slug: "merci",
+      name: "Page de remerciement",
+      // next-steps → process, download → offer, reminder → about
+      defaultSectionTypes: ["hero", "process", "offer", "about", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "offer", "about", "cta",
+        "video", "testimonials", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
+      role: "access",
+      slug: "acces",
+      name: "Page d'accès au produit",
+      defaultSectionTypes: ["hero", "offer", "process", "cta"],
+      allowedSectionTypes: [
+        "hero", "offer", "process", "cta",
+        "about", "video", "faq",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+const BOOKING: FunnelBlueprint = {
+  kind: "booking",
+  pages: [
+    {
+      role: "landing",
+      slug: "rendez-vous",
+      name: "Page de réservation",
+      // speaker → about
+      defaultSectionTypes: ["hero", "benefits", "process", "testimonials", "faq", "cta"],
+      allowedSectionTypes: [
+        "hero", "benefits", "process", "testimonials", "faq",
+        "cta", "about", "guarantee", "proof", "qualification",
+      ],
+      copywritingFramework: "AIDA",
+      secondaryFrameworks: ["BAB"],
+      heroMediaPolicy: "prefer-image",
+      minSections: 5,
+      publiclyLinked: true,
+    },
+    {
+      role: "booking",
+      slug: "reservation",
+      name: "Page de prise de rendez-vous",
+      defaultSectionTypes: ["hero", "form", "guarantee", "cta"],
+      allowedSectionTypes: [
+        "hero", "form", "guarantee", "cta",
+        "about", "testimonials", "faq",
+      ],
+      copywritingFramework: "REASSURANCE",
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
+      role: "confirmation",
+      slug: "confirmation",
+      name: "Confirmation du rendez-vous",
+      defaultSectionTypes: ["hero", "process", "about", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "cta",
+        "video", "testimonials", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+const COACHING_HIGH_TICKET: FunnelBlueprint = {
+  kind: "coaching-high-ticket",
+  pages: [
+    {
+      role: "application",
+      slug: "candidature",
+      name: "Page de candidature",
+      // speaker → about
+      defaultSectionTypes: [
+        "hero", "benefits", "process", "testimonials",
+        "about", "guarantee", "faq", "cta",
+      ],
+      allowedSectionTypes: [
+        "hero", "benefits", "process", "testimonials", "about",
+        "guarantee", "faq", "cta", "proof", "video", "qualification",
+        "problem", "solution",
+      ],
+      copywritingFramework: "BAB",
+      secondaryFrameworks: ["PAS", "STAR"],
+      heroMediaPolicy: "prefer-image",
+      minSections: 6,
+      publiclyLinked: true,
+    },
+    {
+      role: "qualification",
+      slug: "qualification",
+      name: "Formulaire de qualification",
+      defaultSectionTypes: ["hero", "form", "cta"],
+      allowedSectionTypes: [
+        "hero", "form", "cta",
+        "about", "testimonials", "guarantee",
+      ],
+      copywritingFramework: "REASSURANCE",
+      heroMediaPolicy: "single-only",
+      minSections: 2,
+      publiclyLinked: false,
+    },
+    {
+      role: "confirmation",
+      slug: "merci",
+      name: "Candidature reçue",
+      defaultSectionTypes: ["hero", "process", "about", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "cta",
+        "video", "testimonials", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+    {
+      role: "case-studies",
+      slug: "etudes-de-cas",
+      name: "Études de cas",
+      defaultSectionTypes: ["hero", "testimonials", "proof", "cta"],
+      allowedSectionTypes: [
+        "hero", "testimonials", "proof", "cta",
+        "about", "benefits", "video",
+      ],
+      copywritingFramework: "STAR",
+      heroMediaPolicy: "prefer-image",
+      minSections: 3,
+      publiclyLinked: true,
+    },
+  ],
+};
+
+const CHALLENGE: FunnelBlueprint = {
+  kind: "challenge",
+  pages: [
+    {
+      role: "challenge-landing",
+      slug: "challenge",
+      name: "Page du challenge",
+      // agenda → program, speaker → about
+      defaultSectionTypes: [
+        "hero", "benefits", "program", "testimonials",
+        "faq", "cta", "guarantee",
+      ],
+      allowedSectionTypes: [
+        "hero", "benefits", "program", "testimonials", "faq",
+        "cta", "guarantee", "about", "video", "proof", "process",
+      ],
+      copywritingFramework: "AIDA",
+      secondaryFrameworks: ["BAB", "SCARCITY-URGENCY"],
+      heroMediaPolicy: "prefer-image",
+      minSections: 5,
+      publiclyLinked: true,
+    },
+    {
+      role: "confirmation",
+      slug: "confirmation",
+      name: "Confirmation d'inscription",
+      defaultSectionTypes: ["hero", "process", "about", "program", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "program", "cta",
+        "video", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+    {
+      role: "challenge-day",
+      slug: "jour",
+      name: "Page d'une journée de challenge",
+      defaultSectionTypes: ["hero", "video", "benefits", "cta", "faq"],
+      allowedSectionTypes: [
+        "hero", "video", "benefits", "cta", "faq",
+        "process", "about", "testimonials",
+      ],
+      copywritingFramework: "4P",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "prefer-video",
+      minSections: 4,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+/* ------------------------------------------------------------------ */
+/*  Blueprints legacy (rétrocompat — mappés vers les blueprints modernes) */
+/* ------------------------------------------------------------------ */
+
+// Les anciens FunnelKind legacy pointent vers la blueprint moderne équivalente,
+// mais doivent quand même exister dans le Record<FunnelKind, …>.
+
+const VSL_LEGACY: FunnelBlueprint = {
+  ...DIGITAL_PRODUCT,
+  kind: "vsl",
+};
+
+const FORMATION_LEGACY: FunnelBlueprint = {
+  ...DIGITAL_PRODUCT,
+  kind: "formation",
+};
+
+const SERVICE_LEGACY: FunnelBlueprint = {
+  ...BOOKING,
+  kind: "service",
+};
+
+const SAAS_LEGACY: FunnelBlueprint = {
+  ...DIGITAL_PRODUCT,
+  kind: "saas",
+};
+
+const THANK_YOU_LEGACY: FunnelBlueprint = {
+  kind: "thank-you",
+  pages: [
+    {
+      role: "thankyou",
+      slug: "merci",
+      name: "Page de remerciement",
+      defaultSectionTypes: ["hero", "process", "about", "cta"],
+      allowedSectionTypes: [
+        "hero", "process", "about", "cta",
+        "testimonials", "video", "thank_you",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["NEXT-STEPS"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+  ],
+};
+
+/* ------------------------------------------------------------------ */
+/*  Registre principal                                                 */
+/* ------------------------------------------------------------------ */
+
+export const FUNNEL_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = {
+  "lead-magnet": LEAD_MAGNET,
+  "webinar": WEBINAR,
+  "digital-product": DIGITAL_PRODUCT,
+  "booking": BOOKING,
+  "coaching-high-ticket": COACHING_HIGH_TICKET,
+  "challenge": CHALLENGE,
+  // Legacy (rétrocompat)
+  "vsl": VSL_LEGACY,
+  "formation": FORMATION_LEGACY,
+  "service": SERVICE_LEGACY,
+  "saas": SAAS_LEGACY,
+  "thank-you": THANK_YOU_LEGACY,
+};
+
+/* ------------------------------------------------------------------ */
+/*  Helpers publics                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getFunnelBlueprint(kind: FunnelKind): FunnelBlueprint {
+  return FUNNEL_BLUEPRINTS[kind] ?? LEAD_MAGNET;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Catalogues par FunnelKind
-// ─────────────────────────────────────────────────────────────────────────────
-
-const NEXT_LABEL_DEFAULT = {
-  fr: "Continuer",
-  en: "Continue",
-  es: "Continuar",
-};
-
-const NEXT_LABEL_ACCESS = {
-  fr: "Accéder à ma ressource",
-  en: "Access my resource",
-  es: "Acceder a mi recurso",
-};
-
-const NEXT_LABEL_CHECKOUT = {
-  fr: "Passer au paiement",
-  en: "Go to checkout",
-  es: "Ir al pago",
-};
-
-const NEXT_LABEL_BOOKING = {
-  fr: "Réserver mon créneau",
-  en: "Book my slot",
-  es: "Reservar mi cita",
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Lead Magnet : optin → thankyou → delivery
-// ─────────────────────────────────────────────────────────────────────────────
-const LEAD_MAGNET_PAGES: PageBlueprint[] = [
-  {
-    role: "optin",
-    slug: "/",
-    name: { fr: "Page d'inscription", en: "Opt-in page", es: "Página de inscripción" },
-    isHome: true,
-    description: {
-      fr: "Page de capture du lead magnet : présenter la ressource gratuite, ses bénéfices et capter l'email.",
-      en: "Lead magnet capture page: present the free resource, its benefits and capture the email.",
-      es: "Página de captura del lead magnet: presentar el recurso gratuito, sus beneficios y capturar el email.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "proof", "form", "faq"],
-    nextLabel: { fr: "Recevoir ma ressource", en: "Get my resource", es: "Recibir mi recurso" },
-  },
-  {
-    role: "thankyou",
-    slug: "merci",
-    name: { fr: "Page de remerciement", en: "Thank-you page", es: "Página de agradecimiento" },
-    isHome: false,
-    description: {
-      fr: "Page de confirmation après inscription au lead magnet GRATUIT par email. La ressource est ENVOYÉE PAR EMAIL, jamais téléchargée ici. Rassurer, expliquer de vérifier la boîte mail (et les spams), et proposer de patienter / explorer la marque.",
-      en: "Confirmation page after sign-up to the FREE email lead magnet. The resource is SENT BY EMAIL, never downloaded here. Reassure, explain to check the inbox (and spam folder), invite to explore the brand.",
-      es: "Página de confirmación tras la inscripción al lead magnet GRATUITO por email. El recurso se ENVÍA POR EMAIL, nunca se descarga aquí. Tranquilizar, explicar revisar la bandeja (y spam), invitar a explorar la marca.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_ACCESS,
-  },
-  {
-    role: "delivery",
-    slug: "acces",
-    name: { fr: "Page d'accès", en: "Access page", es: "Página de acceso" },
-    isHome: false,
-    description: {
-      fr: "Page de livraison DIRECTE de la ressource : c'est ICI que le téléchargement réel a lieu. Lien/bouton de téléchargement clair, instructions, puis invitation à découvrir l'offre payante.",
-      en: "DIRECT resource delivery page: this is WHERE the actual download happens. Clear download link/button, instructions, then invitation to discover the paid offer.",
-      es: "Página de entrega DIRECTA del recurso: AQUÍ ocurre la descarga real. Enlace/botón de descarga claro, instrucciones, luego invitación a descubrir la oferta de pago.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "offer", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Digital Product : sales → checkout → thankyou
-// ─────────────────────────────────────────────────────────────────────────────
-const DIGITAL_PRODUCT_PAGES: PageBlueprint[] = [
-  {
-    role: "sales",
-    slug: "/",
-    name: { fr: "Page de vente", en: "Sales page", es: "Página de ventas" },
-    isHome: true,
-    description: {
-      fr: "Page de vente principale : promesse forte, problème, solution, bénéfices, preuve sociale, offre, garantie et CTA d'achat.",
-      en: "Main sales page: strong promise, problem, solution, benefits, social proof, offer, guarantee and purchase CTA.",
-      es: "Página de venta principal: promesa fuerte, problema, solución, beneficios, prueba social, oferta, garantía y CTA de compra.",
-    },
-    defaultSectionTypes: [
-      "hero",
-      "problem",
-      "solution",
-      "benefits",
-      "proof",
-      "offer",
-      "bonus",
-      "guarantee",
-      "faq",
-      "cta",
-    ],
-    nextLabel: NEXT_LABEL_CHECKOUT,
-  },
-  {
-    role: "checkout",
-    slug: "commande",
-    name: { fr: "Page de commande", en: "Checkout page", es: "Página de pago" },
-    isHome: false,
-    description: {
-      fr: "Page de paiement : rappeler l'offre, rassurer (garantie, sécurité), afficher le formulaire de commande.",
-      en: "Checkout page: recap the offer, reassure (guarantee, security), display the order form.",
-      es: "Página de pago: recordar la oferta, tranquilizar (garantía, seguridad), mostrar el formulario de pedido.",
-    },
-    defaultSectionTypes: ["hero", "offer", "guarantee", "form"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-  {
-    role: "thankyou",
-    slug: "merci",
-    name: { fr: "Page de confirmation", en: "Confirmation page", es: "Página de confirmación" },
-    isHome: false,
-    description: {
-      fr: "Page de remerciement après ACHAT : confirmation de commande, prochaines étapes, accès au produit (lien direct ou instructions).",
-      en: "Thank-you page after PURCHASE: order confirmation, next steps, product access (direct link or instructions).",
-      es: "Página de agradecimiento tras la COMPRA: confirmación de pedido, próximos pasos, acceso al producto (enlace directo o instrucciones).",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Webinar : registration → confirmation → replay
-// ─────────────────────────────────────────────────────────────────────────────
-const WEBINAR_PAGES: PageBlueprint[] = [
-  {
-    role: "registration",
-    slug: "/",
-    name: { fr: "Page d'inscription", en: "Registration page", es: "Página de inscripción" },
-    isHome: true,
-    description: {
-      fr: "Page d'inscription au webinaire : sujet, date, intervenant, bénéfices clés et formulaire d'inscription.",
-      en: "Webinar registration page: topic, date, speaker, key benefits and registration form.",
-      es: "Página de inscripción al webinar: tema, fecha, ponente, beneficios clave y formulario de inscripción.",
-    },
-    defaultSectionTypes: ["hero", "webinar", "benefits", "proof", "form", "faq"],
-    nextLabel: { fr: "Réserver ma place", en: "Reserve my seat", es: "Reservar mi plaza" },
-  },
-  {
-    role: "confirmation",
-    slug: "confirmation",
-    name: { fr: "Page de confirmation", en: "Confirmation page", es: "Página de confirmación" },
-    isHome: false,
-    description: {
-      fr: "Page de confirmation d'inscription : rappel date/heure, ajouter au calendrier, instructions pour rejoindre.",
-      en: "Registration confirmation page: date/time reminder, add to calendar, instructions to join.",
-      es: "Página de confirmación de inscripción: recordatorio fecha/hora, añadir al calendario, instrucciones para unirse.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-  {
-    role: "replay",
-    slug: "replay",
-    name: { fr: "Page de replay", en: "Replay page", es: "Página de replay" },
-    isHome: false,
-    description: {
-      fr: "Page de replay du webinaire : vidéo intégrée, résumé des points clés, CTA vers l'offre.",
-      en: "Webinar replay page: embedded video, key points summary, CTA to the offer.",
-      es: "Página de replay del webinar: video integrado, resumen de puntos clave, CTA hacia la oferta.",
-    },
-    defaultSectionTypes: ["hero", "video", "benefits", "offer", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Booking : landing → booking → confirmation
-// ─────────────────────────────────────────────────────────────────────────────
-const BOOKING_PAGES: PageBlueprint[] = [
-  {
-    role: "landing",
-    slug: "/",
-    name: { fr: "Page d'accueil", en: "Landing page", es: "Página de inicio" },
-    isHome: true,
-    description: {
-      fr: "Page d'accueil pour prise de rendez-vous : promesse claire, bénéfices d'un appel découverte, preuve sociale, CTA vers la réservation.",
-      en: "Booking landing page: clear promise, benefits of a discovery call, social proof, CTA to booking.",
-      es: "Página de inicio para reserva: promesa clara, beneficios de una llamada de descubrimiento, prueba social, CTA hacia la reserva.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "proof", "process", "faq", "cta"],
-    nextLabel: NEXT_LABEL_BOOKING,
-  },
-  {
-    role: "booking",
-    slug: "reservation",
-    name: { fr: "Page de réservation", en: "Booking page", es: "Página de reserva" },
-    isHome: false,
-    description: {
-      fr: "Page de réservation : intégration calendrier (Calendly, Cal.com, etc.), rappel de ce qui sera abordé pendant l'appel.",
-      en: "Booking page: calendar integration (Calendly, Cal.com, etc.), recap of what will be covered during the call.",
-      es: "Página de reserva: integración de calendario (Calendly, Cal.com, etc.), recordatorio de lo que se tratará durante la llamada.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "form"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-  {
-    role: "confirmation",
-    slug: "confirmation",
-    name: { fr: "Page de confirmation", en: "Confirmation page", es: "Página de confirmación" },
-    isHome: false,
-    description: {
-      fr: "Page de confirmation après réservation : rappel date/heure, préparation au call, contact.",
-      en: "Confirmation page after booking: date/time reminder, call preparation, contact.",
-      es: "Página de confirmación tras reserva: recordatorio fecha/hora, preparación a la llamada, contacto.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Coaching High Ticket
-// ─────────────────────────────────────────────────────────────────────────────
-const COACHING_HIGH_TICKET_PAGES: PageBlueprint[] = [
-  {
-    role: "landing",
-    slug: "/",
-    name: { fr: "Page d'accueil", en: "Landing page", es: "Página de inicio" },
-    isHome: true,
-    description: {
-      fr: "Page d'accueil coaching premium : positionnement haut de gamme, qui c'est pour, qui c'est pas pour, autorité.",
-      en: "Premium coaching landing page: high-end positioning, who it's for, who it's not for, authority.",
-      es: "Página de inicio coaching premium: posicionamiento de alta gama, para quién es, para quién no, autoridad.",
-    },
-    defaultSectionTypes: ["hero", "about", "problem", "solution", "proof", "qualification", "faq", "cta"],
-    nextLabel: { fr: "Voir des cas clients", en: "See case studies", es: "Ver casos de éxito" },
-  },
-  {
-    role: "case-studies",
-    slug: "cas-clients",
-    name: { fr: "Études de cas", en: "Case studies", es: "Casos de éxito" },
-    isHome: false,
-    description: {
-      fr: "Page d'études de cas détaillées : transformations clients chiffrées, témoignages premium, mécanique de l'accompagnement.",
-      en: "Detailed case studies page: quantified client transformations, premium testimonials, coaching mechanics.",
-      es: "Página de casos de éxito detallados: transformaciones cuantificadas, testimonios premium, mecánica del coaching.",
-    },
-    defaultSectionTypes: ["hero", "testimonials", "proof", "benefits", "cta"],
-    nextLabel: { fr: "Candidater à l'accompagnement", en: "Apply for coaching", es: "Aplicar al coaching" },
-  },
-  {
-    role: "application",
-    slug: "candidature",
-    name: { fr: "Page de candidature", en: "Application page", es: "Página de aplicación" },
-    isHome: false,
-    description: {
-      fr: "Page de qualification / candidature : formulaire détaillé pour qualifier le prospect avant l'appel.",
-      en: "Qualification / application page: detailed form to qualify the prospect before the call.",
-      es: "Página de calificación / aplicación: formulario detallado para calificar al prospecto antes de la llamada.",
-    },
-    defaultSectionTypes: ["hero", "qualification", "form"],
-    nextLabel: NEXT_LABEL_BOOKING,
-  },
-  {
-    role: "booking",
-    slug: "reservation",
-    name: { fr: "Page de réservation", en: "Booking page", es: "Página de reserva" },
-    isHome: false,
-    description: {
-      fr: "Page de réservation de l'appel stratégique : intégration calendrier, rappel des bénéfices de l'appel.",
-      en: "Strategic call booking page: calendar integration, recap of call benefits.",
-      es: "Página de reserva de la llamada estratégica: integración de calendario, recordatorio de los beneficios.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "form"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-  {
-    role: "confirmation",
-    slug: "confirmation",
-    name: { fr: "Page de confirmation", en: "Confirmation page", es: "Página de confirmación" },
-    isHome: false,
-    description: {
-      fr: "Page de confirmation après réservation de l'appel : préparation, contact, rappel.",
-      en: "Confirmation page after call booking: preparation, contact, reminder.",
-      es: "Página de confirmación tras reserva de la llamada: preparación, contacto, recordatorio.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Challenge
-// ─────────────────────────────────────────────────────────────────────────────
-const CHALLENGE_PAGES: PageBlueprint[] = [
-  {
-    role: "challenge-landing",
-    slug: "/",
-    name: { fr: "Page d'inscription", en: "Challenge landing", es: "Página de inscripción" },
-    isHome: true,
-    description: {
-      fr: "Page d'inscription au challenge : promesse de transformation sur X jours, programme, bénéfices, urgence, formulaire.",
-      en: "Challenge sign-up page: X-day transformation promise, program, benefits, urgency, form.",
-      es: "Página de inscripción al reto: promesa de transformación en X días, programa, beneficios, urgencia, formulario.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "process", "proof", "form", "faq"],
-    nextLabel: { fr: "Je participe au challenge", en: "I join the challenge", es: "Participo en el reto" },
-  },
-  {
-    role: "confirmation",
-    slug: "confirmation",
-    name: { fr: "Page de confirmation", en: "Confirmation page", es: "Página de confirmación" },
-    isHome: false,
-    description: {
-      fr: "Page de confirmation d'inscription au challenge : date de démarrage, ce qui va se passer, inviter à rejoindre la communauté.",
-      en: "Challenge sign-up confirmation page: start date, what will happen, invite to join the community.",
-      es: "Página de confirmación de inscripción al reto: fecha de inicio, qué pasará, invitar a unirse a la comunidad.",
-    },
-    defaultSectionTypes: ["hero", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-  {
-    role: "challenge-day",
-    slug: "jour-1",
-    name: { fr: "Jour 1 du challenge", en: "Challenge day 1", es: "Día 1 del reto" },
-    isHome: false,
-    description: {
-      fr: "Page du jour 1 du challenge : vidéo / contenu du jour, exercices à faire, CTA vers jour suivant ou offre.",
-      en: "Challenge day 1 page: video / content of the day, exercises to do, CTA to next day or offer.",
-      es: "Página del día 1 del reto: video / contenido del día, ejercicios a realizar, CTA al día siguiente o a la oferta.",
-    },
-    defaultSectionTypes: ["hero", "video", "benefits", "cta"],
-    nextLabel: NEXT_LABEL_DEFAULT,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapping FunnelKind → PageBlueprint[]
-// ─────────────────────────────────────────────────────────────────────────────
-
-const CATALOG: Record<string, PageBlueprint[]> = {
-  "lead-magnet": LEAD_MAGNET_PAGES,
-  "digital-product": DIGITAL_PRODUCT_PAGES,
-  "webinar": WEBINAR_PAGES,
-  "booking": BOOKING_PAGES,
-  "coaching-high-ticket": COACHING_HIGH_TICKET_PAGES,
-  "challenge": CHALLENGE_PAGES,
-};
-
-export function getDefaultPagesForKind(
-  kind?: FunnelKind | string
-): PageBlueprint[] {
-  if (!kind) return [];
-  const normalized = normalizeFunnelKind(kind as FunnelKind);
-  if (!normalized) return [];
-  return CATALOG[normalized] ?? [];
-}
-
-export function getBlueprintForRole(
-  kind: FunnelKind | string | undefined,
+export function getPageBlueprint(
+  kind: FunnelKind,
   role: PageRole
 ): PageBlueprint | undefined {
-  const pages = getDefaultPagesForKind(kind);
-  return pages.find((p) => p.role === role);
+  return getFunnelBlueprint(kind).pages.find((p) => p.role === role);
 }
 
-export function getHomeBlueprint(
-  kind?: FunnelKind | string
-): PageBlueprint | undefined {
-  const pages = getDefaultPagesForKind(kind);
-  return pages.find((p) => p.isHome) ?? pages[0];
+export function getAllowedSectionTypes(
+  kind: FunnelKind,
+  role: PageRole
+): FunnelSectionType[] | undefined {
+  return getPageBlueprint(kind, role)?.allowedSectionTypes;
+}
+
+export function getHeroMediaPolicy(
+  kind: FunnelKind,
+  role: PageRole
+): HeroMediaPolicy {
+  return getPageBlueprint(kind, role)?.heroMediaPolicy ?? "single-only";
+}
+
+export function getCopywritingFrameworks(
+  kind: FunnelKind,
+  role: PageRole
+): CopywritingFramework[] {
+  const bp = getPageBlueprint(kind, role);
+  if (!bp) return ["AIDA"];
+  const list: CopywritingFramework[] = [];
+  if (bp.copywritingFramework) list.push(bp.copywritingFramework);
+  if (bp.secondaryFrameworks) list.push(...bp.secondaryFrameworks);
+  return list.length > 0 ? list : ["AIDA"];
 }

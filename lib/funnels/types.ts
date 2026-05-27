@@ -111,6 +111,7 @@ export type CtaConfig = {
   popupId?: string;
   popupTitle?: string;
   popupBody?: string;
+  /** @deprecated */
   popupEmbed?: string;
   /** Lot B3+ : id d'une page interne du même funnel (navigation inter-pages) */
   pageId?: string;
@@ -122,6 +123,9 @@ export type CtaConfig = {
   icon?: CtaIcon;
   /** 🆕 Lot B4 : margins/paddings personnalisés */
   spacing?: CtaSpacing;
+   /** Message de réassurance affiché sous le formulaire popup (RGPD, sécurité, etc.). */
+  popupReassurance?: string;
+
 };
 
 export type ImageMode = "none" | "upload" | "ai-suggested";
@@ -428,7 +432,11 @@ export type FunnelSection = {
   formConfig?: FormSectionConfig;
   background?: SectionBackground;
   decorativeIcons?: DecorativeIcon[];
+  reassurance?: string;
 };
+
+/** Message de réassurance par défaut affiché sous les formulaires (popup et section form). */
+export const DEFAULT_REASSURANCE = "🔒 Vos coordonnées sont en sécurité, jamais partagées";
 
 export type EmailSequenceItem = {
   subject: string;
@@ -680,6 +688,7 @@ export type MediaItem = {
   sectionHint?: FunnelSectionType;
   alt?: string;
   fileName?: string;
+  
 };
 
 export type CopywritingTone =

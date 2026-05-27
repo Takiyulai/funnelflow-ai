@@ -5,7 +5,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2,
   Sparkles, Target, Upload, Link as LinkIcon, AnchorIcon,
   ImageOff, Image as ImageIcon, Wand2, AlertCircle, Eye, Pencil,
-  Building2, Package, User,
+  Building2, Package, User, Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -30,7 +30,11 @@ import type {
 import { makeAnchorCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
 import { useRouter } from "next/navigation";
-import { createFunnelFromAi } from "@/lib/store/funnelStore";
+import {
+  createFunnelFromAi,
+  FunnelStorageQuotaError,
+  getStorageUsage,
+} from "@/lib/store/funnelStore";
 import { MediasStep } from "@/components/funnel/wizard/MediasStep";
 import { CopywritingStep } from "@/components/funnel/wizard/CopywritingStep";
 
@@ -244,15 +248,52 @@ export function CreateFunnelWizard() {
       };
 
       setFunnel(enrichedFunnel);
-      setSuccessMessage("Tunnel généré : redirection vers l'éditeur...");
 
-      const stored = createFunnelFromAi(enrichedFunnel, brief);
-      setTimeout(() => {
-        router.push(`/editor/${stored.id}`);
-      }, 600);
+      // ✅ FIX : on isole la persistance localStorage pour différencier
+      // un échec de quota d'un échec réseau côté API.
+      try {
+        const stored = createFunnelFromAi(enrichedFunnel, brief);
+        setSuccessMessage("Tunnel généré : redirection vers l'éditeur...");
+        setTimeout(() => {
+          router.push(`/editor/${stored.id}`);
+        }, 600);
+      } catch (storageErr) {
+        console.error("[wizard] storage error:", storageErr);
+
+        if (storageErr instanceof FunnelStorageQuotaError) {
+          const usage = getStorageUsage();
+          setErrorReason("storage-full");
+          setErrorMessage(
+            `Le stockage du navigateur est saturé (${usage.totalMB} Mo utilisés sur ~5 Mo). ` +
+              `La purge automatique des anciens tunnels n'a pas suffi. ` +
+              `Supprimez d'anciens tunnels depuis le tableau de bord, ou videz le cache du site, puis réessayez.`
+          );
+        } else {
+          setErrorReason("storage-error");
+          setErrorMessage(
+            storageErr instanceof Error
+              ? `Impossible d'enregistrer le tunnel localement : ${storageErr.message}`
+              : "Impossible d'enregistrer le tunnel localement"
+          );
+        }
+        return;
+      }
 
     } catch (err) {
       console.error("[wizard] generate fetch error:", err);
+
+      // ✅ FIX : on intercepte aussi le quota au cas où il fuit jusqu'ici
+      if (err instanceof FunnelStorageQuotaError) {
+        const usage = getStorageUsage();
+        setErrorReason("storage-full");
+        setErrorMessage(
+          `Le stockage du navigateur est saturé (${usage.totalMB} Mo utilisés sur ~5 Mo). ` +
+            `Supprimez d'anciens tunnels depuis le tableau de bord, puis réessayez.`
+        );
+        setFunnel(null);
+        return;
+      }
+
       setErrorReason("network-error");
       setErrorMessage(
         "La connexion a été interrompue par le navigateur ou le serveur (Timeout). Nous avons optimisé la vitesse, réessayez une fois. Si cela persiste, vérifiez votre connexion internet."
@@ -896,6 +937,9 @@ function GenerationStep({
     health?.reason === "invalid-key" ||
     health?.reason === "header-error";
 
+  // ✅ FIX : titre et icône adaptés au type d'erreur
+  const isStorageIssue = errorReason === "storage-full" || errorReason === "storage-error";
+
   return (
     <div className="grid gap-4">
       <h2 className="text-xl font-black">Génération</h2>
@@ -941,14 +985,23 @@ function GenerationStep({
       )}
 
       {errorMessage && (
-        <div className="rounded-lg border border-red/30 bg-red/5 p-3">
-          <p className="flex items-start gap-2 text-xs font-bold text-red">
-            <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            <span>La génération a échoué</span>
+        <div className={`rounded-lg border p-3 ${isStorageIssue ? "border-amber-400/40 bg-amber-50" : "border-red/30 bg-red/5"}`}>
+          <p className={`flex items-start gap-2 text-xs font-bold ${isStorageIssue ? "text-amber-700" : "text-red"}`}>
+            {isStorageIssue ? <Database size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+            <span>
+              {isStorageIssue ? "Stockage du navigateur saturé" : "La génération a échoué"}
+            </span>
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-red/90">{errorMessage}</p>
+          <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue ? "text-amber-800" : "text-red/90"}`}>
+            {errorMessage}
+          </p>
+          {isStorageIssue && (
+            <p className="mt-2 text-xs leading-relaxed text-amber-800">
+              👉 Allez dans <a href="/dashboard" className="underline font-bold">le tableau de bord</a> pour supprimer d'anciens tunnels, puis revenez sur cette page et cliquez sur <strong>Réessayer la génération</strong>.
+            </p>
+          )}
           {errorReason && (
-            <p className="mt-2 text-[10px] uppercase tracking-wider text-red/70 font-bold">
+            <p className={`mt-2 text-[10px] uppercase tracking-wider font-bold ${isStorageIssue ? "text-amber-700/80" : "text-red/70"}`}>
               Code: {errorReason}
             </p>
           )}

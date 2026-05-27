@@ -1,8 +1,17 @@
 "use client";
 
 import { useRef } from "react";
-import { Image as ImageIcon, Video, X, Plus, Upload, Link as LinkIcon } from "lucide-react";
-import { Field, Input, Textarea, Select } from "@/components/ui/Field";
+import {
+  Image as ImageIcon,
+  Video,
+  X,
+  Plus,
+  Upload,
+  Link as LinkIcon,
+  CheckCircle2,
+  Info,
+} from "lucide-react";
+import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import type {
   Language,
@@ -15,89 +24,231 @@ import { makeEmptyMediaItem } from "@/lib/funnels/types";
 const MAX_MEDIAS = 5;
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 
-const LABELS = {
+// ─────────────────────────────────────────────────────────────────────────────
+// LABELS multilingues — une seule structure cohérente
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Lang = Language;
+
+const LABELS: Record<
+  Lang,
+  {
+    title: string;
+    intro: string;
+    counter: (n: number) => string;
+    addImage: string;
+    addVideo: string;
+    full: string;
+    auto: string;
+    upload: string;
+    pasteUrl: string;
+    description: string;
+    descriptionPlaceholder: string;
+    alt: string;
+    altPlaceholder: string;
+    sectionHintLabel: string;
+    sectionHintHelper: string;
+    placementGuaranteed: string;
+    placementAuto: string;
+    remove: string;
+    tooBig: string;
+    tipTitle: string;
+    tipBody: string;
+  }
+> = {
   fr: {
-    title: "Vos médias",
+    title: "Médias",
     intro:
-      "Ajoutez jusqu'à 5 visuels ou vidéos. Décrivez chaque média : l'IA les placera automatiquement dans les bonnes sections. Étape optionnelle.",
+      "Ajoutez jusqu'à 5 médias (images, vidéos). L'IA les placera dans les bonnes sections.",
+    counter: (n) => `${n} / ${MAX_MEDIAS} médias`,
     addImage: "Ajouter une image",
     addVideo: "Ajouter une vidéo",
-    upload: "Téléverser un fichier",
-    pasteUrl: "Coller une URL",
-    description: "Description (où placer ce média, ce qu'il représente)",
-    descriptionPlaceholder:
-      "Ex. capture de l'interface du produit, à placer en hero",
-    sectionHint: "Section suggérée (optionnel)",
-    alt: "Texte alternatif (accessibilité)",
-    altPlaceholder: "Ex. capture d'écran du tableau de bord",
-    remove: "Retirer",
-    counter: (n: number) => `${n} / ${MAX_MEDIAS} média${n > 1 ? "s" : ""}`,
-    full: "Limite atteinte : retirez un média pour en ajouter un autre",
-    tooBig: "Fichier trop volumineux (max 2 MB)",
-    pickFile: "Choisir un fichier...",
+    full: "Vous avez atteint la limite de 5 médias.",
     auto: "Placement automatique",
+    upload: "Téléverser",
+    pasteUrl: "Coller une URL…",
+    description: "Description",
+    descriptionPlaceholder:
+      "Ex. : Photo du coach Jean Dupont, capture d'écran du témoignage de Marie...",
+    alt: "Texte alternatif (SEO/accessibilité)",
+    altPlaceholder: "Décrivez l'image en quelques mots",
+    sectionHintLabel: "À placer dans la section (recommandé)",
+    sectionHintHelper:
+      "Indiquez où ce média doit apparaître. Sans cette info, l'IA déduit depuis la description — mais le placement n'est pas garanti.",
+    placementGuaranteed: "Placement garanti",
+    placementAuto: "Placement automatique (basé sur la description)",
+    remove: "Supprimer",
+    tooBig: "Fichier trop volumineux (max 2 Mo).",
+    tipTitle: "Astuce — pour un placement garanti",
+    tipBody:
+      "Choisissez la section cible pour chaque média. Sinon, l'IA déduit depuis la description — le résultat peut varier.",
   },
   en: {
-    title: "Your media",
+    title: "Media",
     intro:
-      "Add up to 5 images or videos. Describe each one: the AI will place them in the right sections. This step is optional.",
+      "Add up to 5 medias (images, videos). The AI will place them in the right sections.",
+    counter: (n) => `${n} / ${MAX_MEDIAS} medias`,
     addImage: "Add an image",
     addVideo: "Add a video",
-    upload: "Upload a file",
-    pasteUrl: "Paste a URL",
-    description: "Description (where to use it, what it shows)",
-    descriptionPlaceholder: "E.g. product UI screenshot, to use in hero",
-    sectionHint: "Suggested section (optional)",
-    alt: "Alt text (accessibility)",
-    altPlaceholder: "E.g. dashboard screenshot",
-    remove: "Remove",
-    counter: (n: number) => `${n} / ${MAX_MEDIAS} media`,
-    full: "Limit reached: remove one to add another",
-    tooBig: "File too large (max 2 MB)",
-    pickFile: "Pick a file...",
+    full: "You reached the limit of 5 medias.",
     auto: "Auto placement",
+    upload: "Upload",
+    pasteUrl: "Paste a URL…",
+    description: "Description",
+    descriptionPlaceholder:
+      "E.g.: Coach John Doe's photo, screenshot of Marie's testimonial...",
+    alt: "Alt text (SEO/accessibility)",
+    altPlaceholder: "Describe the image in a few words",
+    sectionHintLabel: "Place in section (recommended)",
+    sectionHintHelper:
+      "Tell us where this media should appear. Without this, the AI guesses from the description — placement not guaranteed.",
+    placementGuaranteed: "Placement guaranteed",
+    placementAuto: "Auto placement (based on description)",
+    remove: "Remove",
+    tooBig: "File too large (max 2 MB).",
+    tipTitle: "Tip — for guaranteed placement",
+    tipBody:
+      "Choose the target section for each media. Otherwise, the AI will guess from the description — results may vary.",
   },
   es: {
-    title: "Tus medios",
+    title: "Medios",
     intro:
-      "Añade hasta 5 imágenes o vídeos. Describe cada uno: la IA los colocará en las secciones adecuadas. Paso opcional.",
+      "Añade hasta 5 medios (imágenes, vídeos). La IA los colocará en las secciones correctas.",
+    counter: (n) => `${n} / ${MAX_MEDIAS} medios`,
     addImage: "Añadir imagen",
     addVideo: "Añadir vídeo",
-    upload: "Subir un archivo",
-    pasteUrl: "Pegar una URL",
-    description: "Descripción (dónde usarlo, qué muestra)",
-    descriptionPlaceholder: "Ej. captura de la interfaz, para el hero",
-    sectionHint: "Sección sugerida (opcional)",
-    alt: "Texto alternativo (accesibilidad)",
-    altPlaceholder: "Ej. captura del panel",
-    remove: "Quitar",
-    counter: (n: number) => `${n} / ${MAX_MEDIAS} medios`,
-    full: "Límite alcanzado: retira uno para añadir otro",
-    tooBig: "Archivo demasiado grande (máx 2 MB)",
-    pickFile: "Elegir un archivo...",
+    full: "Has alcanzado el límite de 5 medios.",
     auto: "Colocación automática",
+    upload: "Subir",
+    pasteUrl: "Pegar una URL…",
+    description: "Descripción",
+    descriptionPlaceholder:
+      "Ej.: Foto del coach, captura del testimonio de María...",
+    alt: "Texto alternativo (SEO/accesibilidad)",
+    altPlaceholder: "Describe la imagen en pocas palabras",
+    sectionHintLabel: "Colocar en la sección (recomendado)",
+    sectionHintHelper:
+      "Indique dónde debe aparecer este media. Sin esta información, la IA adivina desde la descripción.",
+    placementGuaranteed: "Colocación garantizada",
+    placementAuto: "Colocación automática (basada en descripción)",
+    remove: "Eliminar",
+    tooBig: "Archivo demasiado grande (máx 2 MB).",
+    tipTitle: "Consejo — para una colocación garantizada",
+    tipBody:
+      "Elija la sección destino para cada media. De lo contrario, la IA adivinará desde la descripción.",
   },
-} as const;
+};
 
-const SECTION_OPTIONS: { value: FunnelSectionType | ""; label: string }[] = [
-  { value: "", label: "—" },
-  { value: "hero", label: "Hero" },
-  { value: "about", label: "À propos" },
-  { value: "problem", label: "Problème" },
-  { value: "solution", label: "Solution" },
-  { value: "benefits", label: "Bénéfices" },
-  { value: "proof", label: "Preuve" },
-  { value: "testimonials", label: "Témoignages" },
-  { value: "offer", label: "Offre" },
-  { value: "bonus", label: "Bonus" },
-  { value: "guarantee", label: "Garantie" },
-  { value: "pricing", label: "Tarifs" },
-  { value: "process", label: "Process" },
-  { value: "program", label: "Programme" },
-  { value: "video", label: "Vidéo" },
-  { value: "faq", label: "FAQ" },
-  { value: "cta", label: "CTA" },
+// ─────────────────────────────────────────────────────────────────────────────
+// Options du sélecteur de section
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SectionHintOption = {
+  value: "" | FunnelSectionType;
+  label: Record<Lang, string>;
+  hint?: Record<Lang, string>;
+};
+
+const SECTION_HINT_OPTIONS: SectionHintOption[] = [
+  {
+    value: "",
+    label: {
+      fr: "Laisser l'IA décider (auto-détection)",
+      en: "Let AI decide (auto-detect)",
+      es: "Dejar que la IA decida (auto-detección)",
+    },
+    hint: {
+      fr: "Le système détectera la section depuis votre description.",
+      en: "The system will detect the section from your description.",
+      es: "El sistema detectará la sección desde su descripción.",
+    },
+  },
+  {
+    value: "hero",
+    label: {
+      fr: "Hero (en-tête de page)",
+      en: "Hero (page header)",
+      es: "Hero (encabezado)",
+    },
+    hint: {
+      fr: "⚠️ Un seul média autorisé dans le hero.",
+      en: "⚠️ Only one media allowed in the hero.",
+      es: "⚠️ Solo un media permitido en el hero.",
+    },
+  },
+  {
+    value: "about",
+    label: {
+      fr: "À propos / Coach / Fondateur",
+      en: "About / Coach / Founder",
+      es: "Sobre mí / Coach / Fundador",
+    },
+    hint: {
+      fr: "Idéal pour une photo de vous, votre équipe.",
+      en: "Ideal for your photo, your team.",
+      es: "Ideal para su foto, su equipo.",
+    },
+  },
+  {
+    value: "testimonials",
+    label: {
+      fr: "Témoignages / Avis clients",
+      en: "Testimonials / Reviews",
+      es: "Testimonios / Reseñas",
+    },
+    hint: {
+      fr: "Capture d'écran d'avis, photo de client.",
+      en: "Review screenshot, customer photo.",
+      es: "Captura de reseña, foto de cliente.",
+    },
+  },
+  {
+    value: "video",
+    label: {
+      fr: "Vidéo de présentation / Démo",
+      en: "Presentation video / Demo",
+      es: "Vídeo de presentación / Demo",
+    },
+    hint: {
+      fr: "VSL, démo produit, extrait de webinaire.",
+      en: "VSL, product demo, webinar excerpt.",
+      es: "VSL, demo de producto, extracto de webinar.",
+    },
+  },
+  {
+    value: "pricing",
+    label: {
+      fr: "Produit / Offre (mockup, couverture)",
+      en: "Product / Offer (mockup, cover)",
+      es: "Producto / Oferta (mockup, portada)",
+    },
+  },
+  {
+    value: "bonus",
+    label: {
+      fr: "Bonus inclus",
+      en: "Included bonus",
+      es: "Bonus incluido",
+    },
+  },
+  {
+    value: "proof",
+    label: {
+      fr: "Preuves / Résultats chiffrés",
+      en: "Proof / Numbered results",
+      es: "Prueba / Resultados numéricos",
+    },
+    hint: {
+      fr: "Screenshots de résultats, graphiques, dashboards.",
+      en: "Result screenshots, charts, dashboards.",
+      es: "Capturas de resultados, gráficos.",
+    },
+  },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Composant principal
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function MediasStep({
   language,
@@ -134,6 +285,17 @@ export function MediasStep({
           <h2 className="text-xl font-black">{L.title}</h2>
         </div>
         <p className="mt-1 text-xs text-muted">{L.intro}</p>
+      </div>
+
+      {/* Bandeau d'aide */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="flex gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-900">
+            <p className="font-medium mb-1">{L.tipTitle}</p>
+            <p className="text-blue-800">{L.tipBody}</p>
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 rounded-lg bg-canvas p-2.5">
@@ -190,6 +352,10 @@ export function MediasStep({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Carte média individuelle
+// ─────────────────────────────────────────────────────────────────────────────
+
 function MediaCard({
   media,
   language,
@@ -218,8 +384,13 @@ function MediaCard({
     reader.readAsDataURL(file);
   }
 
+  const selectedOption = SECTION_HINT_OPTIONS.find(
+    (o) => o.value === (media.sectionHint ?? ""),
+  );
+
   return (
     <div className="rounded-lg border border-line bg-white p-3.5 animate-[fadeIn_0.2s_ease-out]">
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-canvas text-ink">
@@ -240,6 +411,7 @@ function MediaCard({
       </div>
 
       <div className="mt-3 grid gap-3">
+        {/* Upload + URL */}
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -253,7 +425,9 @@ function MediaCard({
             <input
               type="url"
               value={media.url.startsWith("data:") ? "" : media.url}
-              onChange={(e) => onUpdate({ url: e.target.value, fileName: undefined })}
+              onChange={(e) =>
+                onUpdate({ url: e.target.value, fileName: undefined })
+              }
               placeholder={L.pasteUrl}
               className="w-full bg-transparent text-xs outline-none placeholder:text-muted"
             />
@@ -271,6 +445,7 @@ function MediaCard({
           />
         </div>
 
+        {/* Preview image */}
         {media.url && !isVideo && media.url.startsWith("data:") && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -283,6 +458,7 @@ function MediaCard({
           <p className="truncate text-[11px] text-muted">{media.url}</p>
         )}
 
+        {/* Description */}
         <Field label={L.description}>
           <Textarea
             value={media.description ?? ""}
@@ -292,33 +468,64 @@ function MediaCard({
           />
         </Field>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={L.sectionHint}>
-            <Select
-              value={media.sectionHint ?? ""}
-              onChange={(e) =>
-                onUpdate({
-                  sectionHint: (e.target.value || undefined) as
+        {/* Sélecteur de section cible (UNIQUE) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {L.sectionHintLabel}
+          </label>
+          <select
+            value={media.sectionHint ?? ""}
+            onChange={(e) =>
+              onUpdate({
+                sectionHint:
+                  (e.target.value || undefined) as
                     | FunnelSectionType
                     | undefined,
-                })
-              }
-            >
-              {SECTION_OPTIONS.map((opt) => (
-                <option key={opt.value || "auto"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={L.alt}>
-            <Input
-              value={media.alt ?? ""}
-              onChange={(e) => onUpdate({ alt: e.target.value })}
-              placeholder={L.altPlaceholder}
-            />
-          </Field>
+              })
+            }
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none bg-white"
+          >
+            {SECTION_HINT_OPTIONS.map((opt) => (
+              <option key={opt.value || "auto"} value={opt.value}>
+                {opt.label[language] ?? opt.label.fr}
+              </option>
+            ))}
+          </select>
+
+          {/* Helper contextuel */}
+          {selectedOption?.hint ? (
+            <p className="mt-1 text-xs text-gray-500 flex items-start gap-1">
+              <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>{selectedOption.hint[language] ?? selectedOption.hint.fr}</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">{L.sectionHintHelper}</p>
+          )}
+
+          {/* Badge de statut */}
+          <div className="mt-2">
+            {media.sectionHint ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {L.placementGuaranteed}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                <Info className="w-3.5 h-3.5" />
+                {L.placementAuto}
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Alt text */}
+        <Field label={L.alt}>
+          <Input
+            value={media.alt ?? ""}
+            onChange={(e) => onUpdate({ alt: e.target.value })}
+            placeholder={L.altPlaceholder}
+          />
+        </Field>
       </div>
     </div>
   );

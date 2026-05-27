@@ -4,6 +4,7 @@ import type {
   Funnel,
   FunnelBrief,
   FunnelSection,
+  FunnelSectionType,
   FunnelPage,
   PageRole,
   BonusItem,
@@ -12,12 +13,17 @@ import type {
   SectionItem,
   Language,
   IconName,
+  FunnelKind,
+  MediaItem,
+  SectionImage,
+  VideoSource,
 } from "@/lib/funnels/types";
 import { makeAnchorCta, normalizeIconName } from "@/lib/funnels/types";
 import {
   completeFunnelPrompt,
   mainPagePrompt,
   secondaryPagesPrompt,
+  type MediaInput,
 } from "./prompts";
 import { getMood } from "@/lib/funnels/moods";
 import {
@@ -30,15 +36,311 @@ import {
   getTemplateSectionTypes,
 } from "@/lib/funnels/applyTemplate";
 import {
-  getDefaultPagesForKind,
-  getBlueprintForRole,
-} from "@/lib/funnels/pageCatalogs";
-import {
   buildPagesFromBlueprints,
   chainPagesNavigation,
   filterSectionsByBlueprint,
 } from "@/lib/funnels/pageGenerator";
 import { normalizeFunnelKind } from "@/lib/funnels/kinds";
+import {
+  getFunnelBlueprint,
+  getPageBlueprint,
+  getHeroMediaPolicy,
+  getAllowedSectionTypes,
+} from "@/lib/funnels/pageCatalogs";
+
+/* ================================================================== */
+/*  Helper : rôle d'accueil par type de tunnel                        */
+/* ================================================================== */
+
+function getHomeRoleForKind(kind: FunnelKind): PageRole {
+  switch (kind) {
+    case "lead-magnet":
+      return "optin";
+    case "webinar":
+      return "registration";
+    case "digital-product":
+    case "vsl":
+    case "formation":
+    case "saas":
+      return "sales";
+    case "booking":
+    case "service":
+      return "landing";
+    case "coaching-high-ticket":
+      return "application";
+    case "challenge":
+      return "challenge-landing";
+    case "thank-you":
+      return "thankyou";
+    default:
+      return "optin";
+  }
+}
+
+/* ================================================================== */
+/*  PLACEMENT DÉTERMINISTE DES MÉDIAS                                  */
+/* ================================================================== */
+
+const MEDIA_KEYWORD_MAP: Array<{ section: FunnelSectionType; keywords: RegExp }> = [
+  {
+    section: "testimonials",
+    keywords:
+      /\b(t[ée]moignage|avis client|review|testimonial|screenshot|capture\s*d['e]?\s*[ée]cran|client|customer|rese[ñn]a|testimonio|opini[oó]n)\b/i,
+  },
+  {
+    section: "about",
+    keywords:
+      /\b(coach|fondateur|founder|about\s*me|[àa]\s*propos|portrait|photo\s*de\s*moi|profile|profil|equipo|sobre\s*m[ií]|biographie|bio)\b/i,
+  },
+  {
+    section: "pricing",
+    keywords:
+      /\b(produit|product|mockup|couverture|cover|packaging|box|formation|produkt|producto)\b/i,
+  },
+  {
+    section: "video",
+    keywords:
+      /\b(d[ée]mo|demo|walkthrough|tutoriel|tutorial|pr[ée]sentation|presentation|vsl|sales\s*video|preview|extrait)\b/i,
+  },
+  {
+    section: "proof",
+    keywords:
+      /\b(r[ée]sultat|result|chiffre|graphique|graph|dashboard|tableau\s*de\s*bord|stats|m[ée]trique|metric|resultado|estad[ií]stica)\b/i,
+  },
+];
+
+function detectSectionFromKeywords(media: MediaItem): FunnelSectionType | null {
+  const haystack = [
+    media.description || "",
+    media.alt || "",
+    media.fileName || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (!haystack.trim()) return null;
+
+  for (const rule of MEDIA_KEYWORD_MAP) {
+    if (rule.keywords.test(haystack)) return rule.section;
+  }
+  return null;
+}
+
+function fallbackSectionByKind(kind: "image" | "video"): FunnelSectionType {
+  return kind === "video" ? "video" : "about";
+}
+
+export function placeMediasIntoSections(
+  sections: FunnelSection[],
+  medias: MediaItem[] | undefined,
+  opts: { funnelKind: FunnelKind; role: PageRole },
+): FunnelSection[] {
+  if (!medias || medias.length === 0) return sections;
+
+  const allowed = getAllowedSectionTypes(opts.funnelKind, opts.role);
+  const result: FunnelSection[] = sections.map((s) => ({ ...s }));
+
+  const alreadyPlaced = new Set<string>();
+  for (const s of result) {
+    const ref = extractMediaRef(s);
+    if (ref) alreadyPlaced.add(ref);
+  }
+
+  for (const media of medias) {
+    const ref = media.id || media.url;
+    if (!ref || alreadyPlaced.has(ref)) continue;
+
+    let targetType: FunnelSectionType =
+      (media.sectionHint as FunnelSectionType | undefined) ||
+      detectSectionFromKeywords(media) ||
+      fallbackSectionByKind(media.kind || "image");
+
+    if (allowed && !allowed.includes(targetType)) {
+      targetType = pickFallbackAllowedSection(media, allowed);
+    }
+
+    const existing = result.find(
+      (s) => s.type === targetType && !hasMediaAttached(s),
+    );
+
+    if (existing) {
+      attachMediaToSection(existing, media);
+      alreadyPlaced.add(ref);
+    } else {
+      const newSection = createSectionWithMedia(targetType, media);
+      const heroIdx = result.findIndex((s) => s.type === "hero");
+      if (heroIdx >= 0) {
+        result.splice(heroIdx + 1, 0, newSection);
+      } else {
+        result.push(newSection);
+      }
+      alreadyPlaced.add(ref);
+    }
+  }
+
+  return result;
+}
+
+function extractMediaRef(section: FunnelSection): string | null {
+  return (
+    section.image?.mediaRef ||
+    section.image?.url ||
+    section.video?.url ||
+    null
+  );
+}
+
+function hasMediaAttached(section: FunnelSection): boolean {
+  return Boolean(
+    section.image?.url ||
+      section.image?.mediaRef ||
+      section.video?.url,
+  );
+}
+
+function attachMediaToSection(section: FunnelSection, media: MediaItem): void {
+  const ref = media.url || "";
+  if (media.kind === "video") {
+    const video: VideoSource = {
+      provider: detectVideoProvider(ref),
+      url: ref,
+    };
+    section.video = video;
+  } else {
+    const image: SectionImage = {
+      mode: "upload",
+      url: ref,
+      mediaRef: media.id || ref,
+      alt: media.alt || "",
+    };
+    section.image = image;
+  }
+}
+
+function detectVideoProvider(url: string): VideoSource["provider"] {
+  if (/youtube\.com|youtu\.be/i.test(url)) return "youtube";
+  if (/vimeo\.com/i.test(url)) return "vimeo";
+  if (/\.(mp4|webm|mov)$/i.test(url)) return "upload";
+  return "url";
+}
+
+function createSectionWithMedia(
+  type: FunnelSectionType,
+  media: MediaItem,
+): FunnelSection {
+  const section: FunnelSection = {
+    id: `sec_${Math.random().toString(36).slice(2, 10)}`,
+    type,
+    headline: defaultHeadlineForType(type),
+    visible: true,
+  };
+  attachMediaToSection(section, media);
+  return section;
+}
+
+function defaultHeadlineForType(type: FunnelSectionType): string {
+  const titles: Partial<Record<FunnelSectionType, string>> = {
+    about: "À propos",
+    testimonials: "Ils en parlent",
+    video: "Découvrez en vidéo",
+    proof: "Résultats concrets",
+    pricing: "Votre offre",
+  };
+  return titles[type] ?? "Section";
+}
+
+function pickFallbackAllowedSection(
+  media: MediaItem,
+  allowed: readonly FunnelSectionType[],
+): FunnelSectionType {
+  const kind = media.kind || "image";
+  const preferences: FunnelSectionType[] =
+    kind === "video"
+      ? ["video", "hero", "about", "testimonials"]
+      : ["about", "testimonials", "proof", "hero", "pricing"];
+  for (const pref of preferences) {
+    if (allowed.includes(pref)) return pref;
+  }
+  return allowed[0] ?? "about";
+}
+
+export function enforceHeroSingleMedia(
+  sections: FunnelSection[],
+  opts: { funnelKind: FunnelKind; role: PageRole },
+): FunnelSection[] {
+  const policy = getHeroMediaPolicy(opts.funnelKind, opts.role);
+  const result = sections.map((s) => ({ ...s }));
+
+  const heroIdx = result.findIndex((s) => s.type === "hero");
+  if (heroIdx < 0) return result;
+
+  const hero = { ...result[heroIdx] };
+  const hasImage = Boolean(hero.image?.url || hero.image?.mediaRef);
+  const hasVideo = Boolean(hero.video?.url);
+
+  if (!(hasImage && hasVideo)) return result;
+
+  let keep: "image" | "video";
+  let moveTo: FunnelSectionType;
+
+  switch (policy) {
+    case "prefer-video":
+      keep = "video";
+      moveTo = "about";
+      break;
+    case "prefer-image":
+      keep = "image";
+      moveTo = "video";
+      break;
+    case "single-only":
+    default:
+      keep = "image";
+      moveTo = "video";
+      break;
+  }
+
+  const movedMedia: MediaItem =
+    keep === "video"
+      ? {
+          id: `moved_${Date.now()}`,
+          kind: "image",
+          url: hero.image?.url || hero.image?.mediaRef || "",
+          alt: hero.image?.alt || "",
+        }
+      : {
+          id: `moved_${Date.now()}`,
+          kind: "video",
+          url: hero.video?.url || "",
+          alt: "",
+        };
+
+  if (keep === "video") {
+    hero.image = { mode: "none" };
+  } else {
+    hero.video = undefined;
+  }
+  result[heroIdx] = hero;
+
+  const allowed = getAllowedSectionTypes(opts.funnelKind, opts.role);
+  let finalMoveTo: FunnelSectionType = moveTo;
+  if (allowed && !allowed.includes(moveTo)) {
+    const fallback = pickFallbackAllowedSection(movedMedia, allowed);
+    finalMoveTo = fallback;
+  }
+
+  const existing = result.find(
+    (s, i) => i !== heroIdx && s.type === finalMoveTo && !hasMediaAttached(s),
+  );
+
+  if (existing) {
+    attachMediaToSection(existing, movedMedia);
+  } else {
+    const newSection = createSectionWithMedia(finalMoveTo, movedMedia);
+    result.splice(heroIdx + 1, 0, newSection);
+  }
+
+  return result;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Erreur typée
@@ -70,23 +372,18 @@ export class AiGenerationError extends Error {
 // Schémas zod
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ✅ FIX : CTA ultra-tolérant. On accepte string, objet partiel, ou null.
-// La normalisation se fait dans `normalizeCta`, qui garantit un `label` valide.
 const ctaSchema = z
   .union([
     z.string(),
     z
       .object({
-        // Aliases courants utilisés par l'IA
         label: z.string().optional(),
         text: z.string().optional(),
         title: z.string().optional(),
-        // Cibles
         url: z.string().optional(),
         href: z.string().optional(),
         link: z.string().optional(),
         action: z.string().optional(),
-        // Comportement
         mode: z.enum(["redirect", "anchor", "popup"]).optional(),
         target: z.enum(["_self", "_blank"]).optional(),
         anchorId: z.string().optional(),
@@ -163,7 +460,6 @@ const sectionItemSchema = z.union([
         features: z.array(z.string()).optional().default([]),
         highlighted: z.boolean().optional(),
         badge: z.string().optional(),
-        // ✅ FIX : même tolérance pour le CTA de pricing
         cta: ctaSchema,
       })
       .passthrough(),
@@ -245,7 +541,7 @@ const funnelSchema = z.object({
         html: z.string().optional().default(""),
         text: z.string().optional().default(""),
         cta: ctaSchema,
-      })
+      }),
     )
     .optional()
     .default([]),
@@ -272,7 +568,7 @@ const secondaryPagesSchema = z.object({
     z.object({
       role: z.string(),
       sections: z.array(sectionSchema),
-    })
+    }),
   ),
 });
 
@@ -290,16 +586,13 @@ function pickString(...candidates: unknown[]): string | undefined {
 }
 
 function normalizeCta(raw: unknown, fallback: CtaConfig): CtaConfig {
-  // null / undefined → fallback complet
   if (raw == null) return { ...fallback };
 
-  // string simple → on l'utilise comme label
   if (typeof raw === "string") {
     const label = raw.trim();
     return label ? { ...fallback, label } : { ...fallback };
   }
 
-  // Objet (potentiellement incomplet / avec alias)
   if (typeof raw === "object") {
     const obj = raw as Record<string, unknown>;
 
@@ -336,7 +629,6 @@ function normalizeCta(raw: unknown, fallback: CtaConfig): CtaConfig {
     };
   }
 
-  // Tout autre type inattendu → fallback
   return { ...fallback };
 }
 
@@ -385,7 +677,7 @@ function extractJsonPayload(raw: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 function normalizeSectionItems(
   rawItems: z.infer<typeof sectionItemSchema>[],
-  fallbackCta: CtaConfig
+  fallbackCta: CtaConfig,
 ): SectionItem[] {
   return rawItems.map((item): SectionItem => {
     switch (item.kind) {
@@ -434,7 +726,6 @@ function normalizeSectionItems(
           },
         };
       case "pricing": {
-        // ✅ FIX : CTA de pricing également normalisé via normalizeCta
         const pricingFallbackCta: CtaConfig = {
           ...fallbackCta,
           label: fallbackCta.label || "Choisir",
@@ -500,11 +791,9 @@ function getCtaLabelForSection(sectionType: string, lang: Language): string {
 function parseSectionsArray(
   rawSections: z.infer<typeof sectionSchema>[],
   fallbackCta: CtaConfig,
-  brief: FunnelBrief
+  brief: FunnelBrief,
 ): FunnelSection[] {
   return rawSections.map((section, index) => {
-    // ✅ FIX : on construit un fallback CTA spécifique à chaque section pour
-    // garantir qu'aucun label vide ne soit jamais affiché à l'utilisateur.
     const sectionFallbackCta: CtaConfig = {
       ...fallbackCta,
       label:
@@ -512,22 +801,40 @@ function parseSectionsArray(
         getCtaLabelForSection(section.type, brief.language),
     };
 
+    const image: SectionImage = section.image
+      ? {
+          mode: section.image.mode ?? "none",
+          url: section.image.url,
+          alt: section.image.alt,
+          credit: section.image.credit,
+          sourceUrl: section.image.sourceUrl,
+          suggestionQuery: section.image.suggestionQuery,
+          mediaRef: section.image.mediaRef,
+        }
+      : { mode: brief.defaultImageMode ?? "none" };
+
+    const video: VideoSource | undefined = section.video?.url
+      ? {
+          provider: section.video.provider ?? detectVideoProvider(section.video.url),
+          url: section.video.url,
+          posterUrl: section.video.posterUrl,
+        }
+      : undefined;
+
     return {
       id: section.id ?? `${section.type}-${index + 1}`,
-      type: section.type as FunnelSection["type"],
+      type: section.type as FunnelSectionType,
       eyebrow: section.eyebrow,
       headline: section.headline,
       subheadline: section.subheadline,
       body: section.body,
       bullets: section.bullets,
-      // ✅ FIX : on normalise TOUJOURS via normalizeCta même si l'IA renvoie
-      // un objet incomplet (sans label) ou une string brute.
       cta:
         section.cta !== undefined
           ? normalizeCta(section.cta, sectionFallbackCta)
           : undefined,
-      image: section.image ?? { mode: brief.defaultImageMode ?? "none" },
-      video: section.video as FunnelSection["video"],
+      image,
+      video,
       visible: section.visible ?? true,
       style: section.style as FunnelSection["style"],
       visualDirection: section.visualDirection,
@@ -544,7 +851,7 @@ function parseSectionsArray(
 function buildMediaLibraryFromBrief(brief: FunnelBrief): Funnel["media"] {
   if (!brief.medias || brief.medias.length === 0) return undefined;
   const cleaned = brief.medias.filter(
-    (m) => typeof m.url === "string" && m.url.length > 0
+    (m) => typeof m.url === "string" && m.url.length > 0,
   );
   return cleaned.length > 0 ? cleaned : undefined;
 }
@@ -553,7 +860,7 @@ function buildMediaLibraryFromBrief(brief: FunnelBrief): Funnel["media"] {
 // Application du style de template
 // ─────────────────────────────────────────────────────────────────────────────
 function buildStyleMapByType(
-  styledSections: FunnelSection[] | undefined
+  styledSections: FunnelSection[] | undefined,
 ): Map<string, Partial<FunnelSection>> {
   const map = new Map<string, Partial<FunnelSection>>();
   if (!styledSections || styledSections.length === 0) return map;
@@ -571,7 +878,7 @@ function buildStyleMapByType(
 
 function applyStyleMapToSections(
   sections: FunnelSection[],
-  styleMap: Map<string, Partial<FunnelSection>>
+  styleMap: Map<string, Partial<FunnelSection>>,
 ): FunnelSection[] {
   if (styleMap.size === 0) return sections;
   return sections.map((sec) => {
@@ -591,7 +898,7 @@ function applyStyleMapToSections(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lot B3 — Enrichissement des sections riches (anti-FAQ-vide, etc.)
+// Lot B3 — Enrichissement des sections riches
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RICH_SECTION_TYPES = new Set<string>([
@@ -619,7 +926,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `Access is sent immediately by email after sign-up. You can go through ${brief.offerName} at your own pace, with no time limit.`,
         es: `El acceso se envía de inmediato por email tras la inscripción. Puedes consultar ${brief.offerName} a tu ritmo, sin límite de tiempo.`,
       },
-      lang
+      lang,
     );
   }
   if (/mobile|téléphone|smartphone|tablette|appareil/i.test(q)) {
@@ -629,7 +936,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `Yes, all content is 100% compatible with mobile, tablet and desktop. You can access it on any device.`,
         es: `Sí, todo el contenido es 100% compatible con móvil, tableta y escritorio. Puedes acceder desde cualquier dispositivo.`,
       },
-      lang
+      lang,
     );
   }
   if (/remboursement|garantie|satisfait/i.test(q)) {
@@ -639,7 +946,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `We offer a 30-day money-back guarantee. If you're not satisfied, just email us and you'll be refunded, no questions asked.`,
         es: `Ofrecemos una garantía de devolución de 30 días. Si no estás satisfecho, escríbenos y serás reembolsado sin preguntas.`,
       },
-      lang
+      lang,
     );
   }
   if (/débutant|niveau|expérience|connaissance/i.test(q)) {
@@ -649,7 +956,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `No prior knowledge is required. The content of ${brief.offerName} is designed for ${brief.targetAudience}, from scratch.`,
         es: `No se requiere conocimiento previo. El contenido de ${brief.offerName} está pensado para ${brief.targetAudience}, desde cero.`,
       },
-      lang
+      lang,
     );
   }
   if (/prix|coût|payer|gratuit/i.test(q)) {
@@ -659,7 +966,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `The price is ${brief.price}. No hidden fees. You get full unlimited access.`,
         es: `El precio es ${brief.price}. Sin tarifas ocultas. Obtienes acceso completo e ilimitado.`,
       },
-      lang
+      lang,
     );
   }
   if (/contact|support|aide|question/i.test(q)) {
@@ -669,7 +976,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
         en: `Our team is reachable by email and answers within 24 to 48 business hours. We're here to help.`,
         es: `Nuestro equipo está disponible por email y responde en 24 a 48 horas hábiles. Estamos aquí para ayudarte.`,
       },
-      lang
+      lang,
     );
   }
 
@@ -679,7 +986,7 @@ function generateFaqAnswer(question: string, brief: FunnelBrief): string {
       en: `Great question. ${brief.offerName} was designed specifically to address this: ${brief.promise}. Contact us if you need more details.`,
       es: `Excelente pregunta. ${brief.offerName} fue diseñado específicamente para abordar este punto: ${brief.promise}. Contáctanos si necesitas más detalles.`,
     },
-    lang
+    lang,
   );
 }
 
@@ -709,7 +1016,7 @@ function buildFallbackFaqItems(brief: FunnelBrief): SectionItem[] {
         `¿Cómo contactarles si tengo dudas?`,
       ].join("|"),
     },
-    lang
+    lang,
   ).split("|");
 
   return questions.map((q) => ({
@@ -722,7 +1029,7 @@ function buildFallbackTestimonialItems(brief: FunnelBrief): SectionItem[] {
   const lang = brief.language;
   const exampleTag = tLang(
     { fr: "Exemple — à personnaliser :", en: "Example — to customize:", es: "Ejemplo — a personalizar:" },
-    lang
+    lang,
   );
 
   const personasByLang: Record<Language, { name: string; role: string }[]> = {
@@ -762,7 +1069,7 @@ function buildFallbackTestimonialItems(brief: FunnelBrief): SectionItem[] {
         `${exampleTag} Vi resultados en pocas semanas. Contenido muy bien estructurado.`,
       ].join("|"),
     },
-    lang
+    lang,
   ).split("|");
 
   return personas.map((p, i) => ({
@@ -778,12 +1085,12 @@ function buildFallbackTestimonialItems(brief: FunnelBrief): SectionItem[] {
 
 function convertBulletsToTestimonialItems(
   bullets: string[],
-  brief: FunnelBrief
+  brief: FunnelBrief,
 ): SectionItem[] {
   const lang = brief.language;
   const exampleTag = tLang(
     { fr: "Exemple — à personnaliser :", en: "Example — to customize:", es: "Ejemplo — a personalizar:" },
-    lang
+    lang,
   );
   const namesByLang: Record<Language, string[]> = {
     fr: ["Claire D.", "Marc L.", "Sophie M."],
@@ -826,7 +1133,7 @@ function buildFallbackPricingItems(brief: FunnelBrief): SectionItem[] {
         `Garantía de devolución de 30 días`,
       ].join("|"),
     },
-    lang
+    lang,
   ).split("|");
 
   return [
@@ -896,7 +1203,7 @@ function buildFallbackGuaranteeItems(brief: FunnelBrief): SectionItem[] {
           en: `If you're not satisfied with ${brief.offerName} within 30 days, request a full refund — no questions asked.`,
           es: `Si en 30 días no estás satisfecho con ${brief.offerName}, pide tu reembolso completo, sin justificaciones.`,
         },
-        lang
+        lang,
       ),
       duration: tLang({ fr: "30 jours", en: "30 days", es: "30 días" }, lang),
       iconName: "shield",
@@ -907,7 +1214,7 @@ function buildFallbackGuaranteeItems(brief: FunnelBrief): SectionItem[] {
 
 function enrichSectionsWithDefaults(
   sections: FunnelSection[],
-  brief: FunnelBrief
+  brief: FunnelBrief,
 ): FunnelSection[] {
   return sections.map((section) => {
     const type = section.type as string;
@@ -916,10 +1223,9 @@ function enrichSectionsWithDefaults(
 
     const existingItems = Array.isArray(section.items) ? section.items : [];
 
-    // ─── FAQ ─────────────────────────────────────────────────────────
     if (type === "faq") {
       const validFaqItems = existingItems.filter(
-        (it) => it.kind === "faq" && it.data?.question && it.data?.answer
+        (it) => it.kind === "faq" && it.data?.question && it.data?.answer,
       );
       if (validFaqItems.length >= 3) {
         return { ...section, items: validFaqItems, body: undefined, bullets: undefined };
@@ -941,10 +1247,9 @@ function enrichSectionsWithDefaults(
       };
     }
 
-    // ─── Testimonials / Proof ─────────────────────────────────────────
     if (type === "testimonials" || type === "proof") {
       const validTestimonials = existingItems.filter(
-        (it) => it.kind === "testimonial" && it.data?.quote && it.data?.authorName
+        (it) => it.kind === "testimonial" && it.data?.quote && it.data?.authorName,
       );
       if (validTestimonials.length >= 1) {
         return { ...section, items: validTestimonials, body: section.body, bullets: undefined };
@@ -966,14 +1271,13 @@ function enrichSectionsWithDefaults(
       };
     }
 
-    // ─── Pricing / Offer ──────────────────────────────────────────────
     if (type === "pricing" || type === "offer") {
       const validPricing = existingItems.filter(
         (it) =>
           it.kind === "pricing" &&
           it.data?.name &&
           it.data?.price &&
-          Array.isArray(it.data?.features)
+          Array.isArray(it.data?.features),
       );
       if (validPricing.length >= 1) {
         return { ...section, items: validPricing, bullets: undefined };
@@ -995,10 +1299,9 @@ function enrichSectionsWithDefaults(
       return { ...section, items: buildFallbackPricingItems(brief), bullets: undefined };
     }
 
-    // ─── Bonus ────────────────────────────────────────────────────────
     if (type === "bonus") {
       const validBonus = existingItems.filter(
-        (it) => it.kind === "bonus" && it.data?.title
+        (it) => it.kind === "bonus" && it.data?.title,
       );
       if (validBonus.length >= 1) {
         return { ...section, items: validBonus, bullets: undefined };
@@ -1010,10 +1313,9 @@ function enrichSectionsWithDefaults(
       return { ...section, items: buildFallbackBonusItems(brief), bullets: undefined };
     }
 
-    // ─── Guarantee ────────────────────────────────────────────────────
     if (type === "guarantee") {
       const validGuarantee = existingItems.filter(
-        (it) => it.kind === "guarantee" && it.data?.title
+        (it) => it.kind === "guarantee" && it.data?.title,
       );
       if (validGuarantee.length >= 1) {
         return { ...section, items: validGuarantee.slice(0, 1), bullets: undefined };
@@ -1033,7 +1335,7 @@ function enrichFunnelPages(pages: FunnelPage[], brief: FunnelBrief): FunnelPage[
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Parseur principal (legacy single-page, conservé pour rétrocompat)
+// Parseur principal (legacy single-page)
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
   const clean = extractJsonPayload(raw);
@@ -1045,7 +1347,7 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
     throw new AiGenerationError(
       "invalid-json",
       "La réponse de l'IA n'est pas un JSON valide",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
   }
 
@@ -1057,7 +1359,7 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
     throw new AiGenerationError(
       "schema-mismatch",
       "La réponse de l'IA ne respecte pas la structure attendue",
-      JSON.stringify(result.error.flatten().fieldErrors).slice(0, 500)
+      JSON.stringify(result.error.flatten().fieldErrors).slice(0, 500),
     );
   }
   const parsed = result.data;
@@ -1068,9 +1370,9 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
       brief.language === "fr"
         ? "Recevoir les détails"
         : brief.language === "es"
-        ? "Recibir los detalles"
-        : "Get the details",
-      "lead-form"
+          ? "Recibir los detalles"
+          : "Get the details",
+      "lead-form",
     );
 
   const rawSections = parseSectionsArray(parsed.sections, fallbackCta, brief);
@@ -1114,7 +1416,7 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
 // ─────────────────────────────────────────────────────────────────────────────
 function buildTemplateInstruction(
   template: ReturnType<typeof getPremiumTemplate>,
-  brief: FunnelBrief
+  brief: FunnelBrief,
 ): string {
   if (!template) return "";
 
@@ -1126,8 +1428,8 @@ function buildTemplateInstruction(
     lang === "fr"
       ? "CONTRAINTES DE TEMPLATE (à respecter strictement) :"
       : lang === "es"
-      ? "RESTRICCIONES DE PLANTILLA (a respetar estrictamente):"
-      : "TEMPLATE CONSTRAINTS (must be strictly respected):";
+        ? "RESTRICCIONES DE PLANTILLA (a respetar estrictamente):"
+        : "TEMPLATE CONSTRAINTS (must be strictly respected):";
 
   const lines = [
     header,
@@ -1136,22 +1438,21 @@ function buildTemplateInstruction(
     lang === "fr"
       ? `- Génère EXACTEMENT ces sections, dans cet ordre, en utilisant ces "type" dans le JSON :`
       : lang === "es"
-      ? `- Genera EXACTAMENTE estas secciones, en este orden:`
-      : `- Generate EXACTLY these sections, in this order:`,
+        ? `- Genera EXACTAMENTE estas secciones, en este orden:`
+        : `- Generate EXACTLY these sections, in this order:`,
     ...expectedSections.map((t, i) => `  ${i + 1}. "${t}"`),
     lang === "fr"
       ? `- N'ajoute pas d'autres sections. N'omet aucune section listée.`
       : lang === "es"
-      ? `- No añadas otras secciones. No omitas ninguna sección listada.`
-      : `- Do not add other sections. Do not omit any listed section.`,
+        ? `- No añadas otras secciones. No omitas ninguna sección listada.`
+        : `- Do not add other sections. Do not omit any listed section.`,
   ];
 
   return "\n\n" + lines.join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ FIX : Consigne CTA stricte injectée dans tous les prompts pour réduire
-// la fréquence des réponses malformées de l'IA.
+// Consigne CTA stricte
 // ─────────────────────────────────────────────────────────────────────────────
 function buildCtaInstruction(lang: Language): string {
   const fr = `
@@ -1172,7 +1473,6 @@ STRICT RULE FOR THE "cta" FIELD (must apply to EVERY section):
 - "label" is REQUIRED and must be a non-empty string (5 to 30 chars).
 - NEVER use a plain string for "cta".
 - NEVER omit the "label" field inside the "cta" object.
-- When unsure, use: { "label": "I want access", "mode": "anchor", "anchorId": "lead-form" }
 `;
   const es = `
 
@@ -1181,8 +1481,6 @@ REGLA ESTRICTA PARA EL CAMPO "cta" (aplica a CADA sección):
   { "label": "Texto del botón", "mode": "anchor", "anchorId": "lead-form" }
 - "label" es OBLIGATORIO y debe ser una cadena no vacía (5 a 30 caracteres).
 - NUNCA uses una cadena simple para "cta".
-- NUNCA omitas el campo "label" dentro del objeto "cta".
-- En caso de duda, usa: { "label": "Quiero acceder", "mode": "anchor", "anchorId": "lead-form" }
 `;
   return lang === "fr" ? fr : lang === "es" ? es : en;
 }
@@ -1199,7 +1497,7 @@ async function callOpenAI(args: {
   if (!process.env.OPENAI_API_KEY) {
     throw new AiGenerationError(
       "missing-key",
-      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez"
+      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez",
     );
   }
 
@@ -1224,7 +1522,7 @@ async function callOpenAI(args: {
     if (!rawText || rawText.length < 20) {
       throw new AiGenerationError(
         "empty-response",
-        "L'IA a retourné une réponse vide. Réessayez la génération"
+        "L'IA a retourné une réponse vide. Réessayez la génération",
       );
     }
     return rawText;
@@ -1239,7 +1537,7 @@ async function callOpenAI(args: {
       throw new AiGenerationError(
         "invalid-key",
         "La clé OpenAI a été refusée. Vérifiez sa validité sur platform.openai.com",
-        message
+        message,
       );
     }
     if (status === 429 || code === "insufficient_quota") {
@@ -1249,14 +1547,14 @@ async function callOpenAI(args: {
         insufficient
           ? "Quota OpenAI épuisé. Ajoutez du crédit sur platform.openai.com/account/billing"
           : "Trop de requêtes en peu de temps. Réessayez dans une minute",
-        message
+        message,
       );
     }
 
     throw new AiGenerationError(
       "network-error",
       "Impossible de joindre OpenAI. Vérifiez votre connexion ou réessayez dans un instant",
-      message
+      message,
     );
   }
 }
@@ -1270,27 +1568,46 @@ const SYSTEM_MESSAGE_FUNNEL =
   "never a plain string, and \"label\" must always be a non-empty string.";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper : conversion MediaItem[] → MediaInput[] (pour les prompts)
+// ─────────────────────────────────────────────────────────────────────────────
+function toMediaInputs(medias: MediaItem[] | undefined): MediaInput[] | undefined {
+  if (!medias || medias.length === 0) return undefined;
+  return medias.map((m) => ({
+    id: m.id,
+    url: m.url,
+    kind: m.kind,
+    description: m.description,
+    alt: m.alt,
+    filename: m.fileName,
+    sectionHint: m.sectionHint,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Génération multi-pages (Lot B2 — fonction principale)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise<Funnel> {
   if (!process.env.OPENAI_API_KEY) {
     throw new AiGenerationError(
       "missing-key",
-      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez"
+      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez",
     );
   }
 
-  const normalizedKind = normalizeFunnelKind(brief.funnelKind);
-  const blueprints = getDefaultPagesForKind(normalizedKind);
+  const normalizedKind = normalizeFunnelKind(brief.funnelKind) ?? "lead-magnet";
+  const funnelBlueprint = getFunnelBlueprint(normalizedKind);
+  const blueprints = funnelBlueprint.pages;
 
   if (blueprints.length === 0) {
     console.warn(
-      `[generateMultiPageFunnelWithAI] Pas de catalogue pour kind="${brief.funnelKind}", fallback monopage`
+      `[generateMultiPageFunnelWithAI] Pas de catalogue pour kind="${brief.funnelKind}", fallback monopage`,
     );
     return generateFunnelWithAI(brief);
   }
 
-  const mainBlueprint = blueprints.find((b) => b.isHome) ?? blueprints[0];
+  const homeRole = getHomeRoleForKind(normalizedKind);
+  const mainBlueprint =
+    blueprints.find((b) => b.role === homeRole) ?? blueprints[0];
   const secondaryBlueprints = blueprints.filter((b) => b !== mainBlueprint);
 
   const template =
@@ -1299,15 +1616,24 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     PREMIUM_TEMPLATES[0];
 
   console.info(
-    `[generateMultiPageFunnelWithAI] Lancement de la génération en parallèle (Main + ${secondaryBlueprints.length} pages secondaires)...`
+    `[generateMultiPageFunnelWithAI] Lancement de la génération en parallèle (Main + ${secondaryBlueprints.length} pages secondaires)...`,
   );
 
-  // ✅ FIX : on injecte la consigne CTA stricte dans le prompt
   const ctaInstruction = buildCtaInstruction(brief.language);
-  const mainPromptText =
-    mainPagePrompt({ brief, blueprint: mainBlueprint }) + ctaInstruction;
 
-  // On lance les deux appels en parallèle
+  const mainPromptText =
+    mainPagePrompt({
+      brand: brief.brandName,
+      offer: brief.offerName,
+      audience: brief.targetAudience,
+      funnelKind: normalizedKind,
+      language: brief.language,
+      medias: toMediaInputs(brief.medias),
+      cta: brief.primaryCta
+        ? { primary: brief.primaryCta.label }
+        : undefined,
+    }) + ctaInstruction;
+
   const mainPromise = callOpenAI({
     systemMessage: SYSTEM_MESSAGE_FUNNEL,
     userPrompt: mainPromptText,
@@ -1318,10 +1644,16 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   if (secondaryBlueprints.length > 0) {
     const secondaryPromptText =
       secondaryPagesPrompt({
-        brief,
-        mainPageHeadline: brief.promise,
-        mainPagePromise: brief.promise,
-        blueprints: secondaryBlueprints,
+        brand: brief.brandName,
+        offer: brief.offerName,
+        funnelKind: normalizedKind,
+        language: brief.language,
+        pages: secondaryBlueprints.map((bp) => ({
+          role: bp.role,
+          slug: bp.slug,
+          name: bp.name,
+        })),
+        medias: toMediaInputs(brief.medias),
       }) + ctaInstruction;
     secondaryPromise = callOpenAI({
       systemMessage: SYSTEM_MESSAGE_FUNNEL,
@@ -1330,42 +1662,38 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     });
   }
 
-  // Timeout de sécurité pour ne pas bloquer tout le processus
   const timeoutPromise = new Promise<null>((_, reject) =>
-    setTimeout(() => reject(new Error("Timeout AI")), 45000)
+    setTimeout(() => reject(new Error("Timeout AI")), 45000),
   );
 
   let mainRawText: string;
   let secondaryRawText: string | null = null;
 
   try {
-    // On attend d'abord la page principale qui est CRITIQUE
     mainRawText = (await Promise.race([mainPromise, timeoutPromise])) as string;
 
-    // On essaie de récupérer les pages secondaires, mais sans bloquer si elles échouent
     try {
       secondaryRawText = await Promise.race([secondaryPromise, Promise.resolve(null)]);
     } catch (secErr) {
       console.warn(
         "[generateMultiPageFunnelWithAI] Échec non-bloquant des pages secondaires:",
-        secErr
+        secErr,
       );
     }
   } catch (err) {
     console.error(
       "[generateMultiPageFunnelWithAI] Échec critique de la page principale ou timeout global:",
-      err
+      err,
     );
     throw new AiGenerationError(
       "network-error",
       "Le serveur AI a mis trop de temps à répondre. Réessayez avec un brief plus court ou vérifiez votre connexion.",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
   }
 
   const mainParsed = funnelSchema.safeParse(JSON.parse(extractJsonPayload(mainRawText)));
   if (!mainParsed.success) {
-    // 🔍 DEBUG : log de la réponse brute pour diagnostiquer le schema mismatch
     console.log("=== RAW AI MAIN PAGE RESPONSE ===");
     console.log(mainRawText);
     console.log("=== END RAW MAIN ===");
@@ -1374,12 +1702,12 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     console.log("=== END ZOD ERRORS ===");
     console.error(
       "[generateMultiPageFunnelWithAI] Schema mismatch on main page:",
-      mainParsed.error.flatten().fieldErrors
+      mainParsed.error.flatten().fieldErrors,
     );
     throw new AiGenerationError(
       "schema-mismatch",
       "La page principale générée ne respecte pas la structure attendue",
-      JSON.stringify(mainParsed.error.flatten().fieldErrors).slice(0, 500)
+      JSON.stringify(mainParsed.error.flatten().fieldErrors).slice(0, 500),
     );
   }
 
@@ -1393,9 +1721,9 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       brief.language === "fr"
         ? "Recevoir les détails"
         : brief.language === "es"
-        ? "Recibir los detalles"
-        : "Get the details",
-      "lead-form"
+          ? "Recibir los detalles"
+          : "Get the details",
+      "lead-form",
     );
 
   const mainSections = parseSectionsArray(mainData.sections, fallbackCta, brief);
@@ -1410,7 +1738,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       console.log("=== END RAW SECONDARY ===");
 
       const secondaryParsed = secondaryPagesSchema.safeParse(
-        JSON.parse(extractJsonPayload(secondaryRawText))
+        JSON.parse(extractJsonPayload(secondaryRawText)),
       );
 
       if (secondaryParsed.success) {
@@ -1419,15 +1747,15 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
           const sections = parseSectionsArray(page.sections, fallbackCta, brief);
           sectionsByRole.set(role, sections);
           console.info(
-            `[generateMultiPageFunnelWithAI] Page secondaire "${role}" : ${sections.length} sections OK.`
+            `[generateMultiPageFunnelWithAI] Page secondaire "${role}" : ${sections.length} sections OK.`,
           );
         }
         console.info(
-          "[generateMultiPageFunnelWithAI] Pages secondaires intégrées avec succès."
+          "[generateMultiPageFunnelWithAI] Pages secondaires intégrées avec succès.",
         );
       } else {
         console.warn(
-          "[generateMultiPageFunnelWithAI] Schema mismatch sur pages secondaires, utilisation des placeholders."
+          "[generateMultiPageFunnelWithAI] Schema mismatch sur pages secondaires, utilisation des placeholders.",
         );
         console.warn("=== ZOD ERRORS (secondary pages) — detailed ===");
         console.warn(JSON.stringify(secondaryParsed.error.issues, null, 2));
@@ -1436,7 +1764,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     } catch (err) {
       console.warn(
         "[generateMultiPageFunnelWithAI] Erreur de parsing des pages secondaires:",
-        err
+        err,
       );
     }
   }
@@ -1445,9 +1773,23 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     blueprints,
     sectionsByRole,
     brief,
+    homeRole,
   });
 
-  const homePage = pages.find((p) => p.isHome) ?? pages[0];
+  // 🆕 Patch 4 : application déterministe du placement médias + hero ≤ 1 média
+  const pagesWithMedias = pages.map((page) => {
+    let sections = placeMediasIntoSections(page.sections, brief.medias, {
+      funnelKind: normalizedKind,
+      role: page.role,
+    });
+    sections = enforceHeroSingleMedia(sections, {
+      funnelKind: normalizedKind,
+      role: page.role,
+    });
+    return { ...page, sections };
+  });
+
+  const homePage = pagesWithMedias.find((p) => p.isHome) ?? pagesWithMedias[0];
   const homeSections = homePage?.sections ?? mainSections;
 
   const media = buildMediaLibraryFromBrief(brief);
@@ -1455,7 +1797,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   const aiFunnel: Funnel = {
     funnelName: mainData.funnelName,
     language: mainData.language,
-    pages,
+    pages: pagesWithMedias,
     sections: homeSections,
     thankYouPage: {
       headline: mainData.thankYouPage.headline,
@@ -1484,13 +1826,13 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     },
   };
 
-  const filteredPages = aiFunnel.pages ?? pages;
+  const filteredPages = aiFunnel.pages ?? pagesWithMedias;
   const styledFunnel = applyTemplateToFunnel(template, aiFunnel, brief);
 
   const styleMap = buildStyleMapByType(styledFunnel.sections);
 
   const finalPages: FunnelPage[] = filteredPages.map((page) => {
-    const blueprint = getBlueprintForRole(normalizedKind, page.role);
+    const blueprint = getPageBlueprint(normalizedKind, page.role);
     let sections = blueprint
       ? filterSectionsByBlueprint(page.sections, blueprint)
       : page.sections;
@@ -1523,7 +1865,7 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
   if (!process.env.OPENAI_API_KEY) {
     throw new AiGenerationError(
       "missing-key",
-      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez"
+      "Aucune clé OpenAI détectée côté serveur. Ajoutez OPENAI_API_KEY dans .env.local puis redémarrez",
     );
   }
 
@@ -1585,7 +1927,7 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
       subheadline: t(
         `Un tunnel pensé pour ${brief.targetAudience}`,
         `A funnel built for ${brief.targetAudience}`,
-        `Un embudo pensado para ${brief.targetAudience}`
+        `Un embudo pensado para ${brief.targetAudience}`,
       ),
       cta: primaryCta,
       image: { mode: brief.defaultImageMode ?? "none" },
@@ -1602,7 +1944,7 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
       body: t(
         "Votre demande est confirmée",
         "Your request is confirmed",
-        "Tu solicitud está confirmada"
+        "Tu solicitud está confirmada",
       ),
       cta: makeAnchorCta(t("Retour", "Back", "Volver"), "top"),
     },

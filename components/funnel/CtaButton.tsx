@@ -1,125 +1,162 @@
 "use client";
 
-import type { CtaConfig } from "@/lib/funnels/types";
-import { isSafeUrl } from "@/lib/funnels/cta";
+import Link from "next/link";
+import type { CtaConfig, CtaIcon } from "@/lib/funnels/types";
 
 type Props = {
   cta: CtaConfig;
-  /**
-   * disabled=true : utilisé en mode preview wizard pour empêcher la navigation
-   * tout en gardant le rendu visuel.
-   */
-  disabled?: boolean;
   className?: string;
+  /** Si fourni, override le href calculé depuis cta. */
+  href?: string;
+  /** Désactive le CTA (mode preview, état non publié, etc.). */
+  disabled?: boolean;
+  /** Callback en mode popup (cta.mode === "popup"). */
+  onPopupClick?: () => void;
 };
 
 /**
- * Bouton CTA qui rend la balise sémantique correcte selon cta.mode :
- *  - "redirect" : <a href={cta.url}> avec target/rel sécurisés
- *  - "anchor"   : <a href="#anchorId"> qui scrolle vers la section cible
- *  - "popup"    : <button> qui ouvre un popup embarqué
+ * Retourne l'icône effective à afficher :
+ * - "none" explicite → null (rien)
+ * - undefined → "arrow-right" par défaut
+ * - sinon → l'icône choisie
  */
-export function CtaButton({ cta, disabled = false, className = "" }: Props) {
-  const baseClasses =
-    "ff-btn inline-flex items-center justify-center gap-2 " +
-    "disabled:opacity-60 disabled:cursor-not-allowed " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ff-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--ff-bg)]";
+function effectiveIcon(cta: CtaConfig): CtaIcon | null {
+  if (cta.icon === "none") return null;
+  return (cta.icon ?? "arrow-right") as CtaIcon;
+}
 
-  const finalClasses = `${baseClasses} ${className}`.trim();
+/** SVG inline pour chaque icône CTA supportée (parité avec lib/export/html.ts). */
+function CtaIconSvg({ name }: { name: CtaIcon }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.4,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    className: "inline-block shrink-0",
+  };
 
-  // Mode preview wizard : bouton désactivé visuellement identique
-  if (disabled) {
-    return (
-      <button type="button" disabled className={finalClasses} data-ff-cta>
-        {cta.label}
-      </button>
-    );
-  }
-
-  // Mode "redirect" : lien externe (Stripe Payment Link, Calendly, etc.)
-  // CORRECTION CRITIQUE : par défaut, _blank pour les URLs externes.
-  // Avant, target="_self" si non défini → clic restait dans la même page.
-  if (cta.mode === "redirect") {
-    if (cta.url && isSafeUrl(cta.url)) {
-      // Si target n'est pas explicitement "_self", on force "_blank" sur les URLs absolues
-      const isAbsolute = /^https?:\/\//i.test(cta.url.trim());
-      const target =
-        cta.target === "_self"
-          ? "_self"
-          : cta.target === "_blank"
-          ? "_blank"
-          : isAbsolute
-          ? "_blank" // Défaut sain : nouvel onglet pour URL absolue
-          : "_self";
-      const rel = target === "_blank" ? "noopener noreferrer" : undefined;
+  switch (name) {
+    case "arrow-right":
       return (
-        <a
-          href={cta.url}
-          target={target}
-          rel={rel}
-          className={finalClasses}
-          data-ff-cta
-        >
-          {cta.label}
-        </a>
+        <svg {...common}>
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <polyline points="12 5 19 12 12 19" />
+        </svg>
       );
-    }
-    // URL manquante ou douteuse : on tombe en fallback bouton inerte plutôt
-    // que rediriger vers #lead-form (ce qui était l'ancien comportement trompeur)
+    case "arrow-down":
+      return (
+        <svg {...common}>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <polyline points="5 12 12 19 19 12" />
+        </svg>
+      );
+    case "external":
+      return (
+        <svg {...common} strokeWidth={2.2}>
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      );
+    case "none":
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function CtaButton({
+  cta,
+  className = "",
+  href,
+  disabled = false,
+  onPopupClick,
+}: Props) {
+  const iconName = effectiveIcon(cta);
+  const icon = iconName ? <CtaIconSvg name={iconName} /> : null;
+
+  const content = (
+    <span className="inline-flex items-center justify-center gap-2">
+      <span>{cta.label}</span>
+      {icon}
+    </span>
+  );
+
+  const baseClass =
+    "inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors";
+  const disabledClass = disabled
+    ? "pointer-events-none opacity-60 cursor-not-allowed"
+    : "";
+  const finalClass = `${baseClass} ${className} ${disabledClass}`.trim();
+
+  // Mode popup : bouton qui ouvre la modale
+  if (cta.mode === "popup") {
     return (
       <button
         type="button"
-        disabled
-        className={finalClasses}
-        data-ff-cta
-        title="URL de redirection manquante ou invalide"
+        onClick={onPopupClick}
+        disabled={disabled}
+        className={finalClass}
       >
-        {cta.label}
+        {content}
       </button>
     );
   }
 
-  // Mode "anchor" : scroll vers une section interne
-  if (cta.mode === "anchor") {
-    const anchorId = (cta.anchorId ?? "lead-form").replace(/^#/, "");
+  // Mode ancre (scroll vers une section)
+  if (cta.mode === "anchor" && cta.anchorId) {
+    if (disabled) {
+      return (
+        <button type="button" className={finalClass} disabled>
+          {content}
+        </button>
+      );
+    }
     return (
-      <a href={`#${anchorId}`} className={finalClasses} data-ff-cta>
-        {cta.label}
+      <a href={`#${cta.anchorId}`} className={finalClass}>
+        {content}
       </a>
     );
   }
 
-  // Mode "popup" : ouverture du popup embarqué
-  if (cta.mode === "popup") {
-    const popupId = cta.popupId ?? "lead-popup";
+  // Mode redirect (externe ou interne) — href fourni par le parent
+  if (href) {
+    if (disabled) {
+      return (
+        <button type="button" className={finalClass} disabled>
+          {content}
+        </button>
+      );
+    }
+    const isExternal = /^https?:\/\//i.test(href);
+    if (isExternal) {
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={finalClass}
+        >
+          {content}
+        </a>
+      );
+    }
     return (
-      <button
-        type="button"
-        data-ff-popup={popupId}
-        data-ff-popup-target={popupId}
-        className={finalClasses}
-        data-ff-cta
-        onClick={(e) => {
-          const overlay =
-            typeof document !== "undefined"
-              ? document.getElementById(popupId)
-              : null;
-          if (overlay) {
-            e.preventDefault();
-            overlay.setAttribute("data-ff-open", "true");
-            document.body.style.overflow = "hidden";
-          }
-        }}
-      >
-        {cta.label}
-      </button>
+      <Link href={href} className={finalClass}>
+        {content}
+      </Link>
     );
   }
 
-  // Fallback : bouton inerte
+  // Fallback : bouton désactivé (aucune cible définie)
   return (
-    <button type="button" disabled className={finalClasses} data-ff-cta>
-      {cta.label}
+    <button type="button" className={finalClass} disabled>
+      {content}
     </button>
   );
 }

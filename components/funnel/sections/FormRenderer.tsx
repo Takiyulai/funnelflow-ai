@@ -10,14 +10,19 @@ import type {
   SectionItem,
   FormFieldItem,
 } from "@/lib/funnels/types";
+import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
+import {
+  extractSlugsFromPath,
+  resolveNextDestination,
+} from "@/lib/funnels/nextDestination";
 
 type Props = {
   section: FunnelSection;
   /** Slug du funnel (si connu en dehors de /tunnel/[slug]) */
   funnelSlug?: string;
-  /** 🆕 Funnel complet (pour résoudre la page suivante automatiquement) */
+  /** Funnel complet (pour résoudre la page suivante automatiquement) */
   funnel?: Funnel;
-  /** 🆕 Page courante (pour lire nextPageId) */
+  /** Page courante (pour lire nextPageId) */
   page?: FunnelPage;
 };
 
@@ -27,113 +32,41 @@ type SubmitState =
   | { kind: "success"; message: string }
   | { kind: "error"; message: string };
 
-function classifyField(field: FormFieldItem): "email" | "name" | "phone" | "consent" | "other" {
+function classifyField(
+  field: FormFieldItem,
+): "email" | "name" | "phone" | "consent" | "other" {
   const t = (field.type || "").toLowerCase();
   const n = (field.name || "").toLowerCase();
   if (t === "email" || n.includes("email") || n.includes("mail")) return "email";
-  if (t === "checkbox" && (n.includes("consent") || n.includes("rgpd") || n.includes("agree"))) return "consent";
-  if (t === "tel" || n.includes("phone") || n.includes("tel") || n.includes("mobile")) return "phone";
-  if (n === "name" || n.includes("nom") || n.includes("prenom") || n.includes("firstname") || n.includes("lastname") || n.includes("fullname")) return "name";
+  if (
+    t === "checkbox" &&
+    (n.includes("consent") || n.includes("rgpd") || n.includes("agree"))
+  )
+    return "consent";
+  if (t === "tel" || n.includes("phone") || n.includes("tel") || n.includes("mobile"))
+    return "phone";
+  if (
+    n === "name" ||
+    n.includes("nom") ||
+    n.includes("prenom") ||
+    n.includes("firstname") ||
+    n.includes("lastname") ||
+    n.includes("fullname")
+  )
+    return "name";
   return "other";
 }
 
-function extractSlugsFromPath(pathname: string | null): {
-  funnelSlug: string | null;
-  pageSlug: string | null;
-} {
-  if (!pathname) return { funnelSlug: null, pageSlug: null };
-  const match = pathname.match(/^\/tunnel\/([^/]+)(?:\/([^/]+))?/);
-  if (!match) return { funnelSlug: null, pageSlug: null };
-  return {
-    funnelSlug: match[1] || null,
-    pageSlug: match[2] || null,
-  };
-}
-
 /**
- * 🆕 Résout la page suivante selon l'ordre de priorité :
- *  1. section.formConfig.redirectToPageId
- *  2. section.formConfig.redirectToUrl
- *  3. section.cta.pageId / section.cta.pageSlug / section.cta.url
- *  4. page.nextPageId (chaînage auto via chainPagesNavigation)
- *  5. page suivante dans funnel.pages[] (fallback ultime)
+ * Calcule le texte de réassurance à afficher.
+ * - undefined → message par défaut
+ * - chaîne vide ou espaces → masqué (null)
+ * - sinon → texte fourni
  */
-function resolveNextDestination(args: {
-  section: FunnelSection;
-  funnel?: Funnel;
-  page?: FunnelPage;
-  funnelSlug: string | null;
-}): string | null {
-  const { section, funnel, page, funnelSlug } = args;
-
-  const pages = funnel?.pages ?? [];
-  const findPageById = (id?: string) =>
-    id ? pages.find((p) => p.id === id) : undefined;
-  const findPageBySlug = (slug?: string) => {
-    if (!slug) return undefined;
-    const clean = slug.replace(/^\/+/, "").replace(/\/+$/, "");
-    return pages.find(
-      (p) =>
-        p.slug.replace(/^\/+/, "").replace(/\/+$/, "") === clean,
-    );
-  };
-  const buildUrlForPage = (target: FunnelPage): string => {
-    if (!funnelSlug) return "/";
-    if (target.isHome) return `/tunnel/${funnelSlug}`;
-    const clean = target.slug
-      .replace(/^\/+/, "")
-      .replace(/\/+$/, "");
-    return `/tunnel/${funnelSlug}/${clean}`;
-  };
-
-  // 1) formConfig — redirection explicite définie par l'utilisateur
-  const fc = section.formConfig;
-  if (fc?.redirectToPageId) {
-    const target = findPageById(fc.redirectToPageId);
-    if (target) return buildUrlForPage(target);
-  }
-  if (fc?.redirectToUrl) {
-    return fc.redirectToUrl;
-  }
-
-  // 2) CTA configuré sur la section (compatibilité existante)
-  const ctaAny = section.cta as
-    | { mode?: string; url?: string; pageId?: string; pageSlug?: string }
-    | undefined;
-  if (ctaAny?.pageId) {
-    const target = findPageById(ctaAny.pageId);
-    if (target) return buildUrlForPage(target);
-  }
-  if (ctaAny?.pageSlug) {
-    const target = findPageBySlug(ctaAny.pageSlug);
-    if (target) return buildUrlForPage(target);
-  }
-  if (ctaAny?.url && ctaAny.mode === "redirect") {
-    const raw = ctaAny.url.trim();
-    const isAbsolute = /^https?:\/\//i.test(raw) || raw.startsWith("//");
-    const isMailto = raw.startsWith("mailto:") || raw.startsWith("tel:");
-    if (isAbsolute || isMailto) return raw;
-    // URL relative → on tente de la résoudre comme un pageSlug interne
-    const target = findPageBySlug(raw);
-    if (target) return buildUrlForPage(target);
-    return raw; // fallback
-  }
-
-  // 3) page.nextPageId (chaînage automatique injecté à la génération)
-  if (page?.nextPageId) {
-    const target = findPageById(page.nextPageId);
-    if (target) return buildUrlForPage(target);
-  }
-
-  // 4) Fallback : page suivante dans l'ordre du tableau pages[]
-  if (page && pages.length > 0) {
-    const idx = pages.findIndex((p) => p.id === page.id);
-    if (idx >= 0 && idx < pages.length - 1) {
-      return buildUrlForPage(pages[idx + 1]);
-    }
-  }
-
-  return null;
+function computeReassurance(raw: string | undefined): string | null {
+  if (raw === undefined) return DEFAULT_REASSURANCE;
+  if (raw.trim() === "") return null;
+  return raw;
 }
 
 export function FormRenderer({
@@ -163,12 +96,12 @@ export function FormRenderer({
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
 
   const ctaLabel =
-    section.formConfig?.submitLabel ||
-    section.cta?.label ||
-    "Envoyer";
+    section.formConfig?.submitLabel || section.cta?.label || "Envoyer";
   const isSubmitting = state.kind === "submitting";
   const isPreview = !funnelSlug;
   const isSuccess = state.kind === "success";
+
+  const reassuranceText = computeReassurance(section.reassurance);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -218,7 +151,10 @@ export function FormRenderer({
     }
 
     if (!email) {
-      setState({ kind: "error", message: "Veuillez renseigner votre adresse email." });
+      setState({
+        kind: "error",
+        message: "Veuillez renseigner votre adresse email.",
+      });
       return;
     }
 
@@ -256,7 +192,6 @@ export function FormRenderer({
         return;
       }
 
-      // 🆕 Résolution de la prochaine étape
       const redirectTo = resolveNextDestination({
         section,
         funnel,
@@ -288,7 +223,7 @@ export function FormRenderer({
     }
   }
 
-  // ─── Rendu (inchangé) ────────────────────────────────────────────
+  // ─── Rendu ─────────────────────────────────────────────────────────
   if (fields.length === 0) {
     return (
       <form
@@ -315,6 +250,14 @@ export function FormRenderer({
         />
         <SubmitButton label={ctaLabel} state={state} isPreview={isPreview} />
         <FeedbackMessage state={state} isPreview={isPreview} />
+        {reassuranceText && (
+          <p
+            className="mt-3 text-center text-[11px]"
+            style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.6 }}
+          >
+            {reassuranceText}
+          </p>
+        )}
       </form>
     );
   }
@@ -336,11 +279,17 @@ export function FormRenderer({
       </div>
       <SubmitButton label={ctaLabel} state={state} isPreview={isPreview} />
       <FeedbackMessage state={state} isPreview={isPreview} />
+      {reassuranceText && (
+        <p
+          className="mt-3 text-center text-[11px]"
+          style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.6 }}
+        >
+          {reassuranceText}
+        </p>
+      )}
     </form>
   );
 }
-
-// ─── Sous-composants inchangés (inputStyle, SubmitButton, FeedbackMessage, FieldBlock) ──
 
 const inputStyle: React.CSSProperties = {
   border: "1px solid var(--ff-border, rgba(0,0,0,0.12))",

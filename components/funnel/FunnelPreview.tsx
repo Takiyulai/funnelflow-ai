@@ -45,6 +45,8 @@ import {
   InlineDecorativeIcon,
 } from "@/components/funnel/DecorativeIconsLayer";
 import { TimerRenderer } from "@/components/funnel/sections/TimerRenderer";
+import { PopupForm } from "@/components/funnel/PopupForm";
+
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -947,10 +949,15 @@ function HeroBlock({
               anim={animOf(section.animations, "cta", "fade-up")}
               pageLinks={pageLinks}
               slugLinks={slugLinks}
+              funnel={funnel}
+              page={activePage}
+              section={section}
             />
             <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
           </div>
         )}
+
+
 
         {section.type === "form" && (
           <div data-ff-shadow={shadowAttr}>
@@ -1133,18 +1140,22 @@ function SectionBlock({
         ))}
 
         {!isForm && section.cta?.label && (
-          <div className="ff-cta-wrap inline-flex items-center gap-2">
-            <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
-            <CtaLink
-              cta={section.cta}
-              className="text-sm mt-2"
-              anim={animOf(section.animations, "cta", "fade-up")}
-              pageLinks={pageLinks}
-              slugLinks={slugLinks}
-            />
-            <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
-          </div>
-        )}
+  <div className="ff-cta-wrap inline-flex items-center gap-2">
+    <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
+    <CtaLink
+      cta={section.cta}
+      className="text-sm mt-2"
+      anim={animOf(section.animations, "cta", "fade-up")}
+      pageLinks={pageLinks}
+      slugLinks={slugLinks}
+      funnel={funnel}
+      page={activePage}
+      section={section}
+    />
+    <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
+  </div>
+)}
+
 
         {isForm && (
           <div data-ff-shadow={shadowAttr}>
@@ -1448,13 +1459,34 @@ function CtaLink({
   anim,
   pageLinks,
   slugLinks,
+  funnel,
+  page,
+  section,
 }: {
   cta: NonNullable<FunnelSection["cta"]>;
   className?: string;
   anim?: AnimationPreset;
   pageLinks: Map<string, string>;
   slugLinks: Map<string, string>;
+  funnel: Funnel;
+  page?: FunnelPage;
+  section: FunnelSection;
 }) {
+  // ─── Mode "popup" : bouton qui ouvre la modale ────────────────────
+  if (cta.mode === "popup") {
+    return (
+      <PopupForm
+        cta={cta}
+        section={section}
+        funnel={funnel}
+        page={page}
+        buttonClassName={`ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg ${className}`}
+        buttonProps={{ "data-ff-anim": anim ?? "fade-up" } as React.ButtonHTMLAttributes<HTMLButtonElement>}
+      />
+    );
+  }
+
+  // ─── Modes "anchor" et "redirect" : <a> classique ────────────────
   let href = ctaHref(cta);
   let target = ctaTarget(cta);
   let rel = ctaRel(cta);
@@ -1509,3 +1541,4 @@ function CtaLink({
     </a>
   );
 }
+

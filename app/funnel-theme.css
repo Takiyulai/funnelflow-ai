@@ -1315,6 +1315,16 @@
   background-image: linear-gradient(135deg, #C084FC 0%, #A855F7 100%) !important;
   background-color: #C084FC !important;
 }
+/* ─── Bonus cards : hover state pour la preview ─── */
+[data-ff-template] .ff-bonus-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+[data-ff-template] .ff-bonus-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--ff-accent) 50%, transparent) !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ff-shadow-color, #000) 25%, transparent);
+}
+
 
 /* ───────── 24. Safe-fit éditeur SIO ───────── */
 @media (max-width: 1099px) {
@@ -1806,4 +1816,13 @@
 [data-ff-template] .ff-hl {
   color: var(--ff-accent, #2563eb);
   font-weight: inherit;
+}
+/* ─── Reassurance message (sous forms / popup) ─── */
+[data-ff-template] .ff-reassurance {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ff-ink-soft);
+  opacity: 0.7;
+  line-height: 1.5;
 }

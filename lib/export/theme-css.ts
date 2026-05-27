@@ -2458,6 +2458,15 @@ const THEMES_CSS = `
   opacity: 0.55;
   animation: ff-decor-drift 28s ease-in-out infinite reverse;
 }
+/* ─── Reassurance message (sous forms / popup) ─── */
+.ff-reassurance {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ff-ink-soft);
+  opacity: 0.65;
+  line-height: 1.5;
+}
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2615,3 +2624,4 @@ export function buildThemeRootAttrs(funnel: Funnel): ThemeRootAttrs {
     inlineStyle: styleParts.join(";"),
   };
 }
+

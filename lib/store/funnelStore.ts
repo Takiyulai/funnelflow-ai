@@ -26,6 +26,30 @@ const PUBLISHED_PREFIX = "ff:public:";
 const INDEX_KEY = "ff:funnel-index";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Erreur typée pour quota localStorage
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class FunnelStorageQuotaError extends Error {
+  constructor(message = "Le stockage du navigateur est plein") {
+    super(message);
+    this.name = "FunnelStorageQuotaError";
+  }
+}
+
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err instanceof DOMException) {
+    return (
+      err.name === "QuotaExceededError" ||
+      err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      err.code === 22 ||
+      err.code === 1014
+    );
+  }
+  return /quota|exceeded the quota/i.test(err.message);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Event bus
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -91,31 +115,109 @@ function readIndex(): string[] {
 
 function writeIndex(ids: string[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(INDEX_KEY, JSON.stringify(ids));
+  try {
+    window.localStorage.setItem(INDEX_KEY, JSON.stringify(ids));
+  } catch {
+    // Silent : l'index sera reconstruit au prochain load si nécessaire
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quota helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Récupère pour chaque funnel stocké : son id, sa date d'update, sa taille.
+ * Utilisé pour purger en cas de quota dépassé.
+ */
+function getStoredFunnelsMeta(): Array<{
+  id: string;
+  updatedAt: string;
+  size: number;
+}> {
+  if (typeof window === "undefined") return [];
+  const ids = readIndex();
+  const out: Array<{ id: string; updatedAt: string; size: number }> = [];
+  for (const id of ids) {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_PREFIX + id);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as Partial<StoredFunnel>;
+      out.push({
+        id,
+        updatedAt: parsed.updatedAt ?? "",
+        size: raw.length,
+      });
+    } catch {
+      // Entrée corrompue : on la marque pour suppression prioritaire
+      out.push({ id, updatedAt: "", size: 0 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Tente d'écrire dans localStorage. En cas de QuotaExceededError, supprime
+ * progressivement les funnels les plus anciens (sauf celui en cours d'écriture)
+ * jusqu'à pouvoir stocker, puis throw FunnelStorageQuotaError si rien n'y fait.
+ */
+function safeSetItem(key: string, value: string, protectedId?: string): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, value);
+    return;
+  } catch (err) {
+    if (!isQuotaError(err)) throw err;
+
+    console.warn(
+      "[funnelStore] Quota localStorage dépassé, purge des anciens tunnels..."
+    );
+
+    // Liste les autres funnels triés du plus ancien au plus récent
+    const others = getStoredFunnelsMeta()
+      .filter((m) => m.id !== protectedId)
+      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+
+    // Supprime un par un en réessayant
+    for (const meta of others) {
+      try {
+        window.localStorage.removeItem(STORAGE_PREFIX + meta.id);
+        window.localStorage.removeItem(PUBLISHED_PREFIX + meta.id); // au cas où
+        const remainingIds = readIndex().filter((x) => x !== meta.id);
+        writeIndex(remainingIds);
+        console.warn(`[funnelStore] Tunnel ancien supprimé : ${meta.id}`);
+      } catch {
+        // ignore
+      }
+
+      try {
+        window.localStorage.setItem(key, value);
+        return; // 🎉 stockage réussi après purge
+      } catch (retryErr) {
+        if (!isQuotaError(retryErr)) throw retryErr;
+        // Continue à purger
+      }
+    }
+
+    // Dernier recours : on n'a plus rien à purger et ça ne passe toujours pas
+    throw new FunnelStorageQuotaError(
+      "Le stockage du navigateur est plein et la purge des anciens tunnels n'a pas suffi. Videz le cache du site (ou supprimez manuellement des tunnels) puis réessayez."
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 LOT B1 — Migration multi-pages
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Convertit un funnel ancien format (sections[] à la racine, pas de pages[])
- * vers le nouveau format multi-pages (1 page "Accueil" contenant les sections).
- *
- * Idempotente : si le funnel a déjà pages[], retourne tel quel.
- *
- * Cette migration est transparente pour l'utilisateur et préserve toutes
- * les données existantes (sections, design, meta, etc.).
- */
 function migrateFunnelToMultiPage(funnel: Funnel): Funnel {
-  // Déjà migré ?
   if (funnel.pages && funnel.pages.length > 0) {
     return funnel;
   }
 
   const legacySections = funnel.sections ?? [];
 
-  // Crée une page "Accueil" qui contient toutes les sections existantes
   const homePage: FunnelPage = {
     id: makePageId(),
     slug: "/",
@@ -136,7 +238,6 @@ function migrateFunnelToMultiPage(funnel: Funnel): Funnel {
   return {
     ...funnel,
     pages: [homePage],
-    // ✅ On conserve sections[] pour la rétrocompat (alias de pages[0].sections)
     sections: legacySections,
     meta: {
       ...(funnel.meta ?? {}),
@@ -145,10 +246,6 @@ function migrateFunnelToMultiPage(funnel: Funnel): Funnel {
   };
 }
 
-/**
- * Synchronise funnel.sections avec funnel.pages[home].sections.
- * Garantit la cohérence du champ legacy après modification des pages.
- */
 function syncLegacySections(funnel: Funnel): Funnel {
   if (!funnel.pages || funnel.pages.length === 0) return funnel;
   const home = funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
@@ -156,9 +253,6 @@ function syncLegacySections(funnel: Funnel): Funnel {
   return { ...funnel, sections: home.sections };
 }
 
-/**
- * Normalise les FunnelKind legacy (vsl → digital-product, etc.).
- */
 function normalizeLegacyKind(funnel: Funnel): Funnel {
   if (!funnel.meta?.funnelKind) return funnel;
   const normalized = normalizeFunnelKind(funnel.meta.funnelKind);
@@ -178,7 +272,6 @@ function applyMigrations(stored: StoredFunnel): StoredFunnel {
 
   let funnel = stored.funnel;
 
-  // Migration 1 : sections items (Livraison B)
   if (Array.isArray(funnel.sections)) {
     const migratedSections = migrateAllSections(funnel.sections);
     const hasChanged = migratedSections.some((s, i) => s !== funnel.sections[i]);
@@ -187,29 +280,25 @@ function applyMigrations(stored: StoredFunnel): StoredFunnel {
     }
   }
 
-  // 🆕 Migration 2 : multi-pages (Lot B1)
   const beforePages = funnel.pages;
   funnel = migrateFunnelToMultiPage(funnel);
   const wasMigratedToMultiPage = beforePages !== funnel.pages;
 
-  // 🆕 Migration 3 : normalisation des FunnelKind legacy
   funnel = normalizeLegacyKind(funnel);
-
-  // Sync legacy sections (au cas où pages[home].sections a été modifié ailleurs)
   funnel = syncLegacySections(funnel);
 
-  // Si rien n'a changé, retourne l'original (référence stable)
   if (funnel === stored.funnel) return stored;
 
   const migrated = { ...stored, funnel };
 
-  // 🆕 Si on vient de migrer en multi-pages, on persiste immédiatement
-  // pour éviter de re-migrer à chaque load (perf + cohérence)
   if (wasMigratedToMultiPage && typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(STORAGE_PREFIX + stored.id, JSON.stringify(migrated));
+      window.localStorage.setItem(
+        STORAGE_PREFIX + stored.id,
+        JSON.stringify(migrated)
+      );
     } catch {
-      // Ignore les erreurs de stockage (quota, etc.)
+      // Ignore les erreurs de stockage (quota, etc.) — pas critique ici
     }
   }
 
@@ -254,13 +343,15 @@ export function listFunnels(): StoredFunnel[] {
 
 export function saveFunnel(stored: StoredFunnel): void {
   if (typeof window === "undefined") return;
-  // 🆕 On synchronise toujours legacy sections avant sauvegarde
+
   const synced: StoredFunnel = {
     ...stored,
     funnel: syncLegacySections(stored.funnel),
     updatedAt: new Date().toISOString(),
   };
-  window.localStorage.setItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced));
+
+  // ✅ Écriture sécurisée avec purge automatique en cas de quota dépassé
+  safeSetItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced), stored.id);
 
   const ids = readIndex();
   if (!ids.includes(stored.id)) {
@@ -286,13 +377,18 @@ export function deleteFunnel(id: string): void {
 // Création depuis une génération IA
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function createFunnelFromAi(funnel: Funnel, brief: FunnelBrief): StoredFunnel {
+export function createFunnelFromAi(
+  funnel: Funnel,
+  brief: FunnelBrief
+): StoredFunnel {
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `ff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const baseSlug = slugify(funnel.funnelName || `${brief.brandName}-${brief.offerName}`);
+  const baseSlug = slugify(
+    funnel.funnelName || `${brief.brandName}-${brief.offerName}`
+  );
   const existingSlugs = new Set(listFunnels().map((f) => f.slug));
   const slug = uniqueSlug(baseSlug || "tunnel", existingSlugs);
 
@@ -306,7 +402,6 @@ export function createFunnelFromAi(funnel: Funnel, brief: FunnelBrief): StoredFu
     updatedAt: now,
   };
 
-  // Migration appliquée immédiatement (transforme sections[] en pages[home])
   const migrated = applyMigrations(stored);
   saveFunnel(migrated);
   return migrated;
@@ -316,10 +411,6 @@ export function createFunnelFromAi(funnel: Funnel, brief: FunnelBrief): StoredFu
 // 🆕 LOT B1 — Helpers de manipulation des pages
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Met à jour les sections d'une page spécifique d'un funnel.
- * Synchronise automatiquement legacy sections si c'est la page d'accueil.
- */
 export function updatePageSections(
   funnel: Funnel,
   pageId: string,
@@ -332,10 +423,6 @@ export function updatePageSections(
   return syncLegacySections({ ...funnel, pages });
 }
 
-/**
- * Ajoute une page à un funnel. La page est insérée à la position spécifiée
- * (ou à la fin si position non fournie).
- */
 export function addPage(
   funnel: Funnel,
   page: Omit<FunnelPage, "id">,
@@ -351,9 +438,6 @@ export function addPage(
   return { ...funnel, pages };
 }
 
-/**
- * Supprime une page d'un funnel. Refuse de supprimer la page d'accueil.
- */
 export function removePage(funnel: Funnel, pageId: string): Funnel {
   if (!funnel.pages) return funnel;
   const target = funnel.pages.find((p) => p.id === pageId);
@@ -362,16 +446,12 @@ export function removePage(funnel: Funnel, pageId: string): Funnel {
   return syncLegacySections({ ...funnel, pages });
 }
 
-/**
- * Réordonne les pages d'un funnel.
- */
 export function reorderPages(funnel: Funnel, orderedIds: string[]): Funnel {
   if (!funnel.pages) return funnel;
   const byId = new Map(funnel.pages.map((p) => [p.id, p]));
   const reordered = orderedIds
     .map((id) => byId.get(id))
     .filter((p): p is FunnelPage => Boolean(p));
-  // Préserver les pages absentes de la liste (sécurité)
   const missing = funnel.pages.filter((p) => !orderedIds.includes(p.id));
   return syncLegacySections({ ...funnel, pages: [...reordered, ...missing] });
 }
@@ -383,13 +463,17 @@ export function reorderPages(funnel: Funnel, orderedIds: string[]): Funnel {
 export function publishFunnel(id: string): StoredFunnel | null {
   const stored = loadFunnel(id);
   if (!stored || typeof window === "undefined") return null;
+
   const updated: StoredFunnel = {
     ...stored,
     publishedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  window.localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated));
-  window.localStorage.setItem(PUBLISHED_PREFIX + stored.slug, JSON.stringify(updated));
+
+  // ✅ Écriture sécurisée pour les deux entrées
+  safeSetItem(STORAGE_PREFIX + id, JSON.stringify(updated), id);
+  safeSetItem(PUBLISHED_PREFIX + stored.slug, JSON.stringify(updated), id);
+
   emitChange(id);
   return updated;
 }
@@ -404,6 +488,47 @@ export function loadPublishedFunnel(slug: string): StoredFunnel | null {
   } catch {
     return null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagnostic / maintenance
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Retourne la taille totale (en octets) occupée par les tunnels dans
+ * localStorage. Utile pour afficher l'occupation à l'utilisateur.
+ */
+export function getStorageUsage(): {
+  totalBytes: number;
+  totalMB: number;
+  count: number;
+} {
+  if (typeof window === "undefined")
+    return { totalBytes: 0, totalMB: 0, count: 0 };
+  const metas = getStoredFunnelsMeta();
+  const totalBytes = metas.reduce((sum, m) => sum + m.size, 0);
+  return {
+    totalBytes,
+    totalMB: +(totalBytes / 1024 / 1024).toFixed(2),
+    count: metas.length,
+  };
+}
+
+/**
+ * Supprime tous les tunnels stockés. À utiliser avec précaution.
+ */
+export function clearAllFunnels(): void {
+  if (typeof window === "undefined") return;
+  const ids = readIndex();
+  for (const id of ids) {
+    const stored = loadFunnel(id);
+    window.localStorage.removeItem(STORAGE_PREFIX + id);
+    if (stored?.slug) {
+      window.localStorage.removeItem(PUBLISHED_PREFIX + stored.slug);
+    }
+  }
+  writeIndex([]);
+  emitChange();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

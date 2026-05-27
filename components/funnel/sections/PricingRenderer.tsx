@@ -65,7 +65,7 @@ export function PricingRenderer({
               "ff-pricing-card",
               highlighted ? "ff-card-elevated" : "ff-card",
               "relative rounded-2xl p-8 flex flex-col",
-              "transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1)",
+              "transition-all duration-500 ease-out",
               highlighted ? "ring-1 ring-inset ring-[var(--ff-accent)]/20" : "",
               "hover:-translate-y-2 hover:shadow-2xl",
             ]
@@ -130,31 +130,35 @@ export function PricingRenderer({
               )}
             </div>
 
-            {item.data.features && item.data.features.length > 0 && (
-              <ul className="space-y-4 mb-8 flex-1">
-                {item.data.features.map((feat, fIdx) => (
-                  <li
-                    key={fIdx}
-                    className={`flex items-start gap-3 ${bodySize}`}
-                    style={{ color: "var(--ff-ink)" }}
-                  >
-                    <span
-                      className="shrink-0 mt-1 flex items-center justify-center p-0.5 rounded-full bg-[var(--ff-accent)]/10"
-                      style={{
-                        color: "var(--ff-accent)",
-                      }}
+              {item.data.features && item.data.features.length > 0 && (
+                <ul className="space-y-4 mb-8 flex-1 w-full text-left">
+                  {item.data.features.map((feat, fIdx) => (
+                    <li
+                      key={fIdx}
+                      className={`flex items-start gap-3 text-left ${bodySize}`}
+                      style={{ color: "var(--ff-ink)" }}
                     >
-                      <IconRenderer
-                        config={featureIconConfig}
-                        fallbackName="check"
-                        className="w-3.5 h-3.5"
-                      />
-                    </span>
-                    <span className="flex-1 opacity-90">{feat}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <span
+                        className="shrink-0 mt-1 flex items-center justify-center p-0.5 rounded-full"
+                        style={{
+                          background:
+                            "color-mix(in srgb, var(--ff-accent) 12%, transparent)",
+                          color: "var(--ff-accent)",
+                        }}
+                      >
+                        <IconRenderer
+                          config={featureIconConfig}
+                          fallbackName="check"
+                          className="w-3.5 h-3.5"
+                        />
+                      </span>
+                      <span className="flex-1 min-w-0 opacity-90 break-words">{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+
 
             {cta?.label && (
               <a

@@ -4,7 +4,6 @@ import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
 import { getIconByName } from "@/components/editor/IconPicker";
 import { RichText } from "@/components/funnel/RichText";
 
-
 type Props = {
   section: FunnelSection;
   bodySize?: string;
@@ -35,10 +34,12 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
         return (
           <div
             key={idx}
-            className="ff-bonus-card rounded-xl p-5 flex gap-4 items-start"
+            className="ff-bonus-card rounded-xl p-5 flex gap-4 items-start transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
             style={{
-              background: "color-mix(in srgb, var(--ff-accent, #31845C) 6%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--ff-accent, #31845C) 25%, transparent)",
+              background:
+                "color-mix(in srgb, var(--ff-accent, #31845C) 10%, transparent)",
+              border:
+                "1px solid color-mix(in srgb, var(--ff-accent, #31845C) 35%, transparent)",
             }}
           >
             <div
@@ -54,10 +55,10 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap mb-1">
                 <RichText
-                    as="p"
-                    className={`${bodySize} leading-relaxed`}
-                    text={item.data.description}
-                  />
+                  as="p"
+                  className={`${bodySize} font-bold leading-relaxed`}
+                  text={item.data.title || `Bonus ${idx + 1}`}
+                />
 
                 {item.data.value && (
                   <span

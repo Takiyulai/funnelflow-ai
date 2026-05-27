@@ -1,8 +1,8 @@
 // lib/funnels/sectionItems.ts
 //
-// Helpers pour les items spécialisés (FAQ, témoignages, pricing, bonus, garantie, formField).
-// Création d'items vides + migration auto des bullets existants vers le nouveau
-// format (Livraison B, choix utilisateur "ii" — migration automatique).
+// Helpers pour les items spécialisés (FAQ, témoignages, pricing, bonus, garantie,
+// formField, timer). Création d'items vides + migration auto des bullets existants
+// vers le nouveau format (Livraison B, choix utilisateur "ii" — migration automatique).
 
 import type {
   BonusItem,
@@ -14,7 +14,9 @@ import type {
   PricingPlanItem,
   SectionItem,
   TestimonialItem,
+  TimerItem,
 } from "./types";
+import { makeDefaultTimer } from "./types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapping section.type → kind d'item
@@ -102,6 +104,10 @@ export function makeEmptyFormFieldItem(): FormFieldItem {
   };
 }
 
+export function makeEmptyTimerItem(): TimerItem {
+  return makeDefaultTimer();
+}
+
 /** Crée un SectionItem vide selon le kind demandé. */
 export function makeEmptyItem(kind: SectionItem["kind"]): SectionItem {
   switch (kind) {
@@ -117,6 +123,8 @@ export function makeEmptyItem(kind: SectionItem["kind"]): SectionItem {
       return { kind: "guarantee", data: makeEmptyGuaranteeItem() };
     case "formField":
       return { kind: "formField", data: makeEmptyFormFieldItem() };
+    case "timer":
+      return { kind: "timer", data: makeEmptyTimerItem() };
     default: {
       // Exhaustiveness check : si un nouveau kind est ajouté à SectionItem,
       // TypeScript signalera ici qu'il n'est pas géré.
@@ -205,13 +213,14 @@ function bulletToGuaranteeItem(bullet: string): GuaranteeItem {
 function bulletToFormFieldItem(bullet: string): FormFieldItem {
   // Heuristique très basique : on prend le bullet comme label, on dérive un name.
   const trimmed = bullet.trim();
-  const name = trimmed
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 32) || "field";
+  const name =
+    trimmed
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 32) || "field";
   return {
     name,
     label: trimmed,
@@ -255,6 +264,10 @@ export function migrateSectionBulletsToItems(
           return { kind: "guarantee", data: bulletToGuaranteeItem(bullet) };
         case "formField":
           return { kind: "formField", data: bulletToFormFieldItem(bullet) };
+        case "timer":
+          // Les timers ne sont jamais générés depuis un bullet textuel : on
+          // retombe sur un timer par défaut (l'utilisateur l'ajustera).
+          return { kind: "timer", data: makeEmptyTimerItem() };
         default: {
           const _exhaustive: never = kind;
           throw new Error(`Unknown SectionItem kind: ${String(_exhaustive)}`);

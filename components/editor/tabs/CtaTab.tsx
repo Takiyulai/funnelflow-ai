@@ -238,10 +238,9 @@ export function CtaTab({ section, onChange }: Props) {
               {/* === Popup FunnelFlow interne === */}
               {(cta.popupProvider ?? "internal") === "internal" && (
                 <>
-                  <div className="rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5 text-[11px] text-amber-100/80">
-                    Le popup est <strong>embarqué dans le bloc HTML exporté</strong>.
-                    Aucune configuration systeme.io supplémentaire nécessaire — collez
-                    le bloc, ça fonctionne.
+                  <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/5 px-3 py-2 text-[11px] text-emerald-200/80">
+                    ✓ Ce popup s'affiche directement sur votre tunnel FunnelFlow.
+                    Aucune configuration externe nécessaire.
                   </div>
 
                   <Field label="Titre du popup" required>
@@ -260,20 +259,6 @@ export function CtaTab({ section, onChange }: Props) {
                       onChange={(e) => updateCta({ popupBody: e.target.value })}
                       className={`${inputClass} min-h-[60px] resize-y py-2`}
                       placeholder="Laissez vos coordonnées, l'accès vous est envoyé immédiatement."
-                    />
-                  </Field>
-
-                  <Field
-                    label="Code d'embed formulaire systeme.io"
-                    hint="Dans systeme.io : Formulaires → votre formulaire → Code d'intégration → copier/coller ici. Laissez vide pour un formulaire de démonstration."
-                  >
-                    <textarea
-                      value={cta.popupEmbed ?? ""}
-                      onChange={(e) => updateCta({ popupEmbed: e.target.value })}
-                      className={`${inputClass} min-h-[100px] resize-y py-2 font-mono text-[11px]`}
-                      placeholder={
-                        '<form action="https://systeme.io/..." method="POST">\n  ...\n</form>'
-                      }
                     />
                   </Field>
 

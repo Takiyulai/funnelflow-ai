@@ -76,17 +76,37 @@ export function ContentTab({ section, onChange }: Props) {
     );
   }
 
-  if (section.type === "form") {
-    return (
-      <div className="space-y-4">
-        <GenericTextFields section={section} onChange={onChange} hideBullets hideTimer />
-        <div className="border-t border-white/10 pt-4">
-          <FormFieldsEditor section={section} onChange={onChange} />
-        </div>
-        {timerBlock}
+if (section.type === "form") {
+  return (
+    <div className="space-y-4">
+      <GenericTextFields section={section} onChange={onChange} hideBullets hideTimer />
+      <div className="border-t border-white/10 pt-4">
+        <FormFieldsEditor section={section} onChange={onChange} />
       </div>
-    );
-  }
+
+      {/* 🆕 Message de réassurance RGPD */}
+      <div className="border-t border-white/10 pt-4">
+        <label className="mb-1 block text-xs font-medium text-white/70">
+          Message de réassurance
+          <span className="ml-1 text-[10px] text-white/40">(sous le formulaire)</span>
+        </label>
+        <input
+          type="text"
+          value={section.reassurance ?? ""}
+          onChange={(e) => onChange({ reassurance: e.target.value })}
+          placeholder="🔒 Vos coordonnées sont en sécurité, jamais partagées."
+          className="w-full rounded-md border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-300/40 focus:outline-none"
+        />
+        <p className="mt-1 text-[10px] text-white/40">
+          Laissez vide pour utiliser le message par défaut. Saisissez un espace pour le masquer.
+        </p>
+      </div>
+
+      {timerBlock}
+    </div>
+  );
+}
+
 
   if (section.type === "guarantee") {
     return (

@@ -65,6 +65,8 @@ import {
   buildThemeRootAttrs,
 } from "./theme-css";
 import { createReadme } from "./readme";
+import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper : sérialise dataAttrs en chaîne d'attributs HTML
@@ -304,19 +306,27 @@ function ctaAttrs(cta: CtaConfig): string {
 // CTA — icon + rendu
 // ─────────────────────────────────────────────────────────────────────────────
 function renderCtaIcon(icon?: CtaIcon): string {
-  if (!icon || icon === "none") return "";
+  // Choix explicite "aucune icône" → rien
+  if (icon === "none") return "";
+
+  // Fallback : si rien n'est défini, on met la flèche → par défaut
+  const effective: CtaIcon = icon ?? "arrow-right";
+
   const sz = 18;
-  if (icon === "arrow-right") {
+
+  if (effective === "arrow-right") {
     return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>`;
   }
-  if (icon === "arrow-down") {
+  if (effective === "arrow-down") {
     return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/></svg></span>`;
   }
-  if (icon === "external") {
+  if (effective === "external") {
     return `<span class="ff-cta-ic" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>`;
   }
+
   return "";
 }
+
 
 function ctaInlineStyle(spacing?: CtaSpacing): string {
   if (!spacing) return "";
@@ -1087,8 +1097,11 @@ function computeInitialTimeLeft(timer: TimerItem): {
   if (timer.mode === "countdown-date" && timer.targetDate) {
     const t = new Date(timer.targetDate).getTime();
     if (!isNaN(t)) totalMs = Math.max(0, t - Date.now());
-  } else if (timer.mode === "countdown-duration" && timer.durationHours) {
-    totalMs = Math.max(0, timer.durationHours * 60 * 60 * 1000);
+  } else if (timer.mode === "countdown-duration") {
+    const hours = (timer.durationHours && timer.durationHours > 0)
+      ? timer.durationHours
+      : 24;
+    totalMs = Math.max(0, hours * 60 * 60 * 1000);
   }
   return {
     days: Math.floor(totalMs / (1000 * 60 * 60 * 24)),
@@ -1097,6 +1110,7 @@ function computeInitialTimeLeft(timer: TimerItem): {
     seconds: Math.floor((totalMs / 1000) % 60),
   };
 }
+
 
 function buildTimerDataAttrs(
   timer: TimerItem,
@@ -1115,11 +1129,13 @@ function buildTimerDataAttrs(
     "data-ff-timer-scope": `${funnelId}_${pageId}`,
     "data-ff-timer-lang": language,
   };
-  if (timer.mode === "countdown-duration" && timer.durationHours) {
-    attrs["data-ff-timer-duration-ms"] = String(
-      Math.max(1, timer.durationHours) * 60 * 60 * 1000,
-    );
+  if (timer.mode === "countdown-duration") {
+    const hours = (timer.durationHours && timer.durationHours > 0)
+      ? timer.durationHours
+      : 24;
+    attrs["data-ff-timer-duration-ms"] = String(hours * 60 * 60 * 1000);
   }
+
   if (timer.mode === "countdown-date" && timer.targetDate) {
     const t = new Date(timer.targetDate).getTime();
     if (!isNaN(t)) attrs["data-ff-timer-target-ms"] = String(t);
@@ -1530,11 +1546,28 @@ function renderFormFields(
     })
     .join("\n");
 
+  // 🆕 Calcul du message de réassurance (RGPD / sécurité)
+  // - undefined  → message par défaut
+  // - "" / "   " → masqué
+  // - sinon      → texte fourni
+  const reassuranceRaw = section.reassurance;
+  const reassuranceText =
+    reassuranceRaw === undefined
+      ? DEFAULT_REASSURANCE
+      : reassuranceRaw.trim() === ""
+        ? null
+        : reassuranceRaw;
+  const reassuranceHtml = reassuranceText
+    ? `<p class="ff-reassurance">${escapeHtml(reassuranceText)}</p>`
+    : "";
+
   return `<form class="ff-form-fields" action="#" method="post">
 ${fieldsHtml}
 <button type="submit" class="ff-btn ff-form-submit">${escapeHtml(ctaLabel)}</button>
+${reassuranceHtml}
 </form>`;
 }
+
 
 function renderSection(
   section: FunnelSection,

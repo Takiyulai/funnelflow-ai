@@ -68,17 +68,22 @@ export function TimerRenderer({ timer, funnelId = "default", pageId = "default",
   };
 
   // Calcule le target timestamp (ms) selon le mode
-  const targetMs = useMemo(() => {
-    if (timer.mode === "countdown-date" && timer.targetDate) {
-      const d = new Date(timer.targetDate).getTime();
-      return isNaN(d) ? Date.now() : d;
-    }
-    if (timer.mode === "countdown-duration" && timer.durationHours) {
-      const start = getOrInitStartTime(timer.id, scopeKey);
-      return start + timer.durationHours * 60 * 60 * 1000;
-    }
-    return 0;
-  }, [timer.id, timer.mode, timer.durationHours, timer.targetDate, scopeKey]);
+    const targetMs = useMemo(() => {
+      if (timer.mode === "countdown-date" && timer.targetDate) {
+        const d = new Date(timer.targetDate).getTime();
+        if (isNaN(d)) return Date.now() + 24 * 60 * 60 * 1000;
+        return d;
+      }
+      if (timer.mode === "countdown-duration") {
+        const hours = (timer.durationHours && timer.durationHours > 0)
+          ? timer.durationHours
+          : 24;
+        const start = getOrInitStartTime(timer.id, scopeKey);
+        return start + hours * 60 * 60 * 1000;
+      }
+      return 0;
+    }, [timer.id, timer.mode, timer.durationHours, timer.targetDate, scopeKey]);
+
 
   const [timeLeft, setTimeLeft] = useState<TimeLeft>(() =>
     timer.mode === "seats-counter"
