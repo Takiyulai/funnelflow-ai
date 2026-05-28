@@ -1,16 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import {
-  Image as ImageIcon,
-  Video,
-  X,
-  Plus,
-  Upload,
-  Link as LinkIcon,
-  CheckCircle2,
-  Info,
-} from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import type {
@@ -21,11 +12,21 @@ import type {
 } from "@/lib/funnels/types";
 import { makeEmptyMediaItem } from "@/lib/funnels/types";
 
+// Aliases locaux — évite tout conflit avec le barrel optimizer de Next.js
+const ImageIcon = LucideIcons.Image;
+const Video = LucideIcons.Video;
+const X = LucideIcons.X;
+const Plus = LucideIcons.Plus;
+const Upload = LucideIcons.Upload;
+const LinkIcon = LucideIcons.Link;
+const CheckCircle2 = LucideIcons.CheckCircle2;
+const Info = LucideIcons.Info;
+
 const MAX_MEDIAS = 5;
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LABELS multilingues — une seule structure cohérente
+// LABELS multilingues
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Lang = Language;
@@ -468,7 +469,7 @@ function MediaCard({
           />
         </Field>
 
-        {/* Sélecteur de section cible (UNIQUE) */}
+        {/* Sélecteur de section cible */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             {L.sectionHintLabel}
@@ -496,7 +497,9 @@ function MediaCard({
           {selectedOption?.hint ? (
             <p className="mt-1 text-xs text-gray-500 flex items-start gap-1">
               <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-              <span>{selectedOption.hint[language] ?? selectedOption.hint.fr}</span>
+              <span>
+                {selectedOption.hint[language] ?? selectedOption.hint.fr}
+              </span>
             </p>
           ) : (
             <p className="mt-1 text-xs text-gray-500">{L.sectionHintHelper}</p>

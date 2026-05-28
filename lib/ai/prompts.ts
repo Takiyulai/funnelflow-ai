@@ -31,10 +31,6 @@ function tr<T extends Record<Language, string>>(map: T, lang: Language): string 
 // 🆕 Helper : résolution du rôle d'accueil selon le type de tunnel
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Retourne le PageRole de la page d'accueil pour un FunnelKind donné.
- * (Aucun PageRole "home" n'existe ; chaque type de tunnel a son rôle d'entrée.)
- */
 function getHomeRoleForKind(kind: FunnelKind): PageRole {
   switch (kind) {
     case "lead-magnet":
@@ -176,6 +172,108 @@ export function mediasBlock(
   );
 
   return lines.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Bloc : interdiction d'inventer des noms de fichier
+// ─────────────────────────────────────────────────────────────────────────────
+
+function noInventedFilenamesBlock(lang: Language): string {
+  return tr(
+    {
+      fr: [
+        "## ⚠️ NOMS DE FICHIERS — RÈGLE ABSOLUE",
+        "",
+        "N'INVENTE JAMAIS un nom de fichier image (ex: \"speaking.png\", \"hero.jpg\", \"photo-coach.webp\").",
+        "Pour chaque média fourni dans `MÉDIAS FOURNIS`, utilise EXCLUSIVEMENT son `ref` exact (ex: `[uploaded-media-xxx]`) dans le champ `image.url` ou `video.url`.",
+        "Si aucun média n'est fourni pour une section, laisse `image.mode = \"none\"` SANS URL.",
+        "",
+        "❌ INTERDIT : `image: { url: \"speaking.png\" }`, `image: { url: \"/images/coach.jpg\" }`",
+        "✅ AUTORISÉ : `image: { url: \"[uploaded-media-1779906684809-zpnilq]\", alt: \"Coach\" }`",
+        "✅ AUTORISÉ (aucun média) : `image: { mode: \"none\" }`",
+      ].join("\n"),
+      en: [
+        "## ⚠️ FILENAMES — ABSOLUTE RULE",
+        "",
+        "NEVER invent an image filename (e.g., \"speaking.png\", \"hero.jpg\").",
+        "For each provided media, use ONLY its exact `ref` (e.g., `[uploaded-media-xxx]`) in `image.url` or `video.url`.",
+        "If no media is provided for a section, leave `image.mode = \"none\"` WITHOUT URL.",
+      ].join("\n"),
+      es: [
+        "## ⚠️ NOMBRES DE ARCHIVO — REGLA ABSOLUTA",
+        "",
+        "NUNCA inventes un nombre de archivo de imagen.",
+        "Usa SOLO el `ref` proporcionado (ej: `[uploaded-media-xxx]`).",
+        "Si no hay media, deja `image.mode = \"none\"` SIN URL.",
+      ].join("\n"),
+    },
+    lang,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Bloc : injection de la vidéo principale du brief
+// ─────────────────────────────────────────────────────────────────────────────
+
+function briefVideoBlock(
+  videoUrl: string | undefined,
+  lang: Language,
+  isSecondary = false,
+): string {
+  if (!videoUrl || !videoUrl.trim()) return "";
+
+  const trimmed = videoUrl.trim();
+
+  if (lang === "en") {
+    return [
+      "## 🎥 MAIN VIDEO PROVIDED (MANDATORY)",
+      "",
+      `URL: \`${trimmed}\``,
+      "",
+      isSecondary
+        ? "If the page role is `replay`, `live`, `webinar`, or `confirmation`, you MUST create a `video` section with this URL as the central content."
+        : "You MUST create a `video` section containing this URL. For funnels of type `webinar` or `vsl`, this video is the central element of the page.",
+      "",
+      "Required format:",
+      "```json",
+      `{ "type": "video", "video": { "url": "${trimmed}", "provider": "youtube" }, "headline": "...", "body": "..." }`,
+      "```",
+    ].join("\n");
+  }
+
+  if (lang === "es") {
+    return [
+      "## 🎥 VIDEO PRINCIPAL PROPORCIONADO (OBLIGATORIO)",
+      "",
+      `URL: \`${trimmed}\``,
+      "",
+      isSecondary
+        ? "Si el rol de página es `replay`, `live`, `webinar` o `confirmation`, DEBES crear una sección `video` con esta URL."
+        : "DEBES crear una sección `video` con esta URL. Para embudos `webinar` o `vsl`, este vídeo es el contenido central.",
+      "",
+      "Formato requerido :",
+      "```json",
+      `{ "type": "video", "video": { "url": "${trimmed}", "provider": "youtube" }, "headline": "...", "body": "..." }`,
+      "```",
+    ].join("\n");
+  }
+
+  return [
+    "## 🎥 VIDÉO PRINCIPALE FOURNIE (OBLIGATOIRE)",
+    "",
+    `URL : \`${trimmed}\``,
+    "",
+    isSecondary
+      ? "Si le rôle de la page est `replay`, `live`, `webinar` ou `confirmation`, tu DOIS créer une section `video` contenant cette URL comme contenu central."
+      : "Tu DOIS créer une section de type `video` contenant cette URL. Pour les tunnels de type `webinar` ou `vsl`, cette vidéo est l'élément central de la page.",
+    "",
+    "Format requis :",
+    "```json",
+    `{ "type": "video", "video": { "url": "${trimmed}", "provider": "youtube" }, "headline": "Découvrez la méthode en vidéo", "body": "Une présentation claire de ce qui vous attend." }`,
+    "```",
+    "",
+    "⚠️ Cette URL doit apparaître TELLE QUELLE dans le champ `video.url` — ne la modifie pas, ne la remplace pas par un placeholder.",
+  ].join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,12 +472,18 @@ function richSectionsBlock(brief: FunnelBrief): string {
       fr: [
         "Pour ces sections, NE METS PAS le contenu dans `body` ou `bullets`. Utilise OBLIGATOIREMENT le tableau `items[]` avec le bon `kind` et la bonne structure `data`.",
         "Si tu utilises `items[]`, ne mets ni `body` ni `bullets` dans la section (ils seraient ignorés).",
+        "",
+        "📸 RÈGLE SPÉCIALE TESTIMONIALS : si un média avec sectionHint=\"testimonials\" est fourni, place son `ref` dans le champ `data.avatarUrl` du PREMIER testimonial — JAMAIS dans le champ `image` de la section.",
       ].join("\n"),
       en: [
         "For these sections, DO NOT put content in `body` or `bullets`. You MUST use the `items[]` array with the correct `kind` and `data` structure.",
+        "",
+        "📸 SPECIAL TESTIMONIALS RULE: if a media with sectionHint=\"testimonials\" is provided, place its `ref` in the `data.avatarUrl` field of the FIRST testimonial — NEVER in the section's `image` field.",
       ].join("\n"),
       es: [
         "Para estas secciones, NO pongas el contenido en `body` o `bullets`. DEBES usar el array `items[]`.",
+        "",
+        "📸 REGLA ESPECIAL TESTIMONIALS: coloca el `ref` del media en `data.avatarUrl` del PRIMER testimonio, NUNCA en el `image` de la sección.",
       ].join("\n"),
     },
     lang,
@@ -394,7 +498,7 @@ function richSectionsBlock(brief: FunnelBrief): string {
     "",
     "─── testimonials / proof (minimum 3 items) ───",
     `"items": [`,
-    `  {"kind":"testimonial","data":{"quote":"Résultat visible en 2 semaines.","authorName":"Claire D.","rating":5}}`,
+    `  {"kind":"testimonial","data":{"quote":"Résultat visible en 2 semaines.","authorName":"Claire D.","authorRole":"Entrepreneure","avatarUrl":"[uploaded-media-xxx]","rating":5}}`,
     `]`,
     "",
     "─── pricing / offer (1 à 3 items) ───",
@@ -466,14 +570,15 @@ function commonJsonSchemaBlock(lang: Language = "fr"): string {
     {
       "id": "string-optionnel",
       "type": "hero" | "about" | "problem" | "solution" | "benefits" | "proof" | "testimonials" | "offer" | "bonus" | "guarantee" | "pricing" | "process" | "program" | "video" | "faq" | "cta" | "form",
-      "eyebrow": "string-optionnel",
+      "eyebrow": "string-obligatoire (2-5 mots)",
       "headline": "string-obligatoire",
       "subheadline": "string-optionnel",
       "body": "string-optionnel (interdit si items[] présent)",
       "bullets": ["string"],
       "items": [{ "kind": "faq" | "testimonial" | "pricing" | "bonus" | "guarantee", "data": { ... } }],
       "cta": { "label": "string", "mode": "anchor" | "redirect", "url": "...", "anchorId": "lead-form", "target": "_self" | "_blank" },
-      "image": { "mode": "none" | "upload" | "ai-suggested", "mediaRef": "id-optionnel", "alt": "string-optionnel" },
+      "image": { "mode": "none" | "upload" | "ai-suggested", "url": "[uploaded-media-xxx]", "alt": "string-optionnel" },
+      "video": { "url": "https://youtu.be/xxx", "provider": "youtube" },
       "visible": true
     }
   ],
@@ -786,6 +891,10 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
     "",
     mediasBlock(brief.medias as MediaInput[] | undefined, lang),
     "",
+    noInventedFilenamesBlock(lang),
+    "",
+    briefVideoBlock(brief.videoUrl, lang, false),
+    "",
     strictSectionRequirementsBlock(lang),
     "",
     richSectionsBlock(brief),
@@ -988,6 +1097,10 @@ export function mainPagePrompt(args: {
   medias?: MediaInput[];
   cta?: { primary?: string; secondary?: string };
   extraContext?: string;
+  /** 🆕 URL vidéo principale du brief (sera injectée comme section video) */
+  videoUrl?: string;
+  /** 🆕 Brief complet pour activer les blocs richSections + strictSectionRequirements */
+  brief?: FunnelBrief;
 }): string {
   const lang: Language = args.language || "fr";
   const langLabel =
@@ -997,6 +1110,10 @@ export function mainPagePrompt(args: {
   const bp = getPageBlueprint(args.funnelKind, homeRole);
   const recommendedSections = bp?.defaultSectionTypes.join(", ") || "hero, benefits, testimonials, cta";
   const minSections = bp?.minSections ?? 5;
+
+  const briefDrivenBlocks = args.brief
+    ? "\n" + strictSectionRequirementsBlock(lang) + "\n\n" + richSectionsBlock(args.brief) + "\n"
+    : "";
 
   return `# Génération de la page principale du tunnel
 
@@ -1018,6 +1135,12 @@ ${heroSingleMediaBlock(args.funnelKind, homeRole, lang)}
 ${roleSemanticsBlock([homeRole], lang)}
 
 ${mediasBlock(args.medias, lang)}
+
+${noInventedFilenamesBlock(lang)}
+
+${briefVideoBlock(args.videoUrl, lang, false)}
+
+${briefDrivenBlocks}
 
 ## Règle de titre
 Le titre du hero doit être une **promesse claire et spécifique** orientée résultat pour l'audience. Pas de slogan vague. Maximum 12 mots.
@@ -1041,6 +1164,10 @@ export function secondaryPagesPrompt(args: {
   medias?: MediaInput[];
   cta?: { primary?: string; secondary?: string };
   extraContext?: string;
+  /** 🆕 URL vidéo principale du brief */
+  videoUrl?: string;
+  /** 🆕 Brief complet pour activer les blocs richSections + strictSectionRequirements */
+  brief?: FunnelBrief;
 }): string {
   const lang: Language = args.language || "fr";
   const langLabel =
@@ -1064,6 +1191,10 @@ export function secondaryPagesPrompt(args: {
     .join("\n");
 
   const roles = args.pages.map((p) => p.role as string);
+
+  const briefDrivenBlocks = args.brief
+    ? "\n" + strictSectionRequirementsBlock(lang) + "\n\n" + richSectionsBlock(args.brief) + "\n"
+    : "";
 
   return `# Génération des pages secondaires du tunnel
 
@@ -1089,6 +1220,12 @@ ${roleSemanticsBlock(roles, lang)}
 ${frameworksByPage}
 
 ${mediasBlock(args.medias, lang)}
+
+${noInventedFilenamesBlock(lang)}
+
+${briefVideoBlock(args.videoUrl, lang, true)}
+
+${briefDrivenBlocks}
 
 ${args.extraContext || ""}
 

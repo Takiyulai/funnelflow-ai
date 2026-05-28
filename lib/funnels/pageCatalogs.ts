@@ -518,3 +518,49 @@ export function getCopywritingFrameworks(
   if (bp.secondaryFrameworks) list.push(...bp.secondaryFrameworks);
   return list.length > 0 ? list : ["AIDA"];
 }
+/* ------------------------------------------------------------------ */
+/*  🆕 Capacités déclaratives des sections (universel, auto-extensible) */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Types de section qui peuvent porter une image principale (section.image).
+ * Pour ajouter un nouveau type qui accepte une image : ajouter ici, point.
+ */
+export const SECTION_TYPES_ACCEPTING_IMAGE: ReadonlySet<FunnelSectionType> = new Set<FunnelSectionType>([
+  "hero",
+  "about",
+  "proof",
+  "problem",
+  "solution",
+  "offer",
+  "video",
+]);
+
+/**
+ * Types de section dont les items[] portent un avatarUrl
+ * (visage de personne attendu sur chaque item).
+ */
+export const SECTION_TYPES_ACCEPTING_AVATARS: ReadonlySet<FunnelSectionType> = new Set<FunnelSectionType>([
+  "testimonials",
+]);
+
+/**
+ * Types de section qui peuvent porter une vidéo principale (section.video).
+ */
+export const SECTION_TYPES_ACCEPTING_VIDEO: ReadonlySet<FunnelSectionType> = new Set<FunnelSectionType>([
+  "hero",
+  "video",
+  "webinar",
+]);
+
+export function sectionTypeAcceptsImage(t: FunnelSectionType): boolean {
+  return SECTION_TYPES_ACCEPTING_IMAGE.has(t);
+}
+
+export function sectionTypeAcceptsAvatars(t: FunnelSectionType): boolean {
+  return SECTION_TYPES_ACCEPTING_AVATARS.has(t);
+}
+
+export function sectionTypeAcceptsVideo(t: FunnelSectionType): boolean {
+  return SECTION_TYPES_ACCEPTING_VIDEO.has(t);
+}

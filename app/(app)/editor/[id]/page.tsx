@@ -19,6 +19,7 @@ import { SystemeIoExportMenu } from "@/components/editor/SystemeIoExportMenu";
 import { HeaderTab } from "@/components/editor/tabs/HeaderTab";
 import { useToast } from "@/components/ui/Toast";
 import {
+  useFunnelWithStatus,
   useFunnel,
   saveFunnel,
   publishFunnel,
@@ -83,14 +84,9 @@ export default function EditorPage() {
   const toast = useToast();
   const funnelId = params?.id ?? "";
 
-  const stored = useFunnel(funnelId);
+const { stored, status } = useFunnelWithStatus(funnelId);
+const loading = status === "loading";
 
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setHydrated(true), 80);
-    return () => clearTimeout(t);
-  }, []);
-  const loading = !hydrated;
 
   const [history, setHistory] = useState<HistoryState>({
     past: [],
@@ -115,29 +111,47 @@ export default function EditorPage() {
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    if (loading) return;
-    if (!stored) {
-      toast.show({ title: "Tunnel introuvable", variant: "error" });
-      router.replace("/dashboard");
-      return;
-    }
-    if (isInitialLoadRef.current) {
-      setHistory({ past: [], present: stored.funnel, future: [] });
+  if (status === "loading") return;
+  if (status === "not-found") {
+    toast.show({ title: "Tunnel introuvable", variant: "error" });
+    router.replace("/dashboard");
+    return;
+  }
+  if (!stored) return; // safety (ne devrait pas arriver si status === "loaded")
 
-      const homePage =
-        stored.funnel.pages?.find((p) => p.isHome) ??
-        stored.funnel.pages?.[0] ??
-        null;
-      setSelectedPageId(homePage?.id ?? null);
+  if (isInitialLoadRef.current) {
+    setHistory({ past: [], present: stored.funnel, future: [] });
 
-      const firstSection =
-        homePage?.sections[0] ?? stored.funnel.sections[0] ?? null;
-      setSelectedSectionId(firstSection?.id ?? null);
+    const homePage =
+      stored.funnel.pages?.find((p) => p.isHome) ??
+      stored.funnel.pages?.[0] ??
+      null;
+    setSelectedPageId(homePage?.id ?? null);
 
-      setLastSavedAt(new Date(stored.updatedAt).getTime());
-      isInitialLoadRef.current = false;
-    }
-  }, [loading, stored, router, toast]);
+    const firstSection =
+      homePage?.sections[0] ?? stored.funnel.sections[0] ?? null;
+    setSelectedSectionId(firstSection?.id ?? null);
+
+    setLastSavedAt(new Date(stored.updatedAt).getTime());
+    isInitialLoadRef.current = false;
+    return;
+  }
+
+  // 🔑 Si stored a été ré-hydraté avec des data-URLs résolues APRÈS le
+  // chargement initial (cas typique : useFunnel a chargé d'abord la version
+  // avec idb-media:// puis a remplacé par la version avec data:image/...),
+  // on met à jour history.present pour que la preview affiche les médias.
+  // On ne le fait QUE si l'utilisateur n'a pas encore modifié le tunnel
+  // (history.past vide), pour ne pas écraser ses changements.
+  if (
+    history.past.length === 0 &&
+    history.future.length === 0 &&
+    history.present !== stored.funnel
+  ) {
+    setHistory({ past: [], present: stored.funnel, future: [] });
+  }
+}, [status, stored, router, toast, history.past.length, history.future.length, history.present]);
+
 
   const funnel = history.present;
 
