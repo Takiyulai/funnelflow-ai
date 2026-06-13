@@ -2,7 +2,7 @@
 "use client";
 
 import {
-  Download, FileText, Globe2, Users, ArrowRight,
+  Download, FileText, Globe2, Users,
   Sparkles, Upload, CheckCircle2, BookOpen,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
@@ -72,22 +72,21 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-3xl font-black text-ink">Tableau de bord</h1>
+          <h1 className="text-2xl font-black text-ink sm:text-3xl">Tableau de bord</h1>
           <p className="mt-1.5 text-sm text-muted">
             Vue claire de vos tunnels, exports et leads
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button href="/create">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button href="/create" className="w-full justify-center sm:w-auto">
             <Sparkles size={15} /> Créer un tunnel
           </Button>
-          <CloneFunnelButton />
+          <CloneFunnelButton className="w-full justify-center sm:w-auto" />
         </div>
-
       </div>
 
       {/* KPI */}
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <DashboardCard
           label="Tunnels créés"
           value={String(totalFunnels)}
@@ -118,13 +117,10 @@ export default function DashboardPage() {
       {/* Contenu */}
       <div className="mt-6 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
         {/* Liste tunnels */}
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-black text-ink">Derniers tunnels</h2>
-              <p className="text-xs text-muted">Vos tunnels les plus récents</p>
-            </div>
-              <CloneFunnelButton className="w-full justify-center" />
+        <Card className="p-4 sm:p-5">
+          <div className="mb-4">
+            <h2 className="text-lg font-black text-ink">Derniers tunnels</h2>
+            <p className="text-xs text-muted">Vos tunnels les plus récents</p>
           </div>
 
           <div className="grid gap-2">
@@ -147,22 +143,22 @@ export default function DashboardPage() {
 
         {/* Panneau latéral */}
         <div className="grid gap-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h2 className="text-lg font-black text-ink">Actions rapides</h2>
             <div className="mt-3 grid gap-2">
-              <Button href="/export-systeme" variant="secondary">
+              <Button href="/export-systeme" variant="secondary" className="w-full justify-center">
                 <Download size={14} /> Exporter vers systeme.io
               </Button>
-              <Button href="/leads" variant="secondary">
+              <Button href="/leads" variant="secondary" className="w-full justify-center">
                 <Users size={14} /> Voir les leads
               </Button>
-              <Button href="/import" variant="secondary">
+              <Button href="/import" variant="secondary" className="w-full justify-center">
                 <Upload size={14} /> Importer une URL
               </Button>
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <div className="mb-3 flex items-center gap-2">
               <BookOpen size={15} className="text-navy" />
               <h2 className="text-sm font-black text-ink">Bien démarrer</h2>
@@ -217,19 +213,18 @@ function FunnelRow({
         (funnel as { sections?: unknown[] }).sections?.length ?? 0;
 
   const language = (funnel.language ?? "fr").toUpperCase();
-  const pageLabel =
-    pages.length > 1 ? `${pages.length} pages · ` : "";
+  const pageLabel = pages.length > 1 ? `${pages.length} pages · ` : "";
 
   return (
-    <div className="ff-card-hover flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-3.5">
+    <div className="ff-card-hover flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 sm:p-3.5">
       <a href={`/editor/${id}`} className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-ink">{funnel.funnelName}</p>
-        <p className="mt-0.5 text-xs text-muted">
+        <p className="mt-0.5 truncate text-xs text-muted">
           {pageLabel}
           {sectionCount} sections · {language} · {dateLabel}
         </p>
       </a>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         {publishedAt ? (
           <Badge tone="green">Publié</Badge>
         ) : (
@@ -244,7 +239,6 @@ function FunnelRow({
     </div>
   );
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
