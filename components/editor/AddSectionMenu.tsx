@@ -85,6 +85,7 @@ const DEFAULT_HEADLINES: Record<FunnelSectionType, string> = {
   webinar: "Réservez votre place",
   video: "Découvrez en vidéo",
   qualification: "Êtes-vous au bon endroit ?",
+  "raw-html": "Section HTML personnalisée",
 };
 
 /**

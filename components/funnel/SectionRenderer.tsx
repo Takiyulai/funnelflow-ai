@@ -9,6 +9,8 @@ import type {
   FunnelSection,
   SectionLayoutVariant,
 } from "@/lib/funnels/types";
+import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
+
 
 type Props = {
   section: FunnelSection;
@@ -51,6 +53,26 @@ export function SectionRenderer({
   const anims = section.animations ?? {};
   const visible = section.visible !== false;
   if (!visible) return null;
+    // Early return pour les sections HTML brutes (clonage) :
+  // pas de layout standard, le HTML s'affiche dans une iframe sandboxée.
+if (section.type === "raw-html") {
+  const clonedHead = (funnel?.meta as { clonedHead?: string } | undefined)
+    ?.clonedHead;
+  return (
+    <section
+      id={section.id || section.type}
+      data-ff-section="raw-html"
+      className="ff-section ff-raw-html"
+      style={{ padding: 0, margin: 0, background: "transparent" }}
+    >
+      <RawHtmlRenderer
+        section={section}
+        clonedHead={clonedHead}
+        editMode={mode === "preview"}   /* 🆕 active uniquement en preview/éditeur */
+      />
+    </section>
+  );
+}
 
   const sectionId = section.id || section.type;
   const animOf: AnimOf = (key) => anims[key] ?? "none";

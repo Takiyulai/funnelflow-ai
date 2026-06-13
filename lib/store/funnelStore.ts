@@ -11,6 +11,16 @@ import {
   hasIdbRefs,
   resolveMedias,
 } from "./mediaStore";
+// 🆕 SUPABASE — couche d'accès distant
+import {
+  saveRemote,
+  loadRemote,
+  listRemote,
+  deleteRemote as deleteRemoteFn,
+  publishRemote,
+} from "./funnelRepository";
+import { normalizeFunnel } from "./normalizeFunnel";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -202,6 +212,54 @@ function safeSetItem(key: string, value: string, protectedId?: string): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 SUPABASE — Sync distante (source de vérité = Supabase, local = cache)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const remoteSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const REMOTE_DEBOUNCE_MS = 1200;
+
+/**
+ * Pousse un funnel vers Supabase en arrière-plan (debounce par id).
+ * N'émet AUCUN changement local → ne déclenche pas de re-render →
+ * ne casse pas l'anti-boucle d'auto-save. Best-effort : si offline ou
+ * déconnecté, le cache local conserve la donnée jusqu'au prochain save.
+ */
+function scheduleRemoteSave(stored: StoredFunnel): void {
+  if (typeof window === "undefined") return;
+  const existing = remoteSaveTimers.get(stored.id);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    remoteSaveTimers.delete(stored.id);
+    saveRemote(stored).catch((e) =>
+      console.warn(
+        "[funnelStore] saveRemote échoué (cache local conservé):",
+        e,
+      ),
+    );
+  }, REMOTE_DEBOUNCE_MS);
+  remoteSaveTimers.set(stored.id, timer);
+}
+
+/**
+ * Écrit une version distante dans le cache local SANS émettre de changement
+ * (évite la boucle). Utilisé par l'hydratation au load.
+ */
+function hydrateLocalFromRemote(remote: StoredFunnel): void {
+  if (typeof window === "undefined") return;
+  try {
+    safeSetItem(
+      STORAGE_PREFIX + remote.id,
+      JSON.stringify(remote),
+      remote.id,
+    );
+    const ids = readIndex();
+    if (!ids.includes(remote.id)) writeIndex([remote.id, ...ids]);
+  } catch {
+    // quota : pas grave, Supabase reste la source de vérité
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 🆕 Migration multi-pages
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -282,7 +340,7 @@ function applyMigrations(stored: StoredFunnel): StoredFunnel {
 
   funnel = normalizeLegacyKind(funnel);
   funnel = syncLegacySections(funnel);
-
+  funnel = normalizeFunnel(funnel);
   if (funnel === stored.funnel) return stored;
 
   const migrated = { ...stored, funnel };
@@ -394,7 +452,7 @@ export function saveFunnel(stored: StoredFunnel): void {
   };
 
   // 3) Écriture sécurisée avec purge automatique en cas de quota dépassé
-    safeSetItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced), stored.id);
+  safeSetItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced), stored.id);
 
   const ids = readIndex();
   const isNew = !ids.includes(stored.id);
@@ -402,6 +460,13 @@ export function saveFunnel(stored: StoredFunnel): void {
     ids.unshift(stored.id);
     writeIndex(ids);
   }
+
+  // 🆕 SUPABASE — push distant en arrière-plan (debounce). N'affecte PAS
+  // emitChange, donc pas de re-render → pas de boucle. Le funnel envoyé est
+  // `synced` ; funnelRepository externalise les médias idb-media:// /data: vers
+  // Supabase Storage avant écriture (le JSON distant ne contient que des URLs).
+  scheduleRemoteSave(synced);
+
   // 🔑 N'émet de changement QUE pour un nouveau tunnel (apparition dans la
   // liste). Pour une simple mise à jour, on évite la notification qui ferait
   // re-déclencher useFunnel → loadFunnel → setStored → re-render → auto-save
@@ -410,7 +475,6 @@ export function saveFunnel(stored: StoredFunnel): void {
     emitChange(stored.id);
   }
 }
-
 
 export function deleteFunnel(id: string): void {
   if (typeof window === "undefined") return;
@@ -422,6 +486,11 @@ export function deleteFunnel(id: string): void {
   const ids = readIndex().filter((x) => x !== id);
   writeIndex(ids);
   emitChange(id);
+
+  // 🆕 SUPABASE — miroir distant best-effort
+  deleteRemoteFn(id).catch((e) =>
+    console.warn("[funnelStore] deleteRemote échoué:", e),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -526,6 +595,20 @@ export function publishFunnel(id: string): StoredFunnel | null {
   safeSetItem(PUBLISHED_PREFIX + stored.slug, JSON.stringify(updated), id);
 
   emitChange(id);
+
+  // 🆕 SUPABASE — publication distante : on pousse d'abord le draft à jour
+  // (json_content + médias externalisés), PUIS on fige le snapshot publié
+  // (published_content + published_slug + status='published'). Séquentiel
+  // pour garantir que le snapshot contient bien la dernière version.
+  (async () => {
+    try {
+      await saveRemote(updated);
+      await publishRemote(id);
+    } catch (e) {
+      console.warn("[funnelStore] publication distante échouée:", e);
+    }
+  })();
+
   return updated;
 }
 
@@ -592,6 +675,7 @@ export function clearAllFunnels(): void {
   }
   writeIndex([]);
   emitChange();
+  // NB : ne touche PAS au distant (action de maintenance locale uniquement).
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -601,9 +685,30 @@ export function clearAllFunnels(): void {
 export function useFunnelList(): StoredFunnel[] {
   const [list, setList] = useState<StoredFunnel[]>([]);
   useEffect(() => {
+    let cancelled = false;
+
+    // 1) Affichage instantané depuis le cache local
     setList(listFunnels());
-    const unsub = subscribe(() => setList(listFunnels()));
-    return unsub;
+
+    // 2) 🆕 SUPABASE — source de vérité : on récupère la liste distante,
+    //    on hydrate le cache local, puis on rafraîchit l'affichage.
+    listRemote()
+      .then((remoteList) => {
+        if (cancelled || remoteList.length === 0) return;
+        for (const remote of remoteList) {
+          hydrateLocalFromRemote(remote);
+        }
+        if (!cancelled) setList(listFunnels());
+      })
+      .catch((e) => console.warn("[useFunnelList] listRemote:", e));
+
+    const unsub = subscribe(() => {
+      if (!cancelled) setList(listFunnels());
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
   return list;
 }
@@ -617,18 +722,28 @@ export function useFunnel(id: string | undefined): StoredFunnel | null {
     }
     let cancelled = false;
 
-    // 🔑 Chargement en UNE SEULE phase : on attend la version résolue
-    // avant de notifier React. Évite le double-render initial qui
-    // déclenchait l'auto-save en boucle.
-    loadFunnelWithMedia(id).then((resolved) => {
+    // 1) Affichage immédiat depuis le cache local (UX : pas d'écran blanc)
+    loadFunnelWithMedia(id).then((localResolved) => {
       if (cancelled) return;
-      if (resolved) {
-        setStored(resolved);
+      if (localResolved) {
+        setStored(localResolved);
       } else {
-        // Fallback si la résolution échoue : on tente quand même la version sync
+        // Fallback sync si la résolution échoue
         setStored(loadFunnel(id));
       }
     });
+
+    // 2) 🆕 SUPABASE — source de vérité. Hydrate le local puis re-résout
+    //    les médias (les URLs Supabase sont déjà des https : no-op pour eux).
+    loadRemote(id)
+      .then((remote) => {
+        if (cancelled || !remote) return;
+        hydrateLocalFromRemote(remote);
+        loadFunnelWithMedia(id).then((merged) => {
+          if (!cancelled && merged) setStored(merged);
+        });
+      })
+      .catch((e) => console.warn("[useFunnel] loadRemote:", e));
 
     const unsub = subscribe(() => {
       if (cancelled) return;
@@ -662,23 +777,56 @@ export function useFunnelWithStatus(
     let cancelled = false;
     setStatus("loading");
 
+    // 1) Affichage immédiat depuis le cache local
     loadFunnelWithMedia(id).then((resolved) => {
       if (cancelled) return;
       if (resolved) {
         setStored(resolved);
         setStatus("loaded");
       } else {
-        // Fallback sync au cas où
         const fallback = loadFunnel(id);
         if (fallback) {
           setStored(fallback);
           setStatus("loaded");
+        }
+        // Pas de "not-found" ici : on attend la réponse distante (étape 2)
+        // avant de conclure à l'absence, sinon un funnel présent uniquement
+        // côté Supabase (autre appareil, cache vidé) serait déclaré introuvable.
+      }
+    });
+
+    // 2) 🆕 SUPABASE — source de vérité + résolution du statut final.
+    loadRemote(id)
+      .then((remote) => {
+        if (cancelled) return;
+        if (remote) {
+          hydrateLocalFromRemote(remote);
+          loadFunnelWithMedia(id).then((merged) => {
+            if (cancelled) return;
+            if (merged) {
+              setStored(merged);
+              setStatus("loaded");
+            }
+          });
         } else {
+          // Absent côté distant : si rien en local non plus → not-found.
+          const local = loadFunnel(id);
+          if (!local) {
+            setStored(null);
+            setStatus("not-found");
+          }
+        }
+      })
+      .catch((e) => {
+        console.warn("[useFunnelWithStatus] loadRemote:", e);
+        // En cas d'erreur réseau, on retombe sur le local pour décider.
+        if (cancelled) return;
+        const local = loadFunnel(id);
+        if (!local) {
           setStored(null);
           setStatus("not-found");
         }
-      }
-    });
+      });
 
     const unsub = subscribe(() => {
       if (cancelled) return;

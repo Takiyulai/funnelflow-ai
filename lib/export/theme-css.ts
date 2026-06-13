@@ -1,5 +1,5 @@
-/* ============================================================================
- * lib/export/theme-css.ts
+ /*============================================================================
+* lib/export/theme-css.ts
  *
  * Source UNIQUE de verite pour le CSS du tunnel.
  * Utilise a la fois par :
@@ -1254,9 +1254,18 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 
 /* Mode transparent : leger overlay translucide qui s'adapte au fond */
 .ff-brand-bar--transparent {
-  background: color-mix(in srgb, var(--ff-bg) 88%, transparent);
+  background: rgba(255, 255, 255, 0.88);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
+}
+.ff-page[data-ff-theme="clean-dark"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="coaching-premium"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="bold-energy"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="sharp-launch"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="trust-pro"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="lead-snap"] .ff-brand-bar--transparent,
+.ff-page[data-ff-theme="story-sell"] .ff-brand-bar--transparent {
+  background: rgba(10, 10, 10, 0.85);
 }
 /* Fallback navigateurs sans color-mix */
 @supports not (background: color-mix(in srgb, red 50%, blue)) {
@@ -1883,15 +1892,11 @@ textarea.ff-input {
 /* Quand le texte est dans une headline, on ajoute un leger effet "surligneur"
    pour donner plus de presence visuelle (style Linear / Framer). */
 .ff-headline .ff-hl {
-  background-image: linear-gradient(
-    to bottom,
-    transparent 62%,
-    color-mix(in srgb, var(--ff-accent) 28%, transparent) 62%,
-    color-mix(in srgb, var(--ff-accent) 28%, transparent) 92%,
-    transparent 92%
-  );
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
+  background-image: none;
+  text-decoration: underline;
+  text-decoration-color: var(--ff-accent);
+  text-decoration-thickness: 0.18em;
+  text-underline-offset: 0.05em;
   padding: 0 4px;
   border-radius: 2px;
 }
@@ -1972,6 +1977,7 @@ textarea.ff-input {
     }
   }
 }
+
 /* 30. TESTIMONIAL MEDIAS (Sprint B2) */
 .ff-page .ff-testimonial-media img,
 .ff-page .ff-testimonial-media video {
@@ -1979,7 +1985,7 @@ textarea.ff-input {
   width: 100%;
   height: auto;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   background: rgba(0, 0, 0, 0.04);
 }
 .ff-page .ff-testimonial-media--video {
@@ -1995,28 +2001,120 @@ textarea.ff-input {
     grid-template-columns: 1fr !important;
   }
 }
-/* 30. TESTIMONIAL MEDIAS (Sprint B2) */
-.ff-page .ff-testimonial-media img,
-.ff-page .ff-testimonial-media video {
-  display: block;
+/* SIO-FIX : SIO applique text-decoration:underline par défaut sur span colorés et enfants de headings */
+.ff-page span,
+.ff-page .ff-h1 span,
+.ff-page .ff-headline span,
+.ff-page h1 span,
+.ff-page h2 span,
+.ff-page h3 span,
+.ff-page a.ff-btn,
+.ff-page a.ff-brand-cta {
+  text-decoration: none !important;
+}
+.ff-page .ff-body span[style*="color"],
+.ff-page .ff-headline span[style*="color"],
+.ff-page .ff-h1 span[style*="color"] {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+/* SIO-FIX v1 : SIO applique text-decoration:underline aux spans colorés dans les headings */
+.ff-page span,
+.ff-page .ff-h1 span,
+.ff-page .ff-h2 span,
+.ff-page .ff-headline span,
+.ff-page h1 span,
+.ff-page h2 span,
+.ff-page h3 span,
+.ff-page .ff-body span,
+.ff-page .ff-eyebrow span {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+.ff-page a.ff-btn,
+.ff-page a.ff-brand-cta,
+.ff-page a.ff-brand-cta.ff-btn {
+  text-decoration: none !important;
+}
+/* ═══════════════════════════════════════════════════════════════════════════
+   RAW-HTML CLONED SECTIONS — Pleine largeur sur Systeme.io
+   ═══════════════════════════════════════════════════════════════════════════
+   Quand une section est entièrement clonée depuis un site externe
+   (data-ff-raw-html="true"), elle apporte SA PROPRE structure de centrage
+   (ex: .dKrHLy max-width 960px chez SIO). On doit donc :
+     1. Annuler le padding latéral du wrapper .ff-section
+     2. Annuler la max-width du .ff-section-inner (s'il existe)
+     3. Forcer .ff-page à occuper toute la largeur quand TOUTES les sections
+        sont des raw-html (cas "fully cloned")
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Cas 1 : funnel entièrement cloné → .ff-page pleine largeur sans padding */
+.ff-page[data-ff-fully-cloned="true"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Cas 2 : section raw-html individuelle → on retire le padding latéral
+   et toute contrainte de largeur du wrapper FunnelFlow.
+   Le HTML cloné gère LUI-MÊME son centrage interne. */
+.ff-page .ff-section.ff-raw-html,
+.ff-page .ff-section[data-ff-raw-html="true"] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Le .ff-section-inner éventuel à l'intérieur d'une raw-html doit aussi
+   être neutralisé (au cas où il aurait été généré par erreur). */
+.ff-page .ff-section.ff-raw-html > .ff-section-inner,
+.ff-page .ff-section[data-ff-raw-html="true"] > .ff-section-inner {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  text-align: initial !important;
+  align-items: initial !important;
+}
+
+/* Le contenu cloné direct (premier enfant de la raw-html) doit pouvoir
+   prendre toute la largeur — c'est lui qui décide de sa propre contrainte
+   (ex: max-width: 960px sur le .dKrHLy de SIO). */
+.ff-page .ff-section.ff-raw-html > *,
+.ff-page .ff-section[data-ff-raw-html="true"] > * {
+  max-width: 100%;
   width: 100%;
+}
+
+/* Petit garde-fou : si le funnel cloné contient des éléments avec une
+   largeur explicite > viewport (ex: width="1000" sur une image), on
+   force le respect du viewport pour éviter le scroll horizontal. */
+.ff-page[data-ff-fully-cloned="true"] img,
+.ff-page[data-ff-fully-cloned="true"] picture {
+  max-width: 100% !important;
   height: auto;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  background: rgba(0, 0, 0, 0.04);
 }
-.ff-page .ff-testimonial-media--video {
-  border-radius: 12px;
-  overflow: hidden;
-  background: #000;
+
+/* Annule la bordure-séparateur entre sections quand elles sont clonées
+   (le séparateur est conçu pour les sections FunnelFlow natives) */
+.ff-page .ff-section.ff-raw-html::after,
+.ff-page .ff-section[data-ff-raw-html="true"]::after {
+  display: none !important;
 }
-.ff-page .ff-testimonial-media-gallery {
-  margin-bottom: 1.25rem;
-}
-@media (max-width: 640px) {
-  .ff-page .ff-testimonial-media-gallery {
-    grid-template-columns: 1fr !important;
-  }
+
+/* Pas d'alternance de fond sur les sections clonées (elles ont leur
+   propre background-image / background-color via le site source) */
+.ff-page .ff-section.ff-raw-html,
+.ff-page .ff-section[data-ff-raw-html="true"] {
+  background-color: transparent !important;
+  border-top: none !important;
+  border-bottom: none !important;
 }
 
 `;
@@ -2624,4 +2722,3 @@ export function buildThemeRootAttrs(funnel: Funnel): ThemeRootAttrs {
     inlineStyle: styleParts.join(";"),
   };
 }
-

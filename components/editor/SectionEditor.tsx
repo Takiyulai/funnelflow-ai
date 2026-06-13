@@ -1,20 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   FileText,
   Image as ImageIcon,
   MousePointerClick,
   Palette,
+  Layers,
 } from "lucide-react";
 import type { FunnelSection, Language, Funnel } from "@/lib/funnels/types";
 import { ContentTab } from "@/components/editor/tabs/ContentTab";
 import { MediaTab } from "@/components/editor/tabs/MediaTab";
 import { CtaTab } from "@/components/editor/tabs/CtaTab";
 import { StyleTab } from "@/components/editor/tabs/StyleTab";
+import { BackgroundTab } from "@/components/editor/tabs/BackgroundTab";
 import { DecorativeIconsPanel } from "@/components/editor/tabs/DecorativeIconsPanel";
+import { RawHtmlContentTab } from "@/components/editor/tabs/RawHtmlContentTab";
+import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 
-type TabId = "content" | "media" | "cta" | "style";
+type TabId = "content" | "media" | "cta" | "style" | "background";
 
 type Props = {
   section: FunnelSection;
@@ -23,12 +27,19 @@ type Props = {
   onChange: (patch: Partial<FunnelSection>) => void;
 };
 
-
 const TABS: { id: TabId; label: string; icon: typeof FileText }[] = [
   { id: "content", label: "Contenu", icon: FileText },
   { id: "media", label: "Média", icon: ImageIcon },
   { id: "cta", label: "CTA", icon: MousePointerClick },
   { id: "style", label: "Style", icon: Palette },
+  { id: "background", label: "Fond", icon: Layers },
+];
+
+// 🆕 Pour une section raw-html (issue d'un clonage), seul l'onglet Contenu
+// est pertinent en V1. Les autres onglets (Média, CTA, Style, Fond) seront
+// remplacés par des équivalents raw-html dans les étapes 2-4.
+const TABS_RAW_HTML: { id: TabId; label: string; icon: typeof FileText }[] = [
+  { id: "content", label: "Contenu", icon: FileText },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
@@ -50,10 +61,30 @@ const SECTION_LABELS: Record<string, string> = {
   webinar: "Webinaire",
   vsl: "VSL",
   qualification: "Qualification",
+  "raw-html": "Section clonée",
 };
 
 export function SectionEditor({ section, language, funnel, onChange }: Props) {
+  // 🆕 Détecte si la section est un contenu raw-html cloné.
+  // On vérifie à la fois le type ET le marqueur dans body (double sécurité,
+  // car certaines sections clonées pourraient avoir un type différent).
+  const isRawHtml = useMemo(
+    () =>
+      section.type === ("raw-html" as FunnelSection["type"]) ||
+      (typeof section.body === "string" &&
+        section.body.startsWith(RAW_HTML_BODY_MARKER)),
+    [section.type, section.body],
+  );
+
+  const availableTabs = isRawHtml ? TABS_RAW_HTML : TABS;
+
+  // 🆕 Si l'onglet actif n'existe pas dans la liste disponible
+  // (cas d'un toggle entre section native et raw-html), on retombe sur "content".
   const [activeTab, setActiveTab] = useState<TabId>("content");
+  const safeActiveTab = availableTabs.some((t) => t.id === activeTab)
+    ? activeTab
+    : "content";
+
   const sectionLabel = SECTION_LABELS[section.type] ?? section.type;
 
   return (
@@ -63,19 +94,26 @@ export function SectionEditor({ section, language, funnel, onChange }: Props) {
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-white/50">
             Section
+            {isRawHtml && (
+              <span className="ml-2 rounded-full bg-amber-300/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">
+                CLONÉE
+              </span>
+            )}
           </div>
-          <div className="truncate text-sm font-semibold text-white">{sectionLabel}</div>
+          <div className="truncate text-sm font-semibold text-white">
+            {sectionLabel}
+          </div>
         </div>
         <div className="hidden sm:block text-[10px] text-white/40 shrink-0 truncate max-w-[140px]">
           id: {section.id}
         </div>
       </div>
 
-      {/* Tabs — scroll horizontal si nécessaire sur très petits écrans */}
+      {/* Tabs */}
       <div className="flex gap-1 border-b border-white/10 bg-zinc-950/50 px-2 pt-2 overflow-x-auto scrollbar-thin min-w-0">
-        {TABS.map((tab) => {
+        {availableTabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = safeActiveTab === tab.id;
           return (
             <button
               key={tab.id}
@@ -97,23 +135,44 @@ export function SectionEditor({ section, language, funnel, onChange }: Props) {
 
       {/* Tab content */}
       <div className="space-y-4 p-3 sm:p-4 text-white min-w-0">
-        {activeTab === "content" && (
-          <ContentTab section={section} language={language} onChange={onChange} />
-        )}
-        {activeTab === "media" && (
-        <MediaTab section={section} language={language} funnel={funnel} onChange={onChange} />
-        )}
+        {/* 🆕 Routing : si raw-html, on utilise RawHtmlContentTab pour Contenu */}
+        {safeActiveTab === "content" &&
+          (isRawHtml ? (
+            <RawHtmlContentTab section={section} onChange={onChange} />
+          ) : (
+            <ContentTab
+              section={section}
+              language={language}
+              onChange={onChange}
+            />
+          ))}
 
-        {activeTab === "cta" && (
+        {/* Les onglets natifs ne sont disponibles que pour les sections natives.
+            availableTabs filtre déjà ces cas, mais on garde les guards
+            (!isRawHtml) par sécurité au cas où availableTabs serait étendu. */}
+        {safeActiveTab === "media" && !isRawHtml && (
+          <MediaTab
+            section={section}
+            language={language}
+            funnel={funnel}
+            onChange={onChange}
+          />
+        )}
+        {safeActiveTab === "cta" && !isRawHtml && (
           <CtaTab section={section} language={language} onChange={onChange} />
         )}
-        {activeTab === "style" && (
+        {safeActiveTab === "style" && !isRawHtml && (
           <StyleTab section={section} language={language} onChange={onChange} />
         )}
+        {safeActiveTab === "background" && !isRawHtml && (
+          <BackgroundTab section={section} onChange={onChange} />
+        )}
 
-        {/* ─── Lot L : Icônes décoratives — disponible sur TOUTES les sections,
-              toujours visible quel que soit l'onglet actif ──────────────── */}
-        <DecorativeIconsPanel section={section} onChange={onChange} />
+        {/* DecorativeIconsPanel : uniquement pour les sections natives.
+            Les sections raw-html gèrent leurs icônes via le HTML cloné. */}
+        {!isRawHtml && (
+          <DecorativeIconsPanel section={section} onChange={onChange} />
+        )}
       </div>
     </div>
   );

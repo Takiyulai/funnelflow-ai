@@ -19,19 +19,12 @@ import {
 } from "@/lib/funnels/nextDestination";
 
 type Props = {
-  /** Le CTA qui ouvre la popup (mode="popup", popupProvider="internal" ou "systeme") */
   cta: CtaConfig;
-  /** Section qui contient le CTA (utilisée pour la résolution de redirection) */
   section: FunnelSection;
-  /** Funnel complet (pour résolution de la page suivante) */
   funnel?: Funnel;
-  /** Page courante */
   page?: FunnelPage;
-  /** Classes du bouton déclencheur (mêmes que le CTA standard pour cohérence visuelle) */
   buttonClassName?: string;
-  /** Attributs additionnels passés au bouton */
   buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
-  /** Champs personnalisés. Si absent : Prénom + Email. */
   customFields?: FormFieldItem[];
 };
 
@@ -85,12 +78,6 @@ function classifyField(
   return "other";
 }
 
-/**
- * Calcule le texte de réassurance à afficher.
- * - undefined → message par défaut
- * - chaîne vide ou espaces → masqué (null)
- * - sinon → texte fourni
- */
 function computeReassurance(raw: string | undefined): string | null {
   if (raw === undefined) return DEFAULT_REASSURANCE;
   if (raw.trim() === "") return null;
@@ -118,6 +105,17 @@ export function PopupForm({
       >
         {cta.label}
       </button>
+    );
+  }
+
+  // ─── Cas embed externe : popup contenant une iframe sandboxée ──────
+  if (cta.popupProvider === "embed" && cta.popupEmbedHtml) {
+    return (
+      <EmbedPopup
+        cta={cta}
+        buttonClassName={buttonClassName}
+        buttonProps={buttonProps}
+      />
     );
   }
 
@@ -161,7 +159,6 @@ function InternalPopup({
 
   const reassuranceText = computeReassurance(cta.popupReassurance);
 
-  // Fermeture par Échap
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -171,7 +168,6 @@ function InternalPopup({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Empêcher le scroll du body + focus initial
   useEffect(() => {
     if (!open) return;
     const prevOverflow = document.body.style.overflow;
@@ -188,7 +184,6 @@ function InternalPopup({
   function close() {
     if (state.kind === "submitting") return;
     setOpen(false);
-    // Reset différé pour ne pas voir le flash pendant la fermeture
     window.setTimeout(() => {
       if (state.kind !== "success") setState({ kind: "idle" });
     }, 200);
@@ -335,7 +330,6 @@ function InternalPopup({
             animation: "ffPopupFade 180ms ease-out",
           }}
           onMouseDown={(e) => {
-            // clic outside ferme la modale
             if (e.target === e.currentTarget) close();
           }}
         >
@@ -408,10 +402,7 @@ function InternalPopup({
               </button>
 
               {isPreview && (
-                <p
-                  className="text-center text-[11px]"
-                  style={{ opacity: 0.5 }}
-                >
+                <p className="text-center text-[11px]" style={{ opacity: 0.5 }}>
                   Aperçu : le formulaire est désactivé.
                 </p>
               )}
@@ -445,12 +436,8 @@ function InternalPopup({
               )}
             </form>
 
-            {/* 🆕 Message de réassurance RGPD */}
             {reassuranceText && (
-              <p
-                className="mt-4 text-center text-[11px]"
-                style={{ opacity: 0.6 }}
-              >
+              <p className="mt-4 text-center text-[11px]" style={{ opacity: 0.6 }}>
                 {reassuranceText}
               </p>
             )}
@@ -476,6 +463,88 @@ function InternalPopup({
               }
             }
           `}</style>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 EmbedPopup — affiche un code de formulaire externe dans une iframe sandboxée.
+// FunnelFlow ne capture PAS ces leads : ils partent directement vers l'outil tiers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EmbedPopup({
+  cta,
+  buttonClassName,
+  buttonProps,
+}: {
+  cta: CtaConfig;
+  buttonClassName?: string;
+  buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,sans-serif}</style>
+</head><body>${cta.popupEmbedHtml ?? ""}</body></html>`;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={buttonClassName ?? ""}
+        data-ff-cta
+        {...buttonProps}
+      >
+        {cta.label}
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl bg-white p-2 shadow-2xl"
+            style={{ maxHeight: "85vh" }}
+          >
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Fermer"
+              className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 shadow transition hover:bg-black/5"
+            >
+              <X size={16} />
+            </button>
+            <iframe
+              title={cta.popupTitle || "Formulaire"}
+              srcDoc={srcDoc}
+              sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+              className="h-[70vh] w-full rounded-xl border-0"
+            />
+          </div>
         </div>
       )}
     </>
@@ -520,10 +589,7 @@ function PopupField({
   return (
     <div>
       {field.label && (
-        <label
-          className="mb-1 block text-xs font-medium"
-          style={{ opacity: 0.85 }}
-        >
+        <label className="mb-1 block text-xs font-medium" style={{ opacity: 0.85 }}>
           {field.label}
           {field.required && <span style={{ color: "#ef4444" }}> *</span>}
         </label>

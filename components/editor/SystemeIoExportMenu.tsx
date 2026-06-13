@@ -4,7 +4,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Copy, Check, ExternalLink, Code2, ChevronDown, X, BookOpen, FileText, Layers } from "lucide-react";
 import type { Funnel, FunnelPage } from "@/lib/funnels/types";
-// ❌ SUPPRIMÉ : import { renderFunnelHtml, createSystemeBlocks, createSystemeFormBlock } from "@/lib/export/html";
 import { useToast } from "@/components/ui/Toast";
 
 const SYSTEME_IO_DASHBOARD = "https://systeme.io/dashboard/funnels";
@@ -31,6 +30,54 @@ function getPageLabel(page?: FunnelPage | null): string {
   if (page.role && PAGE_ROLE_LABELS[page.role]) return PAGE_ROLE_LABELS[page.role];
   if (page.isHome) return "Page d'accueil";
   return page.slug || "Page";
+}
+
+/**
+ * Fallback synchrone : crée un <textarea> hors-écran, y met le HTML,
+ * sélectionne, exécute document.execCommand('copy'), puis nettoie.
+ * Marche dans 99 % des navigateurs même sans focus parfait.
+ */
+function copyViaTextarea(text: string): boolean {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.width = "1px";
+    ta.style.height = "1px";
+    ta.style.padding = "0";
+    ta.style.border = "none";
+    ta.style.outline = "none";
+    ta.style.boxShadow = "none";
+    ta.style.background = "transparent";
+    ta.style.opacity = "0";
+    ta.setAttribute("readonly", "");
+    document.body.appendChild(ta);
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+
+    const ok = document.execCommand("copy");
+
+    document.body.removeChild(ta);
+
+    if (previouslyFocused && typeof previouslyFocused.focus === "function") {
+      try {
+        previouslyFocused.focus();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return ok;
+  } catch (err) {
+    console.error("[export] copyViaTextarea failed", err);
+    return false;
+  }
 }
 
 export function SystemeIoExportMenu({
@@ -63,7 +110,7 @@ export function SystemeIoExportMenu({
   const activePageLabel = getPageLabel(activePage);
   const hasMultiplePages = (funnel.pages?.length ?? 0) > 1;
 
-  // 🔄 NOUVEAU : appel à l'API serveur au lieu d'un calcul synchrone local
+  // 🔄 Appel à l'API serveur au lieu d'un calcul synchrone local
   async function buildHtml(currentMode: Mode, currentScope: Scope): Promise<string> {
     const res = await fetch("/api/export/systeme", {
       method: "POST",
@@ -82,11 +129,56 @@ export function SystemeIoExportMenu({
     return data.html;
   }
 
-  async function copyToClipboard(currentMode: Mode, currentScope: Scope): Promise<boolean> {
+  /**
+   * Copie le HTML dans le presse-papiers avec triple fallback :
+   *   1. navigator.clipboard.writeText (API moderne, nécessite focus)
+   *   2. document.execCommand('copy') via <textarea> (fallback universel)
+   *   3. Échec gracieux avec log d'erreur
+   */
+  async function copyToClipboard(
+    currentMode: Mode,
+    currentScope: Scope,
+  ): Promise<boolean> {
     try {
+      // 1. Préparer le HTML AVANT toute opération clipboard
+      //    (compression d'images, génération du markup, etc.)
       const html = await buildHtml(currentMode, currentScope);
-      await navigator.clipboard.writeText(html);
-      return true;
+
+      // 2. Re-focus la fenêtre au cas où DevTools ou un autre élément
+      //    aurait pris le focus pendant la génération.
+      try {
+        window.focus();
+      } catch {
+        /* ignore */
+      }
+
+      // 3. Tentative principale : Clipboard API moderne
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function" &&
+        document.hasFocus()
+      ) {
+        try {
+          await navigator.clipboard.writeText(html);
+          return true;
+        } catch (err) {
+          // On bascule sur le fallback en cas d'échec (focus perdu, permissions, etc.)
+          console.warn(
+            "[export] navigator.clipboard.writeText failed, falling back to execCommand:",
+            err,
+          );
+        }
+      }
+
+      // 4. Fallback : <textarea> + document.execCommand('copy')
+      //    Fonctionne même si le document n'a pas le focus parfait,
+      //    car execCommand opère sur la sélection courante.
+      const ok = copyViaTextarea(html);
+      if (ok) return true;
+
+      console.error("[export] copy failed: both methods unavailable");
+      return false;
     } catch (err) {
       console.error("[export] copy failed", err);
       return false;

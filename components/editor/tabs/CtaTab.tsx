@@ -8,6 +8,8 @@ import type {
   CtaIcon,
   CtaSpacing,
   PopupProvider,
+  FormFieldItem,
+  FormFieldType,
 } from "@/lib/funnels/types";
 
 type Props = {
@@ -28,6 +30,11 @@ const DEFAULT_SPACING: CtaSpacing = {
   paddingX: 22,
   paddingY: 0,
 };
+
+const DEFAULT_POPUP_FIELDS: FormFieldItem[] = [
+  { name: "name", type: "text", label: "Prénom", placeholder: "Votre prénom", required: true, width: "full" },
+  { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "full" },
+];
 
 export function CtaTab({ section, onChange }: Props) {
   const cta: CtaConfig | undefined = section.cta;
@@ -66,9 +73,41 @@ export function CtaTab({ section, onChange }: Props) {
     onChange({ cta: { ...cta, spacing: { ...DEFAULT_SPACING } } });
   };
 
+  // ─── Gestion des champs personnalisés du popup interne ───────────────
+  const popupFields = cta?.popupFields;
+
+  const setPopupFields = (fields: FormFieldItem[]) => {
+    if (!cta) return;
+    onChange({ cta: { ...cta, popupFields: fields } });
+  };
+
+  const addPopupField = () => {
+    const current = popupFields ?? DEFAULT_POPUP_FIELDS;
+    setPopupFields([
+      ...current,
+      {
+        name: `field_${current.length + 1}`,
+        type: "text",
+        label: "Nouveau champ",
+        required: false,
+        width: "full",
+      },
+    ]);
+  };
+
+  const updatePopupField = (idx: number, patch: Partial<FormFieldItem>) => {
+    const current = popupFields ?? DEFAULT_POPUP_FIELDS;
+    setPopupFields(current.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  };
+
+  const removePopupField = (idx: number) => {
+    const current = popupFields ?? DEFAULT_POPUP_FIELDS;
+    if (current.length <= 1) return;
+    setPopupFields(current.filter((_, i) => i !== idx));
+  };
+
   const setMode = (mode: CtaMode) => {
     if (!cta) return;
-    // Préserver icon + spacing dans tous les cas
     const preserved = {
       label: cta.label,
       icon: cta.icon,
@@ -103,8 +142,9 @@ export function CtaTab({ section, onChange }: Props) {
           popupBody:
             cta.popupBody ??
             "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
-          popupEmbed: cta.popupEmbed ?? "",
+          popupEmbedHtml: cta.popupEmbedHtml ?? "",
           systemePopupId: cta.systemePopupId ?? "",
+          popupFields: cta.popupFields,
         },
       });
     }
@@ -152,10 +192,7 @@ export function CtaTab({ section, onChange }: Props) {
               <ModeBtn active={cta.mode === "anchor"} onClick={() => setMode("anchor")}>
                 ⬇ Aller au formulaire
               </ModeBtn>
-              <ModeBtn
-                active={cta.mode === "redirect"}
-                onClick={() => setMode("redirect")}
-              >
+              <ModeBtn active={cta.mode === "redirect"} onClick={() => setMode("redirect")}>
                 🔗 Redirection
               </ModeBtn>
               <ModeBtn active={cta.mode === "popup"} onClick={() => setMode("popup")}>
@@ -232,6 +269,12 @@ export function CtaTab({ section, onChange }: Props) {
                   >
                     ⚡ Systeme.io
                   </ModeBtn>
+                  <ModeBtn
+                    active={cta.popupProvider === "embed"}
+                    onClick={() => setPopupProvider("embed")}
+                  >
+                    🔌 Code externe
+                  </ModeBtn>
                 </div>
               </Field>
 
@@ -262,6 +305,89 @@ export function CtaTab({ section, onChange }: Props) {
                     />
                   </Field>
 
+                  {/* === Éditeur de champs à capturer === */}
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/60">
+                        Champs à capturer
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addPopupField}
+                        className="rounded border border-white/10 bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-white/60 hover:border-white/20 hover:text-white"
+                      >
+                        + Ajouter
+                      </button>
+                    </div>
+
+                    {(popupFields ?? DEFAULT_POPUP_FIELDS).map((f, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-md border border-white/10 bg-black/30 p-2 space-y-1.5"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={f.label ?? ""}
+                            onChange={(e) => updatePopupField(idx, { label: e.target.value })}
+                            className={`${inputClass} flex-1`}
+                            placeholder="Libellé"
+                          />
+                          <select
+                            value={f.type}
+                            onChange={(e) =>
+                              updatePopupField(idx, { type: e.target.value as FormFieldType })
+                            }
+                            className={inputClass}
+                            style={{ width: 120 }}
+                          >
+                            <option value="text">Texte</option>
+                            <option value="email">Email</option>
+                            <option value="tel">Téléphone</option>
+                            <option value="number">Nombre</option>
+                            <option value="textarea">Zone texte</option>
+                            <option value="checkbox">Case à cocher</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => removePopupField(idx)}
+                            className="rounded border border-white/10 px-2 py-1 text-[11px] text-white/50 hover:border-red-300/40 hover:text-red-300"
+                            aria-label="Supprimer ce champ"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={f.name}
+                            onChange={(e) =>
+                              updatePopupField(idx, {
+                                name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+                              })
+                            }
+                            className={`${inputClass} flex-1`}
+                            placeholder="nom_technique"
+                          />
+                          <label className="flex items-center gap-1 whitespace-nowrap text-[11px] text-white/60">
+                            <input
+                              type="checkbox"
+                              checked={f.required ?? false}
+                              onChange={(e) => updatePopupField(idx, { required: e.target.checked })}
+                              className="h-3.5 w-3.5 accent-amber-300"
+                            />
+                            Requis
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+
+                    <p className="text-[10px] text-white/40">
+                      Au moins un champ Email est recommandé, sinon le lead ne pourra pas
+                      être enregistré.
+                    </p>
+                  </div>
+
                   <Field
                     label="Identifiant technique"
                     hint="Généré automatiquement, modifiez seulement si nécessaire"
@@ -271,9 +397,7 @@ export function CtaTab({ section, onChange }: Props) {
                       value={cta.popupId ?? ""}
                       onChange={(e) =>
                         updateCta({
-                          popupId: e.target.value
-                            .toLowerCase()
-                            .replace(/[^a-z0-9-]/g, "-"),
+                          popupId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
                         })
                       }
                       className={inputClass}
@@ -296,10 +420,15 @@ export function CtaTab({ section, onChange }: Props) {
                         <strong> ID</strong> (ex : 24034535).
                       </li>
                       <li>
-                        Copiez le <code className="text-amber-200">&lt;script id="form-script-tag-…"&gt;</code> fourni.
+                        Copiez le{" "}
+                        <code className="text-amber-200">
+                          &lt;script id="form-script-tag-…"&gt;
+                        </code>{" "}
+                        fourni.
                       </li>
                       <li>
-                        Collez-le dans <strong>Style global → Intégrations → Script Systeme.io</strong>.
+                        Collez-le dans{" "}
+                        <strong>Style global → Intégrations → Script Systeme.io</strong>.
                       </li>
                       <li>Renseignez ci-dessous l'ID du popup à ouvrir.</li>
                     </ol>
@@ -324,6 +453,22 @@ export function CtaTab({ section, onChange }: Props) {
                     />
                   </Field>
                 </>
+              )}
+
+              {/* === Code externe (embed) === */}
+              {cta.popupProvider === "embed" && (
+                <Field
+                  label="Code du formulaire externe"
+                  required
+                  hint="Collez le code HTML/embed fourni par votre outil (Brevo, MailerLite, Systeme.io…). Il s'affichera dans une fenêtre sécurisée. FunnelFlow ne capture pas ces leads."
+                >
+                  <textarea
+                    value={cta.popupEmbedHtml ?? ""}
+                    onChange={(e) => updateCta({ popupEmbedHtml: e.target.value })}
+                    className={`${inputClass} min-h-[120px] resize-y py-2 font-mono text-[11px]`}
+                    placeholder="<div>...votre code embed...</div>"
+                  />
+                </Field>
               )}
             </>
           )}

@@ -5,36 +5,23 @@
 // contraintes de Systeme.io. Le CSS est fourni par theme-css.ts et
 // applique les 9 thèmes visuels via variables CSS sur data-ff-theme.
 //
-// Structure DOM émise :
+// 🆕 Support des sections RAW HTML (funnels clonés depuis un site externe) :
+// si une section a un body commençant par RAW_HTML_BODY_MARKER, on émet
+// directement son HTML cloné avec les patches appliqués (sans annotation
+// d'édition). Pour un funnel 100 % cloné, on désactive aussi le header
+// et le footer FunnelFlow (la page clonée a déjà les siens).
 //
-//   <div class="ff-page" data-ff-theme="{themeId}" data-ff-export="true">
-//     <div class="ff-brand-bar ff-brand-bar--sticky ff-brand-bar--transparent"
-//          data-ff-brand-type="text|logo|both"
-//          data-ff-brand-has-cta="true|false">
-//       <div class="ff-brand-bar-inner">…</div>
-//     </div>
-//     <section id="…" class="ff-section ff-{type} ff-layout-{layout} [ff-has-shadow]"
-//              style="…; --ff-shadow: …">
-//       <div class="ff-section-inner">…</div>
-//     </section>
-//     <footer class="ff-footer">…</footer>
-//   </div>
+// 🆕 CLONED HEAD : pour un funnel 100 % cloné, on n'émet pas le theme-css
+// FunnelFlow (qui parasite le rendu) et on injecte à la place le clonedHead
+// original (styles + links CSS) stocké dans funnel.meta.clonedHead.
 //
-// Deux modes :
-//   1) renderFunnelHtml(funnel)    → page complète
-//   2) createSystemeBlocks(funnel) → un bloc HTML autonome par section,
-//      CSS scopé sous .ffblk-xxx (préfixage automatique du theme).
+// 🆕 FAQ RUNTIME : pour les FAQ clonées (data-ff-faq-grid), on injecte un
+// script vanilla qui ferme les FAQ par défaut sur la page publique et
+// rétablit l'ouverture/fermeture au clic.
 //
-// Notes :
-// - L'ancien FF_SYSTEME_POPUP_FIX a été supprimé. Il cassait l'iframe au 2e clic.
-// - Tous les CTA (header inclus) passent par `ctaAttrs()` pour que la classe
-//   `systeme-show-popup-{id}` soit posée systématiquement quand mode=popup
-//   provider=systeme. Cela corrige le bug "popup ne s'ouvre que sur hero/benefits".
-// - L'ombrage par section (section.style.shadow = { size, color }) est appliqué
-//   via la classe `ff-has-shadow` + la variable CSS `--ff-shadow` posée en
-//   inline sur le <section>. Les règles correspondantes sont dans theme-css.ts.
-// - 🆕 Timers : rendu HTML statique + script vanilla JS injecté pour faire
-//   décompter en temps réel côté navigateur (compatible Systeme.io).
+// 🆕 NAV PUBLIQUE : quand renderFunnelHtml reçoit `publicSlug`, les CTA en
+// mode "page" (cta.pageId) résolvent vers /p/<slug>/<pageSlug>. Sans publicSlug
+// (export Systeme.io), comportement inchangé (fallback ancre).
 
 import { strToU8, zipSync } from "fflate";
 import type {
@@ -67,6 +54,79 @@ import {
 import { createReadme } from "./readme";
 import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 
+// 🆕 RAW HTML — imports pour le rendu des sections clonées
+import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
+import { applyRawHtmlPatchesServer as applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches.server";
+import { FAQ_RUNTIME_SCRIPT } from "./faq-script";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Contexte de navigation publique (liens inter-pages /p/[slug]/[pageSlug])
+// Quand fourni, les CTA en mode "page" (cta.pageId) résolvent vers l'URL
+// publique de la page cible. Absent (export Systeme.io) → fallback ancre.
+// ─────────────────────────────────────────────────────────────────────────────
+type PublicNavContext = {
+  /** Slug public du funnel (funnels.published_slug) → base /p/<slug> */
+  publicSlug: string;
+  /** Map pageId → slug de page (ex: "/", "merci", "upsell") */
+  pageSlugById: Record<string, string>;
+  /** Id de la page d'accueil (sert à router "/" vers /p/<slug>) */
+  homePageId?: string;
+};
+
+/** Construit l'URL publique d'une page cible à partir de son pageId. */
+function publicPageUrl(nav: PublicNavContext, pageId: string): string | null {
+  const slug = nav.pageSlugById[pageId];
+  if (slug === undefined) return null;
+  // La home (slug "/" ou pageId == homePageId) → racine du funnel
+  if (pageId === nav.homePageId || slug === "/" || slug === "") {
+    return `/p/${nav.publicSlug}`;
+  }
+  const clean = slug.replace(/^\/+/, "");
+  return `/p/${nav.publicSlug}/${clean}`;
+}
+
+/**
+ * 🆕 Pré-applique les patches dans le body brut de chaque section RAW HTML
+ * AVANT l'export, et vide les patches.
+ */
+function flattenRawHtmlPatches(funnel: Funnel): Funnel {
+  const cloned: Funnel = JSON.parse(JSON.stringify(funnel));
+
+  const allSections: FunnelSection[] = [
+    ...(cloned.sections ?? []),
+    ...((cloned.pages ?? []).flatMap((p) => p.sections ?? [])),
+  ];
+
+  let flattened = 0;
+  for (const section of allSections) {
+    if (!isRawHtmlSection(section)) continue;
+
+    const patches = section.rawHtmlPatches;
+    if (!patches || Object.keys(patches).length === 0) continue;
+
+    const rawBody = (section.body ?? "").slice(RAW_HTML_BODY_MARKER.length);
+
+    try {
+      const patched = applyRawHtmlPatches(rawBody, patches, {
+        annotate: true,
+      });
+      section.body = RAW_HTML_BODY_MARKER + patched;
+      flattened++;
+    } catch (e) {
+      console.warn(
+        `[ff-export] flattenRawHtmlPatches: échec pour section ${section.id}`,
+        e,
+      );
+    }
+  }
+
+  if (flattened > 0) {
+    console.info(
+      `[ff-export] flattenRawHtmlPatches: ${flattened} section(s) raw-html aplatie(s) avant export.`,
+    );
+  }
+  return cloned;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper : sérialise dataAttrs en chaîne d'attributs HTML
@@ -137,13 +197,6 @@ function escapeHtml(value = ""): string {
 }
 const escapeAttr = escapeHtml;
 
-/**
- * Applique les "highlights" inline sur du texte deja escape.
- *
- * Convention de syntaxe :
- *   [[texte]]              → mot accentue avec la couleur accent du theme
- *   [[texte|#hexcolor]]    → mot accentue avec une couleur custom
- */
 function applyInlineHighlights(escaped: string): string {
   if (!escaped || escaped.indexOf("[[") === -1) return escaped;
   return escaped.replace(
@@ -184,7 +237,190 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ombrage par section (section.style.shadow)
+// 🆕 RAW HTML — Helpers pour les sections clonées
+// ─────────────────────────────────────────────────────────────────────────────
+function isRawHtmlSection(section: FunnelSection): boolean {
+  return (
+    typeof section.body === "string" &&
+    section.body.startsWith(RAW_HTML_BODY_MARKER)
+  );
+}
+
+function extractRawHtmlBody(section: FunnelSection): string {
+  if (!isRawHtmlSection(section)) return "";
+  return (section.body ?? "").slice(RAW_HTML_BODY_MARKER.length);
+}
+
+function renderRawHtmlSection(section: FunnelSection): string {
+  const rawHtml = extractRawHtmlBody(section);
+  if (!rawHtml) return "";
+  const patched = applyRawHtmlPatches(rawHtml, section.rawHtmlPatches, {
+    annotate: false,
+  });
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-raw-html" data-ff-raw-html="true">
+${patched}
+</section>`;
+}
+
+/**
+ * CSS minimal pour que les sections RAW HTML occupent toute la largeur.
+ *
+ * 🆕 FAQ : sur la page publique, on FERME les FAQ par défaut. Le script
+ * FAQ_RUNTIME_SCRIPT se charge de les ouvrir au clic. Cela évite que
+ * toutes les réponses soient visibles d'un coup à l'ouverture de la page.
+ */
+const RAW_HTML_EXPORT_CSS = `<style data-ff-raw-html-export="true">
+  .ff-raw-html {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block;
+  }
+  .ff-raw-html > section,
+  .ff-raw-html > div,
+  .ff-raw-html > main,
+  .ff-raw-html > article {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .ff-raw-html img,
+  .ff-raw-html video {
+    max-width: 100%;
+    height: auto;
+  }
+  .ff-page[data-ff-fully-cloned="true"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Animations JS-dépendantes neutralisées */
+  .ff-raw-html [data-aos],
+  .ff-raw-html .aos-init {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .ff-raw-html [id^="image-"] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .ff-raw-html .animate-on-load,
+  .ff-raw-html [class*="animate__"] {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  .ff-raw-html img,
+  .ff-raw-html video,
+  .ff-raw-html picture {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Cliquabilité des CTA garantie */
+  .ff-raw-html a,
+  .ff-raw-html a[id^="button-"],
+  .ff-raw-html [data-test-ui="open-url-button"],
+  .ff-raw-html [role="button"] {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  /* 🆕 FAQ : état initial FERMÉ sur la page publique.
+     Le script FAQ runtime gère l'ouverture au clic via les classes
+     .ff-faq-open / .ff-faq-closed. */
+  .ff-raw-html [data-ff-faq-grid] [data-ff-active="false"] ~ * {
+    display: none !important;
+  }
+  .ff-raw-html [data-ff-faq-grid] .ff-faq-closed {
+    display: none !important;
+  }
+  .ff-raw-html [data-ff-faq-grid] .ff-faq-open {
+    display: block !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  .ff-raw-html [data-ff-faq-grid] [data-ff-active] {
+    cursor: pointer !important;
+    user-select: none !important;
+  }
+</style>`;
+
+function pageIsAllRawHtml(sections: FunnelSection[]): boolean {
+  const visible = sections.filter((s) => s.visible !== false);
+  if (visible.length === 0) return false;
+  return visible.every(isRawHtmlSection);
+}
+
+function pageHasRawHtml(sections: FunnelSection[]): boolean {
+  return sections.some((s) => s.visible !== false && isRawHtmlSection(s));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 CLONED HEAD — Extraction et filtrage du <head>
+// ─────────────────────────────────────────────────────────────────────────────
+function getClonedHeadRaw(funnel: Funnel): string {
+  const meta = funnel.meta as { clonedHead?: string } | undefined;
+  const raw = meta?.clonedHead;
+  return typeof raw === "string" ? raw : "";
+}
+
+function sanitizeClonedHeadForExport(rawHead: string): string {
+  if (!rawHead || rawHead.trim().length === 0) return "";
+
+  let out = rawHead;
+  out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
+  out = out.replace(/<script\b[^>]*\/?>/gi, "");
+  out = out.replace(/<meta\b[^>]*\/?>/gi, "");
+  out = out.replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, "");
+  out = out.replace(/<base\b[^>]*\/?>/gi, "");
+  out = out.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*>/gi, "");
+
+  out = out.replace(/<link\b([^>]*)\/?>/gi, (match, attrs: string) => {
+    const relMatch = /\brel\s*=\s*["']?([^"'\s>]+)/i.exec(attrs);
+    if (!relMatch) return "";
+    const rel = relMatch[1].toLowerCase();
+    const allowed = new Set([
+      "stylesheet",
+      "preload",
+      "preconnect",
+      "dns-prefetch",
+      "prefetch",
+    ]);
+    return allowed.has(rel) ? match : "";
+  });
+
+  out = out.replace(
+    /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi,
+    (match, css: string) => {
+      if (/a\s*\{\s*[^}]*pointer-events\s*:\s*none[^}]*\}/i.test(css)) {
+        return "";
+      }
+      return match;
+    },
+  );
+
+  out = out.replace(/<!--[\s\S]*?-->/g, "");
+  out = out.replace(/\n\s*\n\s*\n/g, "\n\n").trim();
+
+  return out;
+}
+
+function extractClonedHeadForExport(funnel: Funnel): string {
+  const raw = getClonedHeadRaw(funnel);
+  if (!raw) return "";
+  const sanitized = sanitizeClonedHeadForExport(raw);
+  if (!sanitized) return "";
+  return `<!-- Cloned head (sanitized) -->\n${sanitized}\n<!-- /Cloned head -->`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ombrage par section
 // ─────────────────────────────────────────────────────────────────────────────
 const SHADOW_PRESETS: Record<string, string> = {
   sm: "0 1px 2px 0 {C}33, 0 1px 2px -1px {C}33",
@@ -229,7 +465,7 @@ function buildShadowStyle(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mapping animations preset → classe CSS
+// Animations
 // ─────────────────────────────────────────────────────────────────────────────
 function animClass(anim?: AnimationPreset | string): string {
   if (!anim || anim === "none") return "";
@@ -264,7 +500,7 @@ function animOf(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CTA — href + attrs (anchor, redirect, popup internal/systeme)
+// CTA
 // ─────────────────────────────────────────────────────────────────────────────
 function isSystemePopup(cta: CtaConfig): boolean {
   return (
@@ -274,7 +510,13 @@ function isSystemePopup(cta: CtaConfig): boolean {
   );
 }
 
-function ctaHref(cta: CtaConfig): string {
+function ctaHref(cta: CtaConfig, nav?: PublicNavContext): string {
+  // 🆕 Navigation inter-pages : si un pageId est présent ET qu'on est en
+  // contexte public, on résout vers l'URL publique de la page cible.
+  if (cta.pageId && nav) {
+    const url = publicPageUrl(nav, cta.pageId);
+    if (url) return url;
+  }
   if (cta.mode === "anchor") {
     return `#${safeId(cta.anchorId ?? "lead-form", "lead-form")}`;
   }
@@ -286,10 +528,15 @@ function ctaHref(cta: CtaConfig): string {
   return "#lead-form";
 }
 
-function ctaAttrs(cta: CtaConfig): string {
-  const href = ctaHref(cta);
+function ctaAttrs(cta: CtaConfig, nav?: PublicNavContext): string {
+  const href = ctaHref(cta, nav);
+  // 🆕 Un lien inter-pages résolu reste interne (_self), jamais _blank.
+  const isInternalPageLink = !!(cta.pageId && nav && href.startsWith("/p/"));
   const isExternal =
-    cta.mode === "redirect" && cta.target === "_blank" && isSafeUrl(cta.url ?? "");
+    !isInternalPageLink &&
+    cta.mode === "redirect" &&
+    cta.target === "_blank" &&
+    isSafeUrl(cta.url ?? "");
   const target = isExternal ? "_blank" : "_self";
   const rel = isExternal ? ' rel="noopener noreferrer"' : "";
 
@@ -302,16 +549,9 @@ function ctaAttrs(cta: CtaConfig): string {
   return ` href="${escapeAttr(href)}" target="${target}"${rel}${classExtra}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CTA — icon + rendu
-// ─────────────────────────────────────────────────────────────────────────────
 function renderCtaIcon(icon?: CtaIcon): string {
-  // Choix explicite "aucune icône" → rien
   if (icon === "none") return "";
-
-  // Fallback : si rien n'est défini, on met la flèche → par défaut
   const effective: CtaIcon = icon ?? "arrow-right";
-
   const sz = 18;
 
   if (effective === "arrow-right") {
@@ -326,7 +566,6 @@ function renderCtaIcon(icon?: CtaIcon): string {
 
   return "";
 }
-
 
 function ctaInlineStyle(spacing?: CtaSpacing): string {
   if (!spacing) return "";
@@ -354,11 +593,12 @@ function renderCtaButton(
   cta: CtaConfig,
   extraClass = "",
   anim: AnimationPreset = "fade-up",
+  nav?: PublicNavContext,
 ): string {
   const iconHtml = renderCtaIcon(cta.icon);
   const styleStr = ctaInlineStyle(cta.spacing);
   const styleAttr = styleStr ? ` style="${escapeAttr(styleStr)}"` : "";
-  const baseAttrs = ctaAttrs(cta);
+  const baseAttrs = ctaAttrs(cta, nav);
   const hasClass = / class="/.test(baseAttrs);
   const aCls = animClass(anim);
   const cls = ["ff-btn", "ff-cta", extraClass, aCls].filter(Boolean).join(" ");
@@ -371,9 +611,9 @@ function renderCtaButton(
   return `<a${finalAttrs}${styleAttr}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
 }
 
-function renderBrandCtaButton(cta: CtaConfig): string {
+function renderBrandCtaButton(cta: CtaConfig, nav?: PublicNavContext): string {
   const iconHtml = renderCtaIcon(cta.icon);
-  const baseAttrs = ctaAttrs(cta);
+  const baseAttrs = ctaAttrs(cta, nav);
   const hasClass = / class="/.test(baseAttrs);
   const cls = "ff-brand-cta ff-btn";
   let finalAttrs = baseAttrs;
@@ -385,9 +625,6 @@ function renderBrandCtaButton(cta: CtaConfig): string {
   return `<a${finalAttrs}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page contient‑elle un CTA Systeme.io ?
-// ─────────────────────────────────────────────────────────────────────────────
 function pageHasSystemePopup(
   sections: FunnelSection[],
   funnel: Funnel,
@@ -495,11 +732,8 @@ function renderImage(
   return `<figure class="${cls.join(" ")}"><img src="${escapeAttr(image.url)}" alt="${alt}" loading="lazy" />${credit}</figure>`;
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Video — parsing robuste (YouTube, Vimeo, fichier direct)
-// Retourne soit une iframe (YT/Vimeo), soit un <video> natif (mp4/webm/…)
-// Compatible Systeme.io : pas d'aspect-ratio CSS, fallback inline si besoin.
+// Video
 // ─────────────────────────────────────────────────────────────────────────────
 type ParsedVideo = { kind: "iframe" | "file"; src: string } | null;
 
@@ -508,7 +742,6 @@ function parseVideoUrl(raw: string): ParsedVideo {
   const url = raw.trim();
   if (!url) return null;
 
-  // Fichier direct
   if (/\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(url)) {
     return { kind: "file", src: url };
   }
@@ -521,7 +754,6 @@ function parseVideoUrl(raw: string): ParsedVideo {
   }
   const host = u.hostname.replace(/^www\./, "").toLowerCase();
 
-  // YouTube : watch / youtu.be / shorts / embed / live
   if (
     host === "youtube.com" ||
     host === "m.youtube.com" ||
@@ -561,7 +793,6 @@ function parseVideoUrl(raw: string): ParsedVideo {
     };
   }
 
-  // Vimeo : vimeo.com/123, vimeo.com/123/hash, player.vimeo.com/video/123[/hash]
   if (host === "vimeo.com" || host === "player.vimeo.com") {
     const segs = u.pathname.split("/").filter(Boolean);
     if (host === "player.vimeo.com") {
@@ -585,7 +816,6 @@ function parseVideoUrl(raw: string): ParsedVideo {
     };
   }
 
-  // Inconnu : tenter une iframe
   return { kind: "iframe", src: url };
 }
 
@@ -601,9 +831,7 @@ function renderVideo(
   const cls = ["ff-video", aCls].filter(Boolean).join(" ");
 
   if (parsed.kind === "file") {
-    const poster = posterUrl
-      ? ` poster="${escapeAttr(posterUrl)}"`
-      : "";
+    const poster = posterUrl ? ` poster="${escapeAttr(posterUrl)}"` : "";
     return `<div class="${cls}"><div class="ff-video-inner">
   <video controls preload="metadata"${poster} style="display:block;width:100%;height:auto;">
     <source src="${escapeAttr(parsed.src)}" />
@@ -615,7 +843,6 @@ function renderVideo(
   <iframe src="${escapeAttr(parsed.src)}" title="Vidéo" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 </div></div>`;
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section colors & background
@@ -642,15 +869,9 @@ function buildSectionInlineStyle(section: FunnelSection): string {
   const colors = getSectionColors(section);
   const bg = section.background;
 
-  if (colors.bg) {
-    parts.push(`background-color:${colors.bg}`);
-  }
-  if (colors.ink) {
-    parts.push(`color:${colors.ink}`);
-  }
-  if (colors.accent) {
-    parts.push(`--ff-accent:${colors.accent}`);
-  }
+  if (colors.bg) parts.push(`background-color:${colors.bg}`);
+  if (colors.ink) parts.push(`color:${colors.ink}`);
+  if (colors.accent) parts.push(`--ff-accent:${colors.accent}`);
 
   if (bg?.imageUrl) {
     parts.push(
@@ -733,11 +954,8 @@ function renderBullets(section: FunnelSection): string {
 
   let mode: "list" | "grid" | "strip" = "list";
   if (isLayoutCompatible) {
-    if (bulletsFitInlineStrip(section.bullets)) {
-      mode = "strip";
-    } else {
-      mode = "grid";
-    }
+    if (bulletsFitInlineStrip(section.bullets)) mode = "strip";
+    else mode = "grid";
   }
 
   const ulClasses = ["ff-bullets"];
@@ -772,7 +990,7 @@ function gridClass(count: number): string {
   return `ff-grid-${cols}`;
 }
 
-function renderPricing(section: FunnelSection): string {
+function renderPricing(section: FunnelSection, nav?: PublicNavContext): string {
   const items = (section.items || []).filter(
     (it): it is SectionItem & { kind: "pricing" } => it.kind === "pricing",
   );
@@ -795,9 +1013,7 @@ function renderPricing(section: FunnelSection): string {
       const period = d.period
         ? `<span class="ff-pricing-period">${escapeHtml(d.period)}</span>`
         : "";
-      const featureIconSize = d.featureIcon
-        ? resolveIconSizePx(d.featureIcon)
-        : 16;
+      const featureIconSize = d.featureIcon ? resolveIconSizePx(d.featureIcon) : 16;
       const featureIconHtml = d.featureIcon
         ? renderIconSvg(
             normalizeIconName(d.featureIcon.name),
@@ -811,7 +1027,7 @@ ${d.features.map((f) => `  <li><span class="ff-feat-check">${featureIconHtml}</s
 </ul>`
         : "";
       const ctaHtml = d.cta?.label
-        ? renderCtaButton(d.cta, "ff-pricing-cta", "fade-up")
+        ? renderCtaButton(d.cta, "ff-pricing-cta", "fade-up", nav)
         : "";
 
       return `  <div class="${cardCls}">
@@ -925,7 +1141,6 @@ function renderTestimonialMediaGallery(
         ? "ff-tm-cols-2"
         : "ff-tm-cols-3";
   const cells = list.map((m) => renderTestimonialMedia(m)).join("\n");
-  // grid responsive en inline (compat SIO sans dépendre du CSS thème)
   return `<div class="ff-testimonial-media-gallery ${colsClass}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
 ${cells}
 </div>`;
@@ -948,7 +1163,6 @@ function renderTestimonials(section: FunnelSection): string {
         .join("")
         .toUpperCase();
 
-      // 🆕 Médias additionnels (Option D : au-dessus de la citation)
       const mediasHtml = Array.isArray(d.medias) && d.medias.length > 0
         ? renderTestimonialMediaGallery(d.medias)
         : "";
@@ -986,7 +1200,6 @@ function renderTestimonials(section: FunnelSection): string {
 ${cards}
 </div>`;
 }
-
 
 function renderFaq(section: FunnelSection): string {
   const items = (section.items || []).filter(
@@ -1049,24 +1262,8 @@ function renderGuarantee(section: FunnelSection): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🆕 Timer — Rendu HTML statique (SIO)
-//
-// Le HTML émis reproduit fidèlement le DOM de TimerRenderer.tsx (mêmes classes
-// ff-timer / ff-timer--cards / --digital / --inline / --seats, mêmes styles
-// inline pour les couleurs et tailles).
-//
-// Toute la config dynamique est posée en data-attrs sur le conteneur racine
-// pour que le script vanilla (FF_TIMER_SCRIPT, plus bas) puisse :
-//   - calculer le temps restant côté navigateur,
-//   - mettre à jour chaque seconde les <span data-ff-timer-field="…">,
-//   - gérer localStorage pour le mode "countdown-duration",
-//   - cacher / remplacer le timer à expiration.
-//
-// Important : les chiffres initiaux sont calculés ici en JS au moment de
-// l'export → le visiteur voit immédiatement un timer plausible, puis le
-// script ajuste en temps réel.
+// Timer
 // ─────────────────────────────────────────────────────────────────────────────
-
 const TIMER_SIZE_CONFIG: Record<
   NonNullable<TimerItem["size"]>,
   { numFs: string; lblFs: string; gap: string; padX: string; padY: string }
@@ -1111,7 +1308,6 @@ function computeInitialTimeLeft(timer: TimerItem): {
   };
 }
 
-
 function buildTimerDataAttrs(
   timer: TimerItem,
   funnelId: string,
@@ -1135,7 +1331,6 @@ function buildTimerDataAttrs(
       : 24;
     attrs["data-ff-timer-duration-ms"] = String(hours * 60 * 60 * 1000);
   }
-
   if (timer.mode === "countdown-date" && timer.targetDate) {
     const t = new Date(timer.targetDate).getTime();
     if (!isNaN(t)) attrs["data-ff-timer-target-ms"] = String(t);
@@ -1169,7 +1364,6 @@ function renderTimer(
     .toLowerCase();
   const dataAttrs = buildTimerDataAttrs(timer, scopeId, pageId, lang);
 
-  /* ─── Mode "seats-counter" ─── */
   if (timer.mode === "seats-counter") {
     const remaining = timer.seatsRemaining ?? 0;
     const total = timer.seatsTotal ?? 100;
@@ -1190,7 +1384,6 @@ function renderTimer(
 </div>`;
   }
 
-  /* ─── Countdown : pré-calcul SSR ─── */
   const t0 = computeInitialTimeLeft(timer);
   const units: Array<{ value: number; label: string; key: string }> = [];
   if (timer.showDays) units.push({ value: t0.days, label: labels.days, key: "days" });
@@ -1200,7 +1393,6 @@ function renderTimer(
 
   const style = timer.style ?? "cards";
 
-  /* ─── Style "inline" ─── */
   if (style === "inline") {
     const labelHtml = timer.label
       ? `<span style="font-size:${sizeConf.lblFs};margin-right:0.5rem;opacity:0.85;">${escapeHtml(timer.label)}</span>`
@@ -1213,7 +1405,6 @@ function renderTimer(
 </div>`;
   }
 
-  /* ─── Style "digital" ─── */
   if (style === "digital") {
     const bgStyle = timer.backgroundColor
       ? `background:${escapeAttr(timer.backgroundColor)};padding:1rem;border-radius:12px;`
@@ -1241,7 +1432,6 @@ function renderTimer(
 </div>`;
   }
 
-  /* ─── Style "cards" (défaut) ─── */
   const bgStyle = timer.backgroundColor
     ? `background:${escapeAttr(timer.backgroundColor)};padding:1rem;border-radius:12px;`
     : "";
@@ -1293,10 +1483,6 @@ function pageHasTimer(sections: FunnelSection[]): boolean {
   return false;
 }
 
-/**
- * Script vanilla JS qui pilote tous les timers de la page.
- * Auto-exécuté au DOMContentLoaded. Guard contre double-boot.
- */
 const FF_TIMER_SCRIPT = `
 <script>
 (function(){
@@ -1382,19 +1568,17 @@ const FF_TIMER_SCRIPT = `
 </script>`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// renderSection — la balise <section> et son contenu
+// renderSection
 // ─────────────────────────────────────────────────────────────────────────────
 type SectionContext = {
   funnel: Funnel;
   isSuccess: boolean;
-  /** 🆕 pour scoper le localStorage des timers (par page) */
   pageId?: string;
+  /** 🆕 Présent uniquement pour le rendu public → active les liens inter-pages */
+  nav?: PublicNavContext;
 };
 
-function resolveLayout(
-  section: FunnelSection,
-  ctx: SectionContext,
-): string {
+function resolveLayout(section: FunnelSection, ctx: SectionContext): string {
   if (ctx.isSuccess) return "centered";
   const raw = effectiveLayoutVariant(section, ctx.funnel);
   if (raw === "split-text-image" || raw === "split-image-text") return "split";
@@ -1404,9 +1588,6 @@ function resolveLayout(
   return "centered";
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hero icon pour les pages succès / confirmation / livraison
-// ─────────────────────────────────────────────────────────────────────────────
 function renderSectionHeroIcon(
   section: FunnelSection,
   ctx: SectionContext,
@@ -1419,7 +1600,6 @@ function renderSectionHeroIcon(
   };
 
   const name: IconName = normalizeIconName(section.iconName ?? "checkCircle");
-
   const sizeMap: Record<string, number> = { sm: 56, md: 72, lg: 96 };
   const px = sizeMap[s.iconSize ?? "md"];
 
@@ -1430,7 +1610,6 @@ function renderSectionHeroIcon(
   const animCls = animClass(anim);
 
   const svg = renderIconSvg(name, px);
-
   return `<div class="ff-section-hero-icon ${animCls}" aria-hidden="true">${svg}</div>`;
 }
 
@@ -1457,7 +1636,7 @@ function renderSectionInnerContent(
   const hasItems = Array.isArray(section.items) && section.items.length > 0;
   let specialized = "";
   if (hasItems) {
-    if (type === "pricing" || type === "offer") specialized = renderPricing(section);
+    if (type === "pricing" || type === "offer") specialized = renderPricing(section, ctx.nav);
     else if (type === "bonus") specialized = renderBonus(section);
     else if (type === "testimonials" || type === "proof")
       specialized = renderTestimonials(section);
@@ -1481,7 +1660,6 @@ function renderSectionInnerContent(
     animOf(section, "video", "zoom-in"),
   );
 
-  // 🆕 Timers de la section (rendus juste avant le CTA)
   const timersHtml = renderSectionTimers(
     section,
     ctx.funnel,
@@ -1489,12 +1667,10 @@ function renderSectionInnerContent(
   );
 
   const ctaWrapStyle = ctaWrapInlineStyle(section.cta?.spacing);
-  const ctaStyleAttr = ctaWrapStyle
-    ? ` style="${escapeAttr(ctaWrapStyle)}"`
-    : "";
+  const ctaStyleAttr = ctaWrapStyle ? ` style="${escapeAttr(ctaWrapStyle)}"` : "";
   const cta =
     section.cta?.label && type !== "form"
-      ? `<div class="ff-cta-wrap ${animClass(animOf(section, "cta", "fade-up"))}"${ctaStyleAttr}>${renderCtaButton(section.cta, "", animOf(section, "cta", "fade-up"))}</div>`
+      ? `<div class="ff-cta-wrap ${animClass(animOf(section, "cta", "fade-up"))}"${ctaStyleAttr}>${renderCtaButton(section.cta, "", animOf(section, "cta", "fade-up"), ctx.nav)}</div>`
       : "";
 
   return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}`;
@@ -1546,10 +1722,6 @@ function renderFormFields(
     })
     .join("\n");
 
-  // 🆕 Calcul du message de réassurance (RGPD / sécurité)
-  // - undefined  → message par défaut
-  // - "" / "   " → masqué
-  // - sinon      → texte fourni
   const reassuranceRaw = section.reassurance;
   const reassuranceText =
     reassuranceRaw === undefined
@@ -1568,7 +1740,6 @@ ${reassuranceHtml}
 </form>`;
 }
 
-
 function renderSection(
   section: FunnelSection,
   ctx: SectionContext,
@@ -1581,16 +1752,10 @@ function renderSection(
 
   const shadow = buildShadowStyle(section.style);
 
-  const classes = [
-    "ff-section",
-    `ff-${section.type}`,
-    `ff-layout-${layout}`,
-  ];
+  const classes = ["ff-section", `ff-${section.type}`, `ff-layout-${layout}`];
   if (isHero) classes.push("ff-hero");
 
-  if (hasVideo && layout === "split") {
-    classes.push("ff-layout-video-stack");
-  }
+  if (hasVideo && layout === "split") classes.push("ff-layout-video-stack");
 
   const spacing = (section.style as { spacing?: string } | undefined)?.spacing;
   if (spacing === "compact") classes.push("ff-spacing-compact");
@@ -1628,7 +1793,7 @@ function renderSection(
     inner = `<div class="ff-section-inner"><div class="ff-split-grid">${order}</div></div>`;
   } else if (hasVideo) {
     const textBlock = renderSectionInnerContent(
-      { ...section, image: undefined } as FunnelSection,
+      { ...section, image: undefined, video: undefined } as FunnelSection,
       ctx,
     );
     const videoBlock = renderVideo(
@@ -1658,7 +1823,7 @@ function extractBrandName(fullName: string): string {
   return fullName.trim();
 }
 
-function renderHeader(funnel: Funnel): string {
+function renderHeader(funnel: Funnel, nav?: PublicNavContext): string {
   const h: FunnelHeader = funnel.header ?? {};
   if (h.enabled === false) return "";
   const logo = h.logoUrl ?? funnel.meta?.logoUrl;
@@ -1678,8 +1843,7 @@ function renderHeader(funnel: Funnel): string {
   else if (showName) brandType = "text";
 
   const hasCta = !!h.cta?.label;
-
-  const ctaHtml = h.cta?.label ? renderBrandCtaButton(h.cta) : "";
+  const ctaHtml = h.cta?.label ? renderBrandCtaButton(h.cta, nav) : "";
 
   return `<div class="${classes.join(" ")}" data-ff-brand-type="${brandType}" data-ff-brand-has-cta="${hasCta ? "true" : "false"}">
   <div class="ff-brand-bar-inner">
@@ -1712,36 +1876,183 @@ function renderFooter(funnel: Funnel): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Compression images
+// ─────────────────────────────────────────────────────────────────────────────
+async function compressDataUrlImage(
+  dataUrl: string,
+  maxWidth = 1200,
+  maxBytes = 120_000,
+): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (!dataUrl.startsWith("data:image/")) return dataUrl;
+  if (dataUrl.length <= maxBytes) return dataUrl;
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("img load failed"));
+      i.src = dataUrl;
+    });
+
+    const ratio = Math.min(1, maxWidth / img.naturalWidth);
+    const w = Math.round(img.naturalWidth * ratio);
+    const h = Math.round(img.naturalHeight * ratio);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const qualities = [0.82, 0.7, 0.6, 0.5, 0.4];
+    let best: string | null = null;
+    for (const q of qualities) {
+      const out = canvas.toDataURL("image/jpeg", q);
+      if (out.length <= maxBytes) return out;
+      best = out;
+    }
+    return best;
+  } catch (e) {
+    console.warn("[ff-export] compressDataUrlImage failed:", e);
+    return null;
+  }
+}
+
+export async function prepareImagesForExport(funnel: Funnel): Promise<Funnel> {
+  if (typeof window === "undefined") return funnel;
+
+  const clone: Funnel = JSON.parse(JSON.stringify(funnel));
+  let nb = 0;
+
+  if (clone.header?.logoUrl?.startsWith("data:image/") && clone.header.logoUrl.length > 60_000) {
+    const c = await compressDataUrlImage(clone.header.logoUrl, 320, 40_000);
+    if (c) { clone.header.logoUrl = c; nb++; }
+  }
+
+  const allSections: FunnelSection[] = [
+    ...(clone.sections ?? []),
+    ...((clone.pages ?? []).flatMap((p) => p.sections ?? [])),
+  ];
+
+  for (const section of allSections) {
+    const img = section.image;
+    if (img?.url?.startsWith("data:image/") && img.url.length > 150_000) {
+      const c = await compressDataUrlImage(img.url, 1200, 120_000);
+      if (c) { img.url = c; nb++; }
+    }
+
+    const bg = section.background;
+    if (bg?.imageUrl?.startsWith("data:image/") && bg.imageUrl.length > 150_000) {
+      const c = await compressDataUrlImage(bg.imageUrl, 1600, 140_000);
+      if (c) { bg.imageUrl = c; nb++; }
+    }
+
+    if (Array.isArray(section.items)) {
+      for (const it of section.items) {
+        if (it.kind === "testimonial") {
+          const d = it.data;
+          if (d.avatarUrl?.startsWith("data:image/") && d.avatarUrl.length > 30_000) {
+            const c = await compressDataUrlImage(d.avatarUrl, 120, 15_000);
+            if (c) { d.avatarUrl = c; nb++; }
+          }
+          if (Array.isArray(d.medias)) {
+            for (const m of d.medias) {
+              if (m.kind === "image" && m.url?.startsWith("data:image/") && m.url.length > 150_000) {
+                const c = await compressDataUrlImage(m.url, 1200, 120_000);
+                if (c) { m.url = c; nb++; }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(clone.media)) {
+    for (const m of clone.media) {
+      if (m.kind === "image" && m.url?.startsWith("data:image/") && m.url.length > 150_000) {
+        const c = await compressDataUrlImage(m.url, 1200, 120_000);
+        if (c) { m.url = c; nb++; }
+      }
+    }
+  }
+
+  if (nb > 0) {
+    console.info(`[ff-export] prepareImagesForExport : ${nb} image(s) compressee(s) pour l'export SIO.`);
+  }
+  return clone;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MODE 1 — Page complète standalone
 // ─────────────────────────────────────────────────────────────────────────────
 export type RenderFunnelHtmlOptions = {
   targetPageId?: string;
   fullDocument?: boolean;
+  /** 🆕 Slug public du funnel. Présent → active les liens inter-pages /p/<slug>/... */
+  publicSlug?: string;
 };
 
 export function renderFunnelHtml(
   funnel: Funnel,
   options: RenderFunnelHtmlOptions = {},
 ): string {
-  const themeCss = getFunnelThemeCss();
-  const rootAttrs = buildThemeRootAttrs(funnel);
-
   const { sections: pageSections, role, isHome, pageId } = resolveExportPage(
     funnel,
     options.targetPageId,
   );
+
+  // 🆕 Contexte de navigation publique : uniquement si un publicSlug est fourni.
+  const nav: PublicNavContext | undefined = options.publicSlug
+    ? {
+        publicSlug: options.publicSlug,
+        homePageId: (funnel.pages ?? []).find((p) => p.isHome)?.id,
+        pageSlugById: Object.fromEntries(
+          (funnel.pages ?? []).map((p) => [p.id, p.slug]),
+        ),
+      }
+    : undefined;
 
   const ctx: SectionContext = {
     funnel,
     isSuccess:
       role === "thankyou" || role === "delivery" || role === "confirmation",
     pageId,
+    nav,
   };
 
   const visibleSections = pageSections.filter((s) => s.visible !== false);
 
+  const isFullyClonedFunnel = pageIsAllRawHtml(visibleSections);
+  const hasAnyRawHtml = pageHasRawHtml(visibleSections);
+
+  const clonedHeadHtml = isFullyClonedFunnel
+    ? extractClonedHeadForExport(funnel)
+    : "";
+
+  const themeCssBlock = isFullyClonedFunnel
+    ? ""
+    : `<style>
+${getFunnelThemeCss()}
+</style>`;
+
+  const designOverrideBlock = isFullyClonedFunnel
+    ? ""
+    : renderDesignOverrideCss(funnel);
+
+  const rootAttrs = isFullyClonedFunnel
+    ? { dataAttrs: {} as Record<string, string>, inlineStyle: "" }
+    : buildThemeRootAttrs(funnel);
+
   const sectionsHtml = visibleSections
-    .map((section, idx) => renderSection(section, ctx, idx === 0))
+    .map((section, idx) => {
+      if (isRawHtmlSection(section)) return renderRawHtmlSection(section);
+      return renderSection(section, ctx, idx === 0);
+    })
     .join("\n");
 
   const needsSystemeScript = pageHasSystemePopup(visibleSections, funnel);
@@ -1750,8 +2061,14 @@ export function renderFunnelHtml(
       ? `\n${funnel.integrations.systemeIoScriptId.trim()}\n`
       : "";
 
-  // 🆕 Script vanilla pour les timers (injecté une seule fois si nécessaire)
   const timerScript = pageHasTimer(visibleSections) ? FF_TIMER_SCRIPT : "";
+
+  // 🆕 FAQ runtime : injecté dès qu'il y a au moins une section raw-html.
+  // Sur la page publique, les FAQ démarrent fermées (cf. RAW_HTML_EXPORT_CSS)
+  // et ce script gère l'ouverture/fermeture au clic.
+  const faqRuntimeScript = hasAnyRawHtml ? FAQ_RUNTIME_SCRIPT : "";
+
+  const rawHtmlExtraCss = hasAnyRawHtml ? RAW_HTML_EXPORT_CSS : "";
 
   const styleAttr = rootAttrs.inlineStyle
     ? ` style="${escapeAttr(rootAttrs.inlineStyle)}"`
@@ -1759,21 +2076,26 @@ export function renderFunnelHtml(
 
   const pageRoleAttr = role ? ` data-ff-page-role="${escapeAttr(role)}"` : "";
   const pageHomeAttr = isHome ? ` data-ff-page-home="true"` : "";
+  const clonedFlagAttr = isFullyClonedFunnel ? ` data-ff-fully-cloned="true"` : "";
 
   const dataAttrsHtml = serializeDataAttrs(rootAttrs.dataAttrs);
 
-  const body = `<style>
-${themeCss}
-</style>
+  const headerHtml = isFullyClonedFunnel ? "" : renderHeader(funnel, nav);
+  const footerHtml = isFullyClonedFunnel ? "" : renderFooter(funnel);
+
+  const body = `${themeCssBlock}
+${designOverrideBlock}
+${clonedHeadHtml}
+${rawHtmlExtraCss}
 <div class="ff-page"
      data-ff-export="true"
-     ${dataAttrsHtml}${pageRoleAttr}${pageHomeAttr}${styleAttr}>
+     ${dataAttrsHtml}${pageRoleAttr}${pageHomeAttr}${clonedFlagAttr}${styleAttr}>
 
-${renderHeader(funnel)}
+${headerHtml}
 ${sectionsHtml}
-${renderFooter(funnel)}
+${footerHtml}
 </div>
-${systemeIntegrationScript}${timerScript}`;
+${systemeIntegrationScript}${timerScript}${faqRuntimeScript}`;
 
   if (!options.fullDocument) return body;
 
@@ -1793,6 +2115,9 @@ ${body}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODE 2 — Blocs individuels autonomes (Systeme.io)
+// NB : aucun `nav` passé ici → les CTA pageId retombent sur l'ancre, ce qui est
+// le comportement voulu pour l'export Systeme.io (les pages y sont publiées
+// séparément, mappées via funnel.integrations.sioPageUrls).
 // ─────────────────────────────────────────────────────────────────────────────
 export type SystemeBlock = {
   id: string;
@@ -1827,12 +2152,99 @@ export function createSystemeBlocks(
     pageId,
   };
 
+  const clonedHeadHtml = extractClonedHeadForExport(funnel);
+
   return pageSections
     .filter((s) => s.visible !== false)
     .map((section, idx) => {
       const scopeClass = makeBlockScopeClass(section);
-      const scopedTheme = getScopedFunnelThemeCss(scopeClass);
 
+      // 🆕 RAW HTML — Cas section clonée
+      if (isRawHtmlSection(section)) {
+        const sectionHtml = renderRawHtmlSection(section);
+        const html = `<style>
+  .${scopeClass} { width: 100%; max-width: 100%; margin: 0; padding: 0; display: block; }
+  .${scopeClass} .ff-raw-html { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; display: block; }
+  .${scopeClass} .ff-raw-html > section,
+  .${scopeClass} .ff-raw-html > div,
+  .${scopeClass} .ff-raw-html > main,
+  .${scopeClass} .ff-raw-html > article {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .${scopeClass} img,
+  .${scopeClass} video { max-width: 100%; height: auto; }
+
+  /* Neutraliser animations JS-dépendantes */
+  .${scopeClass} [data-aos],
+  .${scopeClass} .aos-init {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .${scopeClass} [id^="image-"] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .${scopeClass} .animate-on-load,
+  .${scopeClass} [class*="animate__"] {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  .${scopeClass} img,
+  .${scopeClass} video,
+  .${scopeClass} picture {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Cliquabilité des CTA */
+  .${scopeClass} a,
+  .${scopeClass} a[id^="button-"],
+  .${scopeClass} [data-test-ui="open-url-button"],
+  .${scopeClass} [role="button"] {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  /* 🆕 FAQ : état initial FERMÉ dans le bloc public */
+  .${scopeClass} [data-ff-faq-grid] .ff-faq-closed { display: none !important; }
+  .${scopeClass} [data-ff-faq-grid] .ff-faq-open {
+    display: block !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  .${scopeClass} [data-ff-faq-grid] [data-ff-active] {
+    cursor: pointer !important;
+    user-select: none !important;
+  }
+</style>
+${clonedHeadHtml}
+<div class="${scopeClass}" data-ff-export="true" data-ff-raw-html-block="true">
+${sectionHtml}
+</div>
+${FAQ_RUNTIME_SCRIPT}`;
+
+        const sizeKB = Math.round(html.length / 1024);
+        if (sizeKB > 800) {
+          console.warn(`[ff-export] Bloc RAW HTML ${section.id} = ${sizeKB} KB (limite SIO ~1024 KB)`);
+        }
+
+        return {
+          id: section.id,
+          label:
+            (section.headline && section.headline.trim()) ||
+            `Section ${idx + 1}`,
+          type: "raw-html",
+          html,
+        };
+      }
+
+      // ── Cas natif
+      const scopedTheme = getScopedFunnelThemeCss(scopeClass);
       const sectionHtml = renderSection(section, ctx, idx === 0);
 
       const sectionHasSystemePopup =
@@ -1849,9 +2261,6 @@ export function createSystemeBlocks(
           ? `\n${funnel.integrations.systemeIoScriptId.trim()}\n`
           : "";
 
-      // 🆕 Si ce bloc contient un timer, on injecte le script vanilla.
-      // La garde window.__ffTimerBooted empêche le double-boot si plusieurs
-      // blocs avec timer cohabitent sur la même page SIO.
       const sectionHasTimer = extractTimers(section).length > 0;
       const timerScript = sectionHasTimer ? FF_TIMER_SCRIPT : "";
 
@@ -1864,6 +2273,7 @@ export function createSystemeBlocks(
       const html = `<style>
 ${scopedTheme}
 </style>
+${renderDesignOverrideCss(funnel)}
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
      ${dataAttrsHtml}${styleAttr}>
@@ -1919,6 +2329,7 @@ export function createSystemeFormBlock(funnel: Funnel): SystemeBlock {
   const html = `<style>
 ${scopedTheme}
 </style>
+${renderDesignOverrideCss(funnel)}
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
      ${dataAttrsHtml}${styleAttr}>
@@ -1944,7 +2355,7 @@ ${scopedTheme}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Guide d'import (texte simple, multilingue)
+// Guide d'import
 // ─────────────────────────────────────────────────────────────────────────────
 export function createImportGuide(language: Funnel["language"] = "fr"): string {
   const guides = {
@@ -1988,14 +2399,46 @@ export function createImportGuide(language: Funnel["language"] = "fr"): string {
   return (guides[language] ?? guides.fr).join("\n");
 }
 
+function renderDesignOverrideCss(funnel: Funnel): string {
+  const design = (funnel as any).design;
+  if (!design || typeof design !== "object") return "";
+
+  const primary = typeof design.primaryColor === "string" ? design.primaryColor : null;
+  const secondary = typeof design.secondaryColor === "string" ? design.secondaryColor : null;
+  const accent = typeof design.accentColor === "string" ? design.accentColor : null;
+
+  const isHex = (c: string) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+
+  const overrides: string[] = [];
+  if (primary && isHex(primary)) {
+    overrides.push(`--ff-brand-surface: ${primary};`);
+    overrides.push(`--ff-bg: ${primary};`);
+  }
+  if (secondary && isHex(secondary)) {
+    overrides.push(`--ff-accent: ${secondary};`);
+    overrides.push(`--ff-brand: ${secondary};`);
+  }
+  if (accent && isHex(accent)) {
+    overrides.push(`--ff-link: ${accent};`);
+  }
+
+  if (overrides.length === 0) return "";
+
+  return `<style data-ff-design-override="true">
+.ff-page { ${overrides.join(" ")} }
+</style>`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ZIP exports
 // ─────────────────────────────────────────────────────────────────────────────
-export function createHtmlZipBase64(funnel: Funnel): string {
-  const fullHtml = renderFunnelHtml(funnel, { fullDocument: true });
-  const blocks = createSystemeBlocks(funnel);
-  const formBlock = createSystemeFormBlock(funnel);
-  const guide = createImportGuide(funnel.language);
+export async function createHtmlZipBase64(funnel: Funnel): Promise<string> {
+  const compressed = await prepareImagesForExport(funnel);
+  const prepared = flattenRawHtmlPatches(compressed);
+  const fullHtml = renderFunnelHtml(prepared, { fullDocument: true });
+  const blocks = createSystemeBlocks(prepared);
+  const formBlock = createSystemeFormBlock(prepared);
+  const guide = createImportGuide(prepared.language);
 
   const fileNames = {
     fr: "funnel-complet.html",
@@ -2004,7 +2447,7 @@ export function createHtmlZipBase64(funnel: Funnel): string {
   } as const;
 
   const files: Record<string, Uint8Array> = {
-    [fileNames[funnel.language] ?? "funnel-complete.html"]: strToU8(fullHtml),
+    [fileNames[prepared.language] ?? "funnel-complete.html"]: strToU8(fullHtml),
     "guide-import-systeme.txt": strToU8(guide),
   };
 
@@ -2020,12 +2463,30 @@ export function createHtmlZipBase64(funnel: Funnel): string {
   return Buffer.from(zipped).toString("base64");
 }
 
-export function createSystemeIoZipBase64(funnel: Funnel): string {
-  const fullHtml = renderFunnelHtml(funnel, { fullDocument: true });
-  const blocks = createSystemeBlocks(funnel);
-  const formBlock = createSystemeFormBlock(funnel);
+export async function createSystemeIoZipBase64(funnel: Funnel): Promise<string> {
+  const compressed = await prepareImagesForExport(funnel);
+  const prepared = flattenRawHtmlPatches(compressed);
 
-  const { sections: activeSections } = resolveExportPage(funnel);
+  // Debug : log léger pour traquer les patches non flattenés
+  console.log("[ff-export DEBUG] env=", typeof document,
+    "pages=", (prepared?.pages || []).map((pg: any) => ({
+      pageId: pg.id,
+      slug: pg.slug,
+      sections: (pg.sections || []).map((s: any) => ({
+        id: s.id,
+        type: s.type,
+        hasPatches: !!s.rawHtmlPatches,
+        textKeys: Object.keys(s.rawHtmlPatches?.texts || {}),
+        linkKeys: Object.keys(s.rawHtmlPatches?.links || {}),
+      })),
+    })),
+  );
+
+  const fullHtml = renderFunnelHtml(prepared, { fullDocument: true });
+  const blocks = createSystemeBlocks(prepared);
+  const formBlock = createSystemeFormBlock(prepared);
+
+  const { sections: activeSections } = resolveExportPage(prepared);
 
   const previewName = {
     fr: "apercu-complet.html",
@@ -2040,6 +2501,10 @@ export function createSystemeIoZipBase64(funnel: Funnel): string {
     const fileName = `${safe}.html`;
     const section = activeSections.find((s) => s.id === b.id);
     const hasPopup = section?.cta?.mode === "popup";
+    const sizeKB = Math.round(b.html.length / 1024);
+    if (sizeKB > 800) {
+      console.warn(`[ff-export] Bloc ${b.id} = ${sizeKB} KB (limite SIO ~1024 KB)`);
+    }
     return {
       fileName: `blocs-systeme-io/${fileName}`,
       type: b.type,
@@ -2063,7 +2528,7 @@ export function createSystemeIoZipBase64(funnel: Funnel): string {
   });
 
   const readme = createReadme(
-    funnel,
+    prepared,
     blockEntries.map((b) => ({
       fileName: b.fileName.replace("blocs-systeme-io/", ""),
       type: b.type,
@@ -2074,7 +2539,7 @@ export function createSystemeIoZipBase64(funnel: Funnel): string {
 
   const files: Record<string, Uint8Array> = {
     "README.md": strToU8(readme),
-    [previewName[funnel.language] ?? "apercu-complet.html"]: strToU8(fullHtml),
+    [previewName[prepared.language] ?? "apercu-complet.html"]: strToU8(fullHtml),
   };
   blockEntries.forEach((b) => {
     files[b._zipPath] = strToU8(b._html);

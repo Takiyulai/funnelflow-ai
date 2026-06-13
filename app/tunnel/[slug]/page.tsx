@@ -1,27 +1,27 @@
-// app/tunnel/[slug]/page.tsx
-import { demoFunnel } from "@/lib/funnels/demo";
-import type { Funnel } from "@/lib/funnels/types";
-import { PublicFunnelClient } from "@/components/funnel/PublicFunnelClient";
-import { PublicFunnelView } from "@/components/funnel/PublicFunnelView";
+// app/p/[slug]/page.tsx — page d'entrée (home) du funnel publié
+import { notFound } from "next/navigation";
+import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
+import { renderFunnelHtml } from "@/lib/export/html";
+import { getHomePage } from "@/lib/funnels/types";
 
-// Slugs résolus côté serveur (statiques / démo)
-const SERVER_FUNNELS: Record<string, Funnel> = {
-  demo: demoFunnel,
-};
+export const dynamic = "force-dynamic";
 
-type PageProps = {
+export default async function PublishedFunnelPage({
+  params,
+}: {
   params: Promise<{ slug: string }>;
-};
-
-export default async function TunnelPublicPage({ params }: PageProps) {
+}) {
   const { slug } = await params;
-  const funnel = SERVER_FUNNELS[slug];
+  const published = await getPublishedFunnelBySlug(slug);
+  if (!published) notFound();
 
-  // Slug serveur (demo) : on rend tout côté serveur (page d'accueil)
-  if (funnel) {
-    return <PublicFunnelView funnel={funnel} />;
-  }
+  const home = getHomePage(published.funnel);
+  const html = renderFunnelHtml(published.funnel, {
+    targetPageId: home?.id,
+    fullDocument: false,
+    publicSlug: slug,
+  });
 
-  // Slug inconnu côté serveur : on délègue au client qui lira localStorage
-  return <PublicFunnelClient slug={slug} />;
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }

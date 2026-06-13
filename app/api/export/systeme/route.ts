@@ -8,6 +8,8 @@ import {
 } from "@/lib/export/html";
 import { demoFunnel } from "@/lib/funnels/demo";
 import type { Funnel } from "@/lib/funnels/types";
+export const runtime = "nodejs"; // jsdom ne fonctionne pas sur Edge Runtime
+
 
 // ─── GET : conservé pour la démo (utilise demoFunnel) ──────────────────────
 export async function GET(request: Request) {
@@ -36,7 +38,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const base64 = createHtmlZipBase64(demoFunnel);
+  const base64 = await createHtmlZipBase64(demoFunnel);
   const bytes = Buffer.from(base64, "base64");
   return new NextResponse(new Uint8Array(bytes), {
     headers: {

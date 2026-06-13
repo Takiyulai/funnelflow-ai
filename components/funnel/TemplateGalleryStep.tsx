@@ -6,19 +6,20 @@ import {
   PREMIUM_TEMPLATES,
   getRecommendedTemplates,
   DEFAULT_PREMIUM_TEMPLATE_ID,
+  getPremiumTemplate,
 } from "@/lib/funnels/templates";
 import type {
   FunnelKind,
   Language,
   TemplateDefinition,
 } from "@/lib/funnels/types";
-
 type Props = {
   funnelKind?: FunnelKind;
   language: Language;
   selectedTemplateId?: string;
   onSelect: (templateId: string) => void;
 };
+
 
 export default function TemplateGalleryStep({
   funnelKind,
@@ -51,7 +52,6 @@ export default function TemplateGalleryStep({
         <h2 className="text-xl font-black text-ink">{labels.title}</h2>
         <p className="max-w-2xl text-xs text-muted leading-relaxed">{labels.subtitle}</p>
       </header>
-
       {recommended.length > 0 && (
         <section className="space-y-3 min-w-0">
           {others.length > 0 && (

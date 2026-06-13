@@ -17,6 +17,7 @@ import {
   saveFunnel,
   type StoredFunnel,
 } from "@/lib/store/funnelStore";
+import { CloneFunnelButton } from "@/components/dashboard/CloneFunnelButton";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -80,10 +81,9 @@ export default function DashboardPage() {
           <Button href="/create">
             <Sparkles size={15} /> Créer un tunnel
           </Button>
-          <Button href="/import" variant="secondary">
-            <Upload size={15} /> Importer
-          </Button>
+          <CloneFunnelButton />
         </div>
+
       </div>
 
       {/* KPI */}
@@ -124,9 +124,7 @@ export default function DashboardPage() {
               <h2 className="text-lg font-black text-ink">Derniers tunnels</h2>
               <p className="text-xs text-muted">Vos tunnels les plus récents</p>
             </div>
-            <Button href="/dashboard" variant="ghost" size="sm">
-              Tout voir <ArrowRight size={13} />
-            </Button>
+              <CloneFunnelButton className="w-full justify-center" />
           </div>
 
           <div className="grid gap-2">
@@ -210,13 +208,25 @@ function FunnelRow({
   const { id, slug, funnel, updatedAt, publishedAt } = stored;
   const dateLabel = formatRelativeDate(updatedAt);
 
+  // 🔧 Compat mono-page (ancien modèle) ET multi-pages (nouveau modèle)
+  const pages = funnel.pages ?? [];
+  const sectionCount =
+    pages.length > 0
+      ? pages.reduce((acc, p) => acc + (p.sections?.length ?? 0), 0)
+      : // fallback ancien modèle
+        (funnel as { sections?: unknown[] }).sections?.length ?? 0;
+
+  const language = (funnel.language ?? "fr").toUpperCase();
+  const pageLabel =
+    pages.length > 1 ? `${pages.length} pages · ` : "";
+
   return (
     <div className="ff-card-hover flex items-center justify-between gap-4 rounded-lg border border-line bg-white p-3.5">
-      {/* Lien principal vers l'éditeur (cohérent avec le flux : on édite avant de voir) */}
       <a href={`/editor/${id}`} className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-ink">{funnel.funnelName}</p>
         <p className="mt-0.5 text-xs text-muted">
-          {funnel.sections.length} sections · {funnel.language.toUpperCase()} · {dateLabel}
+          {pageLabel}
+          {sectionCount} sections · {language} · {dateLabel}
         </p>
       </a>
       <div className="flex items-center gap-2 shrink-0">
@@ -234,6 +244,7 @@ function FunnelRow({
     </div>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

@@ -496,6 +496,7 @@ export function CreateFunnelWizard() {
                 selectedTemplateId={brief.templateId}
                 onSelect={selectTemplate}
               />
+
             )}
             {stepLabel === "Objectif" && (
               <ObjectiveStep

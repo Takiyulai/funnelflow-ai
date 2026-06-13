@@ -20,7 +20,6 @@ import { HeaderTab } from "@/components/editor/tabs/HeaderTab";
 import { useToast } from "@/components/ui/Toast";
 import {
   useFunnelWithStatus,
-  useFunnel,
   saveFunnel,
   publishFunnel,
   loadFunnelBySlug,
@@ -84,9 +83,8 @@ export default function EditorPage() {
   const toast = useToast();
   const funnelId = params?.id ?? "";
 
-const { stored, status } = useFunnelWithStatus(funnelId);
-const loading = status === "loading";
-
+  const { stored, status } = useFunnelWithStatus(funnelId);
+  const loading = status === "loading";
 
   const [history, setHistory] = useState<HistoryState>({
     past: [],
@@ -111,47 +109,40 @@ const loading = status === "loading";
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-  if (status === "loading") return;
-  if (status === "not-found") {
-    toast.show({ title: "Tunnel introuvable", variant: "error" });
-    router.replace("/dashboard");
-    return;
-  }
-  if (!stored) return; // safety (ne devrait pas arriver si status === "loaded")
+    if (status === "loading") return;
+    if (status === "not-found") {
+      toast.show({ title: "Tunnel introuvable", variant: "error" });
+      router.replace("/dashboard");
+      return;
+    }
+    if (!stored) return;
 
-  if (isInitialLoadRef.current) {
-    setHistory({ past: [], present: stored.funnel, future: [] });
+    if (isInitialLoadRef.current) {
+      setHistory({ past: [], present: stored.funnel, future: [] });
 
-    const homePage =
-      stored.funnel.pages?.find((p) => p.isHome) ??
-      stored.funnel.pages?.[0] ??
-      null;
-    setSelectedPageId(homePage?.id ?? null);
+      const homePage =
+        stored.funnel.pages?.find((p) => p.isHome) ??
+        stored.funnel.pages?.[0] ??
+        null;
+      setSelectedPageId(homePage?.id ?? null);
 
-    const firstSection =
-      homePage?.sections[0] ?? stored.funnel.sections[0] ?? null;
-    setSelectedSectionId(firstSection?.id ?? null);
+      const firstSection =
+        homePage?.sections[0] ?? stored.funnel.sections[0] ?? null;
+      setSelectedSectionId(firstSection?.id ?? null);
 
-    setLastSavedAt(new Date(stored.updatedAt).getTime());
-    isInitialLoadRef.current = false;
-    return;
-  }
+      setLastSavedAt(new Date(stored.updatedAt).getTime());
+      isInitialLoadRef.current = false;
+      return;
+    }
 
-  // 🔑 Si stored a été ré-hydraté avec des data-URLs résolues APRÈS le
-  // chargement initial (cas typique : useFunnel a chargé d'abord la version
-  // avec idb-media:// puis a remplacé par la version avec data:image/...),
-  // on met à jour history.present pour que la preview affiche les médias.
-  // On ne le fait QUE si l'utilisateur n'a pas encore modifié le tunnel
-  // (history.past vide), pour ne pas écraser ses changements.
-  if (
-    history.past.length === 0 &&
-    history.future.length === 0 &&
-    history.present !== stored.funnel
-  ) {
-    setHistory({ past: [], present: stored.funnel, future: [] });
-  }
-}, [status, stored, router, toast, history.past.length, history.future.length, history.present]);
-
+    if (
+      history.past.length === 0 &&
+      history.future.length === 0 &&
+      history.present !== stored.funnel
+    ) {
+      setHistory({ past: [], present: stored.funnel, future: [] });
+    }
+  }, [status, stored, router, toast, history.past.length, history.future.length, history.present]);
 
   const funnel = history.present;
 
@@ -271,6 +262,76 @@ const loading = status === "loading";
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [undo, redo, handleManualSave]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🆕 Écoute des messages venant des iframes en mode édition.
+  //    - ff-edit-background : ouvre l'éditeur de fond pour la section cliquée.
+  //    - ff-edit-click      : sélectionne la bonne section + ouvre le drawer
+  //                           sur le spot cliqué, même si on était sur une
+  //                           autre section auparavant.
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const data = ev?.data;
+      if (!data || typeof data !== "object") return;
+
+      // ─── Click sur zone neutre → édition du fond ────────────────────────
+      if (data.type === "ff-edit-background") {
+        const sectionId = data.sectionId as string | undefined;
+        if (!sectionId) return;
+
+        const exists = activeSections.some((s) => s.id === sectionId);
+        if (!exists) return;
+
+        const wasAlreadySelected = selectedSectionId === sectionId;
+        setSelectedSectionId(sectionId);
+        setDrawerOpen(true);
+        setMobileTab("preview");
+
+        const delay = wasAlreadySelected ? 80 : 200;
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent("ff-open-background-editor", {
+              detail: { sectionId },
+            }),
+          );
+        }, delay);
+        return;
+      }
+
+      // ─── Click sur un spot (texte / lien / image) ───────────────────────
+      if (data.type === "ff-edit-click") {
+        const sectionId = data.sectionId as string | undefined;
+        if (!sectionId) return;
+
+        const exists = activeSections.some((s) => s.id === sectionId);
+        if (!exists) return;
+
+        const wasAlreadySelected = selectedSectionId === sectionId;
+
+        setSelectedSectionId(sectionId);
+        setDrawerOpen(true);
+        setMobileTab("preview");
+
+        // Re-dispatch le payload vers RawHtmlContentTab quand la section
+        // vient de changer (le listener "message" interne du tab se
+        // remonte avec le nouveau section.id et raterait le message d'origine).
+        // Si la section était déjà sélectionnée, le listener "message" du
+        // tab a déjà capté l'événement → pas besoin de re-dispatcher.
+        if (!wasAlreadySelected) {
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("ff-relay-edit-click", { detail: data }),
+            );
+          }, 200);
+        }
+        return;
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [activeSections, selectedSectionId]);
 
   const mutateActivePageSections = useCallback(
     (transform: (sections: FunnelSection[]) => FunnelSection[]) => {
@@ -703,27 +764,26 @@ const loading = status === "loading";
         </div>
 
         <div
-  className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
-  ref={previewWrapperRef}
->
-  <FunnelPreview
-  key={activePage?.id ?? "default"}
-  funnel={previewFunnel}
-  defaultMode="desktop"
-  showToolbar={true}
-  viewportHeight="calc(100vh - 7rem)"
-  pageRole={activePage?.role}
-/>
+          className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
+          ref={previewWrapperRef}
+        >
+          <FunnelPreview
+            key={activePage?.id ?? "default"}
+            funnel={previewFunnel}
+            defaultMode="desktop"
+            showToolbar={true}
+            viewportHeight="calc(100vh - 7rem)"
+            pageRole={activePage?.role}
+            editMode={true}
+          />
 
-  <InlineColorToolbar
-    previewRootRef={previewWrapperRef}
-    funnel={previewFunnel}
-    updateSection={updateSection}
-    debug={true}
-  />
-</div>
-
-
+          <InlineColorToolbar
+            previewRootRef={previewWrapperRef}
+            funnel={previewFunnel}
+            updateSection={updateSection}
+            debug={true}
+          />
+        </div>
       </div>
 
       <SectionEditorDrawer

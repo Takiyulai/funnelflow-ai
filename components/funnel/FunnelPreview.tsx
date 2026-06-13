@@ -1,7 +1,7 @@
 // components/funnel/FunnelPreview.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Monitor,
   Smartphone,
@@ -46,7 +46,8 @@ import {
 } from "@/components/funnel/DecorativeIconsLayer";
 import { TimerRenderer } from "@/components/funnel/sections/TimerRenderer";
 import { PopupForm } from "@/components/funnel/PopupForm";
-
+import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
+import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -64,6 +65,8 @@ interface FunnelPreviewProps {
   logoSrc?: string;
   className?: string;
   pageRole?: PageRole;
+  /** 🆕 Mode édition : active l'annotation des éléments raw-html pour le scroll-to. */
+  editMode?: boolean;
 }
 
 const SUCCESS_PAGE_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
@@ -72,7 +75,6 @@ const SUCCESS_PAGE_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
   "confirmation",
 ]);
 
-/* Sections autorisées à utiliser grid/inline-strip */
 const BULLET_LAYOUT_SECTIONS = new Set<string>([
   "benefits",
   "benefit",
@@ -84,7 +86,6 @@ const BULLET_LAYOUT_SECTIONS = new Set<string>([
   "kpi",
 ]);
 
-/* Sections forcées en mode "list" (jamais grid/strip) */
 const BULLET_LIST_ONLY_SECTIONS = new Set<string>([
   "hero",
   "cta",
@@ -204,24 +205,87 @@ function shadowStyleVar(color: string): React.CSSProperties {
   return { ["--ff-shadow-color" as string]: color } as React.CSSProperties;
 }
 
-function buildBackgroundStyle(section: FunnelSection): {
+function useResolvedBackgroundUrl(rawUrl: string | undefined): string | undefined {
+  const [resolved, setResolved] = useState<string | undefined>(
+    rawUrl && !rawUrl.startsWith(IDB_MEDIA_PREFIX) ? rawUrl : undefined,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!rawUrl) {
+      setResolved(undefined);
+      return;
+    }
+    if (!rawUrl.startsWith(IDB_MEDIA_PREFIX)) {
+      setResolved(rawUrl);
+      return;
+    }
+    const id = rawUrl.slice(IDB_MEDIA_PREFIX.length);
+    getMedia(id)
+      .then((data) => {
+        if (!cancelled) setResolved(data ?? undefined);
+      })
+      .catch((err) => {
+        console.warn("[FunnelPreview] background getMedia échec:", err);
+        if (!cancelled) setResolved(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rawUrl]);
+
+  return resolved;
+}
+
+function buildBackgroundStyle(
+  section: FunnelSection,
+  resolvedImageUrl?: string,
+): {
   containerStyle: React.CSSProperties;
   hasBackgroundImage: boolean;
-  overlay: number;
+  overlayOpacity: number;
+  overlayColor: string;
 } {
   const bg = section.background;
-  if (!bg?.imageUrl) {
-    return { containerStyle: {}, hasBackgroundImage: false, overlay: 0 };
+  if (!bg?.imageUrl && !bg?.overlayOpacity && !bg?.overlay) {
+    return {
+      containerStyle: {},
+      hasBackgroundImage: false,
+      overlayOpacity: 0,
+      overlayColor: "#000000",
+    };
   }
+
+  const overlayColor = bg?.overlayColor ?? "#000000";
+  const overlayOpacity =
+    typeof bg?.overlayOpacity === "number"
+      ? Math.min(100, Math.max(0, bg.overlayOpacity))
+      : typeof bg?.overlay === "number"
+        ? Math.min(100, Math.max(0, bg.overlay * 100))
+        : 0;
+
+  const finalUrl = resolvedImageUrl ?? bg?.imageUrl;
+  const hasBackgroundImage = !!finalUrl;
+
+  const containerStyle: React.CSSProperties = {};
+  if (hasBackgroundImage) {
+    containerStyle.backgroundImage = `url("${finalUrl}")`;
+    containerStyle.backgroundSize = bg?.size ?? "cover";
+    containerStyle.backgroundPosition = bg?.position ?? "center";
+    containerStyle.backgroundRepeat = "no-repeat";
+    if (bg?.attachment === "fixed") {
+      containerStyle.backgroundAttachment = "fixed";
+    }
+    if (bg?.blur && bg.blur > 0) {
+      (containerStyle as Record<string, unknown>)["--ff-bg-blur"] = `${bg.blur}px`;
+    }
+  }
+
   return {
-    containerStyle: {
-      backgroundImage: `url(${bg.imageUrl})`,
-      backgroundSize: bg.size ?? "cover",
-      backgroundPosition: bg.position ?? "center",
-      backgroundRepeat: "no-repeat",
-    },
-    hasBackgroundImage: true,
-    overlay: bg.overlay ?? 0,
+    containerStyle,
+    hasBackgroundImage,
+    overlayOpacity,
+    overlayColor,
   };
 }
 
@@ -330,10 +394,6 @@ function buildSlugLinkMap(funnel: Funnel): Map<string, string> {
 
 /* ─── Helpers bullets ──────────────────────────────────────────────────── */
 
-/**
- * Parse "75% | de réussite" ou "75% — de réussite" → { value, label }.
- * Sinon retourne null.
- */
 function splitBulletValueLabel(
   raw: string,
 ): { value: string; label: string } | null {
@@ -343,22 +403,28 @@ function splitBulletValueLabel(
   const value = m[1].trim();
   const label = m[2].trim();
   if (!value || !label) return null;
-  // Heuristique : la valeur doit être courte (≤ 12 chars)
   if (value.length > 12) return null;
   return { value, label };
 }
 
-/**
- * Détermine si tous les bullets ont un format "value | label" court → inline-strip.
- */
+function splitBulletTitleDescription(
+  raw: string,
+): { title: string; description: string } | null {
+  if (!raw) return null;
+  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
+  if (!m) return null;
+  const title = m[1].trim();
+  const description = m[2].trim();
+  if (!title || !description) return null;
+  if (description.length < 20) return null;
+  return { title, description };
+}
+
 function bulletsFitInlineStrip(bullets: string[]): boolean {
   if (bullets.length < 2 || bullets.length > 6) return false;
   return bullets.every((b) => splitBulletValueLabel(b) !== null);
 }
 
-/**
- * Décide le mode d'affichage des bullets.
- */
 function decideBulletsMode(
   sectionType: string,
   bullets: string[],
@@ -385,6 +451,7 @@ export function FunnelPreview({
   logoSrc,
   className = "",
   pageRole,
+  editMode = false,
 }: FunnelPreviewProps) {
   const [mode, setMode] = useState<PreviewMode>(
     forcedMode === "raw" ? "desktop" : (forcedMode ?? defaultMode),
@@ -394,7 +461,6 @@ export function FunnelPreview({
 
   const isEmbed = viewportHeight === "auto";
 
-  // Page active : prop explicite > résolution via URL > home > première
   const resolvedActivePage = useMemo<FunnelPage | undefined>(
     () => activePage ?? resolveActivePage(funnel),
     [activePage, funnel],
@@ -454,6 +520,7 @@ export function FunnelPreview({
     pageRole,
     pageLinks,
     slugLinks,
+    editMode,
   };
 
   if (isRaw) {
@@ -556,6 +623,7 @@ type FrameProps = {
   pageRole?: PageRole;
   pageLinks: Map<string, string>;
   slugLinks: Map<string, string>;
+  editMode?: boolean;
 };
 
 function RawFrame(props: FrameProps & { className?: string }) {
@@ -658,6 +726,19 @@ function MobileFrame(props: FrameProps) {
   );
 }
 
+function shouldRenderHeader(
+  funnel: Funnel,
+  activePage: FunnelPage | undefined,
+): boolean {
+  const header = funnel.header;
+  if (header?.enabled === false) return false;
+  if (!funnel.pages || funnel.pages.length === 0) return true;
+  if (header?.showOnSecondaryPages === true) return true;
+  const homePage = funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+  if (!activePage) return true;
+  return activePage.id === homePage.id;
+}
+
 function PreviewBody({
   funnel,
   activePage,
@@ -669,6 +750,7 @@ function PreviewBody({
   pageRole,
   pageLinks,
   slugLinks,
+  editMode,
 }: {
   funnel: Funnel;
   activePage?: FunnelPage;
@@ -680,6 +762,7 @@ function PreviewBody({
   pageRole?: PageRole;
   pageLinks: Map<string, string>;
   slugLinks: Map<string, string>;
+  editMode?: boolean;
 }) {
   const mediaLibrary = funnel.media;
 
@@ -696,9 +779,15 @@ function PreviewBody({
 
   const successPadY = isSuccess && !compact ? "py-16 md:py-20" : padY;
 
+  const isClonedFunnel = Boolean(
+    (funnel.meta as { clonedHead?: string } | undefined)?.clonedHead,
+  );
+
   return (
     <div>
-      <FunnelHeader funnel={funnel} logoSrc={logoSrc} />
+      {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
+        <FunnelHeader funnel={funnel} logoSrc={logoSrc} />
+      )}
 
       {heroSection && (
         <HeroBlock
@@ -733,10 +822,11 @@ function PreviewBody({
           slugLinks={slugLinks}
           funnel={funnel}
           activePage={activePage}
+          editMode={editMode}
         />
       ))}
 
-      <FunnelFooter funnel={funnel} />
+      {!isClonedFunnel && <FunnelFooter funnel={funnel} />}
     </div>
   );
 }
@@ -775,7 +865,8 @@ function HeroBlock({
   const colors: SectionColors = getSectionColors(section);
   const { size: shadowSize, color: shadowColor } = readShadow(section);
   const shadowAttr = shadowSize !== "none" ? shadowSize : undefined;
-  const bg = buildBackgroundStyle(section);
+  const resolvedBgUrl = useResolvedBackgroundUrl(section.background?.imageUrl);
+  const bg = buildBackgroundStyle(section, resolvedBgUrl);
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
   const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
@@ -810,11 +901,14 @@ function HeroBlock({
         ...bg.containerStyle,
       }}
     >
-      {bg.hasBackgroundImage && bg.overlay > 0 && (
+      {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
-          style={{ background: `rgba(0,0,0,${bg.overlay})` }}
+          style={{
+            background: bg.overlayColor,
+            opacity: bg.overlayOpacity / 100,
+          }}
         />
       )}
 
@@ -929,7 +1023,6 @@ function HeroBlock({
           </>
         )}
 
-        {/* Timers de la section — affichés avant le CTA */}
         {extractTimers(section).map((timer) => (
           <TimerRenderer
             key={timer.id}
@@ -957,8 +1050,6 @@ function HeroBlock({
           </div>
         )}
 
-
-
         {section.type === "form" && (
           <div data-ff-shadow={shadowAttr}>
             <FormRenderer section={section} funnel={funnel} page={activePage} />
@@ -982,6 +1073,7 @@ function SectionBlock({
   slugLinks,
   funnel,
   activePage,
+  editMode,
 }: {
   section: FunnelSection;
   padX: string;
@@ -995,13 +1087,39 @@ function SectionBlock({
   slugLinks: Map<string, string>;
   funnel: Funnel;
   activePage?: FunnelPage;
+  editMode?: boolean;
 }) {
+  // 🆕 Early-return pour les sections HTML brutes (clonage de tunnel) :
+  // affichage dans une iframe sandboxée, pas de layout standard.
+  // editMode est propagé pour activer les annotations data-ff-spot-id
+  // permettant le scroll-to depuis le panneau d'édition.
+  if (section.type === "raw-html") {
+    const clonedHead = (funnel.meta as { clonedHead?: string } | undefined)
+      ?.clonedHead;
+    return (
+      <section
+        id={section.id}
+        data-ff-section="raw-html"
+        data-ff-section-id={section.id}
+        className="ff-section relative"
+        style={{ padding: 0, margin: 0, background: "transparent" }}
+      >
+        <RawHtmlRenderer
+          section={section}
+          clonedHead={clonedHead}
+          editMode={editMode}
+        />
+      </section>
+    );
+  }
+
   const isForm = section.type === "form";
   const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
   const colors: SectionColors = getSectionColors(section);
   const { size: shadowSize, color: shadowColor } = readShadow(section);
   const shadowAttr = shadowSize !== "none" ? shadowSize : undefined;
-  const bg = buildBackgroundStyle(section);
+  const resolvedBgUrl = useResolvedBackgroundUrl(section.background?.imageUrl);
+  const bg = buildBackgroundStyle(section, resolvedBgUrl);
   const useSpecialized = usesSpecializedRenderer(section);
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
@@ -1033,11 +1151,14 @@ function SectionBlock({
         ...bg.containerStyle,
       }}
     >
-      {bg.hasBackgroundImage && bg.overlay > 0 && (
+      {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
-          style={{ background: `rgba(0,0,0,${bg.overlay})` }}
+          style={{
+            background: bg.overlayColor,
+            opacity: bg.overlayOpacity / 100,
+          }}
         />
       )}
 
@@ -1128,7 +1249,6 @@ function SectionBlock({
           </>
         )}
 
-        {/* Timers de la section — affichés avant le CTA */}
         {extractTimers(section).map((timer) => (
           <TimerRenderer
             key={timer.id}
@@ -1140,22 +1260,21 @@ function SectionBlock({
         ))}
 
         {!isForm && section.cta?.label && (
-  <div className="ff-cta-wrap inline-flex items-center gap-2">
-    <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
-    <CtaLink
-      cta={section.cta}
-      className="text-sm mt-2"
-      anim={animOf(section.animations, "cta", "fade-up")}
-      pageLinks={pageLinks}
-      slugLinks={slugLinks}
-      funnel={funnel}
-      page={activePage}
-      section={section}
-    />
-    <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
-  </div>
-)}
-
+          <div className="ff-cta-wrap inline-flex items-center gap-2">
+            <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
+            <CtaLink
+              cta={section.cta}
+              className="text-sm mt-2"
+              anim={animOf(section.animations, "cta", "fade-up")}
+              pageLinks={pageLinks}
+              slugLinks={slugLinks}
+              funnel={funnel}
+              page={activePage}
+              section={section}
+            />
+            <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
+          </div>
+        )}
 
         {isForm && (
           <div data-ff-shadow={shadowAttr}>
@@ -1245,7 +1364,6 @@ function BulletsList({
         ? "ff-bullets--inline-strip"
         : "";
 
-  /* ─── Mode "inline-strip" (stats / kpi) ─── */
   if (mode === "inline-strip") {
     return (
       <ul
@@ -1276,7 +1394,6 @@ function BulletsList({
     );
   }
 
-  /* ─── Mode "grid" (benefits / features cards) ─── */
   if (mode === "grid") {
     return (
       <ul
@@ -1289,6 +1406,7 @@ function BulletsList({
           const PerBulletIcon = bulletIcons?.[i]
             ? getIconByName(bulletIcons[i] as string)
             : DefaultBulletIcon;
+          const split = splitBulletTitleDescription(bullet);
           return (
             <li
               key={i}
@@ -1302,7 +1420,18 @@ function BulletsList({
                 style={{ color: "var(--ff-accent, #31845C)" }}
                 aria-hidden="true"
               />
-              <RichText as="span" text={bullet} />
+              {split ? (
+                <span className="flex flex-col gap-1">
+                  <strong className="font-semibold">{split.title}</strong>
+                  <RichText
+                    as="span"
+                    text={split.description}
+                    className="opacity-80 text-[0.95em]"
+                  />
+                </span>
+              ) : (
+                <RichText as="span" text={bullet} />
+              )}
             </li>
           );
         })}
@@ -1310,12 +1439,11 @@ function BulletsList({
     );
   }
 
-  /* ─── Mode "list" (par défaut) ─── */
   return (
     <ul
       data-ff-bullets="stagger"
       data-ff-bullets-mode="list"
-      className={`ff-bullets space-y-2 mb-3 list-none pl-0 ${
+      className={`ff-bullets space-y-3 mb-3 list-none pl-0 ${
         isSuccess ? "inline-block text-left" : ""
       }`}
     >
@@ -1323,6 +1451,7 @@ function BulletsList({
         const PerBulletIcon = bulletIcons?.[i]
           ? getIconByName(bulletIcons[i] as string)
           : DefaultBulletIcon;
+        const split = splitBulletTitleDescription(bullet);
         return (
           <li
             key={i}
@@ -1337,7 +1466,18 @@ function BulletsList({
               style={{ color: "var(--ff-accent, #31845C)" }}
               aria-hidden="true"
             />
-            <RichText as="span" text={bullet} />
+            {split ? (
+              <span className="flex flex-col gap-0.5">
+                <strong className="font-semibold">{split.title}</strong>
+                <RichText
+                  as="span"
+                  text={split.description}
+                  className="opacity-80 text-[0.95em]"
+                />
+              </span>
+            ) : (
+              <RichText as="span" text={bullet} />
+            )}
           </li>
         );
       })}
@@ -1472,7 +1612,6 @@ function CtaLink({
   page?: FunnelPage;
   section: FunnelSection;
 }) {
-  // ─── Mode "popup" : bouton qui ouvre la modale ────────────────────
   if (cta.mode === "popup") {
     return (
       <PopupForm
@@ -1480,13 +1619,13 @@ function CtaLink({
         section={section}
         funnel={funnel}
         page={page}
+        customFields={cta.popupFields}
         buttonClassName={`ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg ${className}`}
         buttonProps={{ "data-ff-anim": anim ?? "fade-up" } as React.ButtonHTMLAttributes<HTMLButtonElement>}
       />
     );
   }
 
-  // ─── Modes "anchor" et "redirect" : <a> classique ────────────────
   let href = ctaHref(cta);
   let target = ctaTarget(cta);
   let rel = ctaRel(cta);
@@ -1541,4 +1680,3 @@ function CtaLink({
     </a>
   );
 }
-

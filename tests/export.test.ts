@@ -87,8 +87,8 @@ describe("Systeme.io block export", () => {
 });
 
 describe("ZIP packaging", () => {
-  it("creates a non-empty base64 zip payload", () => {
-    const base64 = createHtmlZipBase64(funnel);
+  it("creates a non-empty base64 zip payload", async () => {
+    const base64 = await createHtmlZipBase64(funnel);
     expect(typeof base64).toBe("string");
     expect(base64.length).toBeGreaterThan(100);
     expect(base64).toMatch(/^[A-Za-z0-9+/=\r\n]+$/);

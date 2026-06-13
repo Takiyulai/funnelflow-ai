@@ -97,8 +97,9 @@ const briefSchema = z.object({
   creationMode: z.enum(["guided", "free"]).optional(),
   templateId: z.string().optional(),
   moodId: z
-  .enum(["premium-calm", "modern-minimal", "energetic", "institutional-trust", "creative-warm"])
-  .optional(),  mainColor: z.string().optional(),
+    .enum(["premium-calm", "modern-minimal", "energetic", "institutional-trust", "creative-warm"])
+    .optional(),
+  mainColor: z.string().optional(),
   secondaryColor: z.string().optional(),
   logoUrl: z.string().optional(),
   videoUrl: z.string().optional(),
@@ -150,13 +151,17 @@ export async function POST(request: Request) {
   }
 
   const startTime = Date.now();
-  console.info(`[generate-funnel] START generation for brand="${parsed.data.brandName}" offer="${parsed.data.offerName}"`);
+  console.info(
+    `[generate-funnel] START generation for brand="${parsed.data.brandName}" offer="${parsed.data.offerName}"`,
+  );
 
   try {
     const funnel = await generateMultiPageFunnelWithAI(parsed.data);
 
     const duration = Date.now() - startTime;
-    console.info(`[generate-funnel] SUCCESS in ${duration}ms. Pages: ${funnel.pages?.length ?? 1}`);
+    console.info(
+      `[generate-funnel] SUCCESS in ${duration}ms. Pages: ${funnel.pages?.length ?? 1}`,
+    );
 
     return NextResponse.json({
       funnel,
@@ -166,10 +171,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error(`[generate-funnel] FAILED after ${duration}ms:`, error);
-    
+
     if (error instanceof AiGenerationError) {
       console.warn(
-        `[generate-funnel] AI failure after ${duration}ms reason=${error.reason} details=${error.details ?? "none"}`
+        `[generate-funnel] AI failure after ${duration}ms reason=${error.reason} details=${error.details ?? "none"}`,
       );
       return NextResponse.json(
         {
@@ -177,7 +182,7 @@ export async function POST(request: Request) {
           reason: error.reason,
           message: error.message,
         },
-        { status: statusForReason(error.reason) }
+        { status: statusForReason(error.reason) },
       );
     }
 
@@ -189,7 +194,7 @@ export async function POST(request: Request) {
         message:
           "Une erreur inattendue est survenue pendant la génération. Réessayez dans un instant",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

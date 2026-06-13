@@ -69,7 +69,9 @@ export type FunnelSectionType =
   | "webinar"
   | "video"
   | "qualification"
-  | "testimonials";
+  | "testimonials"
+  |"raw-html";
+  
 
 export type CtaMode = "anchor" | "redirect" | "popup";
 
@@ -78,7 +80,8 @@ export type CtaMode = "anchor" | "redirect" | "popup";
  * - "internal" : popup FunnelForge intégrée, lead envoyé vers /api/leads (Supabase).
  * - "systeme"  : popup native Systeme.io, ouverte via la classe systeme-show-popup-<id>.
  */
-export type PopupProvider = "internal" | "systeme";
+export type PopupProvider = "internal" | "systeme" | "embed";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CTA — icône et espacement (Lot B4)
@@ -125,6 +128,10 @@ export type CtaConfig = {
   spacing?: CtaSpacing;
    /** Message de réassurance affiché sous le formulaire popup (RGPD, sécurité, etc.). */
   popupReassurance?: string;
+  /** 🆕 Champs personnalisés du popup interne. Si absent → fallback nom+email. */
+  popupFields?: FormFieldItem[];
+  /** 🆕 Code HTML d'un formulaire externe (si popupProvider="embed"). Rendu en iframe sandboxée. */
+  popupEmbedHtml?: string;
 
 };
 
@@ -157,11 +164,28 @@ export type SectionImage = {
 };
 
 export type SectionBackground = {
+  /** URL de l'image (data:, idb-media://, https://) */
   imageUrl?: string;
+  /** Référence IndexedDB explicite */
+  mediaRef?: string;
+
+  /** Couleur du voile par-dessus l'image. Défaut "#000000" */
+  overlayColor?: string;
+  /** Opacité du voile, 0-100. Défaut 0. Source de vérité moderne. */
+  overlayOpacity?: number;
+  /** Legacy : alpha 0-1 (compatibilité ascendante avec l'existant) */
   overlay?: number;
+
+  /** Position de l'image. Défaut "center" */
   position?: "center" | "top" | "bottom" | "left" | "right";
-  size?: "cover" | "contain";
+  /** Taille de l'image. Défaut "cover" */
+  size?: "cover" | "contain" | "auto";
+  /** Comportement au scroll. "fixed" = parallaxe. Défaut "scroll" */
+  attachment?: "scroll" | "fixed";
+  /** Flou appliqué à l'image, 0-20px. Défaut 0 */
+  blur?: number;
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lot L — Système d'icônes unifié
@@ -404,6 +428,61 @@ export type SectionItem =
   | { kind: "formField"; data: FormFieldItem }
   | { kind: "timer"; data: TimerItem };  // 🆕
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Édition des sections raw-html (clonage)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Patches appliqués à la volée sur le HTML cloné d'une section raw-html.
+ * Les patches sont indexés par ID stable (chemin DOM) calculé par
+ * lib/clone/raw-html-editable.ts.
+ *
+ * Avantages :
+ *  - Réversible (on garde le HTML original intact)
+ *  - Léger (quelques Ko vs 90 Ko de HTML)
+ *  - Compatible undo/redo (un patch = un Partial<FunnelSection>)
+ */
+/**
+ * Patches appliqués à la volée sur le HTML cloné d'une section raw-html.
+ * Les patches sont indexés par ID stable calculé par
+ * lib/clone/raw-html-editable.ts (t-N pour texts, a-N pour links, img-N pour images).
+ *
+ * Avantages :
+ *  - Réversible (on garde le HTML original intact)
+ *  - Léger (quelques Ko vs 90 Ko de HTML)
+ *  - Compatible undo/redo (un patch = un Partial<FunnelSection>)
+ */
+export type RawHtmlBackgroundMode = "color" | "image" | "none" | "original";
+
+export interface RawHtmlBackgroundPatch {
+  /**
+   * - "original" (ou absent) : ne touche à rien, on garde le fond cloné
+   * - "color"    : applique une couleur unie (background.color)
+   * - "image"    : applique une image (background.imageUrl) + overlay optionnel
+   * - "none"     : supprime tout fond (transparent)
+   */
+  mode: RawHtmlBackgroundMode;
+  color?: string;                 // ex: "#0a0a0a" ou "rgb(10,10,10)"
+  imageUrl?: string;              // URL absolue (Supabase, CDN…)
+  overlayColor?: string;          // ex: "#000000"
+  overlayOpacity?: number;        // 0 → 100
+  position?: "center" | "top" | "bottom" | "left" | "right";
+  size?: "cover" | "contain" | "auto";
+  attachment?: "scroll" | "fixed";
+}
+
+export interface RawHtmlPatch {
+  texts?: Record<string, string>;
+  links?: Record<string, { href?: string; label?: string }>;
+  images?: Record<string, { src?: string; alt?: string }>;
+  colors?: Record<string, string>;
+  background?: RawHtmlBackgroundPatch;
+}
+
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FunnelSection (inchangé)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -433,6 +512,8 @@ export type FunnelSection = {
   background?: SectionBackground;
   decorativeIcons?: DecorativeIcon[];
   reassurance?: string;
+  /** Patches d'édition pour les sections de type "raw-html" uniquement. */
+  rawHtmlPatches?: RawHtmlPatch;
 };
 
 /** Message de réassurance par défaut affiché sous les formulaires (popup et section form). */
@@ -456,7 +537,11 @@ export type FunnelHeader = {
   cta?: CtaConfig;
   sticky?: boolean;
   transparent?: boolean;
+  /** 🆕 Si true, le header est aussi affiché sur les pages secondaires.
+   *  Par défaut false : header visible uniquement sur la page d'accueil. */
+  showOnSecondaryPages?: boolean;
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 LOT B4 — Intégrations externes du funnel

@@ -51,7 +51,34 @@ import {
   sectionTypeAcceptsAvatars,
   sectionTypeAcceptsVideo,
 } from "@/lib/funnels/pageCatalogs";
-import { removeOrFillEmptySections } from "@/lib/funnels/sectionFillers";
+import { removeOrFillEmptySections, dedupeSectionsAcrossPages,
+  ensurePricingOnConversionPage, } from "@/lib/funnels/sectionFillers";
+import {
+  getCTAConfig,
+  getArchetype,
+  resolveCTAIntent,
+  type CTAIntent,
+} from "./cta-matrix";
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper : retire le CTA d'une section de façon type-safe
+// ─────────────────────────────────────────────────────────────────────────────
+function stripCta(section: FunnelSection): FunnelSection {
+  // On reconstruit la section sans la propriété cta, type-safe (pas de any).
+  const next: FunnelSection = { ...section };
+  delete (next as { cta?: CtaConfig }).cta;
+  return next;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper : détecte si l'offre est gratuite
+// ─────────────────────────────────────────────────────────────────────────────
+function isFreeOffer(price: string | undefined): boolean {
+  if (!price) return false;
+  const normalized = price.trim().toLowerCase();
+  return /^(gratuit|free|gratis|0|0€|0\s*€|sans\s*frais|offert|libre)$/i.test(normalized);
+}
 
 /* ================================================================== */
 /*  Helper : rôle d'accueil par type de tunnel                        */
@@ -525,15 +552,6 @@ export function enforceHeroSingleMedia(
 /*  INJECTION DÉTERMINISTE DE LA VIDÉO DU BRIEF                       */
 /* ================================================================== */
 
-/**
- * Applique la politique vidéo de la page (heroMediaPolicy) :
- * - "prefer-video"  : vidéo dans hero.video, toute section "video" séparée supprimée
- * - "prefer-image"  : vidéo UNIQUEMENT dans une section "video" dédiée,
- *                     retirée du hero si l'IA l'y a mise
- * - "single-only"   : la vidéo va dans le hero, section vidéo dédiée supprimée
- *
- * Si la vidéo ne peut être placée nulle part, elle est ignorée avec un warning.
- */
 function ensureBriefVideoInSections(
   sections: FunnelSection[],
   videoUrl: string | undefined,
@@ -556,7 +574,6 @@ function ensureBriefVideoInSections(
   const dedicatedVideoSections = result.filter((s) => s.type === "video");
 
   if (policy === "prefer-video") {
-    // La vidéo EST le contenu : elle va dans le hero, on supprime les doublons.
     if (heroSection) {
       heroSection.video = videoSource;
       if (heroSection.image?.url) {
@@ -570,13 +587,11 @@ function ensureBriefVideoInSections(
   }
 
   if (policy === "prefer-image") {
-    // Vidéo UNIQUEMENT dans une section "video" dédiée.
     if (heroSection?.video?.url) {
       heroSection.video = undefined;
     }
 
     if (dedicatedVideoSections.length > 0) {
-      // Remplir la 1ère section vidéo, supprimer les doublons éventuels
       dedicatedVideoSections[0].video = videoSource;
       if (dedicatedVideoSections.length > 1) {
         let seen = false;
@@ -592,7 +607,6 @@ function ensureBriefVideoInSections(
       return result;
     }
 
-    // Aucune section vidéo : on en crée une si la page l'autorise
     if (!allowedSet || allowedSet.has("video")) {
       const newVideoSection: FunnelSection = {
         id: `sec_video_${Date.now().toString(36)}`,
@@ -616,7 +630,6 @@ function ensureBriefVideoInSections(
     return result;
   }
 
-  // policy === "single-only" : un seul média total, vidéo prime.
   if (heroSection && (!allowedSet || allowedSet.has("hero"))) {
     heroSection.video = videoSource;
     if (heroSection.image?.url) {
@@ -626,7 +639,6 @@ function ensureBriefVideoInSections(
     return result;
   }
 
-  // Fallback : section vidéo dédiée si autorisée
   if (dedicatedVideoSections.length > 0) {
     dedicatedVideoSections[0].video = videoSource;
   } else if (!allowedSet || allowedSet.has("video")) {
@@ -1441,9 +1453,6 @@ function buildStyleMapByType(
     if (map.has(s.type)) continue;
     map.set(s.type, {
       style: s.style,
-      // ⚠️ image et video volontairement omis : le template ne fournit
-      // QUE le style visuel, jamais de média. Les médias viennent
-      // exclusivement du brief via placeMediasIntoSections.
       visualDirection: s.visualDirection,
     });
   }
@@ -1459,20 +1468,16 @@ function applyStyleMapToSections(
     const styling = styleMap.get(sec.type);
     if (!styling) return sec;
 
-    // ⚠️ NE JAMAIS réinjecter image/video du template : les médias
-    // viennent EXCLUSIVEMENT du brief via placeMediasIntoSections /
-    // ensureBriefVideoInSections. Le template ne fournit QUE le style.
     return {
       ...sec,
       style: sec.style ?? styling.style,
       visualDirection: sec.visualDirection ?? styling.visualDirection,
-      // image et video : on garde STRICTEMENT ce qui était dans sec
     };
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enrichissement des sections riches (faq, testimonials, pricing, bonus, guarantee)
+// Enrichissement des sections riches
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RICH_SECTION_TYPES = new Set<string>([
@@ -1686,43 +1691,273 @@ function convertBulletsToTestimonialItems(
 
 function buildFallbackPricingItems(brief: FunnelBrief): SectionItem[] {
   const lang = brief.language;
-  const features = tLang(
-    {
-      fr: [
-        `Accès complet à ${brief.offerName}`,
-        `Compatible mobile, tablette et ordinateur`,
-        `Mises à jour à vie incluses`,
-        `Garantie satisfait ou remboursé 30 jours`,
-      ].join("|"),
-      en: [
-        `Full access to ${brief.offerName}`,
-        `Mobile, tablet and desktop compatible`,
-        `Lifetime updates included`,
-        `30-day money-back guarantee`,
-      ].join("|"),
-      es: [
-        `Acceso completo a ${brief.offerName}`,
-        `Compatible con móvil, tableta y escritorio`,
-        `Actualizaciones de por vida incluidas`,
-        `Garantía de devolución de 30 días`,
-      ].join("|"),
+  const free = isFreeOffer(brief.price);
+  const archetype = getArchetype(brief.funnelKind);
+
+  // Features adaptées au TYPE de tunnel (transformation vs accès produit)
+  type FeaturePack = { fr: string[]; en: string[]; es: string[] };
+
+  const featuresByArchetype: Record<string, { free: FeaturePack; paid: FeaturePack }> = {
+    registration: {
+      // Webinaire / challenge : on parle de transformation et d'apprentissage
+      free: {
+        fr: [
+          `Une méthode concrète appliquée pas à pas pendant la session`,
+          `Les erreurs à éviter pour gagner des mois de travail`,
+          `Une session live avec Q&R personnalisé à la fin`,
+          `Le replay offert si vous ne pouvez pas être présent en direct`,
+        ],
+        en: [
+          `A concrete method walked through step by step during the session`,
+          `The mistakes to avoid to save months of work`,
+          `A live session with personalized Q&A at the end`,
+          `The replay included if you can't attend live`,
+        ],
+        es: [
+          `Un método concreto aplicado paso a paso durante la sesión`,
+          `Los errores a evitar para ganar meses de trabajo`,
+          `Una sesión en vivo con preguntas y respuestas personalizadas`,
+          `El replay incluido si no puedes asistir en directo`,
+        ],
+      },
+      paid: {
+        fr: [
+          `Une stratégie complète pour ${brief.promise}`,
+          `Des cas concrets décortiqués en direct`,
+          `Un accompagnement personnalisé après la session`,
+          `Accès à la communauté privée des participants`,
+        ],
+        en: [
+          `A complete strategy to ${brief.promise}`,
+          `Real-world cases broken down live`,
+          `Personalized follow-up after the session`,
+          `Access to the private community of participants`,
+        ],
+        es: [
+          `Una estrategia completa para ${brief.promise}`,
+          `Casos reales analizados en directo`,
+          `Seguimiento personalizado tras la sesión`,
+          `Acceso a la comunidad privada de participantes`,
+        ],
+      },
     },
-    lang,
-  ).split("|");
+    booking: {
+      // RDV / coaching : on parle d'accompagnement personnalisé
+      free: {
+        fr: [
+          `Un appel découverte de 30 minutes en visio`,
+          `Un diagnostic personnalisé de votre situation`,
+          `Un plan d'action concret repartir avec`,
+          `Aucun engagement, aucune obligation d'achat`,
+        ],
+        en: [
+          `A 30-minute discovery call via video`,
+          `A personalized diagnosis of your situation`,
+          `A concrete action plan to leave with`,
+          `No commitment, no obligation to buy`,
+        ],
+        es: [
+          `Una llamada de descubrimiento de 30 minutos por videollamada`,
+          `Un diagnóstico personalizado de tu situación`,
+          `Un plan de acción concreto para llevarte`,
+          `Sin compromiso, sin obligación de compra`,
+        ],
+      },
+      paid: {
+        fr: [
+          `Un accompagnement personnalisé avec ${brief.brandName}`,
+          `Des objectifs clairs et mesurables`,
+          `Un suivi régulier pour garantir vos résultats`,
+          `Une transformation durable de votre situation`,
+        ],
+        en: [
+          `Personalized support with ${brief.brandName}`,
+          `Clear, measurable objectives`,
+          `Regular follow-up to guarantee your results`,
+          `A lasting transformation of your situation`,
+        ],
+        es: [
+          `Acompañamiento personalizado con ${brief.brandName}`,
+          `Objetivos claros y medibles`,
+          `Seguimiento regular para garantizar tus resultados`,
+          `Una transformación duradera de tu situación`,
+        ],
+      },
+    },
+    download: {
+      // Lead magnet : on parle du contenu et de ce qu'on apprend
+      free: {
+        fr: [
+          `Un guide actionnable de A à Z, prêt à appliquer`,
+          `Des exemples concrets et des templates inclus`,
+          `Livré immédiatement par email après inscription`,
+          `Sans carte bancaire, sans engagement`,
+        ],
+        en: [
+          `An actionable A-to-Z guide, ready to apply`,
+          `Concrete examples and templates included`,
+          `Delivered instantly by email after signup`,
+          `No credit card, no commitment`,
+        ],
+        es: [
+          `Una guía accionable de la A a la Z, lista para aplicar`,
+          `Ejemplos concretos y plantillas incluidas`,
+          `Entregado al instante por email tras la inscripción`,
+          `Sin tarjeta bancaria, sin compromiso`,
+        ],
+      },
+      paid: {
+        fr: [
+          `Le guide complet pour ${brief.promise}`,
+          `Des bonus exclusifs réservés aux acheteurs`,
+          `Accès à vie au contenu et aux mises à jour`,
+          `Garantie satisfait ou remboursé 30 jours`,
+        ],
+        en: [
+          `The complete guide to ${brief.promise}`,
+          `Exclusive bonuses reserved for buyers`,
+          `Lifetime access to content and updates`,
+          `30-day money-back guarantee`,
+        ],
+        es: [
+          `La guía completa para ${brief.promise}`,
+          `Bonos exclusivos reservados a compradores`,
+          `Acceso de por vida al contenido y actualizaciones`,
+          `Garantía de devolución de 30 días`,
+        ],
+      },
+    },
+    purchase: {
+      // Vente de produit / formation : features produit classiques
+      free: {
+        fr: [
+          `Accès immédiat à ${brief.offerName}`,
+          `Sans carte bancaire ni engagement`,
+          `Compatible mobile, tablette et ordinateur`,
+          `Annulez à tout moment, sans condition`,
+        ],
+        en: [
+          `Instant access to ${brief.offerName}`,
+          `No credit card, no commitment`,
+          `Mobile, tablet and desktop compatible`,
+          `Cancel anytime, no questions asked`,
+        ],
+        es: [
+          `Acceso inmediato a ${brief.offerName}`,
+          `Sin tarjeta bancaria ni compromiso`,
+          `Compatible con móvil, tableta y escritorio`,
+          `Cancela en cualquier momento, sin condiciones`,
+        ],
+      },
+      paid: {
+        fr: [
+          `Accès complet à ${brief.offerName}`,
+          `Compatible mobile, tablette et ordinateur`,
+          `Mises à jour à vie incluses`,
+          `Garantie satisfait ou remboursé 30 jours`,
+        ],
+        en: [
+          `Full access to ${brief.offerName}`,
+          `Mobile, tablet and desktop compatible`,
+          `Lifetime updates included`,
+          `30-day money-back guarantee`,
+        ],
+        es: [
+          `Acceso completo a ${brief.offerName}`,
+          `Compatible con móvil, tableta y escritorio`,
+          `Actualizaciones de por vida incluidas`,
+          `Garantía de devolución de 30 días`,
+        ],
+      },
+    },
+    "post-conversion": {
+      // Page thank-you isolée : features minimalistes
+      free: {
+        fr: [`Accès immédiat`, `Sans engagement`, `Contenu de qualité`],
+        en: [`Instant access`, `No commitment`, `Quality content`],
+        es: [`Acceso inmediato`, `Sin compromiso`, `Contenido de calidad`],
+      },
+      paid: {
+        fr: [`Accès complet`, `Support inclus`, `Contenu de qualité`],
+        en: [`Full access`, `Support included`, `Quality content`],
+        es: [`Acceso completo`, `Soporte incluido`, `Contenido de calidad`],
+      },
+    },
+  };
+
+  const pack = featuresByArchetype[archetype] ?? featuresByArchetype.purchase;
+  const featuresPack = free ? pack.free : pack.paid;
+  const features = featuresPack[lang] ?? featuresPack.fr;
+
+  // Label CTA adapté à l'archétype + gratuité
+  const ctaLabelsByArchetype: Record<string, { free: Record<Language, string>; paid: Record<Language, string> }> = {
+    registration: {
+      free: { fr: "Je réserve ma place", en: "I save my spot", es: "Reservo mi lugar" },
+      paid: { fr: "Je m'inscris", en: "I register", es: "Me inscribo" },
+    },
+    booking: {
+      free: { fr: "Je réserve mon créneau", en: "I book my slot", es: "Reservo mi cita" },
+      paid: { fr: "Je réserve", en: "I book", es: "Reservo" },
+    },
+    download: {
+      free: { fr: "Je télécharge maintenant", en: "Download now", es: "Descargar ahora" },
+      paid: { fr: "Je veux le guide", en: "I want the guide", es: "Quiero la guía" },
+    },
+    purchase: {
+      free: { fr: "Je commence maintenant", en: "Start now for free", es: "Empezar gratis ahora" },
+      paid: { fr: "Je veux l'accès", en: "I want access", es: "Quiero el acceso" },
+    },
+    "post-conversion": {
+      free: { fr: "Continuer", en: "Continue", es: "Continuar" },
+      paid: { fr: "Continuer", en: "Continue", es: "Continuar" },
+    },
+  };
+  const ctaPack = ctaLabelsByArchetype[archetype] ?? ctaLabelsByArchetype.purchase;
+  const ctaLabel = free ? ctaPack.free[lang] : ctaPack.paid[lang];
+
+  // Period adaptée
+  const period = free
+    ? tLang({ fr: "accès gratuit", en: "free access", es: "acceso gratuito" }, lang)
+    : archetype === "booking"
+      ? tLang({ fr: "à partir de", en: "starting from", es: "desde" }, lang)
+      : tLang({ fr: "paiement unique", en: "one-time payment", es: "pago único" }, lang);
+
+  // Description adaptée
+  const description = free
+    ? tLang(
+        {
+          fr: `${brief.promise} — sans engagement.`,
+          en: `${brief.promise} — no commitment.`,
+          es: `${brief.promise} — sin compromiso.`,
+        },
+        lang,
+      )
+    : brief.promise;
+
+  // Nom du "plan" adapté à l'archétype (pas "BusinessGameChanger" pour un webinaire !)
+  const planNameByArchetype: Record<string, Record<Language, string>> = {
+    registration: { fr: "Votre place au webinaire", en: "Your webinar spot", es: "Tu lugar al webinar" },
+    booking: { fr: "Votre rendez-vous", en: "Your appointment", es: "Tu cita" },
+    download: { fr: "Votre accès", en: "Your access", es: "Tu acceso" },
+    purchase: { fr: brief.offerName, en: brief.offerName, es: brief.offerName },
+    "post-conversion": { fr: brief.offerName, en: brief.offerName, es: brief.offerName },
+  };
+  const planNamePack = planNameByArchetype[archetype] ?? planNameByArchetype.purchase;
+  const planName = planNamePack[lang] ?? brief.offerName;
 
   return [
     {
       kind: "pricing" as const,
       data: {
-        name: brief.offerName,
+        name: planName,
         price: brief.price,
-        period: tLang({ fr: "paiement unique", en: "one-time payment", es: "pago único" }, lang),
-        description: brief.promise,
+        period,
+        description,
         features,
-        highlighted: true,
-        badge: tLang({ fr: "Recommandé", en: "Recommended", es: "Recomendado" }, lang),
+        highlighted: false,
+        badge: undefined,
         cta: {
-          label: tLang({ fr: "Je veux l'accès", en: "I want access", es: "Quiero el acceso" }, lang),
+          label: ctaLabel,
           mode: "anchor",
           anchorId: "lead-form",
         },
@@ -1730,6 +1965,8 @@ function buildFallbackPricingItems(brief: FunnelBrief): SectionItem[] {
     },
   ];
 }
+
+
 
 function buildFallbackBonusItems(brief: FunnelBrief): SectionItem[] {
   const offerName = brief.offerName || "votre offre";
@@ -1888,6 +2125,10 @@ function enrichSectionsWithDefaults(
     }
 
     if (type === "guarantee") {
+      // 🔧 Aucune garantie de remboursement n'a de sens pour une offre gratuite
+      if (isFreeOffer(brief.price)) {
+        return { ...section, visible: false, items: [], bullets: undefined };
+      }
       const validGuarantee = existingItems.filter(
         (it) => it.kind === "guarantee" && it.data?.title,
       );
@@ -1901,12 +2142,6 @@ function enrichSectionsWithDefaults(
   });
 }
 
-/**
- * Enrichit toutes les pages d'un funnel : remplissage des sections riches
- * uniquement. Le nettoyage final (removeOrFillEmptySections) est appelé
- * SÉPARÉMENT après la pipeline médias, pour éviter qu'il s'exécute avant
- * que les médias aient pu remplir les sections "about", "video", etc.
- */
 function enrichFunnelPages(
   pages: FunnelPage[],
   brief: FunnelBrief,
@@ -2039,7 +2274,55 @@ function buildTemplateInstruction(
 // ─────────────────────────────────────────────────────────────────────────────
 // Consigne CTA stricte
 // ─────────────────────────────────────────────────────────────────────────────
-function buildCtaInstruction(lang: Language): string {
+function buildCtaInstruction(lang: Language, brief?: FunnelBrief): string {
+  const freeOffer = brief ? isFreeOffer(brief.price) : false;
+  const priceLabel = brief?.price ?? "";
+
+  const freeInstructionFr = freeOffer
+    ? `
+
+IMPORTANT — OFFRE GRATUITE (PRIORITÉ ABSOLUE) :
+- Le prix de l'offre est "${priceLabel}" (gratuit).
+- N'inclus AUCUNE mention de garantie satisfait ou remboursé, ni de remboursement sous 30 jours.
+- Ne génère AUCUNE section "guarantee" basée sur l'argent ou le remboursement.
+- Dans le pricing (s'il y en a un), mets en avant : accès immédiat, sans carte bancaire, sans engagement, annulation libre à tout moment.
+- N'utilise PAS le badge "Recommandé" sur le pricing s'il n'y a qu'un seul plan généré.
+- Les CTA doivent refléter la gratuité : "Je commence maintenant", "Recevoir gratuitement", "Accéder gratuitement", JAMAIS "Je commande" ni "Acheter".
+- Adapte tout le copywriting (hero, pricing, FAQ, CTA) au fait que l'offre est 100% gratuite.
+
+`
+    : "";
+
+  const freeInstructionEn = freeOffer
+    ? `
+
+IMPORTANT — FREE OFFER (TOP PRIORITY):
+- The offer price is "${priceLabel}" (free).
+- Do NOT include any money-back guarantee or 30-day refund mention.
+- Do NOT generate any "guarantee" section based on money or refund.
+- For pricing (if any), emphasize: instant access, no credit card, no commitment, cancel anytime.
+- Do NOT use the "Recommended" badge on pricing if there's only one plan generated.
+- CTAs must reflect the free nature: "Start now for free", "Get free access", NEVER "Order now" or "Buy now".
+- Adapt all copywriting (hero, pricing, FAQ, CTA) to the fact that the offer is 100% free.
+
+`
+    : "";
+
+  const freeInstructionEs = freeOffer
+    ? `
+
+IMPORTANTE — OFERTA GRATUITA (PRIORIDAD ABSOLUTA):
+- El precio de la oferta es "${priceLabel}" (gratis).
+- NO incluyas ninguna garantía de devolución o reembolso a 30 días.
+- NO generes ninguna sección "guarantee" basada en dinero o reembolso.
+- En el pricing (si lo hay), destaca: acceso inmediato, sin tarjeta bancaria, sin compromiso, cancela en cualquier momento.
+- NO uses el badge "Recomendado" en el pricing si solo hay un plan generado.
+- Los CTA deben reflejar la gratuidad: "Empezar gratis ahora", "Recibir gratis", NUNCA "Comprar" ni "Pedir".
+- Adapta todo el copywriting (hero, pricing, FAQ, CTA) al hecho de que la oferta es 100% gratuita.
+
+`
+    : "";
+
   const fr = `
 
 RÈGLE STRICTE POUR LE CHAMP "cta" (à respecter pour CHAQUE section) :
@@ -2057,6 +2340,18 @@ RÈGLE STRICTE POUR LA STRUCTURE DES SECTIONS :
 - Pour les items typés (faq, testimonial, pricing, bonus, guarantee), utilise OBLIGATOIREMENT le format :
   { "kind": "faq", "data": { "question": "...", "answer": "..." } }
 - Pour le champ "image", utilise OBLIGATOIREMENT { "url": "...", "alt": "..." } et JAMAIS { "src": "..." }.
+RÈGLE STRICTE POUR LES SECTIONS À ITEMS (benefits, process, program, steps, bonus, guarantee) :
+- CHAQUE item DOIT avoir une "description" de 15 à 30 mots minimum, jamais juste un titre seul.
+- Le format obligatoire est : { "kind": "bonus", "data": { "title": "Titre concret de 4-8 mots", "description": "Phrase complète de 15-30 mots qui explique le bénéfice/l'étape, en s'adressant directement au lecteur." } }
+- ❌ INTERDIT : { "data": { "title": "Stratégies éprouvées" } } sans description.
+- ✅ CORRECT : { "data": { "title": "Stratégies éprouvées pour croître", "description": "Découvrez les méthodes testées et validées qui ont déjà permis à des dizaines d'entrepreneurs de doubler leur chiffre d'affaires en moins d'un an." } }
+- Génère TOUJOURS entre 3 et 6 items par section, jamais moins.
+
+RÈGLE STRICTE POUR LES SECTIONS "about" :
+- La section "about" DOIT avoir un "body" de 80 à 200 mots minimum qui présente la marque, le coach/fondateur, ou l'entreprise.
+- Le body ne peut JAMAIS être vide, même si une image est présente.
+- Inclus : qui vous êtes, ce que vous faites, pour qui, et pourquoi vous le faites.
+
 `;
   const en = `
 
@@ -2074,6 +2369,18 @@ STRICT RULE FOR SECTION STRUCTURE:
 - For typed items (faq, testimonial, pricing, bonus, guarantee), use ONLY this format:
   { "kind": "faq", "data": { "question": "...", "answer": "..." } }
 - For the "image" field, use ONLY { "url": "...", "alt": "..." } and NEVER { "src": "..." }.
+STRICT RULE FOR ITEM-BASED SECTIONS (benefits, process, program, steps, bonus, guarantee):
+- EVERY item MUST have a "description" of at least 15-30 words, never a title alone.
+- Required format: { "kind": "bonus", "data": { "title": "Concrete 4-8 word title", "description": "Full 15-30 word sentence explaining the benefit/step, speaking directly to the reader." } }
+- ❌ FORBIDDEN: { "data": { "title": "Proven strategies" } } without description.
+- ✅ CORRECT: { "data": { "title": "Proven growth strategies", "description": "Discover the tested and validated methods that have already helped dozens of entrepreneurs double their revenue in less than a year." } }
+- Always generate between 3 and 6 items per section, never fewer.
+
+STRICT RULE FOR "about" SECTIONS:
+- The "about" section MUST have a "body" of at least 80-200 words presenting the brand, coach/founder, or company.
+- The body can NEVER be empty, even if an image is present.
+- Include: who you are, what you do, for whom, and why you do it.
+
 `;
   const es = `
 
@@ -2089,9 +2396,27 @@ REGLA ESTRICTA PARA LA ESTRUCTURA DE LAS SECCIONES:
 - El campo "body" debe ser siempre una CADENA, nunca un objeto.
 - Para items tipados, usa SOLO: { "kind": "faq", "data": { "question": "...", "answer": "..." } }.
 - Para el campo "image", usa SOLO { "url": "...", "alt": "..." } y NUNCA { "src": "..." }.
+REGLA ESTRICTA PARA SECCIONES CON ITEMS (benefits, process, program, steps, bonus, guarantee):
+- CADA item DEBE tener una "description" de 15 a 30 palabras mínimo, nunca solo un título.
+- Formato obligatorio: { "kind": "bonus", "data": { "title": "Título concreto de 4-8 palabras", "description": "Frase completa de 15-30 palabras que explica el beneficio/paso, dirigiéndose directamente al lector." } }
+- ❌ PROHIBIDO: { "data": { "title": "Estrategias probadas" } } sin description.
+- ✅ CORRECTO: { "data": { "title": "Estrategias probadas de crecimiento", "description": "Descubre los métodos validados que ya han ayudado a decenas de emprendedores a duplicar sus ingresos en menos de un año." } }
+- Genera SIEMPRE entre 3 y 6 items por sección, nunca menos.
+
+REGLA ESTRICTA PARA SECCIONES "about":
+- La sección "about" DEBE tener un "body" de 80 a 200 palabras mínimo que presente la marca, el coach/fundador o la empresa.
+- El body NUNCA puede estar vacío, incluso si hay una imagen.
+- Incluye: quién eres, qué haces, para quién y por qué lo haces.
+
 `;
-  return lang === "fr" ? fr : lang === "es" ? es : en;
+
+  const base = lang === "fr" ? fr : lang === "es" ? es : en;
+  const freeInstruction =
+    lang === "fr" ? freeInstructionFr : lang === "es" ? freeInstructionEs : freeInstructionEn;
+
+  return base + freeInstruction;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Wrapper appel OpenAI réutilisable
@@ -2176,10 +2501,12 @@ const SYSTEM_MESSAGE_FUNNEL =
   "never a plain string, and \"label\" must always be a non-empty string. " +
   "Each section MUST have its fields directly at the root (headline, body, items, image, cta) — NEVER nested inside a 'content' sub-object. " +
   "The 'body' field MUST always be a string, never an object. " +
-  "EVERY section MUST include an 'eyebrow' field (2-5 words, preferably uppercase).";
+  "EVERY section MUST include an 'eyebrow' field (2-5 words, preferably uppercase)." +
+  " Every item inside an items[] array (benefits, process, program, steps, bonus, guarantee) MUST include both a 'title' (4-8 words) AND a 'description' (15-30 words). Items with only a title are forbidden. " +
+  "Every 'about' section MUST have a 'body' of at least 80 words. About sections with only an image and no body text are forbidden.";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper : conversion MediaItem[] → MediaInput[] (pour les prompts)
+// Helper : conversion MediaItem[] → MediaInput[]
 // ─────────────────────────────────────────────────────────────────────────────
 function toMediaInputs(medias: MediaItem[] | undefined): MediaInput[] | undefined {
   if (!medias || medias.length === 0) return undefined;
@@ -2194,9 +2521,6 @@ function toMediaInputs(medias: MediaItem[] | undefined): MediaInput[] | undefine
   }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper : convertit brief.videoUrl en MediaItem virtuel
-// ─────────────────────────────────────────────────────────────────────────────
 function videoUrlToMediaItem(videoUrl: string | undefined): MediaItem | null {
   if (!videoUrl || !videoUrl.trim()) return null;
   return {
@@ -2208,9 +2532,6 @@ function videoUrlToMediaItem(videoUrl: string | undefined): MediaItem | null {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper : header déterministe construit depuis le brief
-// ─────────────────────────────────────────────────────────────────────────────
 function buildDeterministicHeader(
   brief: FunnelBrief,
   fallbackCta: CtaConfig,
@@ -2226,9 +2547,6 @@ function buildDeterministicHeader(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PIPELINE MÉDIAS RÉUTILISABLE — appliquée en DERNIER sur toutes les pages
-// ─────────────────────────────────────────────────────────────────────────────
 function applyMediaPipeline(
   page: FunnelPage,
   brief: FunnelBrief,
@@ -2250,10 +2568,222 @@ function applyMediaPipeline(
   return { ...page, sections };
 }
 
+function applyFooterMeta(funnel: Funnel, brief: FunnelBrief): void {
+  const existingMeta = funnel.meta ?? {};
+  const businessName =
+    existingMeta.businessName?.trim() || brief.brandName?.trim() || "";
+  const legalNotice = existingMeta.legalNotice?.trim() || undefined;
+  const contactEmail = existingMeta.contactEmail?.trim() || undefined;
+
+  funnel.meta = {
+    ...existingMeta,
+    ...(businessName ? { businessName } : {}),
+    ...(legalNotice ? { legalNotice } : {}),
+    ...(contactEmail ? { contactEmail } : {}),
+  };
+}
+
+/**
+ * Harmonise les CTA selon le funnelKind et le rôle de chaque page.
+ * Garantit qu'aucun CTA n'incite à une action incohérente avec sa page :
+ * - Landing → tous les CTA poussent vers la page de conversion
+ * - Conversion (booking/checkout/optin/registration) → CTA = action sur le form
+ * - Thankyou/confirmation → pas de CTA de reconversion, juste post-action
+ *
+ * Fonctionne pour TOUS les types de tunnels via la matrice cta-matrix.ts.
+ */
+function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
+  const lang = brief.language;
+  const isFree = isFreeOffer(brief.price);
+  const archetype = getArchetype(brief.funnelKind);
+  const config = getCTAConfig(brief.funnelKind);
+
+  console.log(
+    `[cta-harmonize] funnelKind="${brief.funnelKind}" → archetype="${archetype}" (verbe: ${config.primaryVerb[lang]})`
+  );
+
+  if (!funnel.pages || funnel.pages.length === 0) {
+    console.warn("[cta-harmonize] ⚠️ Funnel sans pages, harmonisation ignorée.");
+    return funnel;
+  }
+
+  // Identifie la page de conversion (première dont le rôle a defaultIntent="form-scroll")
+  const conversionPage = funnel.pages.find((p) => {
+    const intent = config.rules[p.role]?.defaultIntent;
+    return intent === "form-scroll";
+  });
+  const conversionPageId = conversionPage?.id;
+
+  // Compteur global pour varier les labels de la landing
+  let landingCtaIndex = 0;
+
+  const patchedPages: FunnelPage[] = funnel.pages.map((page) => {
+    // Filtre offre gratuite : retire les sections guarantee partout
+    const filteredSections = isFree
+      ? page.sections.filter((s) => s.type !== "guarantee")
+      : page.sections;
+
+    const patchedSections: FunnelSection[] = filteredSections.map((section): FunnelSection => {
+      const intent: CTAIntent = resolveCTAIntent(config, page.role, section.type);
+
+      switch (intent) {
+        case "convert-primary": {
+          if (!section.cta) return section;
+          const labels = config.primaryLabels[lang];
+          const label = labels[landingCtaIndex % labels.length];
+          landingCtaIndex++;
+
+          // Si on a une page de conversion identifiée → navigation inter-pages
+          if (conversionPageId) {
+            const nextCta: CtaConfig = {
+              ...section.cta,
+              label,
+              mode: "redirect",
+              pageId: conversionPageId,
+              target: "_self",
+            };
+            return { ...section, cta: nextCta };
+          }
+          // Sinon, on scrolle vers le form de la page courante
+          const anchorCta: CtaConfig = {
+            ...section.cta,
+            label,
+            mode: "anchor",
+            anchorId: "lead-form",
+          };
+          return { ...section, cta: anchorCta };
+        }
+
+        case "form-scroll": {
+          if (!section.cta) return section;
+          const nextCta: CtaConfig = {
+            ...section.cta,
+            label: config.formSubmitLabel[lang],
+            mode: "anchor",
+            anchorId: "lead-form",
+          };
+          return { ...section, cta: nextCta };
+        }
+
+        case "form-submit": {
+          if (!section.cta) return section;
+          const nextCta: CtaConfig = {
+            ...section.cta,
+            label: config.formSubmitLabel[lang],
+            mode: "anchor",
+            anchorId: "lead-form",
+          };
+          return { ...section, cta: nextCta };
+        }
+
+        case "post-action": {
+          if (!config.postActionLabel) {
+            // Pas de CTA post-action → on retire le CTA s'il existe
+            return section.cta ? stripCta(section) : section;
+          }
+          if (!section.cta) return section;
+          const nextCta: CtaConfig = {
+            ...section.cta,
+            label: config.postActionLabel[lang],
+            mode: "redirect",
+            url: "#",
+            target: "_self",
+          };
+          return { ...section, cta: nextCta };
+        }
+
+        case "none":
+        default: {
+          return section.cta ? stripCta(section) : section;
+        }
+      }
+    });
+
+    return { ...page, sections: patchedSections };
+  });
+
+  // ─── INJECTION DÉTERMINISTE DE CTA POST-ACTION ───
+  // Sur les pages thankyou/confirmation/replay/delivery/access, si AUCUN CTA
+  // n'existe et qu'un postActionLabel est défini, on injecte une section "cta"
+  // déterministe avec le bon label, pour que la page ne soit pas un cul-de-sac.
+  const POST_CONVERSION_ROLES: PageRole[] = [
+    "thankyou",
+    "confirmation",
+    "replay",
+    "delivery",
+    "access",
+  ];
+
+  const patchedPagesWithPostAction: FunnelPage[] = patchedPages.map((page) => {
+    if (!POST_CONVERSION_ROLES.includes(page.role)) return page;
+    if (!config.postActionLabel) return page;
+
+    const hasCta = page.sections.some((s) => !!s.cta);
+    if (hasCta) return page;
+
+    // Construit une section "cta" déterministe
+    const postActionHeadline = tLang(
+      {
+        fr: "Que faire ensuite ?",
+        en: "What's next?",
+        es: "¿Qué hacer ahora?",
+      },
+      lang,
+    );
+    const postActionSubheadline = tLang(
+      {
+        fr: "Préparez la suite dès maintenant.",
+        en: "Get ready for what's next.",
+        es: "Prepárate para lo que sigue.",
+      },
+      lang,
+    );
+
+    const ctaSection: FunnelSection = {
+      id: `cta_post_action_${Date.now().toString(36)}`,
+      type: "cta",
+      headline: postActionHeadline,
+      subheadline: postActionSubheadline,
+      visible: true,
+      cta: {
+        label: config.postActionLabel[lang],
+        mode: "redirect",
+        url: "#",
+        target: "_self",
+      },
+    };
+
+    console.log(
+      `[cta-harmonize] CTA post-action injecté sur page "${page.role}" : "${config.postActionLabel[lang]}"`,
+    );
+
+    return {
+      ...page,
+      sections: [...page.sections, ctaSection],
+    };
+  });
+
+  // Log final récapitulatif
+  console.log(
+    "[cta-harmonize] Résultat :",
+    patchedPagesWithPostAction.map((p) => ({
+      role: p.role,
+      slug: p.slug,
+      ctas: p.sections
+        .filter((s) => s.cta)
+        .map((s) => ({ type: s.type, label: s.cta?.label, mode: s.cta?.mode })),
+    })),
+  );
+
+  return { ...funnel, pages: patchedPagesWithPostAction };
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Génération multi-pages (fonction principale)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise<Funnel> {
+
   if (!process.env.OPENAI_API_KEY) {
     throw new AiGenerationError(
       "missing-key",
@@ -2286,8 +2816,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     `[generateMultiPageFunnelWithAI] Lancement de la génération en parallèle (Main + ${secondaryBlueprints.length} pages secondaires)...`,
   );
 
-  const ctaInstruction = buildCtaInstruction(brief.language);
-
+  const ctaInstruction = buildCtaInstruction(brief.language, brief);
   const videoMediaItem = videoUrlToMediaItem(brief.videoUrl);
   const briefMediasWithVideo: MediaItem[] = [
     ...(brief.medias ?? []),
@@ -2476,7 +3005,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   const homePageRaw = pages.find((p) => p.isHome) ?? pages[0];
   const homeSectionsRaw = homePageRaw?.sections ?? mainSections;
 
-  // ===== ÉTAPE 1 : Funnel brut (pages IA, pas encore de template ni de médias) =====
+  // ===== ÉTAPE 1 : Funnel brut =====
   const aiFunnel: Funnel = {
     funnelName: mainData.funnelName,
     language: mainData.language,
@@ -2509,12 +3038,12 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     },
   };
 
-  // ===== ÉTAPE 2 : Application du template (style uniquement, JAMAIS de média) =====
+  // ===== ÉTAPE 2 : Application du template (style uniquement) =====
   const styledFunnel = applyTemplateToFunnel(template, aiFunnel, brief);
   const styleMap = buildStyleMapByType(styledFunnel.sections);
   const filteredPages = styledFunnel.pages ?? pages;
 
-  // ===== ÉTAPE 3 : Filtrage par blueprint + style (sans toucher aux médias) =====
+  // ===== ÉTAPE 3 : Filtrage par blueprint + style =====
   const styledPages: FunnelPage[] = filteredPages.map((page) => {
     const blueprint = getPageBlueprint(normalizedKind, page.role);
     let sections = blueprint
@@ -2524,16 +3053,15 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     return { ...page, sections };
   });
 
-  // ===== ÉTAPE 4 : Enrichissement riche (faq, testimonials, pricing, bonus, guarantee) =====
+  // ===== ÉTAPE 4 : Enrichissement riche =====
   const enrichedPages = enrichFunnelPages(styledPages, brief, normalizedKind);
 
-  // ===== ÉTAPE 5 : 🎯 PIPELINE MÉDIAS — en DERNIER, sur TOUTES les pages =====
-  // À ce stade plus aucune étape postérieure ne peut réintroduire un média parasite.
+  // ===== ÉTAPE 5 : Pipeline médias =====
   const pagesWithMedias: FunnelPage[] = enrichedPages.map((page) =>
     applyMediaPipeline(page, brief, briefMediasWithVideo, normalizedKind),
   );
 
-  // ===== ÉTAPE 6 : Nettoyage final (suppression des sections non autorisées ou vides) =====
+  // ===== ÉTAPE 6 : Nettoyage final =====
   const cleanedPages: FunnelPage[] = pagesWithMedias.map((page) => {
     const allowed = getAllowedSectionTypes(normalizedKind, page.role);
     const stats = removeOrFillEmptySections(page, allowed, brief);
@@ -2546,13 +3074,12 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     return page;
   });
 
-  // ===== ÉTAPE 7 : Re-chaînage de la navigation entre pages =====
+  // ===== ÉTAPE 7 : Re-chaînage =====
   const rechainedPages = chainPagesNavigation(cleanedPages);
   const rechainedHome = rechainedPages.find((p) => p.isHome) ?? rechainedPages[0];
 
   const deterministicHeader = buildDeterministicHeader(brief, fallbackCta);
-
-  return {
+  let finalFunnel: Funnel = {
     ...styledFunnel,
     pages: rechainedPages,
     sections: rechainedHome?.sections ?? homeSectionsRaw,
@@ -2560,10 +3087,69 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     header: styledFunnel.header ?? deterministicHeader,
     meta: {
       ...(styledFunnel.meta ?? {}),
+      funnelKind: normalizedKind ?? brief.funnelKind,
       templateId: template.id,
       schemaVersion: 2,
     },
   };
+
+  // ===== ÉTAPE 8 : Dédoublonnage inter-pages =====
+  const dedupeStats = dedupeSectionsAcrossPages(finalFunnel);
+  const totalRemovedDup = Object.values(dedupeStats.removedByPage).reduce(
+    (a, b) => a + b,
+    0,
+  );
+  if (totalRemovedDup > 0) {
+    console.log(
+      `[dedupe] ${totalRemovedDup} sections doublons supprimées : ` +
+        Object.entries(dedupeStats.removedByPage)
+          .map(([role, n]) => `${role}=${n}`)
+          .join(", "),
+    );
+  }
+
+// ===== ÉTAPE 9 : Garantir pricing UNIQUEMENT pour archétype "purchase" =====
+const archetype = getArchetype(brief.funnelKind);
+const shouldInjectPricing = archetype === "purchase" && !isFreeOffer(brief.price);
+
+if (shouldInjectPricing) {
+  const pricingStats = ensurePricingOnConversionPage(
+    finalFunnel,
+    brief,
+    buildFallbackPricingItems,
+  );
+  if (pricingStats.injected) {
+    console.log(
+      `[ensure-pricing] section pricing injectée sur la page "${pricingStats.targetRole}".`,
+    );
+  }
+  if (pricingStats.cleanedFromForbidden > 0) {
+    console.log(
+      `[ensure-pricing] ${pricingStats.cleanedFromForbidden} sections pricing/offer ` +
+        `supprimées de pages interdites.`,
+    );
+  }
+} else {
+  console.log(
+    `[ensure-pricing] Skipped : archétype="${archetype}" + gratuit=${isFreeOffer(brief.price)}. ` +
+      `Pas de section pricing injectée pour ce type de tunnel.`,
+  );
+  // Nettoyage : on retire toute section pricing/offer qui aurait été générée par erreur
+  if (finalFunnel.pages) {
+    finalFunnel.pages = finalFunnel.pages.map((page) => ({
+      ...page,
+      sections: page.sections.filter((s) => s.type !== "pricing" && s.type !== "offer"),
+    }));
+  }
+}
+
+  // ===== ÉTAPE 10 : Footer meta =====
+  applyFooterMeta(finalFunnel, brief);
+
+  // ===== ÉTAPE 11 : Harmonisation des CTA par funnelKind/role =====
+  finalFunnel = harmonizeCTAsByFunnelKind(finalFunnel, brief);
+
+  return finalFunnel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2584,7 +3170,7 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
 
   const basePrompt = completeFunnelPrompt(brief);
   const templateInstruction = buildTemplateInstruction(template, brief);
-  const ctaInstruction = buildCtaInstruction(brief.language);
+  const ctaInstruction = buildCtaInstruction(brief.language, brief);
   const finalPrompt = basePrompt + templateInstruction + ctaInstruction;
 
   const rawText = await callOpenAI({
@@ -2604,13 +3190,13 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
   const normalizedKind = normalizeFunnelKind(brief.funnelKind) ?? "lead-magnet";
   const homeRole = getHomeRoleForKind(normalizedKind);
 
-  // ===== ÉTAPE 1 : Application du template (style uniquement) =====
+  // ===== ÉTAPE 1 : Application du template =====
   const styledFunnel = applyTemplateToFunnel(template, aiFunnel, brief);
 
   // ===== ÉTAPE 2 : Enrichissement riche =====
   const enrichedSections = enrichSectionsWithDefaults(styledFunnel.sections, brief);
 
-  // ===== ÉTAPE 3 : 🎯 PIPELINE MÉDIAS — en DERNIER =====
+  // ===== ÉTAPE 3 : Pipeline médias =====
   let processedSections = placeMediasIntoSections(
     enrichedSections,
     briefMediasWithVideo,
@@ -2653,8 +3239,9 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
     );
   const deterministicHeader = buildDeterministicHeader(brief, fallbackCta);
 
-  return {
+  let finalFunnel: Funnel = {
     ...styledFunnel,
+    pages: [fakeHomePage],
     sections: fakeHomePage.sections,
     media: styledFunnel.media ?? aiFunnel.media,
     header: styledFunnel.header ?? deterministicHeader,
@@ -2663,6 +3250,11 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
       templateId: template.id,
     },
   };
+
+  // ===== ÉTAPE 5 : Harmonisation des CTA =====
+  finalFunnel = harmonizeCTAsByFunnelKind(finalFunnel, brief);
+
+  return finalFunnel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

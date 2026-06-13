@@ -1,41 +1,32 @@
-// app/tunnel/[slug]/[pageSlug]/page.tsx
-import { demoFunnel } from "@/lib/funnels/demo";
-import type { Funnel } from "@/lib/funnels/types";
-import { PublicFunnelClient } from "@/components/funnel/PublicFunnelClient";
-import { PublicFunnelView } from "@/components/funnel/PublicFunnelView";
+// app/p/[slug]/[pageSlug]/page.tsx — pages secondaires du funnel
+import { notFound } from "next/navigation";
+import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
+import { renderFunnelHtml } from "@/lib/export/html";
+import { getPageBySlug } from "@/lib/funnels/types";
 
-// Slugs résolus côté serveur (statiques / démo)
-const SERVER_FUNNELS: Record<string, Funnel> = {
-  demo: demoFunnel,
-};
+export const dynamic = "force-dynamic";
 
-type PageProps = {
+export default async function PublishedFunnelSubPage({
+  params,
+}: {
   params: Promise<{ slug: string; pageSlug: string }>;
-};
-
-/**
- * 🆕 Normalise le pageSlug reçu depuis l'URL.
- * Next.js peut transmettre "merci", "/merci" (encodage exotique), ou
- * un slug avec des "/" parasites si jamais le routing change. On nettoie
- * systématiquement pour garantir un matching robuste avec funnel.pages[].slug.
- */
-function normalizeIncomingPageSlug(raw: string): string {
-  return decodeURIComponent(raw ?? "")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .trim();
-}
-
-export default async function TunnelSecondaryPage({ params }: PageProps) {
+}) {
   const { slug, pageSlug } = await params;
-  const cleanPageSlug = normalizeIncomingPageSlug(pageSlug);
-  const funnel = SERVER_FUNNELS[slug];
+  const published = await getPublishedFunnelBySlug(slug);
+  if (!published) notFound();
 
-  // Slug serveur (demo) : rendu serveur direct
-  if (funnel) {
-    return <PublicFunnelView funnel={funnel} activePageSlug={cleanPageSlug} />;
-  }
+  // pageSlug peut être "/" encodé ou un slug normal ; on tente match exact puis avec "/"
+  const page =
+    getPageBySlug(published.funnel, pageSlug) ??
+    getPageBySlug(published.funnel, `/${pageSlug}`);
+  if (!page) notFound();
 
-  // Slug client : on délègue au client (lecture localStorage)
-  return <PublicFunnelClient slug={slug} activePageSlug={cleanPageSlug} />;
+  const html = renderFunnelHtml(published.funnel, {
+    targetPageId: page.id,
+    fullDocument: false,
+    publicSlug: slug,
+  });
+
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
