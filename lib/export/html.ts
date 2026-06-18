@@ -48,6 +48,7 @@ import {
 } from "@/lib/funnels/resolveMedia";
 import {
   getFunnelThemeCss,
+  getFunnelThemeCssNoGlobalReset,
   getScopedFunnelThemeCss,
   buildThemeRootAttrs,
 } from "./theme-css";
@@ -65,12 +66,14 @@ import { FAQ_RUNTIME_SCRIPT } from "./faq-script";
 // publique de la page cible. Absent (export Systeme.io) → fallback ancre.
 // ─────────────────────────────────────────────────────────────────────────────
 type PublicNavContext = {
-  /** Slug public du funnel (funnels.published_slug) → base /p/<slug> */
+  /** Slug public du funnel (funnels.published_slug) → base /tunnel/<slug> */
   publicSlug: string;
   /** Map pageId → slug de page (ex: "/", "merci", "upsell") */
   pageSlugById: Record<string, string>;
-  /** Id de la page d'accueil (sert à router "/" vers /p/<slug>) */
+  /** Id de la page d'accueil (sert à router "/" vers /tunnel/<slug>) */
   homePageId?: string;
+  /** URL de la page SUIVANTE du tunnel (après soumission de formulaire / CTA sans cible). */
+  nextUrl?: string;
 };
 
 /** Construit l'URL publique d'une page cible à partir de son pageId. */
@@ -79,10 +82,10 @@ function publicPageUrl(nav: PublicNavContext, pageId: string): string | null {
   if (slug === undefined) return null;
   // La home (slug "/" ou pageId == homePageId) → racine du funnel
   if (pageId === nav.homePageId || slug === "/" || slug === "") {
-    return `/p/${nav.publicSlug}`;
+    return `/tunnel/${nav.publicSlug}`;
   }
   const clean = slug.replace(/^\/+/, "");
-  return `/p/${nav.publicSlug}/${clean}`;
+  return `/tunnel/${nav.publicSlug}/${clean}`;
 }
 
 /**
@@ -525,13 +528,15 @@ function ctaHref(cta: CtaConfig, nav?: PublicNavContext): string {
     return `#${safeId(cta.anchorId ?? "lead-form", "lead-form")}`;
   }
   if (cta.mode === "redirect" && cta.url && isSafeUrl(cta.url)) return cta.url;
+  // Redirect sans URL → page suivante du tunnel si disponible, sinon ancre form.
+  if (cta.mode === "redirect" && nav?.nextUrl) return nav.nextUrl;
   return "#lead-form";
 }
 
 function ctaAttrs(cta: CtaConfig, nav?: PublicNavContext): string {
   const href = ctaHref(cta, nav);
   // 🆕 Un lien inter-pages résolu reste interne (_self), jamais _blank.
-  const isInternalPageLink = !!(cta.pageId && nav && href.startsWith("/p/"));
+  const isInternalPageLink = !!(cta.pageId && nav && href.startsWith("/tunnel/"));
   const isExternal =
     !isInternalPageLink &&
     cta.mode === "redirect" &&
@@ -541,12 +546,16 @@ function ctaAttrs(cta: CtaConfig, nav?: PublicNavContext): string {
   const rel = isExternal ? ' rel="noopener noreferrer"' : "";
 
   let classExtra = "";
+  let popupAttr = "";
   if (isSystemePopup(cta)) {
     const id = String(cta.systemePopupId).trim();
     if (id) classExtra = ` class="systeme-show-popup-${escapeAttr(id)}"`;
+  } else if (cta.mode === "popup") {
+    // Popup interne FunnelFlow → ouvert par le runtime (FF_FORM_SCRIPT).
+    popupAttr = ` data-ff-popup-open="1"`;
   }
 
-  return ` href="${escapeAttr(href)}" target="${target}"${rel}${classExtra}`;
+  return ` href="${escapeAttr(href)}" target="${target}"${rel}${classExtra}${popupAttr}`;
 }
 
 function renderCtaIcon(icon?: CtaIcon): string {
@@ -644,6 +653,164 @@ function pageHasSystemePopup(
   }
   return false;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 CTA RUNTIME — popup interne + capture de lead + navigation page suivante
+// ─────────────────────────────────────────────────────────────────────────────
+function ctaIsInternalPopup(cta: CtaConfig | undefined | null): boolean {
+  return !!cta && cta.mode === "popup" && !isSystemePopup(cta);
+}
+
+function pageHasInternalPopup(sections: FunnelSection[], funnel: Funnel): boolean {
+  if (ctaIsInternalPopup(funnel.header?.cta)) return true;
+  for (const s of sections) {
+    if (s.visible === false) continue;
+    if (ctaIsInternalPopup(s.cta)) return true;
+    if (Array.isArray(s.items)) {
+      for (const it of s.items) {
+        if (it.kind === "pricing" && ctaIsInternalPopup(it.data.cta)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 🆕 Collecte les tags CRM des CTA popup internes de la page. L'overlay popup
+ * étant unique par page, on prend l'union des captureTags de tous les CTA popup
+ * internes (dédupliqués, en préservant l'ordre).
+ */
+function collectInternalPopupTags(
+  sections: FunnelSection[],
+  funnel: Funnel,
+): string[] {
+  const out: string[] = [];
+  const add = (cta: CtaConfig | undefined | null) => {
+    if (!ctaIsInternalPopup(cta) || !cta?.captureTags) return;
+    for (const tag of cta.captureTags) {
+      const t = tag.trim();
+      if (t && !out.includes(t)) out.push(t);
+    }
+  };
+  add(funnel.header?.cta);
+  for (const s of sections) {
+    if (s.visible === false) continue;
+    add(s.cta);
+    if (Array.isArray(s.items)) {
+      for (const it of s.items) {
+        if (it.kind === "pricing") add(it.data.cta);
+      }
+    }
+  }
+  return out;
+}
+
+/** Overlay popup interne : un formulaire de capture qui mène à la page suivante. */
+function renderInternalPopupOverlay(
+  funnel: Funnel,
+  nav: PublicNavContext | undefined,
+  label: string,
+  currentPageId: string | undefined,
+  captureTags: string[] = [],
+): string {
+  const lang = funnel.language || "fr";
+  const t =
+    lang === "en"
+      ? { title: "Get instant access", email: "Your email", name: "Your first name", phone: "Phone (optional)", submit: label || "Get access" }
+      : lang === "es"
+        ? { title: "Obtén acceso", email: "Tu email", name: "Tu nombre", phone: "Teléfono (opcional)", submit: label || "Quiero acceso" }
+        : { title: "Recevez votre accès", email: "Votre email", name: "Votre prénom", phone: "Téléphone (optionnel)", submit: label || "Je reçois" };
+
+  const tagsAttr =
+    captureTags.length > 0
+      ? ` data-ff-tags="${escapeAttr(captureTags.join(","))}"`
+      : "";
+
+  const dataAttrs = nav
+    ? ` data-ff-funnel-slug="${escapeAttr(nav.publicSlug)}"` +
+      ` data-ff-page-slug="${escapeAttr(currentPageId ? nav.pageSlugById[currentPageId] ?? "" : "")}"` +
+      ` data-ff-section-id="popup"` +
+      tagsAttr +
+      (nav.nextUrl ? ` data-ff-next-url="${escapeAttr(nav.nextUrl)}"` : "")
+    : "";
+
+  return `<style>
+.ff-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:20px;}
+.ff-popup-overlay[hidden]{display:none;}
+.ff-popup-box{background:var(--ff-surface,#fff);color:var(--ff-ink,#111);max-width:420px;width:100%;border-radius:16px;padding:28px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.45);}
+.ff-popup-close{position:absolute;top:8px;right:12px;background:none;border:none;font-size:26px;line-height:1;cursor:pointer;color:var(--ff-ink,#111);opacity:.6;}
+.ff-popup-box h3{margin:0 0 16px;font-size:20px;font-weight:800;}
+.ff-popup-box .ff-field{margin-bottom:10px;}
+</style>
+<div class="ff-popup-overlay" data-ff-popup-overlay hidden>
+  <div class="ff-popup-box" role="dialog" aria-modal="true">
+    <button type="button" class="ff-popup-close" data-ff-popup-close aria-label="Fermer">&times;</button>
+    <h3>${escapeHtml(t.title)}</h3>
+    <form class="ff-form-fields" action="#" method="post"${dataAttrs}>
+      <div class="ff-field"><input class="ff-input" type="email" name="email" placeholder="${escapeAttr(t.email)}" required /></div>
+      <div class="ff-field"><input class="ff-input" type="text" name="name" placeholder="${escapeAttr(t.name)}" /></div>
+      <div class="ff-field"><input class="ff-input" type="tel" name="phone" placeholder="${escapeAttr(t.phone)}" /></div>
+      <button type="submit" class="ff-btn ff-form-submit" style="width:100%;">${escapeHtml(t.submit)}</button>
+    </form>
+  </div>
+</div>`;
+}
+
+/** Script runtime : capture des formulaires (→ /api/leads) + redirection page suivante + ouverture popup. */
+const FF_FORM_SCRIPT = `<script>(function(){
+  function collect(form){
+    var d={metadata:{}};
+    var els=form.querySelectorAll("input,textarea,select");
+    for(var i=0;i<els.length;i++){
+      var el=els[i]; if(!el.name) continue;
+      var n=el.name.toLowerCase();
+      if(el.type==="checkbox"){ if(n.indexOf("consent")>-1||n.indexOf("rgpd")>-1){d.consent=el.checked;} else {d.metadata[el.name]=el.checked;} continue; }
+      var v=el.value;
+      if(n==="email"||el.type==="email"){d.email=v;}
+      else if(!d.name&&(n==="name"||n==="nom"||n==="prenom"||n==="firstname"||n==="fullname")){d.name=v;}
+      else if(n==="phone"||n==="tel"||n==="telephone"||el.type==="tel"){d.phone=v;}
+      else {d.metadata[el.name]=v;}
+    }
+    return d;
+  }
+  function ok(form,next){ if(next){window.location.href=next;} else {form.innerHTML="<p class=\\"ff-reassurance\\">Merci, c'est bien recu !</p>";} }
+  function bind(form){
+    form.addEventListener("submit",function(e){
+      e.preventDefault();
+      var slug=form.getAttribute("data-ff-funnel-slug");
+      var next=form.getAttribute("data-ff-next-url");
+      var btn=form.querySelector("[type=submit]");
+      var d=collect(form);
+      if(!d.email){return;}
+      if(!slug){ ok(form,next); return; }
+      if(btn){btn.disabled=true;btn.setAttribute("data-l",btn.textContent||"");btn.textContent="...";}
+      d.funnelSlug=slug;
+      d.pageSlug=form.getAttribute("data-ff-page-slug")||null;
+      d.sectionId=form.getAttribute("data-ff-section-id")||null;
+      var tg=form.getAttribute("data-ff-tags"); if(tg){d.tags=tg.split(",").map(function(s){return s.trim();}).filter(Boolean);}
+      fetch("/api/leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)})
+        .then(function(r){return r.json().then(function(j){return{s:r.ok,j:j};}).catch(function(){return{s:r.ok,j:{}};});})
+        .then(function(res){
+          if(res.s&&res.j&&res.j.ok){ ok(form,next); }
+          else { if(btn){btn.disabled=false;btn.textContent=btn.getAttribute("data-l")||"Envoyer";} alert("Une erreur est survenue, reessayez."); }
+        })
+        .catch(function(){ if(btn){btn.disabled=false;btn.textContent=btn.getAttribute("data-l")||"Envoyer";} alert("Connexion impossible, reessayez."); });
+    });
+  }
+  function boot(){
+    var forms=document.querySelectorAll("form.ff-form-fields");
+    for(var i=0;i<forms.length;i++) bind(forms[i]);
+    var ov=document.querySelector("[data-ff-popup-overlay]");
+    if(ov){
+      var openers=document.querySelectorAll("[data-ff-popup-open]");
+      for(var k=0;k<openers.length;k++){ openers[k].addEventListener("click",function(e){e.preventDefault();ov.removeAttribute("hidden");document.body.style.overflow="hidden";}); }
+      ov.addEventListener("click",function(e){ if(e.target===ov){ov.setAttribute("hidden","");document.body.style.overflow="";} });
+      var closers=ov.querySelectorAll("[data-ff-popup-close]");
+      for(var c=0;c<closers.length;c++){ closers[c].addEventListener("click",function(){ov.setAttribute("hidden","");document.body.style.overflow="";}); }
+    }
+  }
+  if(document.readyState!=="loading"){boot();}else{document.addEventListener("DOMContentLoaded",boot);}
+})();</script>`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Icônes SVG inline
@@ -1648,7 +1815,7 @@ function renderSectionInnerContent(
     !specialized && section.bullets?.length ? renderBullets(section) : "";
 
   const formHtml =
-    type === "form" ? renderFormFields(section, ctx.funnel.language) : "";
+    type === "form" ? renderFormFields(section, ctx) : "";
 
   const image = renderImage(
     section.image,
@@ -1678,8 +1845,9 @@ function renderSectionInnerContent(
 
 function renderFormFields(
   section: FunnelSection,
-  language: Funnel["language"],
+  ctx: SectionContext,
 ): string {
+  const language = ctx.funnel.language;
   const fields = (section.items || []).filter(
     (it): it is SectionItem & { kind: "formField" } => it.kind === "formField",
   );
@@ -1733,7 +1901,19 @@ function renderFormFields(
     ? `<p class="ff-reassurance">${escapeHtml(reassuranceText)}</p>`
     : "";
 
-  return `<form class="ff-form-fields" action="#" method="post">
+  const nav = ctx.nav;
+  const captureTags = section.formConfig?.captureTags ?? [];
+  const tagsAttr =
+    captureTags.length > 0 ? ` data-ff-tags="${escapeAttr(captureTags.join(","))}"` : "";
+  const dataAttrs = nav
+    ? ` data-ff-funnel-slug="${escapeAttr(nav.publicSlug)}"` +
+      ` data-ff-page-slug="${escapeAttr(ctx.pageId ? nav.pageSlugById[ctx.pageId] ?? "" : "")}"` +
+      ` data-ff-section-id="${escapeAttr(section.id ?? "")}"` +
+      (nav.nextUrl ? ` data-ff-next-url="${escapeAttr(nav.nextUrl)}"` : "") +
+      tagsAttr
+    : "";
+
+  return `<form class="ff-form-fields" action="#" method="post"${dataAttrs}>
 ${fieldsHtml}
 <button type="submit" class="ff-btn ff-form-submit">${escapeHtml(ctaLabel)}</button>
 ${reassuranceHtml}
@@ -2017,6 +2197,15 @@ export function renderFunnelHtml(
       }
     : undefined;
 
+  // 🆕 URL de la page suivante (après soumission de formulaire / CTA sans cible).
+  if (nav) {
+    const pages = funnel.pages ?? [];
+    const curIdx = pages.findIndex((p) => p.id === pageId);
+    if (curIdx >= 0 && curIdx < pages.length - 1) {
+      nav.nextUrl = publicPageUrl(nav, pages[curIdx + 1].id) ?? undefined;
+    }
+  }
+
   const ctx: SectionContext = {
     funnel,
     isSuccess:
@@ -2080,8 +2269,25 @@ ${getFunnelThemeCss()}
 
   const dataAttrsHtml = serializeDataAttrs(rootAttrs.dataAttrs);
 
-  const headerHtml = isFullyClonedFunnel ? "" : renderHeader(funnel, nav);
+  // 🆕 Header uniquement sur la page d'accueil : un tunnel est un parcours, les
+  // pages secondaires (merci, accès, etc.) n'ont pas besoin du header de l'optin.
+  const headerHtml = isFullyClonedFunnel || !isHome ? "" : renderHeader(funnel, nav);
   const footerHtml = isFullyClonedFunnel ? "" : renderFooter(funnel);
+
+  // 🆕 CTA runtime : overlay popup interne + script de capture/redirection.
+  const internalPopup =
+    !isFullyClonedFunnel && pageHasInternalPopup(visibleSections, funnel);
+  const popupLabel =
+    visibleSections.find((s) => ctaIsInternalPopup(s.cta))?.cta?.label ||
+    funnel.header?.cta?.label ||
+    "";
+  const popupCaptureTags = internalPopup
+    ? collectInternalPopupTags(visibleSections, funnel)
+    : [];
+  const popupOverlayHtml = internalPopup
+    ? renderInternalPopupOverlay(funnel, nav, popupLabel, pageId, popupCaptureTags)
+    : "";
+  const formScript = isFullyClonedFunnel ? "" : FF_FORM_SCRIPT;
 
   const body = `${themeCssBlock}
 ${designOverrideBlock}
@@ -2095,7 +2301,8 @@ ${headerHtml}
 ${sectionsHtml}
 ${footerHtml}
 </div>
-${systemeIntegrationScript}${timerScript}${faqRuntimeScript}`;
+${popupOverlayHtml}
+${systemeIntegrationScript}${timerScript}${faqRuntimeScript}${formScript}`;
 
   if (!options.fullDocument) return body;
 
@@ -2550,5 +2757,8 @@ export async function createSystemeIoZipBase64(funnel: Funnel): Promise<string> 
 }
 
 export function renderFunnelCss(_funnel?: Funnel): string {
-  return getFunnelThemeCss();
+  // CSS scopé sous .ff-page, SANS reset global (body/html/*) : ce CSS est
+  // destiné à être injecté dans un contexte existant (preview/éditeur, bloc
+  // systeme.io) où des règles globales body/html parasiteraient la page hôte.
+  return getFunnelThemeCssNoGlobalReset();
 }

@@ -118,6 +118,14 @@ export function mapToFunnel(
       creationMode: "free",
       schemaVersion: FUNNEL_SCHEMA_VERSION,
       clonedHead: parsed.globalHead,
+      // 🆕 Phase 1A : attributs du <body> source, réappliqués au <body> de
+      // l'iframe pour que les règles body{…}/body.x{…}/#id{…} et le style
+      // inline du body s'appliquent (fond fidèle).
+      clonedBody: {
+        className: parsed.bodyClass,
+        id: parsed.bodyId,
+        style: parsed.bodyStyle,
+      },
     } as Funnel["meta"],
   };
 
@@ -239,12 +247,24 @@ function mapRawHtmlSection(
     };
   }
 
+  // 🆕 Bugs #8 (section vide sous le header) / #1 (espace vide sous le footer) :
+  // le découpage produit parfois des <section> sans AUCUN contenu visible
+  // (spacers, wrappers résiduels). Sur la source elles n'apparaissent pas
+  // (hauteur nulle). On les retire — sauf si tout serait vide (garde-fou).
+  const nonEmpty = subSections.filter((h) => !isEmptySectionHtml(h));
+  const kept = nonEmpty.length > 0 ? nonEmpty : subSections;
+  if (kept.length !== subSections.length) {
+    console.log(
+      `[section-mapper] ${subSections.length - kept.length} sous-section(s) vide(s) retirée(s).`
+    );
+  }
+
   // Cas 2 : N blocs → N FunnelSection
   console.log(
-    `[section-mapper] Raw-HTML section index=${index} éclatée en ${subSections.length} sous-sections.`
+    `[section-mapper] Raw-HTML section index=${index} éclatée en ${kept.length} sous-sections.`
   );
 
-  return subSections.map((subHtml, subIdx) => {
+  return kept.map((subHtml, subIdx) => {
     const detectedTitle = extractFirstHeadingText(subHtml);
     const baseLabel = getRawHtmlPlaceholderHeadline(language, subIdx + 1);
     const headline = detectedTitle
@@ -260,6 +280,32 @@ function mapRawHtmlSection(
       style: { spacing: "default" },
     };
   });
+}
+
+/**
+ * 🆕 Une <section> est « vide » (et donc à retirer) si elle n'a AUCUN contenu
+ * visible : pas de texte, pas de média (img/video/iframe/picture/svg), pas de
+ * fond image inline, pas d'overlay préservé. Les spacers/wrappers résiduels du
+ * découpage tombent dans ce cas et créaient des bandes vides (sous le header /
+ * sous le footer).
+ */
+function isEmptySectionHtml(html: string): boolean {
+  if (!html) return true;
+  // Texte visible (tags retirés) ?
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length > 0) return false;
+  // Média ou fond image ?
+  if (/<(img|video|iframe|picture|svg|source)\b/i.test(html)) return false;
+  if (/background-image\s*:|background\s*:\s*url\(/i.test(html)) return false;
+  // Overlay préservé (WhatsApp/popup) ?
+  if (/data-ff-overlays|wa\.me|whatsapp/i.test(html)) return false;
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,7 +347,54 @@ function splitRawHtmlIntoSections(html: string): string[] {
     return [html];
   }
 
-  return extractTopLevelSections(inner);
+  // 🆕 Bugs #5 (WhatsApp flottant) / #6 (popup) : le découpage en <section>
+  // jetait TOUT nœud top-level qui n'était pas une <section> (lien wa.me
+  // `position:fixed`, popups/modales, scripts qui les pilotent…). Sur la page
+  // publique, les sections sont concaténées dans UN SEUL document : un élément
+  // flottant (fixed/sticky) rattaché à n'importe quelle section flotte donc
+  // correctement au-dessus de toute la page. On collecte ces orphelins et on
+  // les rattache à la DERNIÈRE sous-section pour ne plus rien perdre.
+  const orphans: string[] = [];
+  const sections = extractTopLevelSections(inner, orphans);
+
+  const overlayOrphans = orphans.filter(isOverlayOrphan);
+  if (overlayOrphans.length > 0 && sections.length > 0) {
+    console.log(
+      `[section-mapper] ${overlayOrphans.length} orphelin(s) top-level (overlay/flottant) préservé(s) et rattaché(s) à la dernière section.`
+    );
+    // ⚠️ Sécurité layout : on enveloppe les orphelins dans un conteneur
+    // HORS-FLUX (0×0, overflow visible). Ainsi :
+    //  - un overlay flottant (position:fixed/sticky via sa propre CSS) flotte
+    //    normalement (fixed = relatif au viewport, le wrapper ne le gêne pas) ;
+    //  - un popup caché (display:none) reste caché ;
+    //  - un élément resté statique ne RAJOUTE PAS de hauteur à la section
+    //    (évite l'« espace vide sous le footer »).
+    sections[sections.length - 1] +=
+      `\n<div data-ff-overlays style="position:absolute;left:0;top:0;width:0;height:0;overflow:visible">` +
+      overlayOrphans.join("\n") +
+      `</div>`;
+  }
+
+  return sections;
+}
+
+/**
+ * 🆕 Un orphelin top-level mérite d'être préservé s'il s'agit d'un élément
+ * flottant/overlay (bouton chat, popup, modale) ou du script/style qui le
+ * pilote. Ces éléments sont positionnés hors flux (fixed/sticky) ou cachés
+ * jusqu'à déclenchement : leur emplacement exact dans le DOM n'a pas d'impact
+ * visuel, donc les rattacher à la dernière section est sûr.
+ */
+function isOverlayOrphan(html: string): boolean {
+  const h = html.trim();
+  if (!h) return false;
+  return (
+    /position\s*:\s*(fixed|sticky)/i.test(h) ||
+    /wa\.me|api\.whatsapp\.com|whatsapp/i.test(h) ||
+    /\b(popup|modal|overlay|lightbox|fixed-|floating|float-btn|chat-widget)\b/i.test(h) ||
+    /^<script\b/i.test(h) ||
+    /^<style\b/i.test(h)
+  );
 }
 
 function countTopLevelSections(html: string): number {
@@ -313,12 +406,13 @@ function countTopLevelSections(html: string): number {
  * Scanner linéaire à pile : on suit toutes les balises ouvrantes/fermantes
  * pour maintenir la profondeur exacte.
  */
-function extractTopLevelSections(html: string): string[] {
+function extractTopLevelSections(html: string, orphansOut?: string[]): string[] {
   const sections: string[] = [];
   const tagRe = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?>/g;
 
   let depth = 0;             // profondeur globale dans le DOM
   let sectionStart = -1;     // index de début de la section top-level en cours
+  let lastEnd = 0;           // 🆕 fin de la dernière section top-level (capture orphelins)
   let m: RegExpExecArray | null;
 
   while ((m = tagRe.exec(html)) !== null) {
@@ -333,6 +427,11 @@ function extractTopLevelSections(html: string): string[] {
         if (sectionStart === -1 && depth === 0) {
           // Début d'une section top-level
           sectionStart = m.index;
+          // 🆕 Tout ce qui précède (depuis la dernière section) est orphelin.
+          if (orphansOut) {
+            const gap = html.slice(lastEnd, m.index).trim();
+            if (gap) orphansOut.push(gap);
+          }
         }
         if (!isSelfClosing) depth++;
       } else {
@@ -342,6 +441,7 @@ function extractTopLevelSections(html: string): string[] {
           const end = m.index + full.length;
           sections.push(html.slice(sectionStart, end));
           sectionStart = -1;
+          lastEnd = end; // 🆕
         }
       }
     } else {
@@ -355,6 +455,13 @@ function extractTopLevelSections(html: string): string[] {
         }
       }
     }
+  }
+
+  // 🆕 Orphelin final : tout ce qui suit la dernière section top-level
+  // (popups/modales et scripts de fin de page y figurent souvent).
+  if (orphansOut) {
+    const tail = html.slice(lastEnd).trim();
+    if (tail) orphansOut.push(tail);
   }
 
   return sections;

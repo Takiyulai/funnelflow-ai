@@ -59,7 +59,7 @@ export default function TemplateGalleryStep({
               {labels.recommended}
             </h3>
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 min-w-0">
+          <div className="grid gap-3 min-w-0 justify-start [grid-template-columns:repeat(auto-fill,minmax(180px,220px))]">
             {recommended.map((tpl) => (
               <TemplateCardItem
                 key={tpl.id}
@@ -79,7 +79,7 @@ export default function TemplateGalleryStep({
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted">
             {labels.others}
           </h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 min-w-0">
+          <div className="grid gap-3 min-w-0 justify-start [grid-template-columns:repeat(auto-fill,minmax(180px,220px))]">
             {others.map((tpl) => (
               <TemplateCardItem
                 key={tpl.id}
@@ -215,7 +215,7 @@ function TemplateCardItem({
         {/* Badge type de template */}
         <div className="absolute left-2 top-1 z-10">
           <span
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm"
+            className="inline-flex max-w-[calc(100%-1rem)] items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm"
             style={{
               backgroundColor: accent,
               color: bgDark,

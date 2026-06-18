@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 
 // ─── Schéma de validation ─────────────────────────────────────────────
 const leadSchema = z.object({
@@ -14,6 +15,8 @@ const leadSchema = z.object({
   name: z.string().max(200).optional().nullable(),
   phone: z.string().max(40).optional().nullable(),
   consent: z.boolean().optional().default(false),
+  // 🆕 Tags CRM à appliquer automatiquement (configurés sur le formulaire).
+  tags: z.array(z.string().max(60)).max(20).optional(),
   // Métadonnées arbitraires (autres champs du formulaire)
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
 });
@@ -86,13 +89,24 @@ export async function POST(request: Request) {
     );
   }
 
-  // 3. Résolution du funnel par slug
+  // 3. Résolution du funnel : d'abord par slug public (published_slug, celui
+  //    servi aux visiteurs), sinon par slug brouillon (fallback).
   const admin = getSupabaseAdmin();
-  const { data: funnel, error: funnelErr } = await admin
+  let { data: funnel, error: funnelErr } = await admin
     .from("funnels")
     .select("id, user_id, status, language")
-    .eq("slug", payload.funnelSlug)
+    .eq("published_slug", payload.funnelSlug)
     .maybeSingle();
+
+  if (!funnel && !funnelErr) {
+    const byDraft = await admin
+      .from("funnels")
+      .select("id, user_id, status, language")
+      .eq("slug", payload.funnelSlug)
+      .maybeSingle();
+    funnel = byDraft.data;
+    funnelErr = byDraft.error;
+  }
 
   if (funnelErr) {
     console.error("[api/leads] funnel lookup error", funnelErr);
@@ -140,6 +154,23 @@ export async function POST(request: Request) {
   if (insertErr) {
     console.error("[api/leads] insert error", insertErr);
     return NextResponse.json({ ok: false, error: "db_insert_error" }, { status: 500 });
+  }
+
+  // 5. 🆕 Auto-tag : applique les tags configurés sur le formulaire (non bloquant).
+  if (payload.tags && payload.tags.length > 0) {
+    try {
+      const tags = await getOrCreateTagsByName(admin, funnel.user_id, payload.tags);
+      if (tags.length > 0) {
+        await assignTagsToContacts(
+          admin,
+          funnel.user_id,
+          [lead.id],
+          tags.map((t) => t.id),
+        );
+      }
+    } catch (tagErr) {
+      console.warn("[api/leads] auto-tag échoué (non bloquant):", tagErr);
+    }
   }
 
   return NextResponse.json(

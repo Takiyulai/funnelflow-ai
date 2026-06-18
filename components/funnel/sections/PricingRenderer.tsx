@@ -35,7 +35,8 @@ export function PricingRenderer({
     >
       {items.map((item, idx) => {
         const highlighted = item.data.highlighted;
-        const cta = item.data.cta;
+        // Chaque carte de pricing DOIT avoir un CTA : item → CTA de section → défaut.
+        const cta = item.data.cta ?? section.cta;
 
         // Résolution de la destination selon le mode du CTA
         let ctaHref = "#lead-form";
@@ -160,17 +161,15 @@ export function PricingRenderer({
 
 
 
-            {cta?.label && (
-              <a
-                href={ctaHref}
-                target={ctaTarget}
-                rel={ctaRel}
-                className="ff-btn inline-flex items-center justify-center w-full px-4 py-3 rounded-lg font-bold text-sm no-underline mt-auto"
-                data-ff-cta
-              >
-                {cta.label}
-              </a>
-            )}
+            <a
+              href={ctaHref}
+              target={ctaTarget}
+              rel={ctaRel}
+              className="ff-btn inline-flex items-center justify-center w-full px-4 py-3 rounded-lg font-bold text-sm no-underline mt-auto"
+              data-ff-cta
+            >
+              {cta?.label || "Je choisis cette offre"}
+            </a>
           </div>
         );
       })}

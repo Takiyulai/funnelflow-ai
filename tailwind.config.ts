@@ -21,11 +21,14 @@ const config: Config = {
         },
 
         // ─── Palette dashboard (clair, dense, utilitaire) ─────────────────
-        ink: "#0F172A",          // texte principal
-        muted: "#64748B",        // texte secondaire
-        line: "#E2E8F0",         // bordures
-        canvas: "#F8FAFC",       // fond doux
-        surface: "#FFFFFF",      // fond cartes
+        // 🆕 Tokens pilotés par variables CSS → mode dark/light (cf. :root et
+        // .ff-theme-dark dans globals.css). Valeurs claires identiques à
+        // l'origine : aucun changement visuel en mode clair.
+        ink: "var(--ff-ink)",        // texte principal
+        muted: "var(--ff-muted)",    // texte secondaire
+        line: "var(--ff-line)",      // bordures
+        canvas: "var(--ff-canvas)",  // fond doux
+        surface: "var(--ff-surface)",// fond cartes
 
         // Couleurs d'action dashboard (alignées sur la landing)
         navy: "#08498D",         // bleu accent dashboard

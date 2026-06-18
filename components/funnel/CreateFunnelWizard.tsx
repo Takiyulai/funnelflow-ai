@@ -97,13 +97,25 @@ export function CreateFunnelWizard() {
   const [errorReason, setErrorReason] = useState<string>("");
   const [aiHealth, setAiHealth] = useState<AiHealth | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
+  // Écran de choix initial : "choice" (défaut) → "express" ou "wizard" (parcours classique).
+  const [entryMode, setEntryMode] = useState<"choice" | "express" | "wizard">("choice");
+  const [expressPrompt, setExpressPrompt] = useState("");
+  const [expressPages, setExpressPages] = useState(4);
   const router = useRouter();
 
   const steps = useMemo<StepLabel[]>(() => {
     const kind = getFunnelKind(brief.funnelKind);
     const includeVideo = kind?.needsVideo === true;
+    // Express IA : parcours allégé (le copy vient du prompt, le type est choisi
+    // dans l'écran express) → on ne garde que thème, médias et finalisation.
+    if (brief.creationMode === "express") {
+      const express: StepLabel[] = ["Template", "Médias", "Visuels", "Ambiance", "Génération"];
+      // Tunnel qui a besoin d'une vidéo (ex. webinaire) → on insère l'étape Vidéo.
+      if (includeVideo) express.splice(1, 0, "Vidéo");
+      return express;
+    }
     return ALL_STEPS.filter((label) => label !== "Vidéo" || includeVideo);
-  }, [brief.funnelKind]);
+  }, [brief.funnelKind, brief.creationMode]);
 
   useEffect(() => {
     if (step >= steps.length) setStep(steps.length - 1);
@@ -379,6 +391,112 @@ export function CreateFunnelWizard() {
   };
 
   const stepLabel = steps[step];
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Écran de choix initial (Part B) — n'altère PAS la machine d'étapes classique.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (entryMode === "choice") {
+    return (
+      <div className="grid gap-6 animate-[fadeIn_0.4s_ease-out] max-w-3xl mx-auto">
+        <div className="text-center">
+          <h2 className="text-2xl font-black text-ink">Comment veux-tu créer ton tunnel&nbsp;?</h2>
+          <p className="mt-2 text-muted">Choisis ton point de départ. Tu pourras tout ajuster ensuite dans l'éditeur.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => { update("creationMode", "express"); setEntryMode("express"); }}
+            className="group text-left rounded-2xl border-2 border-line bg-white p-6 transition-all duration-200 hover:border-[#C7A436] hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C7A436]/50"
+          >
+            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#C7A436]/15 text-[#C7A436]">
+              <Wand2 className="h-6 w-6" />
+            </div>
+            <h3 className="flex items-center gap-2 text-lg font-black text-ink">
+              Express IA
+              <span className="rounded-full bg-[#C7A436] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#080E1A]">Rapide</span>
+            </h3>
+            <p className="mt-1.5 text-sm text-muted">Décris ton activité en quelques phrases et choisis le nombre de pages. L'IA pré-remplit tout le tunnel, puis tu ajustes thème, visuels et médias.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => { update("creationMode", "guided"); setEntryMode("wizard"); }}
+            className="group text-left rounded-2xl border-2 border-line bg-white p-6 transition-all duration-200 hover:border-[#31845C] hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#31845C]/40"
+          >
+            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#31845C]/15 text-[#31845C]">
+              <Target className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-black text-ink">Pas à pas</h3>
+            <p className="mt-1.5 text-sm text-muted">Le parcours guidé classique&nbsp;: format, offre, audience, copywriting… Tu contrôles chaque détail, étape par étape.</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (entryMode === "express") {
+    const canGo = expressPrompt.trim().length >= 20;
+    return (
+      <div className="grid gap-5 animate-[fadeIn_0.4s_ease-out] max-w-2xl mx-auto">
+        <button
+          type="button"
+          onClick={() => setEntryMode("choice")}
+          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" /> Retour
+        </button>
+        <div>
+          <h2 className="text-2xl font-black text-ink">Décris ton activité</h2>
+          <p className="mt-2 text-muted">Plus c'est précis, meilleur sera le tunnel. Mentionne ton offre, ton audience, ton prix et ta promesse.</p>
+        </div>
+        <Field label="Ton activité, ton offre, ta cible…">
+          <Textarea
+            rows={7}
+            value={expressPrompt}
+            onChange={(e) => setExpressPrompt(e.target.value)}
+            placeholder="Ex : Je suis coach en nutrition pour femmes actives. Je vends un programme de 8 semaines à 297€ qui aide à retrouver de l'énergie sans régime restrictif. Mon audience : femmes 30-45 ans débordées qui ont déjà essayé plusieurs régimes…"
+          />
+        </Field>
+        <Field label="Type de tunnel souhaité">
+          <Select
+            value={brief.funnelKind ?? ""}
+            onChange={(e) => update("funnelKind", (e.target.value || undefined) as FunnelKind | undefined)}
+          >
+            <option value="">Laisser l'IA décider</option>
+            <option value="lead-magnet">Aimant à leads — ebook / guide gratuit</option>
+            <option value="digital-product">Produit digital — page de vente</option>
+            <option value="coaching-high-ticket">Coaching / accompagnement haut de gamme</option>
+            <option value="booking">Prise de rendez-vous / appel</option>
+            <option value="webinar">Webinaire — inscription + replay</option>
+            <option value="challenge">Challenge / défi</option>
+          </Select>
+        </Field>
+        <Field label="Nombre de pages du tunnel généré">
+          <Select value={String(expressPages)} onChange={(e) => setExpressPages(Number(e.target.value))}>
+            <option value="1">1 page — capture simple</option>
+            <option value="2">2 pages — capture + merci</option>
+            <option value="3">3 pages — vente courte</option>
+            <option value="4">4 pages — tunnel complet</option>
+            <option value="5">5 pages — tunnel étendu</option>
+            <option value="6">6 pages et plus</option>
+          </Select>
+        </Field>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted">{canGo ? "Tu pourras générer tout de suite — thème et visuels restent ajustables via les onglets." : "Ajoute encore quelques détails (20 caractères min.)."}</span>
+          <Button
+            disabled={!canGo}
+            onClick={() => {
+              updateMany({ creationMode: "express", businessPrompt: expressPrompt.trim(), pageCount: expressPages });
+              setEntryMode("wizard");
+              // Parcours express réduit → on démarre sur sa 1re étape (Template).
+              setStep(0);
+            }}
+          >
+            Continuer <ArrowRight className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-5 animate-[fadeIn_0.4s_ease-out] min-w-0 max-w-full">
@@ -723,6 +841,10 @@ function OfferStep({
           <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
         </Field>
 
+        <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
+          <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
+        </Field>
+
         <Field label="Promesse principale">
           <Textarea
             value={brief.promise}
@@ -769,15 +891,7 @@ function AudienceStep({ brief, update }: { brief: FunnelBrief; update: <K extend
       <Field label="Problème principal">
         <Textarea value={brief.mainPain} onChange={(e) => update("mainPain", e.target.value)} />
       </Field>
-      <Field label="Ton souhaité">
-        <Select value={brief.tone} onChange={(e) => update("tone", e.target.value)}>
-          <option value="premium">Premium</option>
-          <option value="expert">Expert</option>
-          <option value="chaleureux">Chaleureux</option>
-          <option value="direct">Direct</option>
-          <option value="storytelling">Storytelling</option>
-        </Select>
-      </Field>
+      {/* Le ton est défini à l'étape Copywriting (suppression du doublon). */}
     </div>
   );
 }
@@ -787,7 +901,6 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
   const modes: { value: CtaMode; label: string; hint: string; icon: typeof LinkIcon; available: boolean }[] = [
     { value: "redirect", label: "Lien de redirection", hint: "Checkout Stripe, Calendly, page externe, WhatsApp", icon: LinkIcon, available: true },
     { value: "anchor", label: "Ancre interne", hint: "Faire défiler vers une section, par exemple le formulaire", icon: AnchorIcon, available: true },
-    { value: "popup", label: "Popup intégrée", hint: "Ouvrir un formulaire en superposition", icon: Wand2, available: false },
   ];
 
   return (

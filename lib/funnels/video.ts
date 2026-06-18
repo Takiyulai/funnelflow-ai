@@ -73,7 +73,19 @@ export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
     return { embedUrl: null, provider: "vimeo", id: null };
   }
 
-  // URL inconnue mais valide : on autorise un iframe direct uniquement en HTTPS
+  // 🆕 Domaines « placeholder » à NE JAMAIS embarquer : l'IA invente parfois
+  // une fausse URL de vidéo (ex. https://example.com/presentation-video) qui,
+  // mise en iframe, affichait la page « Example Domain ». On les rejette → la
+  // section affiche un placeholder « ajouter une vidéo » au lieu d'un junk.
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  const isPlaceholderHost =
+    /^(example\.(com|org|net)|test\.(com|org)|iana\.org|localhost)$/.test(host) ||
+    host.endsWith(".example");
+  if (isPlaceholderHost) {
+    return { embedUrl: null, provider: "unknown", id: null };
+  }
+
+  // URL inconnue mais valide : on autorise un iframe direct uniquement en HTTPS.
   if (u.protocol === "https:") {
     return { embedUrl: trimmed, provider: "url", id: null };
   }

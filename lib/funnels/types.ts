@@ -25,7 +25,7 @@ export type FunnelKind =
   | "saas"
   | "thank-you";
 
-export type CreationMode = "guided" | "free";
+export type CreationMode = "guided" | "free" | "express";
 
 export type MoodId =
   | "premium-calm"
@@ -132,6 +132,8 @@ export type CtaConfig = {
   popupFields?: FormFieldItem[];
   /** 🆕 Code HTML d'un formulaire externe (si popupProvider="embed"). Rendu en iframe sandboxée. */
   popupEmbedHtml?: string;
+  /** 🆕 Tags CRM appliqués automatiquement aux leads capturés via ce popup interne. */
+  captureTags?: string[];
 
 };
 
@@ -292,6 +294,8 @@ export type SectionStyle = {
     size?: "none" | "sm" | "md" | "lg" | "xl";
     color?: string;
   };
+  /** 🆕 Affiche les puces/cartes numérotées (1, 2, 3…) au lieu d'icônes. */
+  numberedBullets?: boolean;
 };
 
 export type AnimationPreset =
@@ -417,6 +421,8 @@ export type FormSectionConfig = {
   submitLabel?: string;
   /** Message de succès affiché après soumission */
   successMessage?: string;
+  /** 🆕 Tags CRM appliqués automatiquement aux leads qui soumettent ce formulaire. */
+  captureTags?: string[];
 };
 
 export type SectionItem =
@@ -476,7 +482,15 @@ export interface RawHtmlBackgroundPatch {
 export interface RawHtmlPatch {
   texts?: Record<string, string>;
   links?: Record<string, { href?: string; label?: string }>;
-  images?: Record<string, { src?: string; alt?: string }>;
+  /**
+   * 🆕 Phase 1B : `mediaType` permet de CONVERTIR un média (ex : remplacer une
+   * image — y compris un GIF animé — par une vraie vidéo `<video>` ou un embed
+   * `<iframe>`). Si absent, le type d'origine de l'élément est conservé.
+   */
+  images?: Record<
+    string,
+    { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" }
+  >;
   colors?: Record<string, string>;
   background?: RawHtmlBackgroundPatch;
 }
@@ -813,6 +827,10 @@ export type FunnelBrief = {
   defaultImageMode?: ImageMode;
   funnelKind?: FunnelKind;
   creationMode?: CreationMode;
+  /** Express IA : description complète de l'activité saisie par l'utilisateur. */
+  businessPrompt?: string;
+  /** Express IA : nombre de pages souhaité dans le tunnel généré. */
+  pageCount?: number;
   templateId?: string;
   moodId?: MoodId;
   mainColor?: string;
@@ -823,6 +841,10 @@ export type FunnelBrief = {
   ctaUrl?: string;
   ctaLabel?: string;
   ctaTarget?: "_self" | "_blank";
+  /** 🆕 Palier 1 paiement : lien de paiement externe de l'offre (Stripe Payment
+   *  Link, page de paiement systeme.io, etc.). Si renseigné sur une offre
+   *  payante, le CTA de la section pricing redirige vers ce lien. */
+  paymentUrl?: string;
   medias?: MediaItem[];
   copywritingPrefs?: CopywritingPrefs;
 };

@@ -56,8 +56,14 @@ export function SectionRenderer({
     // Early return pour les sections HTML brutes (clonage) :
   // pas de layout standard, le HTML s'affiche dans une iframe sandboxée.
 if (section.type === "raw-html") {
-  const clonedHead = (funnel?.meta as { clonedHead?: string } | undefined)
-    ?.clonedHead;
+  const clonedMeta = funnel?.meta as
+    | {
+        clonedHead?: string;
+        clonedBody?: { className?: string; id?: string; style?: string };
+      }
+    | undefined;
+  const clonedHead = clonedMeta?.clonedHead;
+  const clonedBody = clonedMeta?.clonedBody;
   return (
     <section
       id={section.id || section.type}
@@ -68,6 +74,7 @@ if (section.type === "raw-html") {
       <RawHtmlRenderer
         section={section}
         clonedHead={clonedHead}
+        clonedBody={clonedBody}
         editMode={mode === "preview"}   /* 🆕 active uniquement en preview/éditeur */
       />
     </section>

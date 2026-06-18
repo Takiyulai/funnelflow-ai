@@ -458,23 +458,40 @@ export default function EditorPage() {
     [funnel, pushHistory]
   );
 
-  const handlePublish = useCallback(() => {
+  const handlePublish = useCallback(async () => {
     if (!funnel || !stored) return;
+    const updated: StoredFunnel = {
+      ...stored,
+      funnel,
+      updatedAt: new Date().toISOString(),
+    };
     try {
-      const updated: StoredFunnel = {
-        ...stored,
-        funnel,
-        updatedAt: new Date().toISOString(),
-      };
       saveFunnel(updated);
-      publishFunnel(updated.id);
+      const res = await publishFunnel(updated.id);
+      if (res.remoteOk) {
+        const publicSlug = res.publishedSlug ?? updated.slug;
+        toast.show({
+          title: "Tunnel publié",
+          description: `Disponible sur /tunnel/${publicSlug}`,
+          variant: "success",
+        });
+      } else {
+        // ⚠️ La page publique se sert UNIQUEMENT du snapshot Supabase : si le
+        // distant a échoué, on le dit clairement (fini le faux « publié ✓ »).
+        toast.show({
+          title: "Publication non enregistrée en ligne",
+          description:
+            res.error ??
+            "Le tunnel n'a pas pu être enregistré sur le serveur. Réessayez.",
+          variant: "error",
+        });
+      }
+    } catch (e) {
       toast.show({
-        title: "Tunnel publié",
-        description: `Disponible sur /tunnel/${updated.slug}`,
-        variant: "success",
+        title: "Erreur de publication",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
       });
-    } catch {
-      toast.show({ title: "Erreur de publication", variant: "error" });
     }
   }, [funnel, stored, toast]);
 
@@ -578,11 +595,15 @@ export default function EditorPage() {
   const brandName = extractBrandName(funnel.funnelName);
   const pages = funnel.pages ?? [];
 
-  const previewHref = buildPreviewUrl(stored.slug, activePage);
+  // Publié → vraie page publique (slug public réel, pas le slug brouillon) ;
+  // non publié → aperçu local (évite le 404).
+  const previewHref = stored.publishedAt
+    ? buildPreviewUrl(stored.publishedSlug ?? stored.slug, activePage)
+    : `/preview/${stored.id}`;
 
   return (
     <AppShell>
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 md:-mx-8 md:-mt-8 min-w-0">
+      <div className="sticky top-0 z-30 -mx-4 -mt-5 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 sm:-mx-6 lg:-mx-8 lg:-mt-8 min-w-0">
         <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-8 min-w-0">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
             <Link

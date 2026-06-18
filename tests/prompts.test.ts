@@ -45,7 +45,7 @@ describe("AI prompts", () => {
   it("enforces JSON-only output and forbids emojis / hype", () => {
     const prompt = completeFunnelPrompt(brief);
     expect(prompt.toLowerCase()).toMatch(/json/);
-    expect(prompt.toLowerCase()).toMatch(/sans emoji|no emoji|aucun emoji/);
+    expect(prompt.toLowerCase()).toMatch(/sans emoji|no emoji|aucun emoji|pas d'emoji/);
   });
 
   it("declares systeme.io as the priority export target", () => {

@@ -49,6 +49,7 @@ function rowToStored(row: FunnelRow): StoredFunnel {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at ?? undefined,
+    publishedSlug: row.published_slug ?? undefined,
   };
 }
 
@@ -128,8 +129,15 @@ async function externalizeMediaToSupabase(
     if (cached) return cached;
 
     const url = await uploadOneMedia(userId, funnelId, dataUrl);
-    if (url) cache.set(value, url);
-    return url;
+    if (url) {
+      cache.set(value, url);
+      return url;
+    }
+    // Fallback : si l'upload Storage échoue, on garde la data-URL INLINE plutôt
+    // qu'une référence "idb-media://" morte (irrésolvable côté serveur public).
+    // Image plus lourde mais réellement affichée sur la page publiée.
+    cache.set(value, dataUrl);
+    return dataUrl;
   }
 
   async function walk(obj: unknown): Promise<void> {
@@ -168,20 +176,93 @@ async function externalizeMediaToSupabase(
 // CRUD distant
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function getUserId(): Promise<string | null> {
-  const supabase = createSupabaseBrowserClient();
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache de session — élimine la contention navigator.locks
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Même avec un client Supabase singleton, plusieurs composants qui se montent
+// simultanément (useFunnelList + useFunnel + autosave debounce) peuvent tous
+// appeler getSession() en même temps. Si le token est expiré, chacun tente un
+// refresh → tous contendent sur navigator.locks → le plus lent se fait « voler »
+// le verrou → AbortError + « Failed to fetch » en cascade.
+//
+// La solution : un seul appel getSession() à la fois (déduplication via promise
+// partagée) et un cache de 60 s (évite les appels répétés inutiles). On invalide
+// le cache sur changement d'état auth (login / logout).
+
+type SessionCache = { userId: string | null; expiresAt: number };
+let _sessionCache: SessionCache | null = null;
+let _sessionPromise: Promise<string | null> | null = null;
+const SESSION_CACHE_TTL_MS = 60_000;
+
+// Invalider le cache sur changement d'état (login / logout / refresh).
+if (typeof window !== "undefined") {
+  try {
+    createSupabaseBrowserClient().auth.onAuthStateChange(() => {
+      _sessionCache = null;
+      // Ne pas annuler _sessionPromise en vol : elle aboutira et rafraîchira
+      // le cache avec les nouvelles données.
+    });
+  } catch {
+    /* Supabase non dispo (SSR) : ignoré */
+  }
 }
+
+async function getUserId(): Promise<string | null> {
+  const now = Date.now();
+
+  // 1) Cache valide → réponse instantanée, aucun verrou.
+  if (_sessionCache && _sessionCache.expiresAt > now) {
+    return _sessionCache.userId;
+  }
+
+  // 2) Appel déjà en vol → on attend le même appel (pas de doublon).
+  if (_sessionPromise) return _sessionPromise;
+
+  // 3) Premier appelant : lance l'appel et partage la promise.
+  _sessionPromise = (async () => {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      // getSession() lit le token depuis le storage local ; s'il est expiré il
+      // lance UN SEUL refresh (verrou acquis une seule fois car tous les autres
+      // appelants attendent déjà _sessionPromise ci-dessus).
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user?.id ?? null;
+      _sessionCache = { userId, expiresAt: Date.now() + SESSION_CACHE_TTL_MS };
+      return userId;
+    } finally {
+      _sessionPromise = null;
+    }
+  })();
+
+  return _sessionPromise;
+}
+
+/** Formate une erreur PostgREST/Supabase en message lisible AVEC le code. */
+function formatPgError(
+  prefix: string,
+  error: { message?: string; details?: string; hint?: string; code?: string },
+): string {
+  const code = error.code ? `[${error.code}] ` : "";
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  return `${prefix} : ${code}${parts.join(" — ") || "erreur inconnue"}`;
+}
+
+// Colonnes nécessaires à rowToStored. On EXCLUT volontairement `published_content`
+// (énorme et redondant avec json_content) : le ramener pour TOUS les tunnels
+// d'un coup gonflait la réponse jusqu'à casser le parsing JSON
+// (« Unterminated string in JSON »), faisant tomber la synchro du dashboard.
+const LIST_COLS =
+  "id, slug, json_content, brief, created_at, updated_at, published_at, published_slug";
 
 export async function listRemote(): Promise<StoredFunnel[]> {
   const supabase = createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("funnels")
-    .select("*")
+    .select(LIST_COLS)
     .order("updated_at", { ascending: false });
   if (error) {
-    console.warn("[funnelRepository] listRemote:", error.message);
+    console.warn(formatPgError("[funnelRepository] listRemote", error));
     return [];
   }
   return (data as FunnelRow[]).map(rowToStored);
@@ -205,8 +286,9 @@ export async function loadRemote(id: string): Promise<StoredFunnel | null> {
 export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | null> {
   const userId = await getUserId();
   if (!userId) {
-    console.warn("[funnelRepository] saveRemote: pas d'utilisateur connecté");
-    return null;
+    // ⚠️ On LÈVE l'erreur (au lieu de retourner null en silence) pour que la
+    // publication puisse remonter une cause précise à l'utilisateur.
+    throw new Error("Non connecté à Supabase (session expirée ?). Reconnectez-vous.");
   }
   const supabase = createSupabaseBrowserClient();
 
@@ -229,23 +311,82 @@ export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | n
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  // Première tentative : upsert par id.
+  let { data, error } = await supabase
     .from("funnels")
     .upsert(row, { onConflict: "id" })
     .select("*")
     .maybeSingle();
 
+  // 🆕 Collision de slug (23505 sur funnels_user_slug_uidx) : un AUTRE tunnel
+  // (souvent une ligne orpheline laissée par une suppression qui avait échoué)
+  // occupe déjà ce slug. On résout vers un slug libre et on réessaie, plutôt
+  // que de bloquer la publication.
+  if (error && error.code === "23505" && /slug/i.test(`${error.message} ${error.details ?? ""}`)) {
+    const freeSlug = await resolveFreeFunnelSlug(userId, stored.slug, stored.id);
+    ({ data, error } = await supabase
+      .from("funnels")
+      .upsert({ ...row, slug: freeSlug }, { onConflict: "id" })
+      .select("*")
+      .maybeSingle());
+  }
+
   if (error) {
-    console.warn("[funnelRepository] saveRemote:", error.message);
-    return null;
+    throw new Error(formatPgError("Enregistrement Supabase impossible", error));
   }
   return data ? rowToStored(data as FunnelRow) : null;
+}
+
+/** Trouve un `slug` (brouillon) libre pour cet utilisateur (≠ autres lignes). */
+async function resolveFreeFunnelSlug(
+  userId: string,
+  base: string,
+  selfId: string,
+): Promise<string> {
+  const supabase = createSupabaseBrowserClient();
+  const isTaken = async (candidate: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from("funnels")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("slug", candidate)
+      .neq("id", selfId)
+      .maybeSingle();
+    return !!data;
+  };
+  if (!(await isTaken(base))) return base;
+  for (let i = 2; i < 200; i++) {
+    const candidate = `${base}-${i}`;
+    if (!(await isTaken(candidate))) return candidate;
+  }
+  return `${base}-${selfId.slice(0, 8)}`;
 }
 
 export async function deleteRemote(id: string): Promise<void> {
   const supabase = createSupabaseBrowserClient();
   const { error } = await supabase.from("funnels").delete().eq("id", id);
-  if (error) console.warn("[funnelRepository] deleteRemote:", error.message);
+  if (error) {
+    // ⚠️ Si la suppression distante échoue (souvent RLS), le tunnel réapparaît
+    // au prochain chargement (hydratation depuis Supabase). On LÈVE l'erreur
+    // pour que l'appelant puisse la remonter.
+    throw new Error(formatPgError("Suppression Supabase impossible", error));
+  }
+  // ⚠️ CRUCIAL : PostgREST/Postgres ne renvoie PAS d'erreur si 0 ligne a été
+  // supprimée (RLS, ligne orpheline d'un autre user_id…). Sans vérification, on
+  // croirait la suppression réussie, on effacerait le « tombstone » côté client,
+  // et le tunnel RESSUSCITERAIT au prochain listRemote. On confirme donc
+  // l'absence réelle ; si la ligne existe toujours, on lève une erreur pour que
+  // l'appelant conserve le tombstone (tunnel masqué définitivement en local).
+  const { data: still } = await supabase
+    .from("funnels")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (still) {
+    throw new Error(
+      "Suppression Supabase non effective : la ligne existe toujours (RLS/ownership — ligne orpheline ?).",
+    );
+  }
 }
 
 /**
@@ -254,12 +395,16 @@ export async function deleteRemote(id: string): Promise<void> {
  */
 export async function publishRemote(id: string): Promise<StoredFunnel | null> {
   const userId = await getUserId();
-  if (!userId) return null;
+  if (!userId) throw new Error("Non connecté à Supabase (session expirée ?).");
   const supabase = createSupabaseBrowserClient();
 
   // On repart du draft courant (déjà à jour côté json_content via saveRemote)
   const current = await loadRemote(id);
-  if (!current) return null;
+  if (!current) {
+    throw new Error(
+      "Brouillon introuvable côté Supabase : l'enregistrement distant n'a pas abouti.",
+    );
+  }
 
   // published_slug global : on tente le slug draft, sinon suffixe court
   const publishedSlug = await resolvePublishedSlug(current.slug, id);
@@ -277,8 +422,7 @@ export async function publishRemote(id: string): Promise<StoredFunnel | null> {
     .maybeSingle();
 
   if (error) {
-    console.warn("[funnelRepository] publishRemote:", error.message);
-    return null;
+    throw new Error(formatPgError("Publication Supabase impossible", error));
   }
   return data ? rowToStored(data as FunnelRow) : null;
 }

@@ -62,6 +62,12 @@ function ensureGoogleFontsLoaded(): void {
 const ALLOWED_THEMES = [
   "clean-light",
   "clean-dark",
+  "editorial-warm",
+  "aurora-glow",
+  "mint-fresh",
+  "cosmos-night",
+  "sunset-coral",
+  "neo-brutalist",
   "coaching-premium",
   "bold-energy",
   "premium-minimal",
@@ -69,6 +75,10 @@ const ALLOWED_THEMES = [
   "trust-pro",
   "lead-snap",
   "story-sell",
+  // 🆕 Nouveaux templates (identité CSS définie dans funnel-theme.css)
+  "vsl-focus",
+  "webinar-live",
+  "showcase",
 ] as const;
 
 type ThemeId = (typeof ALLOWED_THEMES)[number];

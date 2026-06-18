@@ -20,7 +20,42 @@ import {
   publishRemote,
 } from "./funnelRepository";
 import { normalizeFunnel } from "./normalizeFunnel";
+import { compressToUTF16, decompressFromUTF16 } from "lz-string";
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Compression du cache localStorage
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 🆕 Les tunnels CLONÉS embarquent du HTML brut volumineux. En clair, quelques
+// tunnels saturaient le quota localStorage (~5 Mo) → `safeSetItem` purgeait les
+// AUTRES tunnels → ils disparaissaient du dashboard (puis réapparaissaient via
+// l'hydratation Supabase = effet « clignotant »). On compresse donc le JSON des
+// tunnels (lz-string, synchrone) : le HTML se compresse ~6-10×, ce qui multiplie
+// la capacité effective et supprime quasiment les purges destructives.
+//
+// Rétro-compatibilité : les entrées NON compressées (legacy) restent lisibles
+// (on ne décompresse que les valeurs préfixées par LZ_PREFIX).
+
+const LZ_PREFIX = "LZ1:";
+
+function serializeStored(stored: StoredFunnel): string {
+  try {
+    return LZ_PREFIX + compressToUTF16(JSON.stringify(stored));
+  } catch {
+    // Compression impossible : on retombe sur le JSON brut (toujours lisible).
+    return JSON.stringify(stored);
+  }
+}
+
+function deserializeStored(raw: string): StoredFunnel {
+  if (raw.startsWith(LZ_PREFIX)) {
+    const json = decompressFromUTF16(raw.slice(LZ_PREFIX.length)) || "";
+    return JSON.parse(json) as StoredFunnel;
+  }
+  // Entrée legacy (JSON brut, écrite avant la compression).
+  return JSON.parse(raw) as StoredFunnel;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -34,11 +69,18 @@ export type StoredFunnel = {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+  /** Slug public réellement attribué à la publication (peut différer du slug
+   *  brouillon si celui-ci était déjà pris globalement). Sert au lien Aperçu. */
+  publishedSlug?: string;
 };
 
 const STORAGE_PREFIX = "ff:funnel:";
 const PUBLISHED_PREFIX = "ff:public:";
 const INDEX_KEY = "ff:funnel-index";
+// 🆕 Tombstones : ids de tunnels supprimés localement dont la suppression
+// distante n'est peut-être pas (encore) confirmée. Empêche l'hydratation
+// Supabase de les faire « réapparaître » dans le dashboard.
+const DELETED_KEY = "ff:funnel-deleted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Erreur typée pour quota localStorage
@@ -140,6 +182,44 @@ function writeIndex(ids: string[]) {
   }
 }
 
+// ─── Tombstones (suppressions) ───────────────────────────────────────────────
+
+function readDeleted(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DELETED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function isDeleted(id: string): boolean {
+  return readDeleted().includes(id);
+}
+
+function addDeleted(id: string): void {
+  if (typeof window === "undefined") return;
+  const set = new Set(readDeleted());
+  set.add(id);
+  try {
+    window.localStorage.setItem(DELETED_KEY, JSON.stringify([...set]));
+  } catch {
+    /* quota : non bloquant */
+  }
+}
+
+function clearDeleted(id: string): void {
+  if (typeof window === "undefined") return;
+  const next = readDeleted().filter((x) => x !== id);
+  try {
+    window.localStorage.setItem(DELETED_KEY, JSON.stringify(next));
+  } catch {
+    /* non bloquant */
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Quota helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,11 +236,11 @@ function getStoredFunnelsMeta(): Array<{
     try {
       const raw = window.localStorage.getItem(STORAGE_PREFIX + id);
       if (!raw) continue;
-      const parsed = JSON.parse(raw) as Partial<StoredFunnel>;
+      const parsed = deserializeStored(raw) as Partial<StoredFunnel>;
       out.push({
         id,
         updatedAt: parsed.updatedAt ?? "",
-        size: raw.length,
+        size: raw.length, // taille STOCKÉE (compressée) → pertinente pour le quota
       });
     } catch {
       out.push({ id, updatedAt: "", size: 0 });
@@ -226,18 +306,40 @@ const REMOTE_DEBOUNCE_MS = 1200;
  */
 function scheduleRemoteSave(stored: StoredFunnel): void {
   if (typeof window === "undefined") return;
+  // 🆕 Anti-résurrection : un tunnel SUPPRIMÉ (tombstone) ne doit JAMAIS être
+  // ré-poussé vers Supabase — sinon un onglet éditeur resté ouvert (autosave)
+  // le recrée côté distant et il réapparaît dans le dashboard.
+  if (isDeleted(stored.id)) return;
   const existing = remoteSaveTimers.get(stored.id);
   if (existing) clearTimeout(existing);
   const timer = setTimeout(() => {
     remoteSaveTimers.delete(stored.id);
-    saveRemote(stored).catch((e) =>
-      console.warn(
-        "[funnelStore] saveRemote échoué (cache local conservé):",
-        e,
-      ),
-    );
+    saveRemote(stored)
+      .then((saved) => {
+        // 🆕 Si le distant a dû corriger le slug (collision résolue), on
+        // synchronise le cache local pour éviter une re-collision au prochain save.
+        if (saved?.slug && saved.slug !== stored.slug) {
+          reconcileLocalSlug(stored.id, saved.slug);
+        }
+      })
+      .catch((e) =>
+        console.warn(
+          "[funnelStore] saveRemote échoué (cache local conservé):",
+          e,
+        ),
+      );
   }, REMOTE_DEBOUNCE_MS);
   remoteSaveTimers.set(stored.id, timer);
+}
+
+/** Met à jour le slug local d'un tunnel (après résolution de collision distante). */
+function reconcileLocalSlug(id: string, newSlug: string): void {
+  if (typeof window === "undefined") return;
+  const stored = loadFunnel(id);
+  if (!stored || stored.slug === newSlug) return;
+  const updated: StoredFunnel = { ...stored, slug: newSlug };
+  safeSetItem(STORAGE_PREFIX + id, serializeStored(updated), id);
+  emitChange(id);
 }
 
 /**
@@ -246,10 +348,35 @@ function scheduleRemoteSave(stored: StoredFunnel): void {
  */
 function hydrateLocalFromRemote(remote: StoredFunnel): void {
   if (typeof window === "undefined") return;
+  // 🆕 Ne PAS ressusciter un tunnel supprimé localement (tombstone) tant que
+  // sa suppression distante n'est pas confirmée.
+  if (isDeleted(remote.id)) return;
+
+  // 🆕 PROTECTION ANTI-PERTE D'ÉDITIONS : si la version LOCALE est plus récente
+  // que la distante (ex. l'utilisateur vient d'ajouter une section mais
+  // l'autosave distant est en retard ou avait échoué), on NE l'écrase PAS.
+  // On garde le local ET on pousse le local vers Supabase pour qu'il rattrape.
+  const localRaw = window.localStorage.getItem(STORAGE_PREFIX + remote.id);
+  if (localRaw) {
+    try {
+      const local = deserializeStored(localRaw);
+      const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+      const remoteTime = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+      if (localTime > remoteTime) {
+        const ids = readIndex();
+        if (!ids.includes(remote.id)) writeIndex([remote.id, ...ids]);
+        scheduleRemoteSave(local); // le distant rattrape le local plus récent
+        return;
+      }
+    } catch {
+      // JSON local illisible : on laissera le distant écraser ci-dessous
+    }
+  }
+
   try {
     safeSetItem(
       STORAGE_PREFIX + remote.id,
-      JSON.stringify(remote),
+      serializeStored(remote),
       remote.id,
     );
     const ids = readIndex();
@@ -349,7 +476,7 @@ function applyMigrations(stored: StoredFunnel): StoredFunnel {
     try {
       window.localStorage.setItem(
         STORAGE_PREFIX + stored.id,
-        JSON.stringify(migrated),
+        serializeStored(migrated),
       );
     } catch {
       // Ignore les erreurs de stockage (quota, etc.) — pas critique ici
@@ -373,7 +500,7 @@ export function loadFunnel(id: string): StoredFunnel | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_PREFIX + id);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredFunnel;
+    const parsed = deserializeStored(raw);
     return applyMigrations(parsed);
   } catch {
     return null;
@@ -411,12 +538,39 @@ export function loadFunnelBySlug(slug: string): StoredFunnel | null {
 export function listFunnels(): StoredFunnel[] {
   if (typeof window === "undefined") return [];
   const ids = readIndex();
+  // 🆕 Filet de sécurité : ne jamais afficher un tunnel supprimé (tombstone),
+  // même si une écriture tardive l'avait laissé dans l'index local.
+  const deleted = new Set(readDeleted());
   const items: StoredFunnel[] = [];
   for (const id of ids) {
+    if (deleted.has(id)) continue;
     const f = loadFunnel(id);
     if (f) items.push(f);
   }
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/**
+ * 🆕 Purge les snapshots `ff:public:` hérités du localStorage. Ils étaient
+ * énormes (full funnel + base64), jamais nettoyés et inutiles (la page publique
+ * lit Supabase). Leur accumulation saturait le quota et provoquait des purges
+ * destructives (brouillons supprimés → tunnels qui disparaissent/réapparaissent).
+ * Idempotent : ne fait rien s'il n'y en a plus.
+ */
+export function purgeLegacyPublicSnapshots(): number {
+  if (typeof window === "undefined") return 0;
+  let freed = 0;
+  for (const k of Object.keys(window.localStorage)) {
+    if (k.startsWith(PUBLISHED_PREFIX)) {
+      try {
+        window.localStorage.removeItem(k);
+        freed++;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return freed;
 }
 
 /**
@@ -427,6 +581,11 @@ export function listFunnels(): StoredFunnel[] {
  */
 export function saveFunnel(stored: StoredFunnel): void {
   if (typeof window === "undefined") return;
+
+  // 🆕 Anti-résurrection : ne JAMAIS ré-écrire (ni ré-indexer) un tunnel
+  // supprimé. Sans ce garde-fou, un onglet éditeur resté ouvert sur un tunnel
+  // qu'on vient de supprimer le recrée via son autosave (local + distant).
+  if (isDeleted(stored.id)) return;
 
   // 1) Cloner profondément pour ne pas muter l'objet d'origine en mémoire
   let clonedFunnel: Funnel;
@@ -452,7 +611,7 @@ export function saveFunnel(stored: StoredFunnel): void {
   };
 
   // 3) Écriture sécurisée avec purge automatique en cas de quota dépassé
-  safeSetItem(STORAGE_PREFIX + stored.id, JSON.stringify(synced), stored.id);
+  safeSetItem(STORAGE_PREFIX + stored.id, serializeStored(synced), stored.id);
 
   const ids = readIndex();
   const isNew = !ids.includes(stored.id);
@@ -485,12 +644,22 @@ export function deleteFunnel(id: string): void {
   }
   const ids = readIndex().filter((x) => x !== id);
   writeIndex(ids);
+  // 🆕 Tombstone : empêche la réapparition par hydratation tant que la
+  // suppression distante n'est pas confirmée.
+  addDeleted(id);
   emitChange(id);
 
-  // 🆕 SUPABASE — miroir distant best-effort
-  deleteRemoteFn(id).catch((e) =>
-    console.warn("[funnelStore] deleteRemote échoué:", e),
-  );
+  // 🆕 SUPABASE — miroir distant. Si OK → on retire le tombstone (ménage fait).
+  // Si échec (souvent RLS) → on GARDE le tombstone (reste masqué) et on logge
+  // la cause précise (code PostgREST) pour diagnostic.
+  deleteRemoteFn(id)
+    .then(() => clearDeleted(id))
+    .catch((e) =>
+      console.warn(
+        "[funnelStore] deleteRemote échoué (tunnel masqué localement) :",
+        e instanceof Error ? e.message : e,
+      ),
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -511,6 +680,25 @@ export function createFunnelFromAi(
   );
   const existingSlugs = new Set(listFunnels().map((f) => f.slug));
   const slug = uniqueSlug(baseSlug || "tunnel", existingSlugs);
+
+  // 🆕 Auto-tag : on pose un tag de capture par défaut (nom de l'offre) sur les
+  // formulaires, pour que les leads soumis soient taggés automatiquement.
+  const captureTag = (brief.offerName || brief.brandName || "").trim();
+  if (captureTag) {
+    const tagForms = (secs?: Funnel["sections"]) => {
+      secs?.forEach((s) => {
+        if (s.type !== "form") return;
+        const existing = s.formConfig?.captureTags;
+        s.formConfig = {
+          provider: s.formConfig?.provider ?? "internal",
+          ...s.formConfig,
+          captureTags: existing && existing.length ? existing : [captureTag],
+        };
+      });
+    };
+    tagForms(funnel.sections);
+    funnel.pages?.forEach((p) => tagForms(p.sections));
+  }
 
   const now = new Date().toISOString();
   const stored: StoredFunnel = {
@@ -580,9 +768,27 @@ export function reorderPages(funnel: Funnel, orderedIds: string[]): Funnel {
 // Publication
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function publishFunnel(id: string): StoredFunnel | null {
+export type PublishResult = {
+  /** Tunnel local mis à jour (publishedAt posé) — null si introuvable. */
+  stored: StoredFunnel | null;
+  /** true si le snapshot a bien été figé dans Supabase (sinon 404 en ligne). */
+  remoteOk: boolean;
+  /** Slug public réel attribué par Supabase (peut différer du slug brouillon). */
+  publishedSlug?: string;
+  /** Message d'erreur distant à afficher si remoteOk = false. */
+  error?: string;
+};
+
+/**
+ * Publie un tunnel. L'écriture LOCALE est immédiate ; l'écriture DISTANTE
+ * (Supabase) est désormais AWAITÉE et son résultat remonté, pour ne plus
+ * afficher un faux « publié ✓ » alors que la page publique renverrait un 404.
+ */
+export async function publishFunnel(id: string): Promise<PublishResult> {
   const stored = loadFunnel(id);
-  if (!stored || typeof window === "undefined") return null;
+  if (!stored || typeof window === "undefined") {
+    return { stored: null, remoteOk: false, error: "Tunnel introuvable." };
+  }
 
   const updated: StoredFunnel = {
     ...stored,
@@ -590,26 +796,42 @@ export function publishFunnel(id: string): StoredFunnel | null {
     updatedAt: new Date().toISOString(),
   };
 
-  // ✅ Écriture sécurisée pour les deux entrées
-  safeSetItem(STORAGE_PREFIX + id, JSON.stringify(updated), id);
-  safeSetItem(PUBLISHED_PREFIX + stored.slug, JSON.stringify(updated), id);
-
+  // ✅ Écriture locale du brouillon (UX instantanée). On N'écrit PLUS de
+  // snapshot `ff:public:` en localStorage : il était énorme (full funnel +
+  // base64), jamais nettoyé, et inutile (la page publique lit Supabase). Ces
+  // snapshots saturaient le quota → purges destructives → tunnels qui
+  // disparaissent/réapparaissent dans le dashboard.
+  safeSetItem(STORAGE_PREFIX + id, serializeStored(updated), id);
   emitChange(id);
 
-  // 🆕 SUPABASE — publication distante : on pousse d'abord le draft à jour
-  // (json_content + médias externalisés), PUIS on fige le snapshot publié
-  // (published_content + published_slug + status='published'). Séquentiel
-  // pour garantir que le snapshot contient bien la dernière version.
-  (async () => {
-    try {
-      await saveRemote(updated);
-      await publishRemote(id);
-    } catch (e) {
-      console.warn("[funnelStore] publication distante échouée:", e);
+  // 🆕 SUPABASE — publication distante séquentielle : on pousse d'abord le
+  // draft à jour (json_content + médias), PUIS on fige le snapshot publié.
+  // Toute erreur (session, RLS, colonne manquante) est REMONTÉE à l'appelant.
+  try {
+    const saved = await saveRemote(updated);
+    // 🆕 Si une collision de slug a été résolue côté distant, on aligne le local
+    // AVANT de figer le snapshot publié (sinon slug local ≠ slug distant).
+    if (saved?.slug && saved.slug !== updated.slug) {
+      reconcileLocalSlug(id, saved.slug);
     }
-  })();
+    const published = await publishRemote(id);
+    const publishedSlug = published?.publishedSlug;
 
-  return updated;
+    // On persiste le slug public RÉEL pour que le lien Aperçu pointe juste.
+    if (publishedSlug) {
+      const fresh = loadFunnel(id) ?? updated;
+      const withSlug: StoredFunnel = { ...fresh, publishedSlug };
+      safeSetItem(STORAGE_PREFIX + id, serializeStored(withSlug), id);
+      emitChange(id);
+      return { stored: withSlug, remoteOk: true, publishedSlug };
+    }
+
+    return { stored: updated, remoteOk: true };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : "Publication distante échouée.";
+    console.warn("[funnelStore] publication distante échouée:", error);
+    return { stored: updated, remoteOk: false, error };
+  }
 }
 
 export function loadPublishedFunnel(slug: string): StoredFunnel | null {
@@ -687,6 +909,18 @@ export function useFunnelList(): StoredFunnel[] {
   useEffect(() => {
     let cancelled = false;
 
+    // 🆕 Purge les anciens snapshots ff:public:* (full funnel + images base64
+    // inline, parfois 3+ Mo, jamais nettoyés). Ils saturaient le quota localStorage
+    // → purges destructives → brouillons effacés → tunnels qui disparaissent /
+    // réapparaissent. La page publique lit Supabase ; ces snapshots sont inutiles.
+    // Idempotent : sans effet si déjà purgés.
+    const freed = purgeLegacyPublicSnapshots();
+    if (freed > 0) {
+      console.info(
+        `[useFunnelList] ${freed} snapshot(s) ff:public:* purgé(s) du localStorage.`,
+      );
+    }
+
     // 1) Affichage instantané depuis le cache local
     setList(listFunnels());
 
@@ -694,7 +928,31 @@ export function useFunnelList(): StoredFunnel[] {
     //    on hydrate le cache local, puis on rafraîchit l'affichage.
     listRemote()
       .then((remoteList) => {
-        if (cancelled || remoteList.length === 0) return;
+        if (cancelled) return;
+        // Liste distante vide = potentiellement transitoire (session non encore
+        // prête) → on NE touche PAS aux tombstones (sinon risque de ressusciter
+        // un tunnel supprimé) et on garde l'affichage local.
+        if (remoteList.length === 0) return;
+
+        // 🆕 Réconciliation des tombstones (suppressions) :
+        //  - un tunnel supprimé ABSENT du distant → suppression confirmée,
+        //    on retire le tombstone (ménage, évite l'accumulation) ;
+        //  - un tunnel supprimé ENCORE présent (orphelin/RLS) → on GARDE le
+        //    tombstone (hydratation le saute) et on RE-TENTE la suppression
+        //    distante, pour finir par nettoyer la ligne fantôme.
+        const remoteIds = new Set(remoteList.map((r) => r.id));
+        for (const deletedId of readDeleted()) {
+          if (!remoteIds.has(deletedId)) {
+            clearDeleted(deletedId);
+          } else {
+            deleteRemoteFn(deletedId)
+              .then(() => clearDeleted(deletedId))
+              .catch(() => {
+                /* toujours bloqué : reste masqué via tombstone */
+              });
+          }
+        }
+
         for (const remote of remoteList) {
           hydrateLocalFromRemote(remote);
         }

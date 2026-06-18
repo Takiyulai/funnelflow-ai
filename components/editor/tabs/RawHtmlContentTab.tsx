@@ -40,15 +40,10 @@ import {
 import { walkerDebug } from "@/lib/clone/raw-html-walker";
 walkerDebug.enabled = true;
 
-// Extension locale tolérante : si raw-html-editable.ts n'expose pas encore
-// `mediaType`, on l'autorise ici sans toucher au walker.
-type MediaSpot = EditableImageSpot & {
-  mediaType?: "image" | "video" | "embed";
-};
-
+// 🆕 Phase 1B : le walker + l'inventaire portent désormais `mediaType`.
+// Fallback "image" par sécurité pour d'anciens patches/clones sans le champ.
 function getMediaType(spot: EditableImageSpot): "image" | "video" | "embed" {
-  const mt = (spot as MediaSpot).mediaType;
-  return mt ?? "image";
+  return spot.mediaType ?? "image";
 }
 
 type Props = {
@@ -343,7 +338,9 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
     if (!spot) return;
     const original = field === "src" ? spot.src : spot.alt ?? "";
     const prev = imagePatches[id] ?? {};
-    const next: { src?: string; alt?: string } = { ...prev };
+    const next: { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" } = {
+      ...prev,
+    };
 
     if (value === original) {
       delete next[field];
@@ -352,7 +349,49 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
     }
 
     const nextImages = { ...imagePatches };
-    if (next.src === undefined && next.alt === undefined) {
+    if (
+      next.src === undefined &&
+      next.alt === undefined &&
+      next.mediaType === undefined
+    ) {
+      delete nextImages[id];
+    } else {
+      nextImages[id] = next;
+    }
+
+    onChange({
+      rawHtmlPatches: {
+        ...patches,
+        images: Object.keys(nextImages).length > 0 ? nextImages : undefined,
+      },
+    });
+  };
+
+  // 🆕 Phase 1B : convertir un média (image ↔ vidéo ↔ embed).
+  const updateImageMediaType = (
+    id: string,
+    mediaType: "image" | "video" | "embed",
+  ) => {
+    const spot = inventory.images.find((m) => m.id === id);
+    const sourceType = spot?.mediaType ?? "image";
+    const prev = imagePatches[id] ?? {};
+    const next: { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" } = {
+      ...prev,
+    };
+
+    // Si on revient au type d'origine, on retire l'override.
+    if (mediaType === sourceType) {
+      delete next.mediaType;
+    } else {
+      next.mediaType = mediaType;
+    }
+
+    const nextImages = { ...imagePatches };
+    if (
+      next.src === undefined &&
+      next.alt === undefined &&
+      next.mediaType === undefined
+    ) {
       delete nextImages[id];
     } else {
       nextImages[id] = next;
@@ -634,6 +673,9 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
             isFocused
             onChangeField={(field, v) =>
               updateImage(activeImageSpot.id, field, v)
+            }
+            onChangeMediaType={(t) =>
+              updateImageMediaType(activeImageSpot.id, t)
             }
             onReset={() => resetImage(activeImageSpot.id)}
             onFocus={() =>
@@ -1597,15 +1639,19 @@ function MediaSpotEditor({
   patch,
   isFocused,
   onChangeField,
+  onChangeMediaType,
   onReset,
   onFocus,
   onBlur,
   autoFocus,
 }: {
   spot: EditableImageSpot;
-  patch: { src?: string; alt?: string } | undefined;
+  patch:
+    | { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" }
+    | undefined;
   isFocused: boolean;
   onChangeField: (field: "src" | "alt", v: string) => void;
+  onChangeMediaType: (mediaType: "image" | "video" | "embed") => void;
   onReset: () => void;
   onFocus: () => void;
   onBlur: () => void;
@@ -1614,7 +1660,8 @@ function MediaSpotEditor({
   const isModified = patch !== undefined;
   const currentSrc = patch?.src ?? spot.src;
   const currentAlt = patch?.alt ?? spot.alt ?? "";
-  const mediaType = getMediaType(spot);
+  // 🆕 Phase 1B : type effectif = override du patch, sinon type d'origine.
+  const mediaType = patch?.mediaType ?? getMediaType(spot);
 
   const srcRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1785,6 +1832,48 @@ function MediaSpotEditor({
       </div>
 
       <div className="px-2 pb-2 pt-1 space-y-1.5">
+        {/* 🆕 Phase 1B : type de média — convertit le média (image / vidéo / embed) */}
+        <div>
+          <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
+            Type de média
+          </label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                { id: "image", label: "Image", Icon: ImageIcon },
+                { id: "video", label: "Vidéo", Icon: Film },
+                { id: "embed", label: "Embed", Icon: Code2 },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onChangeMediaType(m.id)}
+                className={[
+                  "flex items-center justify-center gap-1 rounded border px-1.5 py-1.5 text-[10px] transition-colors",
+                  mediaType === m.id
+                    ? "border-sky-300/50 bg-sky-300/[0.12] text-sky-100"
+                    : "border-white/10 bg-black/30 text-white/55 hover:bg-white/[0.05]",
+                ].join(" ")}
+              >
+                <m.Icon className="h-3 w-3" />
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {mediaType !== getMediaType(spot) && (
+            <div className="mt-1 text-[9px] text-amber-200/70">
+              Converti depuis «{" "}
+              {getMediaType(spot) === "video"
+                ? "Vidéo"
+                : getMediaType(spot) === "embed"
+                  ? "Embed"
+                  : "Image"}{" "}
+              ». La balise sera remplacée au rendu.
+            </div>
+          )}
+        </div>
+
         {isPreviewable && (
           <div className="rounded-md border border-white/10 bg-black/40 p-1.5 flex items-center justify-center max-h-32 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}

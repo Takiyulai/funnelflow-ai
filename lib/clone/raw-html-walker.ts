@@ -11,6 +11,17 @@
 
 export type SpotKind = "text" | "link" | "image";
 
+/**
+ * Sous-type de média porté par un ImageSpot.
+ * - "image" : balise <img>
+ * - "video" : balise <video> (upload de fichier vidéo possible)
+ * - "embed" : <iframe> vidéo (YouTube/Vimeo/Loom/Wistia) → édition par URL d'embed
+ *
+ * Le `kind` reste "image" (le pipeline d'édition média est unifié), mais
+ * `mediaType` permet à l'éditeur d'ouvrir le bon flux (image vs vidéo vs embed).
+ */
+export type MediaType = "image" | "video" | "embed";
+
 export type TextSubKind = "title" | "subtitle" | "paragraph" | "short";
 
 export interface TextSpot {
@@ -40,6 +51,8 @@ export interface ImageSpot {
   element: Element;
   src: string;
   alt: string;
+  /** 🆕 Phase 1B : distingue image / vidéo / embed pour ouvrir le bon éditeur. */
+  mediaType: MediaType;
 }
 
 export type Spot = TextSpot | LinkSpot | ImageSpot;
@@ -261,6 +274,7 @@ export function walkEditable(
             element: el,
             src,
             alt: el.getAttribute("alt") || "",
+            mediaType: "image",
           });
           imageCount++;
         }
@@ -282,6 +296,7 @@ export function walkEditable(
             element: el,
             src,
             alt: poster,
+            mediaType: "video",
           });
           imageCount++;
         }
@@ -300,6 +315,7 @@ export function walkEditable(
           element: el,
           src,
           alt: el.getAttribute("title") || "",
+          mediaType: "embed",
         });
         imageCount++;
       }
@@ -317,9 +333,17 @@ export function walkEditable(
         href.startsWith("javascript:") ||
         href.startsWith("data:");
 
+      // 🆕 Bug #9 : un CTA dont le href est technique (`#`, `javascript:`,
+      // checkout/popup…) n'était PAS enregistré comme lien éditable → au clic,
+      // on ne pouvait modifier QUE son texte, pas son URL de redirection. On
+      // enregistre désormais TOUS les CTA/boutons (et les <a> à href technique
+      // qui ressemblent à des CTA) pour qu'on puisse leur assigner une URL.
+      const isCta = isCtaElement(el);
       const shouldRegister =
         linkCount < MAX_LINKS &&
-        (tag === "button" || (!isTechnicalHref && label.length > 0));
+        (tag === "button" ||
+          isCta ||
+          (!isTechnicalHref && label.length > 0));
 
       if (shouldRegister) {
         const key = `${tag}::${href}::${label}`;
@@ -332,7 +356,7 @@ export function walkEditable(
             href,
             label,
             isExternal: /^https?:\/\//i.test(href),
-            isCta: isCtaElement(el),
+            isCta,
           });
           linkCount++;
         }

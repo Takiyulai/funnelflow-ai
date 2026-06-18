@@ -110,13 +110,132 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
     })();
   `;
 
-  // Scénario simple : on attend 3s pour l'hydratation React/styled-components,
-  // puis on extrait les CSS runtime. Pas de scroll automatique pour éviter
-  // l'explosion de taille de DOM (lazy-load).
+  // ───────────────────────────────────────────────────────────────────────
+  // 🆕 PHASE 1A — Capture des FONDS RÉELS de chaque section.
+  //
+  // Problème : le fond visible d'une section vient souvent d'un ANCÊTRE
+  // (body, wrapper, classe CSS du <head>), pas de l'élément racine de la
+  // section. Quand le mapper éclate le body en sous-sections, chaque bloc
+  // perd ce fond hérité → fond blanc rendu en noir/transparent.
+  //
+  // Correctif générique : pendant le scraping (DOM hydraté + CSS runtime
+  // matérialisé), on parcourt chaque section candidate et on écrit son fond
+  // EFFECTIF (calculé) en style inline, ce qui la rend autonome.
+  //
+  // Règles de sûreté :
+  //  - background-color : on remonte aux ancêtres jusqu'à trouver une couleur
+  //    opaque. Si on croise d'abord une background-image, on n'écrit PAS de
+  //    couleur (l'image reste visible — on ne peint pas par-dessus).
+  //  - background-image : on ne capture QUE l'image propre de l'élément
+  //    (jamais héritée) pour éviter qu'une image plein-écran se répète sur
+  //    chaque sous-section.
+  //  - on ne touche jamais un élément qui a déjà un fond inline explicite.
+  // ───────────────────────────────────────────────────────────────────────
+  const captureBackgroundsScript = `
+    (function() {
+      try {
+        function isTransparent(c) {
+          if (!c) return true;
+          c = String(c).trim().toLowerCase();
+          if (c === 'transparent' || c === 'none' || c === 'initial' || c === 'inherit') return true;
+          var m = c.match(/rgba?\\(([^)]+)\\)/);
+          if (m) {
+            var parts = m[1].split(',').map(function(s){ return parseFloat(s); });
+            if (parts.length >= 4 && parts[3] === 0) return true;
+          }
+          return false;
+        }
+        function effectiveBgColor(el) {
+          var node = el, hops = 0;
+          while (node && node.nodeType === 1 && hops < 12) {
+            var cs = window.getComputedStyle(node);
+            if (cs) {
+              // Une image de fond visible derrière → ne pas écraser avec une couleur.
+              if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
+              if (!isTransparent(cs.backgroundColor)) return cs.backgroundColor;
+            }
+            node = node.parentElement;
+            hops++;
+          }
+          return null;
+        }
+        var els = document.querySelectorAll('body > *, body section');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          if (!el || el.nodeType !== 1) continue;
+          var tag = el.tagName ? el.tagName.toLowerCase() : '';
+          if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'meta' || tag === 'br') continue;
+
+          var inlineStyle = (el.getAttribute('style') || '').toLowerCase();
+          var hasInlineBg =
+            inlineStyle.indexOf('background:') !== -1 ||
+            inlineStyle.indexOf('background-color') !== -1 ||
+            inlineStyle.indexOf('background-image') !== -1;
+          if (hasInlineBg) { el.setAttribute('data-ff-bg-captured', 'skip'); continue; }
+
+          var cs = window.getComputedStyle(el);
+
+          // 1) Image de fond PROPRE (non héritée)
+          if (cs && cs.backgroundImage && cs.backgroundImage !== 'none') {
+            el.style.backgroundImage = cs.backgroundImage;
+            if (cs.backgroundSize) el.style.backgroundSize = cs.backgroundSize;
+            if (cs.backgroundPosition) el.style.backgroundPosition = cs.backgroundPosition;
+            if (cs.backgroundRepeat) el.style.backgroundRepeat = cs.backgroundRepeat;
+            el.setAttribute('data-ff-bg-captured', 'image');
+            continue;
+          }
+
+          // 2) Couleur de fond EFFECTIVE (remonte aux ancêtres)
+          var eff = effectiveBgColor(el);
+          if (eff && !isTransparent(eff)) {
+            el.style.backgroundColor = eff;
+            el.setAttribute('data-ff-bg-captured', 'color');
+          }
+        }
+
+        // ── FOND DE PAGE (html/body) — cause racine principale ──────────────
+        // Le parser fait $("body").html() : le <body style> est jeté, et le
+        // reset du <head> forçait 'background: transparent'. Le vrai fond de la
+        // page (souvent blanc) était donc perdu → rendu noir/transparent.
+        // On matérialise le fond calculé de html/body dans un <style> pinné,
+        // capturé ensuite via le head et appliqué en !important dans l'iframe.
+        function bgDecl(el) {
+          var cs = el ? window.getComputedStyle(el) : null;
+          if (!cs) return '';
+          var out = '';
+          if (cs.backgroundImage && cs.backgroundImage !== 'none') {
+            out += 'background-image:' + cs.backgroundImage + ' !important;';
+            out += 'background-size:' + (cs.backgroundSize || 'auto') + ' !important;';
+            out += 'background-position:' + (cs.backgroundPosition || '0% 0%') + ' !important;';
+            out += 'background-repeat:' + (cs.backgroundRepeat || 'repeat') + ' !important;';
+            out += 'background-attachment:' + (cs.backgroundAttachment || 'scroll') + ' !important;';
+          }
+          if (!isTransparent(cs.backgroundColor)) {
+            out += 'background-color:' + cs.backgroundColor + ' !important;';
+          }
+          return out;
+        }
+        var pageDecl = bgDecl(document.body) || bgDecl(document.documentElement);
+        if (pageDecl) {
+          var bgStyle = document.createElement('style');
+          bgStyle.id = '__ff-captured-page-bg';
+          bgStyle.textContent = 'html,body{' + pageDecl + '}';
+          document.head.appendChild(bgStyle);
+        }
+      } catch (e) {
+        // best-effort
+      }
+    })();
+  `;
+
+  // Scénario : on attend 3s pour l'hydratation React/styled-components, on
+  // matérialise les CSS runtime, PUIS on capture les fonds réels (l'ordre
+  // importe : la capture lit getComputedStyle après hydratation).
   const jsScenario = JSON.stringify({
     instructions: [
       { wait: 3000 },
       { evaluate: extractCssScript },
+      { evaluate: captureBackgroundsScript },
       { wait: 500 },
     ],
   });

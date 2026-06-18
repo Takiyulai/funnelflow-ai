@@ -29,7 +29,7 @@ import { getVideoEmbed } from "@/lib/funnels/video";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
-import { getTemplateButtonAnim } from "@/lib/funnels/templates";
+import { getTemplateButtonAnim, getTemplateDefaultIcon } from "@/lib/funnels/templates";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
 import FunnelHeader from "@/components/funnel/FunnelHeader";
 import { getIconByName } from "@/components/editor/IconPicker";
@@ -84,6 +84,20 @@ const BULLET_LAYOUT_SECTIONS = new Set<string>([
   "numbers",
   "metrics",
   "kpi",
+  // 🆕 Plus de listes regroupées en blocs/cards (numérotées pour les étapes).
+  "solution",
+  "problem",
+  "process",
+  "program",
+  "qualification",
+  "steps",
+  "method",
+  "modules",
+  "curriculum",
+  "included",
+  "deliverables",
+  "bonus",
+  "about",
 ]);
 
 const BULLET_LIST_ONLY_SECTIONS = new Set<string>([
@@ -438,6 +452,73 @@ function decideBulletsMode(
   return "list";
 }
 
+/* ─── 🆕 Phase 1C : bouton flottant WhatsApp (niveau page) ─────────────── */
+//
+// Un bouton flottant ne peut PAS vivre dans l'iframe d'une section clonée
+// (position:fixed s'y cale sur la hauteur du contenu, pas sur l'écran). On
+// extrait donc le 1er lien wa.me / api.whatsapp.com des sections raw-html et
+// on rend un vrai bouton fixe AU-DESSUS des iframes, uniquement côté public.
+
+function extractWhatsAppLink(
+  sections: Array<FunnelSection | undefined>,
+): string | null {
+  for (const s of sections) {
+    if (!s || s.type !== "raw-html" || !s.body) continue;
+    const body = s.body;
+
+    // 1) Lien explicite : href contenant wa.me / *.whatsapp.com / whatsapp://
+    const hrefMatch = body.match(
+      /href\s*=\s*["']([^"']*(?:wa\.me|whatsapp\.com|whatsapp:\/\/)[^"']*)["']/i,
+    );
+    if (hrefMatch && hrefMatch[1]) {
+      return hrefMatch[1].replace(/&amp;/g, "&");
+    }
+
+    // 2) Widget JS sans href : on reconstruit wa.me depuis un numéro trouvé
+    //    (wa.me/<num>, whatsapp.com/send?phone=<num>, ?phone=<num>,
+    //     data-phone="<num>", data-number="<num>").
+    const phoneMatch = body.match(
+      /(?:wa\.me\/|whatsapp\.com\/send\?phone=|[?&]phone=|data-(?:phone|number|wa)\s*=\s*["'])\s*\+?(\d[\d\s().-]{6,}\d)/i,
+    );
+    if (phoneMatch && phoneMatch[1]) {
+      const digits = phoneMatch[1].replace(/\D/g, "");
+      if (digits.length >= 7) return `https://wa.me/${digits}`;
+    }
+  }
+  return null;
+}
+
+function WhatsAppFloat({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="WhatsApp"
+      className="ff-whatsapp-float"
+      style={{
+        position: "fixed",
+        right: "20px",
+        bottom: "20px",
+        zIndex: 2147483000,
+        width: "60px",
+        height: "60px",
+        borderRadius: "50%",
+        background: "#25D366",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 6px 18px rgba(0,0,0,0.28)",
+        textDecoration: "none",
+      }}
+    >
+      <svg viewBox="0 0 32 32" width="34" height="34" fill="#fff" aria-hidden="true">
+        <path d="M16.003 3.2c-7.06 0-12.8 5.74-12.8 12.8 0 2.26.6 4.46 1.73 6.4L3.2 28.8l6.57-1.72a12.74 12.74 0 0 0 6.23 1.6h.01c7.06 0 12.8-5.74 12.8-12.8s-5.74-12.8-12.8-12.8zm0 23.04h-.01a10.6 10.6 0 0 1-5.4-1.48l-.39-.23-3.9 1.02 1.04-3.8-.25-.4a10.62 10.62 0 0 1-1.63-5.67c0-5.87 4.78-10.64 10.66-10.64 2.85 0 5.52 1.11 7.53 3.12a10.57 10.57 0 0 1 3.12 7.53c0 5.87-4.78 10.64-10.65 10.64zm5.84-7.97c-.32-.16-1.9-.94-2.19-1.04-.29-.11-.5-.16-.72.16-.21.32-.82 1.04-1.01 1.25-.19.21-.37.24-.69.08-.32-.16-1.35-.5-2.57-1.59-.95-.85-1.59-1.89-1.78-2.21-.19-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.19.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.72-1.74-.99-2.38-.26-.62-.52-.54-.72-.55l-.61-.01c-.21 0-.56.08-.85.4-.29.32-1.11 1.09-1.11 2.66 0 1.57 1.14 3.08 1.3 3.29.16.21 2.25 3.44 5.46 4.82.76.33 1.36.53 1.82.68.77.24 1.46.21 2.01.13.61-.09 1.9-.78 2.17-1.53.27-.75.27-1.39.19-1.53-.08-.13-.29-.21-.61-.37z" />
+      </svg>
+    </a>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────── */
 
 export function FunnelPreview({
@@ -783,6 +864,12 @@ function PreviewBody({
     (funnel.meta as { clonedHead?: string } | undefined)?.clonedHead,
   );
 
+  // 🆕 Bouton flottant WhatsApp : niveau page, côté public uniquement.
+  const whatsAppLink =
+    !editMode && isClonedFunnel
+      ? extractWhatsAppLink([heroSection, ...otherSections])
+      : null;
+
   return (
     <div>
       {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
@@ -827,6 +914,8 @@ function PreviewBody({
       ))}
 
       {!isClonedFunnel && <FunnelFooter funnel={funnel} />}
+
+      {whatsAppLink && <WhatsAppFloat href={whatsAppLink} />}
     </div>
   );
 }
@@ -987,7 +1076,12 @@ function HeroBlock({
             <BulletsList
               bullets={section.bullets}
               bulletIcons={section.bulletIcons}
-              defaultIconName={section.iconName || "check"}
+              defaultIconName={
+                section.iconName ||
+                getTemplateDefaultIcon(
+                  (funnel.meta as { templateId?: string } | undefined)?.templateId
+                )
+              }
               iconSize={section.iconSize ?? "md"}
               iconAnim={section.iconAnimation ?? "none"}
               animations={section.animations}
@@ -995,6 +1089,7 @@ function HeroBlock({
               isSuccess={isSuccess}
               sectionType={section.type as string}
               shadowSize={shadowSize}
+              numbered={section.style?.numberedBullets}
             />
           )}
 
@@ -1094,8 +1189,14 @@ function SectionBlock({
   // editMode est propagé pour activer les annotations data-ff-spot-id
   // permettant le scroll-to depuis le panneau d'édition.
   if (section.type === "raw-html") {
-    const clonedHead = (funnel.meta as { clonedHead?: string } | undefined)
-      ?.clonedHead;
+    const clonedMeta = funnel.meta as
+      | {
+          clonedHead?: string;
+          clonedBody?: { className?: string; id?: string; style?: string };
+        }
+      | undefined;
+    const clonedHead = clonedMeta?.clonedHead;
+    const clonedBody = clonedMeta?.clonedBody;
     return (
       <section
         id={section.id}
@@ -1107,6 +1208,7 @@ function SectionBlock({
         <RawHtmlRenderer
           section={section}
           clonedHead={clonedHead}
+          clonedBody={clonedBody}
           editMode={editMode}
         />
       </section>
@@ -1124,9 +1226,18 @@ function SectionBlock({
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
 
-  const layout = isSuccess
+  const rawLayout = isSuccess
     ? "success-centered"
     : effectiveLayoutVariant(section, funnel);
+  const isSplit =
+    rawLayout === "split-text-image" || rawLayout === "split-image-text";
+  const hasBullets =
+    Array.isArray(section.bullets) && section.bullets.length > 0;
+  const hasImg = !!resolvedImage || !!section.video?.url;
+  // Split sans image : si on a des cartes/puces, on les envoie dans la colonne
+  // libre (texte d'un côté, cartes de l'autre). Sinon on retombe sur "centered".
+  const splitTextOnly = isSplit && !hasImg && hasBullets;
+  const layout = isSplit && !hasImg && !hasBullets ? "centered" : rawLayout;
 
   return (
     <section
@@ -1134,6 +1245,7 @@ function SectionBlock({
       data-ff-section={section.type}
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-split-mode={splitTextOnly ? "text" : undefined}
       data-ff-shadow-scope={shadowAttr}
       data-ff-custom-bg={colors.bg ? "true" : undefined}
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
@@ -1213,7 +1325,12 @@ function SectionBlock({
             <BulletsList
               bullets={section.bullets}
               bulletIcons={section.bulletIcons}
-              defaultIconName={section.iconName || "check"}
+              defaultIconName={
+                section.iconName ||
+                getTemplateDefaultIcon(
+                  (funnel.meta as { templateId?: string } | undefined)?.templateId
+                )
+              }
               iconSize={section.iconSize ?? "md"}
               iconAnim={section.iconAnimation ?? "none"}
               animations={section.animations}
@@ -1221,6 +1338,7 @@ function SectionBlock({
               isSuccess={isSuccess}
               sectionType={section.type as string}
               shadowSize={shadowSize}
+              numbered={section.style?.numberedBullets}
             />
           )}
 
@@ -1340,6 +1458,7 @@ function BulletsList({
   isSuccess,
   sectionType,
   shadowSize,
+  numbered,
 }: {
   bullets: string[];
   bulletIcons?: string[];
@@ -1351,6 +1470,8 @@ function BulletsList({
   isSuccess: boolean;
   sectionType: string;
   shadowSize?: ShadowSize;
+  /** 🆕 Cartes/puces numérotées (1, 2, 3…) au lieu d'icônes. */
+  numbered?: boolean;
 }) {
   const DefaultBulletIcon = getIconByName(defaultIconName);
   const mode = decideBulletsMode(sectionType, bullets, isSuccess);
@@ -1413,13 +1534,23 @@ function BulletsList({
               data-ff-anim={animOf(animations, "bullets", "fade-up")}
               className={bodySize}
             >
-              <PerBulletIcon
-                data-ff-icon-size={iconSize}
-                data-ff-icon-anim={iconAnim}
-                className="ff-bullet-ic shrink-0"
-                style={{ color: "var(--ff-accent, #31845C)" }}
-                aria-hidden="true"
-              />
+              {numbered ? (
+                <span
+                  className="ff-bullet-num shrink-0"
+                  data-ff-icon-anim={iconAnim}
+                  aria-hidden="true"
+                >
+                  {i + 1}
+                </span>
+              ) : (
+                <PerBulletIcon
+                  data-ff-icon-size={iconSize}
+                  data-ff-icon-anim={iconAnim}
+                  className="ff-bullet-ic shrink-0"
+                  style={{ color: "var(--ff-accent, #31845C)" }}
+                  aria-hidden="true"
+                />
+              )}
               {split ? (
                 <span className="flex flex-col gap-1">
                   <strong className="font-semibold">{split.title}</strong>
@@ -1459,13 +1590,23 @@ function BulletsList({
             className={`flex items-start gap-2 ${bodySize}`}
             style={{ opacity: 0.95 }}
           >
-            <PerBulletIcon
-              data-ff-icon-size={iconSize}
-              data-ff-icon-anim={iconAnim}
-              className="ff-bullet-ic shrink-0 mt-0.5 w-4 h-4"
-              style={{ color: "var(--ff-accent, #31845C)" }}
-              aria-hidden="true"
-            />
+            {numbered ? (
+              <span
+                className="ff-bullet-num ff-bullet-num--sm shrink-0 mt-0.5"
+                data-ff-icon-anim={iconAnim}
+                aria-hidden="true"
+              >
+                {i + 1}
+              </span>
+            ) : (
+              <PerBulletIcon
+                data-ff-icon-size={iconSize}
+                data-ff-icon-anim={iconAnim}
+                className="ff-bullet-ic shrink-0 mt-0.5 w-4 h-4"
+                style={{ color: "var(--ff-accent, #31845C)" }}
+                aria-hidden="true"
+              />
+            )}
             {split ? (
               <span className="flex flex-col gap-0.5">
                 <strong className="font-semibold">{split.title}</strong>

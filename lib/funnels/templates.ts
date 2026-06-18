@@ -91,7 +91,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     },
     bestFor: ["service", "lead-magnet", "digital-product", "saas", "booking"],
     defaultMoodId: "institutional-trust",
-    badge: "Fond personnalisable",
+    badge: "Personnalisable",
     previewColors: ["#FAFAF9", "#2563EB", "#18181B"],
     customizable: true,
     sections: [
@@ -141,16 +141,16 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "clean-dark",
-    name: "Clean Dark",
+    name: "Clean Red",
     personality: {
-      fr: "Fond sombre neutre et moderne, dont chaque couleur peut être modifiée librement après génération",
-      en: "Neutral dark background, fully customizable after generation",
-      es: "Fondo oscuro neutro, totalmente personalizable después de la generación",
+      fr: "Noir profond traversé de boules de lumière rouges dans les coins, accent rouge vif : intense, premium et orienté conversion. Couleurs ajustables après génération.",
+      en: "Deep black with red light orbs in the corners and a vivid red accent: intense, premium and conversion-driven. Colors adjustable after generation.",
+      es: "Negro profundo con orbes de luz roja en las esquinas y acento rojo intenso: premium y orientado a la conversión. Colores ajustables.",
     },
     bestFor: ["digital-product", "saas", "service", "vsl"],
-    defaultMoodId: "premium-calm",
-    badge: "Fond personnalisable",
-    previewColors: ["#09090B", "#3B82F6", "#FAFAFA"],
+    defaultMoodId: "energetic",
+    badge: "Rouge",
+    previewColors: ["#120406", "#FF2E43", "#FAFAFA"],
     customizable: true,
     sections: [
       {
@@ -217,7 +217,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
       },
       {
         type: "problem", id: "problem", required: true,
-        layoutVariant: "centered",
+        layoutVariant: "split-text-image",
         animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
         defaultBulletIcon: "zap",
       },
@@ -249,12 +249,13 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "balanced",
-    decor: { style: "halo", intensity: "medium" },
+    // 🆕 Direction A « Aurora Premium » : sombre profond + halos d'accent forts.
+    decor: { style: "halo", intensity: "strong" },
     typography: {
-      headlineScale: "md",
-      headlineWeight: 700,
+      headlineScale: "xl",
+      headlineWeight: 800,
       headlineTracking: "tight",
-      headlineFamily: "sans",
+      headlineFamily: "display",
     },
   },
 
@@ -357,6 +358,283 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 2b. Éditorial chaleureux (Direction B) — magazine premium, clair & tiède
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "editorial-warm",
+    name: "Éditorial chaleureux",
+    personality: {
+      fr: "Magazine premium clair et tiède : titres serif Fraunces, palette crème/terracotta/vert profond, beaucoup d'air. Idéal coachs, freelances et formateurs.",
+      en: "Warm, light editorial: Fraunces serif headings, cream/terracotta/deep-green palette, generous spacing. Great for coaches and creators.",
+      es: "Editorial cálido y claro: títulos serif Fraunces, paleta crema/terracota/verde, mucho espacio. Ideal para coaches y creadores.",
+    },
+    bestFor: ["service", "digital-product", "coaching-high-ticket", "formation", "booking"],
+    defaultMoodId: "creative-warm",
+    badge: "Éditorial",
+    previewColors: ["#FBF7F1", "#C2410C", "#2B1D16"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "about", id: "about", required: false,
+        includeIf: { has: "about" },
+        layoutVariant: "split-image-text",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", image: "fade-in" },
+      },
+      {
+        type: "problem", id: "problem", required: true,
+        layoutVariant: "split-text-image",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "target",
+      },
+      {
+        type: "solution", id: "solution", required: true,
+        layoutVariant: "split-image-text",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "sparkles",
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "thumbsUp",
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "testimonials", id: "testimonials", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "faq", id: "faq", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "plain", intensity: "subtle" },
+    typography: {
+      headlineScale: "lg",
+      headlineWeight: 500,
+      headlineTracking: "normal",
+      headlineFamily: "serif",
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2c. Aurora Glow (nouveau) — SaaS lumineux, dégradés aurora, cartes vitrées
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "aurora-glow",
+    name: "Aurora Glow",
+    personality: {
+      fr: "SaaS moderne et lumineux : dégradés aurora subtils (indigo/cyan/rose), cartes nettes, typo géométrique Space Grotesk. Rendu 2025 pour produits digitaux et SaaS.",
+      en: "Bright modern SaaS: subtle aurora gradients, crisp cards, Space Grotesk geometric type. A 2025 look for digital products and SaaS.",
+      es: "SaaS moderno y luminoso: degradados aurora sutiles, tarjetas nítidas, tipografía geométrica. Estética 2025 para productos digitales.",
+    },
+    bestFor: ["saas", "digital-product", "lead-magnet", "service"],
+    defaultMoodId: "premium-calm",
+    badge: "Aurora",
+    previewColors: ["#F7F8FF", "#6D5DF6", "#0EA5E9"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "sparkles",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "testimonials", id: "testimonials", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "faq", id: "faq", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "halo", intensity: "medium" },
+    typography: {
+      headlineScale: "lg",
+      headlineWeight: 600,
+      headlineTracking: "tight",
+      headlineFamily: "sans",
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2d. Émeraude (nouveau) — vert menthe lumineux, cartes blanches, rassurant
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "mint-fresh",
+    name: "Émeraude",
+    personality: {
+      fr: "Frais et rassurant : vert menthe lumineux, cartes blanches nettes, typo douce arrondie. Idéal bien-être, coaching et services qui inspirent confiance.",
+      en: "Fresh and reassuring: bright mint green, crisp white cards, soft rounded type. Great for wellness, coaching and trust-driven services.",
+      es: "Fresco y tranquilizador: verde menta luminoso, tarjetas blancas, tipografía suave. Ideal para bienestar, coaching y servicios.",
+    },
+    bestFor: ["service", "coaching-high-ticket", "digital-product", "lead-magnet"],
+    defaultMoodId: "creative-warm",
+    badge: "Fraîcheur",
+    previewColors: ["#0B3D2E", "#10B981", "#FFFFFF"],
+    sections: [
+      { type: "hero", id: "hero", required: true, layoutVariant: "centered", animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" } },
+      { type: "benefits", id: "benefits", required: true, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" }, defaultBulletIcon: "check" },
+      { type: "proof", id: "proof", required: false, layoutVariant: "centered", animations: { headline: "fade-up", body: "fade-up" } },
+      { type: "offer", id: "offer", required: true, layoutVariant: "stacked-card", animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" } },
+      { type: "testimonials", id: "testimonials", required: false, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "faq", id: "faq", required: false, layoutVariant: "dense-list", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "form", id: "form", required: true, layoutVariant: "centered", animations: { headline: "fade-up", cta: "fade-up" } },
+    ],
+    layoutRules: [{ when: { sectionMissing: "image" }, fallbackLayout: "centered" }],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "halo", intensity: "subtle" },
+    typography: { headlineScale: "lg", headlineWeight: 600, headlineTracking: "tight", headlineFamily: "sans" },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2e. Cosmos (nouveau) — indigo profond, glow violet, cartes verre sombre
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "cosmos-night",
+    name: "Cosmos",
+    personality: {
+      fr: "Indigo profond traversé d'un glow violet/fuchsia, cartes verre sombre, typo géométrique. Premium et futuriste pour SaaS et produits tech.",
+      en: "Deep indigo with violet/fuchsia glow, dark glass cards, geometric type. Premium and futuristic for SaaS and tech products.",
+      es: "Índigo profundo con brillo violeta, tarjetas de vidrio oscuro, tipografía geométrica. Premium y futurista para SaaS.",
+    },
+    bestFor: ["saas", "digital-product", "service", "vsl"],
+    defaultMoodId: "premium-calm",
+    badge: "Cosmos",
+    previewColors: ["#0A0E27", "#8B5CF6", "#E9D5FF"],
+    sections: [
+      { type: "hero", id: "hero", required: true, layoutVariant: "centered", animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" } },
+      { type: "benefits", id: "benefits", required: true, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" }, defaultBulletIcon: "sparkles" },
+      { type: "proof", id: "proof", required: false, layoutVariant: "centered", animations: { headline: "fade-up", body: "fade-up" } },
+      { type: "offer", id: "offer", required: true, layoutVariant: "stacked-card", animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" } },
+      { type: "testimonials", id: "testimonials", required: false, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "faq", id: "faq", required: false, layoutVariant: "dense-list", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "form", id: "form", required: true, layoutVariant: "centered", animations: { headline: "fade-up", cta: "fade-up" } },
+    ],
+    layoutRules: [{ when: { sectionMissing: "image" }, fallbackLayout: "centered" }],
+    bulletAnimation: "stagger",
+    density: "balanced",
+    decor: { style: "halo", intensity: "medium" },
+    typography: { headlineScale: "lg", headlineWeight: 600, headlineTracking: "tight", headlineFamily: "sans" },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2f. Sunset (nouveau) — pêche chaleureux, dégradé corail→rose, engageant
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "sunset-coral",
+    name: "Sunset",
+    personality: {
+      fr: "Pêche chaleureux et engageant, dégradé corail→rose sur les CTA, cartes blanches, typo ronde. Donne envie de cliquer — parfait pour offres grand public.",
+      en: "Warm peach and engaging, coral→pink CTA gradient, white cards, rounded type. Makes people want to click — great for consumer offers.",
+      es: "Melocotón cálido y atractivo, degradado coral→rosa en los CTA, tarjetas blancas. Invita a hacer clic — ideal para ofertas masivas.",
+    },
+    bestFor: ["digital-product", "lead-magnet", "service", "coaching-high-ticket"],
+    defaultMoodId: "energetic",
+    badge: "Sunset",
+    previewColors: ["#7A2E1E", "#FB6F4C", "#FFFFFF"],
+    sections: [
+      { type: "hero", id: "hero", required: true, layoutVariant: "centered", animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" } },
+      { type: "benefits", id: "benefits", required: true, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" }, defaultBulletIcon: "check" },
+      { type: "proof", id: "proof", required: false, layoutVariant: "centered", animations: { headline: "fade-up", body: "fade-up" } },
+      { type: "offer", id: "offer", required: true, layoutVariant: "stacked-card", animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" } },
+      { type: "testimonials", id: "testimonials", required: false, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "faq", id: "faq", required: false, layoutVariant: "dense-list", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "form", id: "form", required: true, layoutVariant: "centered", animations: { headline: "fade-up", cta: "fade-up" } },
+    ],
+    layoutRules: [{ when: { sectionMissing: "image" }, fallbackLayout: "centered" }],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "halo", intensity: "subtle" },
+    typography: { headlineScale: "lg", headlineWeight: 700, headlineTracking: "tight", headlineFamily: "sans" },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2g. Brutalist (nouveau) — néo-brutaliste, bordures épaisses, ombres dures
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "neo-brutalist",
+    name: "Brutalist",
+    personality: {
+      fr: "Néo-brutaliste assumé : crème, bordures noires épaisses, ombres dures décalées, blocs de couleur franche (jaune/menthe). Audacieux et mémorable.",
+      en: "Bold neo-brutalist: cream, thick black borders, hard offset shadows, solid color blocks (yellow/mint). Daring and memorable.",
+      es: "Neo-brutalista atrevido: crema, bordes negros gruesos, sombras duras, bloques de color sólido. Audaz y memorable.",
+    },
+    bestFor: ["digital-product", "lead-magnet", "saas", "service"],
+    defaultMoodId: "energetic",
+    badge: "Brut",
+    previewColors: ["#14110A", "#FACC15", "#FFFFFF"],
+    sections: [
+      { type: "hero", id: "hero", required: true, layoutVariant: "centered", animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" } },
+      { type: "benefits", id: "benefits", required: true, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" }, defaultBulletIcon: "check" },
+      { type: "proof", id: "proof", required: false, layoutVariant: "centered", animations: { headline: "fade-up", body: "fade-up" } },
+      { type: "offer", id: "offer", required: true, layoutVariant: "stacked-card", animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" } },
+      { type: "testimonials", id: "testimonials", required: false, layoutVariant: "feature-grid", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "faq", id: "faq", required: false, layoutVariant: "dense-list", animations: { headline: "fade-up", bullets: "fade-up" } },
+      { type: "form", id: "form", required: true, layoutVariant: "centered", animations: { headline: "fade-up", cta: "fade-up" } },
+    ],
+    layoutRules: [{ when: { sectionMissing: "image" }, fallbackLayout: "centered" }],
+    bulletAnimation: "uniform",
+    density: "balanced",
+    decor: { style: "plain", intensity: "subtle" },
+    typography: { headlineScale: "lg", headlineWeight: 800, headlineTracking: "tight", headlineFamily: "sans" },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 3. Premium Minimal — L'élégance à la Apple / Stripe
   // ─────────────────────────────────────────────────────────────────────────
   {
@@ -370,7 +648,8 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     bestFor: ["service", "digital-product", "saas", "booking"],
     defaultMoodId: "premium-calm",
     badge: "Elite",
-    previewColors: ["#FFFFFF", "#000000", "#F8F9FA"],
+    // 🆕 Direction B « Editorial Soft » : crème chaud, halos pastel doux.
+    previewColors: ["#FBF8F2", "#0A0A0A", "#F1ECE2"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -384,7 +663,7 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
       },
       {
         type: "benefits", id: "benefits", required: true,
-        layoutVariant: "feature-grid",
+        layoutVariant: "split-text-image",
         animations: { headline: "fade-up", bullets: "fade-up" },
         defaultBulletIcon: "check",
       },
@@ -409,9 +688,9 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "airy",
-    decor: { style: "halo", intensity: "subtle" },
+    decor: { style: "halo", intensity: "medium" },
     typography: {
-      headlineScale: "lg",
+      headlineScale: "xl",
       headlineWeight: 400,
       headlineTracking: "tight",
       headlineFamily: "serif",
@@ -423,16 +702,16 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: "coaching-premium",
-    name: "Coaching Premium",
+    name: "Luxe Ivoire",
     personality: {
-      fr: "Atmosphère immersive et sombre, accents dorés, pour un positionnement haut de gamme et exclusif.",
-      en: "Immersive dark atmosphere, gold accents, for high-end and exclusive positioning.",
-      es: "Atmósfera inmersiva y oscura, acentos dorados, para un posicionamiento de alta gama y exclusivo.",
+      fr: "Luxe discret et clair : ivoire chaud, titres serif Cormorant, accents or fin, angles nets et beaucoup d'air. Positionnement haut de gamme et intemporel.",
+      en: "Quiet light luxury: warm ivory, Cormorant serif, fine gold accents, sharp edges, lots of air. High-end and timeless.",
+      es: "Lujo discreto y claro: marfil cálido, serif Cormorant, acentos dorados, ángulos nítidos y mucho espacio. Alta gama atemporal.",
     },
     bestFor: ["coaching-high-ticket", "service", "digital-product"],
     defaultMoodId: "premium-calm",
     badge: "Luxe",
-    previewColors: ["#0A0A0A", "#D4AF37", "#1A1A1A"],
+    previewColors: ["#F6F1E7", "#9A7B3F", "#1C1A17"],
     sections: [
       {
         type: "hero", id: "hero", required: true,
@@ -622,12 +901,13 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "stagger",
     density: "balanced",
-    decor: { style: "blobs", intensity: "strong" },
+    // 🆕 Direction C « Neo-Bold » : contraste brut, grille graphique, typo massive.
+    decor: { style: "grid", intensity: "strong" },
     typography: {
-      headlineScale: "md",
-      headlineWeight: 800,
+      headlineScale: "xl",
+      headlineWeight: 900,
       headlineTracking: "tight",
-      headlineFamily: "sans",
+      headlineFamily: "display",
     },
   },
 
@@ -674,12 +954,219 @@ export const PREMIUM_TEMPLATES: TemplateDefinition[] = [
     ],
     bulletAnimation: "uniform",
     density: "dense",
-    decor: { style: "halo", intensity: "subtle" },
+    // 🆕 Polish « Dense » : on garde l'identité compacte/sombre, on renforce les
+    // halos d'accent et l'impact typographique (premium sans casser l'usage).
+    decor: { style: "halo", intensity: "strong" },
     typography: {
-      headlineScale: "sm",
-      headlineWeight: 600,
-      headlineTracking: "normal",
+      headlineScale: "lg",
+      headlineWeight: 700,
+      headlineTracking: "tight",
       headlineFamily: "sans",
+    },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🆕 NOUVEAUX TEMPLATES (validés) : VSL Focus, Webinar Live, Showcase
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // 7. VSL Focus — page centrée sur une vidéo de vente, minimale, conversion.
+  {
+    id: "vsl-focus",
+    name: "VSL Focus",
+    personality: {
+      fr: "Page épurée centrée sur une vidéo de vente (VSL) : tout converge vers le visionnage puis le CTA. Sombre, sans distraction.",
+      en: "Clean page centered on a sales video (VSL): everything drives to watch then convert. Dark, distraction-free.",
+      es: "Página depurada centrada en un video de ventas (VSL): todo lleva a ver y luego convertir. Oscura, sin distracciones.",
+    },
+    bestFor: ["vsl", "digital-product", "formation"],
+    defaultMoodId: "energetic",
+    badge: "VSL",
+    previewColors: ["#070A12", "#38BDF8", "#EEF2F8"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "centered",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "video", id: "video", required: true,
+        layoutVariant: "wide-banner",
+        animations: { headline: "fade-up", video: "zoom-in" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "pulse" },
+      },
+      {
+        type: "guarantee", id: "guarantee", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "faq", id: "faq", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "zoom-in" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+      { when: { sectionMissing: "video" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "balanced",
+    decor: { style: "halo", intensity: "strong" },
+    typography: {
+      headlineScale: "xl",
+      headlineWeight: 800,
+      headlineTracking: "tight",
+      headlineFamily: "display",
+    },
+  },
+
+  // 8. Webinar Live — compte à rebours, inscription, preuve sociale.
+  {
+    id: "webinar-live",
+    name: "Webinar Live",
+    personality: {
+      fr: "Pensée pour un webinaire/événement : urgence (compte à rebours), inscription claire et preuve sociale rassurante.",
+      en: "Built for a webinar/event: urgency (countdown), clear sign-up and reassuring social proof.",
+      es: "Pensada para un webinar/evento: urgencia (cuenta atrás), inscripción clara y prueba social.",
+    },
+    bestFor: ["webinar", "formation", "service"],
+    defaultMoodId: "institutional-trust",
+    badge: "Webinar",
+    previewColors: ["#0B1228", "#6366F1", "#EEF2FF"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "split-text-image",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", image: "fade-in", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "about", id: "about", required: false,
+        layoutVariant: "split-image-text",
+        animations: { headline: "fade-up", body: "fade-up", image: "fade-in" },
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "testimonials", id: "testimonials", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "stacked-card",
+        animations: { headline: "fade-up", cta: "pulse" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "balanced",
+    decor: { style: "halo", intensity: "strong" },
+    typography: {
+      headlineScale: "xl",
+      headlineWeight: 800,
+      headlineTracking: "tight",
+      headlineFamily: "display",
+    },
+  },
+
+  // 9. Showcase — vitrine d'offre haut de gamme avec visuels alternés.
+  {
+    id: "showcase",
+    name: "Showcase",
+    personality: {
+      fr: "Vitrine premium : grands visuels, sections alternées gauche/droite et conteneurs en relief pour présenter une offre haut de gamme.",
+      en: "Premium showcase: large visuals, alternating left/right sections and elevated containers to present a high-end offer.",
+      es: "Escaparate premium: grandes visuales, secciones alternas y contenedores en relieve para una oferta de alta gama.",
+    },
+    bestFor: ["digital-product", "service", "saas", "coaching-high-ticket"],
+    defaultMoodId: "premium-calm",
+    badge: "Showcase",
+    previewColors: ["#0E1116", "#34D399", "#ECFDF5"],
+    sections: [
+      {
+        type: "hero", id: "hero", required: true,
+        layoutVariant: "split-text-image",
+        animations: { eyebrow: "fade-in", headline: "fade-up", subheadline: "fade-up", image: "fade-in", cta: "fade-up" },
+      },
+      {
+        type: "benefits", id: "benefits", required: true,
+        layoutVariant: "split-image-text",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+        defaultBulletIcon: "check",
+      },
+      {
+        type: "solution", id: "solution", required: false,
+        layoutVariant: "split-text-image",
+        animations: { headline: "fade-up", body: "fade-up", image: "fade-in" },
+      },
+      {
+        type: "proof", id: "proof", required: false,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", body: "fade-up" },
+      },
+      {
+        type: "offer", id: "offer", required: true,
+        layoutVariant: "stacked-card",
+        animations: { eyebrow: "fade-in", headline: "fade-up", body: "fade-up", bullets: "fade-up", cta: "fade-up" },
+      },
+      {
+        type: "testimonials", id: "testimonials", required: false,
+        layoutVariant: "feature-grid",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "faq", id: "faq", required: false,
+        layoutVariant: "dense-list",
+        animations: { headline: "fade-up", bullets: "fade-up" },
+      },
+      {
+        type: "form", id: "form", required: true,
+        layoutVariant: "centered",
+        animations: { headline: "fade-up", cta: "fade-up" },
+      },
+    ],
+    layoutRules: [
+      { when: { sectionMissing: "image" }, fallbackLayout: "centered" },
+    ],
+    bulletAnimation: "stagger",
+    density: "airy",
+    decor: { style: "halo", intensity: "medium" },
+    typography: {
+      headlineScale: "xl",
+      headlineWeight: 700,
+      headlineTracking: "tight",
+      headlineFamily: "display",
     },
   },
 ];
@@ -706,6 +1193,12 @@ export const TEMPLATE_BUTTON_ANIMATION: Record<
 > = {
   "clean-light": "lift",
   "clean-dark": "lift",
+  "editorial-warm": "lift",
+  "aurora-glow": "glow",
+  "mint-fresh": "lift",
+  "cosmos-night": "glow",
+  "sunset-coral": "glow",
+  "neo-brutalist": "lift",
   "story-sell": "shine",
   "bold-energy": "pulse",
   "premium-minimal": "lift",
@@ -720,6 +1213,35 @@ export function getTemplateButtonAnim(
 ): "lift" | "glow" | "pulse" | "shine" {
   if (!templateId) return "lift";
   return TEMPLATE_BUTTON_ANIMATION[templateId] ?? "lift";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icône "signature" par template — utilisée comme puce par défaut quand une
+// section n'a pas d'icône explicite. Tout nom inconnu retombe sur "check".
+// ─────────────────────────────────────────────────────────────────────────────
+export const TEMPLATE_DEFAULT_ICON: Record<string, string> = {
+  "clean-light": "check",
+  "clean-dark": "flame",
+  "editorial-warm": "star",
+  "aurora-glow": "sparkles",
+  "mint-fresh": "heart",
+  "cosmos-night": "zap",
+  "sunset-coral": "star",
+  "neo-brutalist": "rocket",
+  "premium-minimal": "check",
+  "coaching-premium": "crown",
+  "story-sell": "lightbulb",
+  "trust-pro": "shield",
+  "bold-energy": "zap",
+  "sharp-launch": "rocket",
+  "lead-snap": "target",
+  "vsl-focus": "zap",
+  "webinar-live": "star",
+  "showcase": "sparkles",
+};
+
+export function getTemplateDefaultIcon(templateId?: string | null): string {
+  return (templateId && TEMPLATE_DEFAULT_ICON[templateId]) || "check";
 }
 
 export const DEFAULT_PREMIUM_TEMPLATE_ID = "story-sell";

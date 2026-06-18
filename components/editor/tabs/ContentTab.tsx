@@ -10,6 +10,7 @@ import { BonusEditor } from "./items/BonusEditor";
 import { GuaranteeEditor } from "./items/GuaranteeEditor";
 import { IconPicker, getIconByName } from "../IconPicker";
 import { FormFieldsEditor } from "./items/FormFieldsEditor";
+import { CaptureTagsEditor } from "./items/CaptureTagsEditor";
 import { TextColorButton } from "../TextColorButton";
 import { TimerEditor } from "./items/TimerEditor";
 
@@ -100,6 +101,11 @@ if (section.type === "form") {
         <p className="mt-1 text-[10px] text-white/40">
           Laissez vide pour utiliser le message par défaut. Saisissez un espace pour le masquer.
         </p>
+      </div>
+
+      {/* 🆕 Tags CRM appliqués automatiquement aux leads de ce formulaire */}
+      <div className="border-t border-white/10 pt-4">
+        <CaptureTagsEditor section={section} onChange={onChange} />
       </div>
 
       {timerBlock}

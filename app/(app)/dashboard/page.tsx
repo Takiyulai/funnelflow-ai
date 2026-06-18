@@ -1,10 +1,12 @@
 // app/(app)/dashboard/page.tsx
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Download, FileText, Globe2, Users,
   Sparkles, Upload, CheckCircle2, BookOpen,
 } from "lucide-react";
+import { getExportCount, EXPORTS_CHANGED_EVENT } from "@/lib/store/statsStore";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +27,34 @@ import { CloneFunnelButton } from "@/components/dashboard/CloneFunnelButton";
 
 export default function DashboardPage() {
   const stored = useFunnelList();
+
+  // 🆕 Total de leads réel (CRM) + compteur d'exports.
+  const [leadsCount, setLeadsCount] = useState<number | null>(null);
+  const [exportsCount, setExportsCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/crm/contacts?limit=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.ok && typeof d.total === "number") setLeadsCount(d.total);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setExportsCount(getExportCount());
+    sync();
+    window.addEventListener(EXPORTS_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(EXPORTS_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   function handleDelete(id: string) {
     deleteFunnel(id);
@@ -96,7 +126,7 @@ export default function DashboardPage() {
         />
         <DashboardCard
           label="Leads collectés"
-          value="0"
+          value={leadsCount === null ? "…" : String(leadsCount)}
           icon={<Users size={18} />}
           accent="green"
         />
@@ -108,7 +138,7 @@ export default function DashboardPage() {
         />
         <DashboardCard
           label="Exports réalisés"
-          value="0"
+          value={String(exportsCount)}
           icon={<Download size={18} />}
           accent="blue"
         />

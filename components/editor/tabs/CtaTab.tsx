@@ -11,6 +11,7 @@ import type {
   FormFieldItem,
   FormFieldType,
 } from "@/lib/funnels/types";
+import { TagsInput } from "./items/TagsInput";
 
 type Props = {
   section: FunnelSection;
@@ -387,6 +388,17 @@ export function CtaTab({ section, onChange }: Props) {
                       être enregistré.
                     </p>
                   </div>
+
+                  {/* 🆕 Tags CRM appliqués aux leads capturés par ce popup */}
+                  <Field
+                    label="Tags appliqués"
+                    hint="Tags CRM posés automatiquement sur chaque lead capturé par ce popup. Un tag inexistant est créé."
+                  >
+                    <TagsInput
+                      value={cta.captureTags ?? []}
+                      onChange={(next) => updateCta({ captureTags: next })}
+                    />
+                  </Field>
 
                   <Field
                     label="Identifiant technique"

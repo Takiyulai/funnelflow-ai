@@ -63,14 +63,28 @@ describe("Systeme.io HTML export", () => {
   });
 });
 
+// createDemoFunnel ne produit qu'une section (hero). Pour vérifier que
+// createSystemeBlocks génère bien UN bloc indépendant PAR section, on lui
+// fournit un funnel multi-sections représentatif.
+const multiSectionFunnel = {
+  ...funnel,
+  sections: [
+    { id: "hero", type: "hero", headline: "Bienvenue", visible: true },
+    { id: "problem", type: "problem", headline: "Le problème", visible: true },
+    { id: "solution", type: "solution", headline: "La solution", visible: true },
+    { id: "offer", type: "offer", headline: "Notre offre", visible: true },
+    { id: "faq", type: "faq", headline: "Questions fréquentes", visible: true },
+  ],
+} as unknown as typeof funnel;
+
 describe("Systeme.io block export", () => {
   it("creates more than three independent blocks", () => {
-    const blocks = createSystemeBlocks(funnel);
+    const blocks = createSystemeBlocks(multiSectionFunnel);
     expect(blocks.length).toBeGreaterThan(3);
   });
 
   it("each block is self-contained with its own scoped <style>", () => {
-    const blocks = createSystemeBlocks(funnel);
+    const blocks = createSystemeBlocks(multiSectionFunnel);
     for (const block of blocks) {
       const html = typeof block === "string" ? block : block.html;
       expect(html.toLowerCase()).not.toContain("<html");

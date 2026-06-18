@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { renderFunnelHtml } from "@/lib/export/html";
 import { getPageBySlug } from "@/lib/funnels/types";
+import PublicFunnelRuntime from "@/components/funnel/PublicFunnelRuntime";
 
 export const dynamic = "force-dynamic";
 
@@ -28,5 +29,10 @@ export default async function PublishedFunnelSubPage({
   });
 
 
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+      <PublicFunnelRuntime />
+    </>
+  );
 }

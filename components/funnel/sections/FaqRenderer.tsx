@@ -20,8 +20,15 @@ export function FaqRenderer({ section, bodySize = "text-base" }: Props) {
 
   return (
     <div
-      className="ff-faq-list mt-4 mx-auto max-w-2xl"
+      className="ff-faq-list mt-6 mx-auto max-w-2xl"
       data-ff-anim={section.animations?.bullets ?? "fade-up"}
+      style={{
+        background: "var(--ff-card-bg, #ffffff)",
+        border: "1px solid var(--ff-card-border, var(--ff-border, rgba(0,0,0,0.1)))",
+        borderRadius: "var(--ff-card-radius, 16px)",
+        boxShadow: "var(--ff-card-shadow, 0 1px 2px rgba(0,0,0,0.05), 0 20px 44px -28px rgba(0,0,0,0.2))",
+        padding: "0.25rem 1.5rem",
+      }}
     >
       {items.map((item, idx) => {
         const isOpen = openIdx === idx;
@@ -61,7 +68,7 @@ export function FaqRenderer({ section, bodySize = "text-base" }: Props) {
             >
               <div className="overflow-hidden">
                 <p
-                  className={`pb-4 pr-8 ${bodySize} whitespace-pre-line`}
+                  className={`pb-4 pr-8 text-left ${bodySize} whitespace-pre-line`}
                   style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.8 }}
                 >
                   {item.data.answer || (

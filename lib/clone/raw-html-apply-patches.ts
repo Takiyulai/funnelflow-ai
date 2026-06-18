@@ -17,7 +17,10 @@ import type { RawHtmlBackgroundPatch } from "@/lib/funnels/types";
 export interface RawHtmlPatch {
   texts?: Record<string, string>;
   links?: Record<string, { href?: string; label?: string }>;
-  images?: Record<string, { src?: string; alt?: string }>;
+  images?: Record<
+    string,
+    { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" }
+  >;
   colors?: Record<string, string>;
   background?: RawHtmlBackgroundPatch;
 }
@@ -177,6 +180,118 @@ function propagateImageSrcToResponsiveVariants(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Phase 1B — Conversion de média (image ↔ vidéo ↔ embed)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Un GIF/visuel cloné est dans une <img>. Pour permettre de le remplacer par
+// une VRAIE vidéo (fichier mp4/webm) ou un embed (YouTube/Vimeo), on remplace
+// la balise par <video> ou <iframe> au moment de l'application des patches.
+
+type MediaTypeChoice = "image" | "video" | "embed";
+
+/** Convertit une URL YouTube/Vimeo "watch" en URL d'embed. Sinon renvoie tel quel. */
+function toEmbedUrl(src: string): string {
+  if (!src) return src;
+  try {
+    // YouTube : youtu.be/ID, watch?v=ID, shorts/ID, /embed/ID (déjà bon)
+    const yt = src.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i,
+    );
+    if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+    // Vimeo : vimeo.com/123 ou player.vimeo.com/video/123 (déjà bon)
+    const vm = src.match(/(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)/i);
+    if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  } catch {
+    // ignore
+  }
+  return src;
+}
+
+/** URL qui DOIT être rendue en iframe (impossible à lire dans une balise <video>). */
+function isEmbeddableUrl(src: string): boolean {
+  return /youtube\.com|youtu\.be|vimeo\.com|loom\.com|wistia/i.test(src || "");
+}
+
+/**
+ * Construit l'élément média de remplacement (video/iframe/img) en reprenant les
+ * attributs visuels de l'élément d'origine (class, id, width).
+ *
+ * Règles :
+ *  - "embed" → toujours <iframe> (URL convertie en URL d'embed).
+ *  - "video" + URL YouTube/Vimeo/Loom → <iframe> (un lien YT ne joue pas dans
+ *    <video>). Sinon → vraie balise <video> (fichier mp4/webm).
+ *  - tout média a un aspect-ratio 16/9 + largeur pour ne pas s'effondrer à 0px.
+ */
+function buildMediaElement(
+  type: MediaTypeChoice,
+  src: string,
+  alt: string,
+  original: Element,
+): Element {
+  const doc = original.ownerDocument || document;
+  const cls = original.getAttribute("class");
+  const id = original.getAttribute("id");
+  const width = original.getAttribute("width");
+
+  const sizeStyle = (el: HTMLElement, withAspect: boolean) => {
+    if (cls) el.setAttribute("class", cls);
+    if (id) el.setAttribute("id", id);
+    // 🆕 Marqueur : média RECONSTRUIT par FunnelFlow. Permet au CSS de rendu
+    // (#ff-media-fix) de NE PAS écraser ses dimensions (sinon le conteneur
+    // s'effondre à 0px car width/height:auto + parent de hauteur nulle).
+    el.setAttribute("data-ff-converted", type);
+    el.style.display = "block";
+    el.style.width = width ? `${width}px` : "100%";
+    el.style.maxWidth = "100%";
+    if (withAspect) {
+      el.style.aspectRatio = "16 / 9";
+      el.style.height = "auto";
+    }
+  };
+
+  const makeIframe = (): HTMLElement => {
+    const f = doc.createElement("iframe");
+    f.setAttribute("src", toEmbedUrl(src));
+    f.setAttribute("frameborder", "0");
+    f.setAttribute(
+      "allow",
+      "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+    );
+    f.setAttribute("allowfullscreen", "");
+    if (alt) f.setAttribute("title", alt);
+    sizeStyle(f, true);
+    f.style.border = "0";
+    return f;
+  };
+
+  if (type === "embed") return makeIframe();
+
+  if (type === "video") {
+    // Lien YouTube/Vimeo/Loom → iframe (illisible dans <video>).
+    if (isEmbeddableUrl(src)) return makeIframe();
+    const v = doc.createElement("video");
+    if (src) v.setAttribute("src", src);
+    v.setAttribute("controls", "");
+    v.setAttribute("playsinline", "");
+    v.setAttribute("preload", "metadata");
+    if (alt) v.setAttribute("title", alt);
+    sizeStyle(v, true);
+    v.style.background = "#000";
+    return v;
+  }
+
+  // image
+  const img = doc.createElement("img");
+  if (src) img.setAttribute("src", src);
+  if (alt) img.setAttribute("alt", alt);
+  if (width) img.setAttribute("width", width);
+  img.setAttribute("loading", "lazy");
+  sizeStyle(img, false);
+  img.style.height = "auto";
+  return img;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // applyRawHtmlPatches
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -248,33 +363,59 @@ export function applyRawHtmlPatches(
       }
     } else if (spot.kind === "image") {
       const patch = p.images?.[spot.id];
-      if (patch) {
-        // On capture l'ancien src AVANT toute modification, pour pouvoir
-        // propager le nouveau aux variantes responsive (desktop/tablet/mobile)
-        // qui partageaient la même URL d'origine.
-        const oldSrc = spot.element.getAttribute("src") || "";
+      const currentTag = spot.element.tagName.toLowerCase();
+      const desiredType = patch?.mediaType;
 
-        if (typeof patch.src === "string" && patch.src) {
-          spot.element.setAttribute("src", patch.src);
-          spot.element.removeAttribute("srcset");
-        }
-        if (typeof patch.alt === "string") {
-          spot.element.setAttribute("alt", patch.alt);
-        }
+      // Faut-il CONVERTIR la balise (ex: <img> → <video>/<iframe>) ?
+      const needsConversion =
+        !!desiredType &&
+        ((desiredType === "video" && currentTag !== "video") ||
+          (desiredType === "embed" && currentTag !== "iframe") ||
+          (desiredType === "image" && currentTag !== "img"));
 
-        // Propagation aux variantes responsive
-        if (typeof patch.src === "string" && patch.src && oldSrc) {
-          propagateImageSrcToResponsiveVariants(
-            root,
-            spot.element,
-            oldSrc,
-            patch.src,
-            typeof patch.alt === "string" ? patch.alt : undefined,
-          );
+      if (needsConversion) {
+        const newSrc =
+          typeof patch?.src === "string" && patch.src
+            ? patch.src
+            : spot.element.getAttribute("src") || "";
+        const newAlt =
+          typeof patch?.alt === "string"
+            ? patch.alt
+            : spot.element.getAttribute("alt") || "";
+        const replacement = buildMediaElement(
+          desiredType as MediaTypeChoice,
+          newSrc,
+          newAlt,
+          spot.element,
+        );
+        if (annotate) {
+          replacement.setAttribute("data-ff-spot-id", spot.id);
         }
-      }
-      if (annotate) {
-        spot.element.setAttribute("data-ff-spot-id", spot.id);
+        spot.element.replaceWith(replacement);
+      } else {
+        // Pas de conversion : patch src/alt en place (comportement existant).
+        if (patch) {
+          const oldSrc = spot.element.getAttribute("src") || "";
+          if (typeof patch.src === "string" && patch.src) {
+            spot.element.setAttribute("src", patch.src);
+            spot.element.removeAttribute("srcset");
+          }
+          if (typeof patch.alt === "string") {
+            spot.element.setAttribute("alt", patch.alt);
+          }
+          if (typeof patch.src === "string" && patch.src && oldSrc) {
+            propagateImageSrcToResponsiveVariants(
+              root,
+              spot.element,
+              oldSrc,
+              patch.src,
+              typeof patch.alt === "string" ? patch.alt : undefined,
+            );
+          }
+        }
+        if (annotate) {
+          spot.element.setAttribute("data-ff-spot-id", spot.id);
+        }
       }
     }
   }

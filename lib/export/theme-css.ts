@@ -2556,6 +2556,176 @@ const THEMES_CSS = `
   opacity: 0.55;
   animation: ff-decor-drift 28s ease-in-out infinite reverse;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PARITÉ APERÇU ↔ PUBLIC — overrides Clean Red & Luxe Ivoire + 6 nouveaux thèmes.
+   Déclarés APRÈS les blocs d'origine : l'ordre source fait gagner les overrides.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══ CLEAN RED (ex clean-dark, refonte) ═══ */
+.ff-page[data-ff-theme="clean-dark"] {
+  --ff-bg: #0B0305; --ff-surface: #1C0A0E; --ff-ink: #FFF3F4; --ff-ink-soft: #E4A9AE; --ff-muted: #7A4A50;
+  --ff-border: rgba(255,46,67,0.16); --ff-accent: #FF2E43; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(255,46,67,0.18); --ff-accent-card: rgba(255,46,67,0.08);
+  --ff-accent-glow: rgba(255,46,67,0.45); --ff-btn-glow-color: rgba(255,46,67,0.55);
+  --ff-font-heading: "Inter", system-ui, -apple-system, sans-serif;
+  --ff-heading-weight: 800; --ff-heading-tracking: -0.04em; --ff-heading-leading: 1.12;
+  --ff-btn-radius: 999px; --ff-btn-bg: linear-gradient(135deg, #FF2E43 0%, #C81E33 100%);
+  --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 12px 30px -10px rgba(255,46,67,0.55);
+  --ff-section-alt-1: rgba(255,46,67,0.06); --ff-section-alt-2: rgba(255,46,67,0.12); --ff-section-alt-border: rgba(255,46,67,0.28);
+  --ff-brand-bar-bg: #120406; --ff-brand-bar-ink: #FFF3F4; --ff-brand-bar-border: rgba(255,46,67,0.18);
+  --ff-footer-bg: #120406; --ff-footer-ink: rgba(255,243,244,0.55); --ff-footer-business-ink: #FFF3F4; --ff-footer-border: rgba(255,46,67,0.18);
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(255,46,67,0.28), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(255,46,67,0.22), transparent 30%),
+    radial-gradient(circle at 0% 100%, rgba(255,46,67,0.20), transparent 30%),
+    radial-gradient(circle at 100% 100%, rgba(255,46,67,0.26), transparent 32%),
+    linear-gradient(to bottom, #0B0305, #0B0305);
+}
+.ff-page[data-ff-theme="clean-dark"] .ff-card { background: #1C0A0E; border: 1px solid rgba(255,46,67,0.34); }
+.ff-page[data-ff-theme="clean-dark"] .ff-eyebrow { color: #FF6B78; }
+
+/* ═══ LUXE IVOIRE (ex coaching-premium, refonte) ═══ */
+.ff-page[data-ff-theme="coaching-premium"] {
+  --ff-bg: #F6F1E7; --ff-surface: #FFFFFF; --ff-ink: #1C1A17; --ff-ink-soft: #5A5249; --ff-muted: #9A9183;
+  --ff-border: rgba(28,26,23,0.12); --ff-accent: #9A7B3F; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(154,123,63,0.18); --ff-accent-card: rgba(154,123,63,0.08);
+  --ff-accent-glow: rgba(154,123,63,0.35); --ff-btn-glow-color: rgba(154,123,63,0.35);
+  --ff-font-heading: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --ff-font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 500; --ff-heading-tracking: -0.01em; --ff-heading-leading: 1.08;
+  --ff-btn-radius: 0px; --ff-btn-bg: #1C1A17; --ff-btn-ink: #F6F1E7; --ff-btn-shadow: none;
+  --ff-section-alt-1: rgba(154,123,63,0.05); --ff-section-alt-2: rgba(28,26,23,0.035); --ff-section-alt-border: rgba(28,26,23,0.12);
+  --ff-brand-bar-bg: #1C1A17; --ff-brand-bar-ink: #F6F1E7; --ff-brand-bar-border: rgba(154,123,63,0.25);
+  --ff-footer-bg: #1C1A17; --ff-footer-ink: rgba(246,241,231,0.6); --ff-footer-business-ink: #F6F1E7; --ff-footer-border: rgba(154,123,63,0.2);
+  background-image: none; background-color: #F6F1E7;
+}
+.ff-page[data-ff-theme="coaching-premium"] .ff-card { background: #FFFFFF; border: 1px solid rgba(28,26,23,0.10); }
+.ff-page[data-ff-theme="coaching-premium"] .ff-headline { font-style: normal; }
+.ff-page[data-ff-theme="coaching-premium"]::before { display: none; }
+.ff-page[data-ff-theme="coaching-premium"]::after { display: none; }
+.ff-page[data-ff-theme="coaching-premium"] .ff-eyebrow { color: #9A7B3F; text-transform: uppercase; letter-spacing: 0.28em; font-style: normal; }
+.ff-page[data-ff-theme="coaching-premium"] .ff-btn { text-transform: uppercase; letter-spacing: 0.18em; border-radius: 0; }
+
+/* ═══ EDITORIAL WARM ═══ */
+.ff-page[data-ff-theme="editorial-warm"] {
+  --ff-bg: #FBF7F1; --ff-surface: #FFFFFF; --ff-ink: #2B1D16; --ff-ink-soft: #6B5648; --ff-muted: #A99A8C;
+  --ff-border: rgba(43,29,22,0.12); --ff-accent: #C2410C; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(194,65,12,0.16); --ff-accent-card: rgba(194,65,12,0.06);
+  --ff-accent-glow: rgba(194,65,12,0.35); --ff-btn-glow-color: rgba(194,65,12,0.4);
+  --ff-font-heading: "Fraunces", "Playfair Display", Georgia, serif;
+  --ff-font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 500; --ff-heading-tracking: -0.01em; --ff-heading-leading: 1.1;
+  --ff-btn-radius: 12px; --ff-btn-bg: #C2410C; --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 12px 28px -10px rgba(194,65,12,0.45);
+  --ff-section-alt-1: rgba(194,65,12,0.07); --ff-section-alt-2: rgba(15,110,86,0.10); --ff-section-alt-border: rgba(43,29,22,0.14);
+  --ff-brand-bar-bg: #2B1D16; --ff-brand-bar-ink: #FBF7F1; --ff-brand-bar-border: rgba(194,65,12,0.25);
+  --ff-footer-bg: #2B1D16; --ff-footer-ink: rgba(251,247,241,0.6); --ff-footer-business-ink: #FBF7F1; --ff-footer-border: rgba(194,65,12,0.2);
+  background-color: #FBF7F1; background-image: none;
+}
+.ff-page[data-ff-theme="editorial-warm"] .ff-card { background: #FFFFFF; border: 1px solid rgba(43,29,22,0.10); }
+.ff-page[data-ff-theme="editorial-warm"] .ff-eyebrow { color: #0F6E56; text-transform: uppercase; letter-spacing: 0.18em; }
+
+/* ═══ AURORA GLOW ═══ */
+.ff-page[data-ff-theme="aurora-glow"] {
+  --ff-bg: #E7EAF7; --ff-surface: #FFFFFF; --ff-ink: #0F1031; --ff-ink-soft: #4B4E72; --ff-muted: #9094B8;
+  --ff-border: rgba(15,16,49,0.10); --ff-accent: #6D5DF6; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(109,93,246,0.16); --ff-accent-card: rgba(109,93,246,0.06);
+  --ff-accent-glow: rgba(109,93,246,0.4); --ff-btn-glow-color: rgba(109,93,246,0.5);
+  --ff-font-heading: "Space Grotesk", "Sora", "Inter", sans-serif;
+  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 600; --ff-heading-tracking: -0.03em; --ff-heading-leading: 1.12;
+  --ff-btn-radius: 12px; --ff-btn-bg: linear-gradient(135deg, #6D5DF6 0%, #0EA5E9 100%); --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 12px 30px -10px rgba(109,93,246,0.5);
+  --ff-section-alt-1: rgba(109,93,246,0.08); --ff-section-alt-2: rgba(14,165,233,0.10); --ff-section-alt-border: rgba(15,16,49,0.10);
+  --ff-brand-bar-bg: #0F1031; --ff-brand-bar-ink: #E7EAF7; --ff-brand-bar-border: rgba(109,93,246,0.25);
+  --ff-footer-bg: #0F1031; --ff-footer-ink: rgba(231,234,247,0.6); --ff-footer-business-ink: #E7EAF7; --ff-footer-border: rgba(109,93,246,0.2);
+  background-image:
+    radial-gradient(ellipse at 12% -10%, rgba(109,93,246,0.22), transparent 45%),
+    radial-gradient(ellipse at 95% 8%, rgba(14,165,233,0.18), transparent 45%),
+    radial-gradient(ellipse at 50% 118%, rgba(236,72,153,0.14), transparent 50%),
+    linear-gradient(to bottom, #E7EAF7, #E7EAF7);
+}
+.ff-page[data-ff-theme="aurora-glow"] .ff-card { background: #FFFFFF; border: 1px solid rgba(15,16,49,0.08); }
+.ff-page[data-ff-theme="aurora-glow"] .ff-eyebrow { color: #6D5DF6; text-transform: uppercase; letter-spacing: 0.14em; }
+
+/* ═══ ÉMERAUDE (mint-fresh) ═══ */
+.ff-page[data-ff-theme="mint-fresh"] {
+  --ff-bg: #EAF8F1; --ff-surface: #FFFFFF; --ff-ink: #08231A; --ff-ink-soft: #3C6B58; --ff-muted: #8FB6A6;
+  --ff-border: rgba(8,35,26,0.10); --ff-accent: #10B981; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(16,185,129,0.16); --ff-accent-card: rgba(16,185,129,0.06);
+  --ff-accent-glow: rgba(16,185,129,0.4); --ff-btn-glow-color: rgba(16,185,129,0.5);
+  --ff-font-heading: "Sora", "Inter", sans-serif; --ff-font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 600; --ff-heading-tracking: -0.02em; --ff-heading-leading: 1.12;
+  --ff-btn-radius: 14px; --ff-btn-bg: linear-gradient(135deg, #10B981 0%, #0EA5A4 100%); --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 12px 28px -10px rgba(16,185,129,0.5);
+  --ff-section-alt-1: rgba(16,185,129,0.07); --ff-section-alt-2: rgba(13,148,136,0.11); --ff-section-alt-border: rgba(8,35,26,0.10);
+  --ff-brand-bar-bg: #08231A; --ff-brand-bar-ink: #EAF8F1; --ff-brand-bar-border: rgba(16,185,129,0.25);
+  --ff-footer-bg: #08231A; --ff-footer-ink: rgba(234,248,241,0.6); --ff-footer-business-ink: #EAF8F1; --ff-footer-border: rgba(16,185,129,0.2);
+  background-image:
+    radial-gradient(ellipse at 10% -10%, rgba(16,185,129,0.16), transparent 45%),
+    radial-gradient(ellipse at 95% 110%, rgba(13,148,136,0.14), transparent 45%),
+    linear-gradient(to bottom, #EAF8F1, #EAF8F1);
+}
+.ff-page[data-ff-theme="mint-fresh"] .ff-card { background: #FFFFFF; border: 1px solid rgba(8,35,26,0.08); }
+.ff-page[data-ff-theme="mint-fresh"] .ff-eyebrow { color: #0E9F6E; text-transform: uppercase; letter-spacing: 0.14em; }
+
+/* ═══ COSMOS (cosmos-night) ═══ */
+.ff-page[data-ff-theme="cosmos-night"] {
+  --ff-bg: #0A0E27; --ff-surface: #141A3A; --ff-ink: #EDEBFF; --ff-ink-soft: #A7A6D6; --ff-muted: #5C5B8F;
+  --ff-border: rgba(139,92,246,0.18); --ff-accent: #8B5CF6; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(139,92,246,0.20); --ff-accent-card: rgba(139,92,246,0.10);
+  --ff-accent-glow: rgba(139,92,246,0.5); --ff-btn-glow-color: rgba(139,92,246,0.6);
+  --ff-font-heading: "Space Grotesk", "Sora", "Inter", sans-serif; --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 600; --ff-heading-tracking: -0.03em; --ff-heading-leading: 1.12;
+  --ff-btn-radius: 12px; --ff-btn-bg: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%); --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 14px 32px -10px rgba(139,92,246,0.6);
+  --ff-section-alt-1: rgba(139,92,246,0.08); --ff-section-alt-2: rgba(236,72,153,0.10); --ff-section-alt-border: rgba(139,92,246,0.22);
+  --ff-brand-bar-bg: #070A1C; --ff-brand-bar-ink: #EDEBFF; --ff-brand-bar-border: rgba(139,92,246,0.25);
+  --ff-footer-bg: #070A1C; --ff-footer-ink: rgba(237,235,255,0.55); --ff-footer-business-ink: #EDEBFF; --ff-footer-border: rgba(139,92,246,0.2);
+  background-image:
+    radial-gradient(ellipse at 8% -8%, rgba(139,92,246,0.30), transparent 42%),
+    radial-gradient(ellipse at 100% 6%, rgba(236,72,153,0.20), transparent 40%),
+    radial-gradient(ellipse at 50% 120%, rgba(56,189,248,0.16), transparent 48%),
+    linear-gradient(to bottom, #0A0E27, #0A0E27);
+}
+.ff-page[data-ff-theme="cosmos-night"] .ff-card { background: #141A3A; border: 1px solid rgba(139,92,246,0.22); }
+.ff-page[data-ff-theme="cosmos-night"] .ff-eyebrow { color: #B794F6; text-transform: uppercase; letter-spacing: 0.16em; }
+
+/* ═══ SUNSET (sunset-coral) ═══ */
+.ff-page[data-ff-theme="sunset-coral"] {
+  --ff-bg: #FFF1E8; --ff-surface: #FFFFFF; --ff-ink: #3A1408; --ff-ink-soft: #8A5240; --ff-muted: #C99884;
+  --ff-border: rgba(58,20,8,0.10); --ff-accent: #FB6F4C; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(251,111,76,0.16); --ff-accent-card: rgba(251,111,76,0.06);
+  --ff-accent-glow: rgba(251,111,76,0.45); --ff-btn-glow-color: rgba(251,111,76,0.55);
+  --ff-font-heading: "Sora", "Inter", sans-serif; --ff-font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 700; --ff-heading-tracking: -0.02em; --ff-heading-leading: 1.1;
+  --ff-btn-radius: 16px; --ff-btn-bg: linear-gradient(135deg, #FB6F4C 0%, #F4467E 100%); --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 0 14px 30px -10px rgba(251,111,76,0.55);
+  --ff-section-alt-1: rgba(251,111,76,0.08); --ff-section-alt-2: rgba(244,70,126,0.10); --ff-section-alt-border: rgba(58,20,8,0.10);
+  --ff-brand-bar-bg: #3A1408; --ff-brand-bar-ink: #FFF1E8; --ff-brand-bar-border: rgba(251,111,76,0.25);
+  --ff-footer-bg: #3A1408; --ff-footer-ink: rgba(255,241,232,0.6); --ff-footer-business-ink: #FFF1E8; --ff-footer-border: rgba(251,111,76,0.2);
+  background-image:
+    radial-gradient(ellipse at 0% -10%, rgba(251,111,76,0.22), transparent 45%),
+    radial-gradient(ellipse at 100% 110%, rgba(244,70,126,0.16), transparent 45%),
+    linear-gradient(to bottom, #FFF1E8, #FFF1E8);
+}
+.ff-page[data-ff-theme="sunset-coral"] .ff-card { background: #FFFFFF; border: 1px solid rgba(58,20,8,0.08); }
+.ff-page[data-ff-theme="sunset-coral"] .ff-eyebrow { color: #E2542F; text-transform: uppercase; letter-spacing: 0.14em; }
+
+/* ═══ BRUTALIST (neo-brutalist) ═══ */
+.ff-page[data-ff-theme="neo-brutalist"] {
+  --ff-bg: #FBF7EC; --ff-surface: #FFFFFF; --ff-ink: #14110A; --ff-ink-soft: #3F3A2C; --ff-muted: #8A8472;
+  --ff-border: #14110A; --ff-accent: #3B49F6; --ff-accent-ink: #FFFFFF;
+  --ff-accent-soft: rgba(59,73,246,0.16); --ff-accent-card: rgba(59,73,246,0.06);
+  --ff-accent-glow: rgba(59,73,246,0.4); --ff-btn-glow-color: rgba(20,17,10,0.9);
+  --ff-font-heading: "Archivo Black", "Inter", sans-serif; --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 800; --ff-heading-tracking: -0.02em; --ff-heading-leading: 1.05;
+  --ff-btn-radius: 0px; --ff-btn-bg: #3B49F6; --ff-btn-ink: #FFFFFF; --ff-btn-shadow: 4px 4px 0 #14110A;
+  --ff-section-alt-1: #FBF59B; --ff-section-alt-2: #C7F5E9; --ff-section-alt-border: #14110A;
+  --ff-brand-bar-bg: #FACC15; --ff-brand-bar-ink: #14110A; --ff-brand-bar-border: #14110A;
+  --ff-footer-bg: #14110A; --ff-footer-ink: rgba(251,247,236,0.7); --ff-footer-business-ink: #FBF7EC; --ff-footer-border: #14110A;
+  background-color: #FBF7EC; background-image: none;
+}
+.ff-page[data-ff-theme="neo-brutalist"] .ff-card { background: #FFFFFF; border: 2px solid #14110A; border-radius: 0; box-shadow: 5px 5px 0 #14110A; }
+.ff-page[data-ff-theme="neo-brutalist"] .ff-btn { border: 2px solid #14110A; border-radius: 0; box-shadow: 4px 4px 0 #14110A; }
+.ff-page[data-ff-theme="neo-brutalist"] .ff-eyebrow { color: #3B49F6; text-transform: uppercase; letter-spacing: 0.10em; }
+
 /* ─── Reassurance message (sous forms / popup) ─── */
 .ff-reassurance {
   margin-top: 0.75rem;
@@ -2593,6 +2763,21 @@ export function getFunnelThemeCss(): string {
     _cachedFullCss = `${BASE_CSS}\n${THEMES_CSS}\n${FULL_DOC_RESET}`;
   }
   return _cachedFullCss;
+}
+
+let _cachedNoResetCss: string | null = null;
+
+/**
+ * CSS du thème SANS le reset global (`body`, `html`, `*`, `img`).
+ * À utiliser quand le CSS doit rester scopé sous `.ff-page` et ne PAS fuiter
+ * vers la page hôte (ex : injection dans un éditeur/preview, export par blocs
+ * systeme.io). Tout est déjà préfixé `.ff-page` dans BASE_CSS/THEMES_CSS.
+ */
+export function getFunnelThemeCssNoGlobalReset(): string {
+  if (_cachedNoResetCss === null) {
+    _cachedNoResetCss = `${BASE_CSS}\n${THEMES_CSS}`;
+  }
+  return _cachedNoResetCss;
 }
 
 export function getScopedFunnelThemeCss(scopeClass: string): string {
@@ -2664,6 +2849,13 @@ const ALLOWED_THEMES = [
   "trust-pro",
   "lead-snap",
   "story-sell",
+  // Nouveaux / refondus — parité avec funnel-theme.css (aperçu).
+  "editorial-warm",
+  "aurora-glow",
+  "mint-fresh",
+  "cosmos-night",
+  "sunset-coral",
+  "neo-brutalist",
 ] as const;
 
 type ThemeId = typeof ALLOWED_THEMES[number];

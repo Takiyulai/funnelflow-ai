@@ -165,5 +165,15 @@ export type ParsedPageData = {
    * de la page source. Injecté dans chaque iframe raw-html pour fidélité visuelle.
    */
   globalHead: string;
+  /**
+   * 🆕 Phase 1A — Attributs du <body> source.
+   * $("body").html() ne garde QUE le contenu : la class/id/style du <body> sont
+   * perdus. Or beaucoup de tunnels (systeme.io, Webflow…) définissent leur fond
+   * via `body.maClasse{…}`, `#wrapper{…}` ou un style inline sur <body>. On les
+   * réapplique au <body> de l'iframe pour que ces règles s'appliquent.
+   */
+  bodyClass?: string;
+  bodyId?: string;
+  bodyStyle?: string;
 };
 

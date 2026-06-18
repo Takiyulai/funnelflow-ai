@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { Copy, Check, ExternalLink, Code2, ChevronDown, X, BookOpen, FileText, Layers } from "lucide-react";
 import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 import { useToast } from "@/components/ui/Toast";
+import { incrementExportCount } from "@/lib/store/statsStore";
 
 const SYSTEME_IO_DASHBOARD = "https://systeme.io/dashboard/funnels";
 
@@ -190,6 +191,7 @@ export function SystemeIoExportMenu({
     const ok = await copyToClipboard(currentMode, currentScope);
     setLoading(false);
     if (ok) {
+      incrementExportCount(); // 🆕 compteur d'exports (dashboard)
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
       const scopeLabel = currentScope === "all" ? "Tout le tunnel" : activePageLabel;

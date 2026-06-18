@@ -4,11 +4,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import { applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches";
+import { detectFeatures, buildFeatureRuntime } from "@/lib/clone/feature-modules";
 import type { FunnelSection } from "@/lib/funnels/types";
+
+type ClonedBody = {
+  className?: string;
+  id?: string;
+  style?: string;
+};
 
 type Props = {
   section: FunnelSection;
   clonedHead?: string;
+  /** 🆕 Phase 1A : attributs du <body> source (fond fidèle). */
+  clonedBody?: ClonedBody;
   editMode?: boolean;
   externalIframeRef?: React.MutableRefObject<HTMLIFrameElement | null>;
 };
@@ -16,6 +25,7 @@ type Props = {
 export function RawHtmlRenderer({
   section,
   clonedHead,
+  clonedBody,
   editMode,
   externalIframeRef,
 }: Props) {
@@ -44,7 +54,7 @@ export function RawHtmlRenderer({
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    iframe.srcdoc = wrapHtmlDocument(html, clonedHead, isEditMode, section.id);
+    iframe.srcdoc = wrapHtmlDocument(html, clonedHead, isEditMode, section.id, clonedBody);
 
     let observer: ResizeObserver | null = null;
 
@@ -56,7 +66,9 @@ export function RawHtmlRenderer({
           doc.documentElement.scrollHeight,
           doc.body?.scrollHeight ?? 0,
         );
-        if (h > 0) setIframeHeight(Math.min(12000, h));
+        // Phase 1A : plafond relevé 12000 → 60000 px pour les longs tunnels
+        // (VSL / sales pages) qui étaient coupés en bas.
+        if (h > 0) setIframeHeight(Math.min(60000, h));
       } catch {
         // CORS
       }
@@ -82,7 +94,16 @@ export function RawHtmlRenderer({
       iframe.removeEventListener("load", handleLoad);
       observer?.disconnect();
     };
-  }, [html, clonedHead, isEditMode, section.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    html,
+    clonedHead,
+    isEditMode,
+    section.id,
+    clonedBody?.className,
+    clonedBody?.id,
+    clonedBody?.style,
+  ]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -120,13 +141,19 @@ export function RawHtmlRenderer({
         height: `${iframeHeight * scale}px`,
         display: wrapperWidth >= 1200 ? "flex" : "block",
         justifyContent: "center",
-        backgroundColor: wrapperWidth >= 1200 ? "#000000" : "transparent",
+        // ⚠️ Correctif : plus de fond noir forcé. Le wrapper était peint en
+        // #000000 quand wrapperWidth >= 1200, et comme l'iframe scalée ne
+        // remplit pas toujours toute la zone, ce noir transparaissait derrière
+        // les sections à fond blanc → fonds incohérents dans l'éditeur.
+        // On laisse transparent pour que le fond réel du tunnel soit le seul visible.
+        backgroundColor: "transparent",
       }
     : {
         height: `${iframeHeight}px`,
         display: "block",
         backgroundColor: "transparent",
       };
+
 
   const iframeStyle: React.CSSProperties = isEditMode
     ? {
@@ -171,11 +198,25 @@ function extractRawHtml(body: string | undefined): string | null {
   return body.slice(RAW_HTML_BODY_MARKER.length);
 }
 
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildBodyTag(clonedBody: ClonedBody | undefined): string {
+  if (!clonedBody) return "<body>";
+  const attrs: string[] = [];
+  if (clonedBody.className) attrs.push(`class="${escapeAttr(clonedBody.className)}"`);
+  if (clonedBody.id) attrs.push(`id="${escapeAttr(clonedBody.id)}"`);
+  if (clonedBody.style) attrs.push(`style="${escapeAttr(clonedBody.style)}"`);
+  return attrs.length > 0 ? `<body ${attrs.join(" ")}>` : "<body>";
+}
+
 function wrapHtmlDocument(
   innerHtml: string,
   clonedHead: string | undefined,
   editMode: boolean,
   sectionId: string,
+  clonedBody?: ClonedBody,
 ): string {
   const head =
     clonedHead && clonedHead.trim().length > 0
@@ -198,7 +239,9 @@ function wrapHtmlDocument(
     overflow: hidden !important;
   }
   body > *:empty:last-child { display: none !important; }
-  body > div:not([class]):not([id]) { display: none !important; }
+  /* Parité avec le rendu public : on ne masque QUE les div vides sans
+     class/id (artefacts), pas les wrappers de fond qui ont du contenu. */
+  body > div:not([class]):not([id]):empty { display: none !important; }
 
   a, a[href] {
     pointer-events: auto !important;
@@ -447,6 +490,27 @@ function wrapHtmlDocument(
     aspect-ratio: auto !important;
     padding-bottom: 0 !important;
   }
+
+  /* 🆕 Phase 1B : média RECONSTRUIT (vidéo/iframe/embed). Doit GAGNER sur la
+     règle générique ci-dessus (même spécificité → placé après) pour ne pas
+     s'effondrer. On garde le ratio 16/9 et une vraie largeur. */
+  video[data-ff-converted],
+  iframe[data-ff-converted] {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    aspect-ratio: 16 / 9 !important;
+    object-fit: contain !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  img[data-ff-converted] {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
 </style>`;
 
   const editModeOnlyStyle = editMode
@@ -583,6 +647,50 @@ function wrapHtmlDocument(
       })(q, a);
       bound++;
     }
+
+    // 🆕 Fallback générique (markup systeme.io sans icône chevron) : on lie les
+    // éléments « question » (texte court terminé par ?) à leur réponse (bloc
+    // frère plus long), et on les replie par défaut → accordéon cliquable.
+    function findAnswerLenient(q){
+      var n = q.nextElementSibling;
+      while(n){
+        var nt = (n.textContent||'').trim();
+        if(nt.length >= 40) return n;
+        n = n.nextElementSibling;
+      }
+      // sinon : frère suivant du parent
+      var p = q.parentElement;
+      if(p && p.nextElementSibling){
+        var pt = (p.nextElementSibling.textContent||'').trim();
+        if(pt.length >= 40) return p.nextElementSibling;
+      }
+      return null;
+    }
+    var cands = document.querySelectorAll('p,div,h3,h4,h5,strong,span');
+    for(var j=0; j<cands.length; j++){
+      var cq = cands[j];
+      if(cq.getAttribute('data-ff-faq-question')==='true') continue;
+      if(cq.children.length > 3) continue;
+      var qt = (cq.textContent||'').trim();
+      if(!(qt.length > 4 && qt.length < 200 && /\\?\\s*$/.test(qt))) continue;
+      var ca = findAnswerLenient(cq);
+      if(!ca) continue;
+      var cat = (ca.textContent||'').trim();
+      if(!(cat.length >= 40 && cat.length > qt.length && cat !== qt)) continue;
+      cq.setAttribute('data-ff-faq-question','true');
+      cq.style.cursor = 'pointer';
+      setOpen(cq, ca, false);
+      (function(qq, aa){
+        qq.addEventListener('click', function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          var open = qq.getAttribute('data-ff-faq-open')==='true';
+          setOpen(qq, aa, !open);
+        });
+      })(cq, ca);
+      bound++;
+    }
+
     if(bound>0){
       try{ console.log('[FAQ-preview] bound', bound, 'questions'); }catch(e){}
     }
@@ -793,6 +901,7 @@ function wrapHtmlDocument(
           currentAlt = spot.getAttribute('title') || '';
           mediaType = 'embed';
         }
+        try { console.log('[FF media-click] tag=' + tag + ' | mediaType=' + mediaType + ' | spotId=' + spotId + ' | src=' + currentSrc); } catch (e) {}
         window.parent.postMessage({
           type: 'ff-edit-click',
           sectionId: SECTION_ID,
@@ -820,11 +929,21 @@ function wrapHtmlDocument(
       }
 
       if (spotId) {
-        // ─── Détection FAQ : la question a une icône chevron en enfant direct ───
+        // ─── Détection FAQ ───────────────────────────────────────────────
+        // 1) Chemin historique : icône chevron en enfant direct → réponse dans
+        //    le div frère suivant.
+        // 2) 🆕 Fallback générique (markup systeme.io sans chevron) : si la
+        //    question ressemble à une question (texte court terminé par « ? »),
+        //    on cherche la réponse = le PROCHAIN spot texte plus long, dans le
+        //    même conteneur d'item FAQ ou son frère suivant.
         var answerSpotId = null;
         var isFaqQuestion = false;
         try {
-          var chevron = spot.querySelector(':scope > i[class*="fa-chevron-circle"], :scope > i[class*="fa-chevron"]');
+          var chevron = spot.querySelector(
+            ':scope > i[class*="fa-chevron-circle"], :scope > i[class*="fa-chevron"], ' +
+            ':scope > i[class*="chevron"], :scope > i[class*="arrow"], ' +
+            ':scope > i[class*="plus"], :scope > svg'
+          );
           if (chevron) {
             var sib = spot.nextElementSibling;
             while (sib) {
@@ -837,6 +956,32 @@ function wrapHtmlDocument(
                 break;
               }
               sib = sib.nextElementSibling;
+            }
+          }
+
+          // Fallback heuristique
+          if (!answerSpotId) {
+            var qText = (spot.textContent || '').trim();
+            var looksLikeQuestion = qText.length > 4 && qText.length < 200 && /\?\s*$/.test(qText);
+            if (looksLikeQuestion) {
+              // Conteneur d'item FAQ : ancêtre proche au "look" FAQ, sinon parent.
+              var container = spot.closest('[class*="faq" i],[class*="accordion" i],[class*="question" i],[class*="toggle" i],[class*="collaps" i],[class*="item" i]') || spot.parentElement;
+              var scopes = [];
+              if (container) { scopes.push(container); if (container.nextElementSibling) scopes.push(container.nextElementSibling); }
+              for (var si = 0; si < scopes.length && !answerSpotId; si++) {
+                var spots = scopes[si].querySelectorAll('[data-ff-spot-id]');
+                for (var k = 0; k < spots.length; k++) {
+                  var cand = spots[k];
+                  if (cand === spot) continue;
+                  var ct = (cand.textContent || '').trim();
+                  // La réponse : plus longue que la question, et différente.
+                  if (ct.length >= 40 && ct.length > qText.length && ct !== qText) {
+                    answerSpotId = cand.getAttribute('data-ff-spot-id');
+                    isFaqQuestion = true;
+                    break;
+                  }
+                }
+              }
             }
           }
         } catch (err) {}
@@ -946,20 +1091,44 @@ function wrapHtmlDocument(
 })();
 </script>`;
 
+  // 🆕 Phase 1C : modules de features (détection au rendu → rétrocompatible
+  // avec les clones existants). FAQ reste géré par faqRuntimeScript ci-dessus ;
+  // les modules ajoutent WhatsApp flottant, header sticky, etc.
+  const features = detectFeatures(innerHtml);
+  const { css: featureCss, script: featureScript } = buildFeatureRuntime(
+    features,
+    { editMode },
+  );
+
+  // 🆕 Bug fond noir (généralisé) : sur beaucoup de pages clonées (ex. systeme.io),
+  // <html>/<body> sont TRANSPARENTS et seules certaines sections peignent leur
+  // propre fond. Dans un vrai navigateur, le fond transparent laisse voir le
+  // « canvas » par défaut = BLANC. Mais ici chaque section est isolée dans une
+  // iframe posée sur le thème SOMBRE de l'app → le fond paraissait noir et le
+  // texte noir devenait illisible. On rétablit donc le blanc par défaut du
+  // navigateur sur html/body. Placé AVANT clonedHead et SANS !important : c'est
+  // la priorité la plus basse → tout fond réellement capturé (`__ff-captured-page-bg`,
+  // en !important), toute règle du site, et tout fond de section le surchargent.
+  // N'a d'effet que lorsque rien d'autre ne peint le fond.
+  const defaultCanvasStyle = `<style id="ff-default-canvas">html,body{background-color:#ffffff;}</style>`;
+
   return `<!DOCTYPE html>
 <html>
 <head>
+${defaultCanvasStyle}
 ${head}
 ${desktopForceStyle}
 ${revealHiddenStyle}
 ${faqFixStyle}
 ${mediaFixStyle}
 ${editModeOnlyStyle}
+${featureCss}
 </head>
-<body>
+${buildBodyTag(clonedBody)}
 ${innerHtml}
 ${interactivityScript}
 ${faqRuntimeScript}
+${featureScript}
 </body>
 </html>`;
 }

@@ -22,6 +22,109 @@
   --ff-brand-blue: #08498D;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   🆕 MODE DARK (scopé à l'espace connecté via .ff-theme-dark sur le wrapper
+   d'AppShell). Les tunnels publics et les aperçus en iframe NE SONT PAS
+   affectés (ils sont hors de ce wrapper / dans des documents séparés).
+   On redéfinit les tokens, puis on rattrape les utilitaires littéraux les
+   plus courants (bg-white, bordures, ombres) pour faire flipper les cartes.
+   ───────────────────────────────────────────────────────────────────────── */
+.ff-theme-dark {
+  --ff-ink: #E6EDF7;        /* texte principal clair */
+  --ff-muted: #94A3B8;      /* texte secondaire */
+  --ff-line: #243049;       /* bordures discrètes */
+  --ff-canvas: #0B1220;     /* fond profond */
+  --ff-surface: #131C2E;    /* fond cartes */
+
+  color: var(--ff-ink);
+  background: var(--ff-canvas);
+  color-scheme: dark;
+}
+
+/* Cartes/surfaces écrites en blanc littéral → surface sombre. */
+.ff-theme-dark .bg-white { background-color: var(--ff-surface) !important; }
+.ff-theme-dark .bg-white\/95 { background-color: rgba(19, 28, 46, 0.95) !important; }
+.ff-theme-dark .bg-white\/90 { background-color: rgba(19, 28, 46, 0.90) !important; }
+.ff-theme-dark .bg-white\/80 { background-color: rgba(19, 28, 46, 0.80) !important; }
+.ff-theme-dark .bg-white\/70 { background-color: rgba(19, 28, 46, 0.70) !important; }
+
+/* Fonds doux clairs → variantes sombres translucides. */
+.ff-theme-dark .bg-slate-50,
+.ff-theme-dark .bg-gray-50,
+.ff-theme-dark .bg-slate-100,
+.ff-theme-dark .bg-gray-100 { background-color: rgba(255, 255, 255, 0.04) !important; }
+
+/* Textes sombres littéraux → texte clair. */
+.ff-theme-dark .text-slate-900,
+.ff-theme-dark .text-gray-900,
+.ff-theme-dark .text-slate-800,
+.ff-theme-dark .text-gray-800 { color: var(--ff-ink) !important; }
+.ff-theme-dark .text-slate-600,
+.ff-theme-dark .text-gray-600,
+.ff-theme-dark .text-slate-500,
+.ff-theme-dark .text-gray-500 { color: var(--ff-muted) !important; }
+
+/* Bordures claires littérales → bordure sombre. */
+.ff-theme-dark .border-slate-200,
+.ff-theme-dark .border-gray-200,
+.ff-theme-dark .border-slate-100,
+.ff-theme-dark .border-gray-100 { border-color: var(--ff-line) !important; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🆕 BRANDING DARK : remplacer le gris/blanc générique par les couleurs
+   FunnelFlow (or signature pour les « eyebrows », chips d'icônes teintés).
+   ───────────────────────────────────────────────────────────────────────── */
+/* Eyebrows (petits libellés MAJUSCULES espacés) → or doux signature. */
+.ff-theme-dark .uppercase.tracking-wider,
+.ff-theme-dark .uppercase.tracking-widest {
+  color: #D9BE6A;
+}
+/* Chips d'icônes des cartes : fonds pastel clairs → teintes de marque sombres. */
+.ff-theme-dark .bg-softBlue { background-color: rgba(8, 73, 141, 0.24) !important; }
+.ff-theme-dark .bg-softGreen { background-color: rgba(49, 132, 92, 0.24) !important; }
+.ff-theme-dark .bg-lightGold { background-color: rgba(199, 164, 54, 0.20) !important; }
+/* Icônes de marque plus lumineuses sur fond sombre. */
+.ff-theme-dark .text-navy { color: #7CB2EC !important; }
+.ff-theme-dark .text-green { color: #5FC495 !important; }
+.ff-theme-dark .text-gold { color: #E3C766 !important; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🆕 MICRO-INTERACTIONS au survol — SCOPÉES à l'espace app (.ff-app).
+   Les tunnels publics / aperçus (hors .ff-app) ne sont jamais affectés.
+   ───────────────────────────────────────────────────────────────────────── */
+.ff-app a[href],
+.ff-app button:not(:disabled),
+.ff-app [role="button"],
+.ff-app .shadow-card,
+.ff-app .ff-card-hover {
+  transition: transform 0.16s ease, box-shadow 0.18s ease,
+    background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.ff-app button:not(:disabled):hover { transform: translateY(-1px); }
+.ff-app button:not(:disabled):active { transform: translateY(0); }
+/* Cartes : léger soulèvement + halo de marque au survol. */
+.ff-app .shadow-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(8, 73, 141, 0.12);
+  border-color: rgba(199, 164, 54, 0.35);
+}
+.ff-theme-dark .shadow-card:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
+  border-color: rgba(199, 164, 54, 0.4);
+}
+/* Liens de navigation / éléments cliquables : accent or au survol. */
+.ff-app [role="button"]:hover { transform: translateY(-1px); }
+
+/* Éditeur email enrichi : placeholder + styles de contenu de base. */
+.ff-email-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--ff-muted);
+  pointer-events: none;
+}
+.ff-email-editor a { color: var(--ff-brand-blue); text-decoration: underline; }
+.ff-email-editor img { max-width: 100%; height: auto; }
+.ff-email-editor ul { padding-left: 1.25rem; list-style: disc; }
+
 * { box-sizing: border-box; }
 
 html, body {

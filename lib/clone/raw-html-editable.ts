@@ -32,6 +32,8 @@ export interface EditableImageSpot {
   id: string;                       // hash stable, ex: "img-c8b9d213"
   src: string;
   alt: string;
+  /** 🆕 Phase 1B : "image" | "video" | "embed" — détermine le flux d'édition. */
+  mediaType: "image" | "video" | "embed";
 }
 
 export interface RawHtmlInventory {
@@ -78,6 +80,7 @@ export function buildRawHtmlInventory(html: string): RawHtmlInventory {
         id: spot.id,
         src: spot.src,
         alt: spot.alt,
+        mediaType: spot.mediaType,
       });
     }
   }
@@ -101,36 +104,59 @@ export function detectRawHtmlBackground(html: string): DetectedBackground {
   const root = document.createElement("div");
   root.innerHTML = html;
 
-  // Cherche le premier conteneur "section" significatif.
-  // ⚠️ Pas de "> div" dans un querySelector — on tombe sur firstElementChild en fallback.
-  const candidate: Element | null =
-    root.querySelector("section, [data-section], .section, main, article") ||
-    root.firstElementChild;
+  // Depuis la Phase 1A, le fond réel est capturé au scraping et écrit en style
+  // inline (data-ff-bg-captured) sur la section ou un de ses wrappers. On
+  // inspecte donc une petite liste de candidats : la section explicite, la
+  // racine du fragment, et ses 1ers enfants — et on retient le premier fond
+  // significatif trouvé (image prioritaire sur couleur).
+  const candidates: Element[] = [];
+  const pushUnique = (el: Element | null | undefined) => {
+    if (el && !candidates.includes(el)) candidates.push(el);
+  };
 
-  if (!candidate) return { kind: "none" };
-
-  const style = (candidate.getAttribute("style") || "").toLowerCase();
-
-  // 1) background-image inline (url("..."))
-  const imgMatch = style.match(
-    /background(?:-image)?\s*:\s*[^;]*url\(\s*['"]?([^'")]+)['"]?\s*\)/i,
+  pushUnique(root.querySelector("[data-ff-bg-captured]"));
+  pushUnique(
+    root.querySelector("section, [data-section], .section, main, article"),
   );
-  if (imgMatch && imgMatch[1]) {
-    return { kind: "image", imageUrl: imgMatch[1] };
+  pushUnique(root.firstElementChild);
+  if (root.firstElementChild) {
+    Array.from(root.firstElementChild.children)
+      .slice(0, 4)
+      .forEach((c) => pushUnique(c));
   }
 
-  // 2) background-color inline
-  const colorMatch = style.match(/background(?:-color)?\s*:\s*([^;]+)/i);
-  if (colorMatch && colorMatch[1] && !/url\(/i.test(colorMatch[1])) {
-    const c = colorMatch[1].trim();
-    if (c && c !== "transparent" && c !== "none") {
-      return { kind: "color", color: c };
+  if (candidates.length === 0) return { kind: "none" };
+
+  let colorFallback: string | null = null;
+
+  for (const candidate of candidates) {
+    const style = (candidate.getAttribute("style") || "").toLowerCase();
+
+    // 1) background-image inline (url("..."))  → prioritaire, on retourne tout de suite
+    const imgMatch = style.match(
+      /background(?:-image)?\s*:\s*[^;]*url\(\s*['"]?([^'")]+)['"]?\s*\)/i,
+    );
+    if (imgMatch && imgMatch[1]) {
+      return { kind: "image", imageUrl: imgMatch[1] };
+    }
+
+    // 2) background-color inline → mémorisé comme fallback (au cas où un autre
+    //    candidat porterait une image)
+    if (!colorFallback) {
+      const colorMatch = style.match(/background(?:-color)?\s*:\s*([^;]+)/i);
+      if (colorMatch && colorMatch[1] && !/url\(/i.test(colorMatch[1])) {
+        const c = colorMatch[1].trim();
+        if (c && c !== "transparent" && c !== "none") {
+          colorFallback = c;
+        }
+      }
+      // 3) Attribut bgcolor legacy
+      const bg = candidate.getAttribute("bgcolor");
+      if (bg) colorFallback = colorFallback ?? bg;
     }
   }
 
-  // 3) Attribut bgcolor legacy
-  const bg = candidate.getAttribute("bgcolor");
-  if (bg) return { kind: "color", color: bg };
+  if (colorFallback) return { kind: "color", color: colorFallback };
 
   return { kind: "none" };
 }

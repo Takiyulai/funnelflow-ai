@@ -94,7 +94,9 @@ const briefSchema = z.object({
       "thank-you",
     ])
     .optional(),
-  creationMode: z.enum(["guided", "free"]).optional(),
+  creationMode: z.enum(["guided", "free", "express"]).optional(),
+  businessPrompt: z.string().optional(),
+  pageCount: z.number().int().min(1).max(12).optional(),
   templateId: z.string().optional(),
   moodId: z
     .enum(["premium-calm", "modern-minimal", "energetic", "institutional-trust", "creative-warm"])
@@ -104,6 +106,8 @@ const briefSchema = z.object({
   logoUrl: z.string().optional(),
   videoUrl: z.string().optional(),
   aboutText: z.string().optional(),
+  // 🆕 Palier 1 paiement : lien de paiement externe de l'offre.
+  paymentUrl: z.string().optional(),
 
   medias: z.array(mediaItemSchema).optional(),
   copywritingPrefs: copywritingPrefsSchema.optional(),

@@ -29,7 +29,11 @@ import type {
 import type { FunnelSectionType } from "@/lib/funnels/types";
 
 const MIN_BLOCK_TEXT_LENGTH = 30;
-const MAX_RAW_HTML_LENGTH = 50_000;
+// ⚠️ Phase 1A : relevé de 50 000 → 2 000 000 pour ne plus tronquer les gros
+// tunnels (VSL/long sales pages). N'est actif que dans le chemin multi-sections
+// (désactivé) ; le mode single-iframe prend tout le <body>. Conservé comme
+// garde-fou pour une éventuelle réactivation.
+const MAX_RAW_HTML_LENGTH = 2_000_000;
 
 /**
  * Point d'entrée principal.
@@ -70,7 +74,11 @@ export function parsePage(
   //   - pas de doublons natifs/raw-html
   //   - hauteur exacte de la page source
   // Inconvénient : non éditable par section. À reclassifier en Phase 2 (AI).
-  const bodyHtml = $("body").html() ?? "";
+  const $body = $("body");
+  const bodyHtml = $body.html() ?? "";
+  const bodyClass = ($body.attr("class") || "").trim() || undefined;
+  const bodyId = ($body.attr("id") || "").trim() || undefined;
+  const bodyStyle = ($body.attr("style") || "").trim() || undefined;
   const singleSection: ClonedSection = {
     kind: "raw-html",
     html: bodyHtml,
@@ -108,6 +116,9 @@ export function parsePage(
     typography,
     mediaAssets,
     globalHead,
+    bodyClass,
+    bodyId,
+    bodyStyle,
   };
 }
 
@@ -671,10 +682,13 @@ function captureGlobalHead($: cheerio.CheerioAPI, sourceUrl: string): string {
     parts.push(`<style>${css}</style>`);
   });
 
-  // 4. Reset minimal pour éviter scrollbars dans iframe
+  // 4. Reset minimal pour éviter scrollbars dans iframe.
+  // ⚠️ Phase 1A : on NE force PLUS 'body { background: transparent }' — c'était
+  // la cause racine du fond perdu. Le fond réel vient désormais soit des
+  // feuilles de style source (conservées ci-dessus), soit du <style
+  // id="__ff-captured-page-bg"> injecté au scraping (en !important).
   parts.push(`<style>
     html, body { margin: 0; padding: 0; overflow-x: hidden; }
-    body { background: transparent; }
     img, video { max-width: 100%; height: auto; }
     a { pointer-events: none; cursor: default; }
   </style>`);

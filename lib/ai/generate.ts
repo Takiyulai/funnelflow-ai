@@ -204,8 +204,15 @@ export function placeMediasIntoSections(
     if (placeholderImg) {
       const real = mediasById.get(placeholderImg);
       if (real) {
-        attachMediaToSection(section, real);
-        alreadyPlaced.add(real.id || real.url || placeholderImg);
+        const realRef = real.id || real.url || placeholderImg;
+        // Anti-duplication : un même média ne doit pas se retrouver sur
+        // plusieurs sections (l'IA réutilise parfois le même [uploaded-id]).
+        if (alreadyPlaced.has(realRef)) {
+          section.image = { mode: "none" };
+        } else {
+          attachMediaToSection(section, real);
+          alreadyPlaced.add(realRef);
+        }
         continue;
       }
     }
@@ -270,7 +277,12 @@ export function placeMediasIntoSections(
         );
         continue;
       }
-      const newSection = createSectionWithMedia(targetType, media);
+      // 🆕 Jamais deux hero : si la cible est "hero" mais qu'un hero existe
+      // déjà (avec média), on crée une section "about" à la place.
+      const heroExists = result.some((s) => s.type === "hero");
+      const createType: FunnelSectionType =
+        targetType === "hero" && heroExists ? "about" : targetType;
+      const newSection = createSectionWithMedia(createType, media);
       const heroIdx = result.findIndex((s) => s.type === "hero");
       if (heroIdx >= 0) {
         result.splice(heroIdx + 1, 0, newSection);
@@ -456,10 +468,13 @@ function pickFallbackAllowedSection(
   allowed: readonly FunnelSectionType[],
 ): FunnelSectionType {
   const kind = media.kind || "image";
+  // 🆕 Pour une IMAGE, on préfère HERO/about (visuel principal) AVANT
+  // testimonials : une image uploadée (ex. « photo du coach ») doit atterrir
+  // dans le hero/à-propos, pas comme avatar de témoignage par défaut.
   const preferences: FunnelSectionType[] =
     kind === "video"
       ? ["video", "hero", "about", "testimonials"]
-      : ["about", "testimonials", "proof", "hero", "pricing"];
+      : ["about", "hero", "proof", "pricing", "testimonials"];
   for (const pref of preferences) {
     if (allowed.includes(pref)) return pref;
   }
@@ -483,6 +498,35 @@ export function enforceHeroSingleMedia(
   const hero = { ...result[heroIdx] };
   const hasImage = Boolean(hero.image?.url || hero.image?.mediaRef);
   const hasVideo = Boolean(hero.video?.url);
+
+  // 🆕 Tunnel VIDÉO ("prefer-video") : une image SEULE dans le hero n'a rien à y
+  // faire (le hero est réservé à la vidéo / au formulaire). On la déplace vers
+  // about/preuve plutôt que de la laisser remplacer la vidéo attendue.
+  if (policy === "prefer-video" && hasImage && !hasVideo) {
+    const movedImg: MediaItem = {
+      id: `moved_${Date.now()}`,
+      kind: "image",
+      url: hero.image?.url || hero.image?.mediaRef || "",
+      alt: hero.image?.alt || "",
+    };
+    hero.image = { mode: "none" };
+    result[heroIdx] = hero;
+
+    const allowedImg = getAllowedSectionTypes(opts.funnelKind, opts.role);
+    let moveTo: FunnelSectionType = "about";
+    if (allowedImg && !allowedImg.includes(moveTo)) {
+      moveTo = pickFallbackAllowedSection(movedImg, allowedImg);
+    }
+    const target = result.find(
+      (s, i) => i !== heroIdx && s.type === moveTo && !hasMediaAttached(s),
+    );
+    if (target) {
+      attachMediaToSection(target, movedImg);
+    } else if (!allowedImg || allowedImg.includes(moveTo)) {
+      result.splice(heroIdx + 1, 0, createSectionWithMedia(moveTo, movedImg));
+    }
+    return result;
+  }
 
   if (!(hasImage && hasVideo)) return result;
 
@@ -1956,11 +2000,23 @@ function buildFallbackPricingItems(brief: FunnelBrief): SectionItem[] {
         features,
         highlighted: false,
         badge: undefined,
-        cta: {
-          label: ctaLabel,
-          mode: "anchor",
-          anchorId: "lead-form",
-        },
+        // 🆕 Palier 1 paiement : si l'offre est payante ET qu'un lien de
+        // paiement a été fourni, le CTA REDIRIGE vers ce lien (Stripe Payment
+        // Link, systeme.io…). Sinon, comportement historique : ancre vers le
+        // formulaire de lead.
+        cta:
+          !free && brief.paymentUrl && brief.paymentUrl.trim().length > 0
+            ? {
+                label: ctaLabel,
+                mode: "redirect" as const,
+                url: brief.paymentUrl.trim(),
+                target: "_blank" as const,
+              }
+            : {
+                label: ctaLabel,
+                mode: "anchor" as const,
+                anchorId: "lead-form",
+              },
       },
     },
   ];
@@ -2782,6 +2838,178 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
 // ─────────────────────────────────────────────────────────────────────────────
 // Génération multi-pages (fonction principale)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Copywriting expert : CTA canonique par type de tunnel + directives transverses.
+// ─────────────────────────────────────────────────────────────────────────────
+function canonicalCtaLabel(kind: string, lang: Language): string {
+  const map: Record<string, { fr: string; en: string; es: string }> = {
+    "lead-magnet": { fr: "Recevoir le guide gratuit", en: "Get the free guide", es: "Recibir la guía gratis" },
+    "digital-product": { fr: "Obtenir l'accès maintenant", en: "Get instant access", es: "Obtener acceso ahora" },
+    "coaching-high-ticket": { fr: "Réserver mon appel", en: "Book my call", es: "Reservar mi llamada" },
+    "booking": { fr: "Réserver mon créneau", en: "Book my slot", es: "Reservar mi cita" },
+    "webinar": { fr: "Réserver ma place", en: "Save my seat", es: "Reservar mi plaza" },
+    "challenge": { fr: "Rejoindre le challenge", en: "Join the challenge", es: "Unirme al reto" },
+  };
+  const e = map[kind] ?? map["lead-magnet"];
+  return lang === "en" ? e.en : lang === "es" ? e.es : e.fr;
+}
+
+function copyDirectives(lang: Language): string {
+  if (lang === "en" || lang === "es") {
+    return (
+      `\n\nSENIOR DIRECT-RESPONSE COPYWRITING DIRECTIVES (10+ years) — write to SELL, lead with emotion:\n` +
+      `- BENEFITS = emotional TRANSFORMATIONS (the before→after the client lives), never technical features. Forbidden as benefits: "mobile compatible", "lifetime updates", "instant access". Each benefit names a real pain removed and the new reality gained.\n` +
+      `- SECTION LABELS/eyebrows are client-oriented and benefit-led. Forbidden: "Our offer", "Your offer", "Our services", "Pricing". Use desire-driven labels (e.g. before pricing: "Ready to finally sleep through the night?").\n` +
+      `- FAQ lifts REAL buying OBJECTIONS (price worth it?, no time, "will it work for me/my case?", fear of failure, guarantee, effort required), each answer reframes toward action. No descriptive feature questions.\n` +
+      `- Each section CTA fits its role: hero = main offer; pricing/offer = buy ("Get access", "Order now"); faq = back to the form/CTA; guarantee = reassure then act; proof = lead into the main CTA. Never "Learn more".\n` +
+      `- EVERY pricing card has its OWN clickable CTA. Pricing inclusions pair each concrete item with the outcome it unlocks.\n` +
+      `- One message per section, credible promise (no hype), same product name/promise/tone throughout.`
+    );
+  }
+  return (
+    `\n\nDIRECTIVES DE COPYWRITING (copywriter direct-response sénior, 10+ ans) — écris pour VENDRE, guidé par l'émotion :\n` +
+    `- LES BÉNÉFICES = des TRANSFORMATIONS émotionnelles (l'avant→après que vit le client), JAMAIS des features techniques. Interdits comme bénéfices : "compatible mobile", "mises à jour à vie", "accès immédiat", "garantie 30 jours". Chaque bénéfice nomme une douleur réelle supprimée et la nouvelle réalité gagnée (ex. "Des nuits complètes enfin retrouvées, sans culpabiliser").\n` +
+    `- LES LABELS/eyebrows de section sont orientés CLIENT et bénéfice. INTERDITS : "Votre offre", "Notre offre", "Nos services", "Tarifs" tout court. Utilise des accroches de désir (ex. avant le pricing : "Prêt à retrouver des nuits paisibles ?").\n` +
+    `- LA FAQ lève les VRAIES OBJECTIONS d'achat (le prix en vaut-il la peine ? je n'ai pas le temps, "est-ce que ça marche pour MON cas ?", peur d'échouer, garantie, effort demandé). Chaque réponse rassure et ramène vers l'action. Pas de questions descriptives de features.\n` +
+    `- Chaque CTA de section colle à son rôle : hero = offre principale ; pricing/offer = achat ("Je commande", "Obtenir l'accès") ; faq = retour au formulaire/CTA ; garantie = rassurer puis agir ; preuve/témoignages = enchaîner vers le CTA. Jamais "En savoir plus".\n` +
+    `- CHAQUE carte de pricing a SON bouton CTA. Dans le pricing, chaque inclusion concrète est reliée au résultat qu'elle débloque (pas une simple liste technique).\n` +
+    `- Un seul message par section, promesse crédible (pas de survente), même nom de produit/promesse/ton partout.`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Framework de copywriting SPÉCIFIQUE au type de tunnel (page principale).
+// Chaque type de page a sa structure persuasive éprouvée + une exigence de
+// profondeur (les pages principales doivent être riches, jamais avares).
+// ─────────────────────────────────────────────────────────────────────────────
+function copyFramework(kind: string, lang: Language): string {
+  const fr: Record<string, string> = {
+    "digital-product":
+      `PAGE DE VENTE — applique CETTE structure de copywriting direct-response, DÉTAILLÉE :\n` +
+      `1) ACCROCHE (hero) : promesse forte centrée sur la transformation + sous-titre (pour qui + résultat concret).\n` +
+      `2) PROBLÈME : nomme la douleur réelle et quotidienne du prospect (frustrations, échecs passés).\n` +
+      `3) AMPLIFICATION : conséquences si rien ne change (coût émotionnel, temps, argent perdus).\n` +
+      `4) SOLUTION : présente le produit comme le pont vers le résultat (mécanisme unique).\n` +
+      `5) BÉNÉFICES : 4 à 6 transformations concrètes (avant→après), orientées résultat.\n` +
+      `6) PREUVE : témoignages crédibles + résultats chiffrés si possible.\n` +
+      `7) OFFRE : ce qui est inclus (relié au résultat), prix, garantie, urgence légitime.\n` +
+      `8) OBJECTIONS (FAQ) : 5 à 6 vraies objections d'achat levées.\n` +
+      `9) CTA d'achat clair, répété aux moments clés.`,
+    "lead-magnet":
+      `PAGE DE CAPTURE — structure :\n` +
+      `1) ACCROCHE : le bénéfice n°1 du lead magnet (résultat rapide et désirable).\n` +
+      `2) MICRO-PROBLÈME : la difficulté précise que le lead magnet résout.\n` +
+      `3) CE QU'IL CONTIENT : 3 à 5 points concrets (ce que la personne saura/pourra faire après).\n` +
+      `4) CRÉDIBILITÉ : preuve courte (pourquoi te faire confiance).\n` +
+      `5) FORMULAIRE simple + réassurance (pas de spam). Reste concis mais convaincant, focalisé sur l'inscription.`,
+    "coaching-high-ticket":
+      `PAGE HAUT DE GAMME (candidature/appel) — structure :\n` +
+      `1) ACCROCHE aspirationnelle (la transformation visée).\n` +
+      `2) POUR QUI c'est / pour qui ce n'est PAS (qualification).\n` +
+      `3) PROBLÈME + pourquoi les solutions classiques échouent.\n` +
+      `4) LA MÉTHODE / l'accompagnement (process en étapes claires).\n` +
+      `5) RÉSULTATS clients (preuve forte).\n` +
+      `6) CADRE / garantie + ce qui est inclus.\n` +
+      `7) CTA : RÉSERVER UN APPEL (qualification), jamais un achat impulsif. Ton premium, crédible, sans survente.`,
+    webinar:
+      `PAGE D'INSCRIPTION WEBINAIRE — structure :\n` +
+      `1) ACCROCHE : la grande promesse du webinaire (ce qu'ils repartiront en sachant faire).\n` +
+      `2) CE QUE TU VAS APPRENDRE : 3 points clés.\n` +
+      `3) POUR QUI c'est.\n` +
+      `4) L'ANIMATEUR : crédibilité (qui, pourquoi l'écouter).\n` +
+      `5) DATE/HEURE + urgence (places limitées / replay limité).\n` +
+      `6) CTA : RÉSERVER SA PLACE. Si une vidéo est fournie, place-la en teaser près du hero.`,
+    booking:
+      `PAGE DE PRISE DE RENDEZ-VOUS — structure :\n` +
+      `1) ACCROCHE : le résultat concret de l'appel/du service.\n` +
+      `2) PROBLÈME + pour qui.\n` +
+      `3) COMMENT ÇA SE PASSE (déroulé de l'appel/service).\n` +
+      `4) PREUVE (clients, résultats).\n` +
+      `5) RÉASSURANCE (sans engagement / gratuit).\n` +
+      `6) CTA : RÉSERVER UN CRÉNEAU.`,
+    challenge:
+      `PAGE DE CHALLENGE — structure :\n` +
+      `1) ACCROCHE : ce qu'ils vont accomplir en X jours.\n` +
+      `2) LE PROBLÈME que le challenge règle.\n` +
+      `3) LE PROGRAMME jour par jour (aperçu).\n` +
+      `4) LA COMMUNAUTÉ / l'accompagnement.\n` +
+      `5) PREUVE + urgence (date de démarrage).\n` +
+      `6) CTA : REJOINDRE LE CHALLENGE.`,
+  };
+
+  const block =
+    fr[kind] ??
+    `PAGE PRINCIPALE — structure persuasive : Accroche → Problème → Amplification → ` +
+      `Solution → Bénéfices (transformations) → Preuve → Offre → Objections → CTA.`;
+
+  const depth =
+    `\nPROFONDEUR : la page principale doit être RICHE et complète — sous-textes développés (2 à 4 phrases), ` +
+    `titres percutants, aucune section vide ou avare, aucun texte générique de remplissage. ` +
+    `Chaque élément doit faire avancer le prospect vers l'action.`;
+
+  if (lang === "en" || lang === "es") {
+    return (
+      `\n\nPAGE-TYPE COPY FRAMEWORK ("${kind}"): follow a proven direct-response structure ` +
+      `(Hook → Problem → Amplification → Solution → Benefits as transformations → Proof → Offer → Objections → CTA), ` +
+      `adapted to this page type. The main page must be RICH and detailed — developed sub-copy (2-4 sentences), ` +
+      `punchy headlines, no empty or filler sections.`
+    );
+  }
+  return `\n\nFRAMEWORK DE COPY (type "${kind}") :\n${block}${depth}`;
+}
+
+// Directives de mise en page & d'usage des médias (anticipe les cas vidéo).
+function layoutDirectives(kind: string, lang: Language): string {
+  const isVideoKind = kind === "webinar" || kind === "vsl";
+  if (lang === "en" || lang === "es") {
+    return (
+      `\n\nLAYOUT & MEDIA: group lists into designed blocks (icon cards, numbered steps, columns), ` +
+      `never a raw bullet list; vary formats between sections. Present "about" as a split (text + visual) when an image exists.` +
+      (isVideoKind
+        ? ` This is a VIDEO funnel: the hero features the VIDEO (text + video + CTA stacked); ` +
+          `never put an uploaded image in place of the hero video — images go to about/proof.`
+        : "")
+    );
+  }
+  return (
+    `\n\nMISE EN PAGE & MÉDIAS :\n` +
+    `- Regroupe les listes en BLOCS conçus (cards à icône, étapes numérotées, ou colonnes), jamais une longue liste à puces brute ; varie les formats entre sections.\n` +
+    `- "about" : présente-le de préférence en SPLIT (texte d'un côté, visuel/photo de l'autre) si une image est disponible.` +
+    (isVideoKind
+      ? `\n- Tunnel VIDÉO (webinaire/VSL) : le hero met en avant la VIDÉO (texte + vidéo + CTA empilés) ; ` +
+        `n'utilise JAMAIS une image uploadée à la place de la vidéo du hero — les images vont dans about/preuve.`
+      : "")
+  );
+}
+
+// CTA de "chaîne" : l'action attendue sur les pages secondaires (≠ CTA de la home).
+function chainCtaGuidance(kind: string, lang: Language): string {
+  const fr: Record<string, string> = {
+    "lead-magnet":
+      `CTA DE CHAÎNE : sur la page de remerciement, le CTA n'est PAS « s'inscrire » mais l'étape suivante — ` +
+      `accéder au contenu / rejoindre le groupe, ou découvrir l'offre payante.`,
+    "digital-product":
+      `CTA DE CHAÎNE : sur la page de remerciement, le CTA mène à la livraison / l'espace membre ` +
+      `(« Accéder à mon espace »), jamais « acheter ».`,
+    "coaching-high-ticket":
+      `CTA DE CHAÎNE : sur merci/confirmation, le CTA prépare l'appel (« Préparer mon appel », ajouter au calendrier).`,
+    webinar:
+      `CTA DE CHAÎNE : page de confirmation d'inscription → « Ajouter au calendrier » ou rejoindre le groupe ; ` +
+      `page replay → CTA principal d'achat/réservation.`,
+    booking:
+      `CTA DE CHAÎNE : sur merci → « Ajouter au calendrier » / préparer le rendez-vous.`,
+    challenge:
+      `CTA DE CHAÎNE : sur merci → « Rejoindre le groupe du challenge ».`,
+  };
+  const block =
+    fr[kind] ??
+    `CTA DE CHAÎNE : sur les pages secondaires, le CTA engage vers l'étape SUIVANTE du parcours, jamais le même que la home.`;
+  if (lang === "en" || lang === "es") {
+    return `\nCHAIN CTA: on secondary pages, the CTA must drive the NEXT step of the journey, never repeat the home CTA.`;
+  }
+  return `\n${block}`;
+}
+
 export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise<Funnel> {
 
   if (!process.env.OPENAI_API_KEY) {
@@ -2805,7 +3033,14 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   const homeRole = getHomeRoleForKind(normalizedKind);
   const mainBlueprint =
     blueprints.find((b) => b.role === homeRole) ?? blueprints[0];
-  const secondaryBlueprints = blueprints.filter((b) => b !== mainBlueprint);
+  let secondaryBlueprints = blueprints.filter((b) => b !== mainBlueprint);
+
+  // Express IA : on cale le nombre de pages sur le choix de l'utilisateur
+  // (1 = page principale seule ; N = page principale + (N-1) pages secondaires).
+  if (brief.creationMode === "express" && typeof brief.pageCount === "number") {
+    const extra = Math.max(0, brief.pageCount - 1);
+    secondaryBlueprints = secondaryBlueprints.slice(0, extra);
+  }
 
   const template =
     getPremiumTemplate(brief.templateId) ??
@@ -2817,6 +3052,13 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   );
 
   const ctaInstruction = buildCtaInstruction(brief.language, brief);
+
+  // Express IA : description libre de l'utilisateur, à utiliser en priorité.
+  const businessContext =
+    brief.businessPrompt && brief.businessPrompt.trim().length > 0
+      ? `\n\nCONTEXTE LIBRE FOURNI PAR L'UTILISATEUR (source de vérité prioritaire pour l'offre, l'audience, le ton, la promesse et le copywriting) :\n"""\n${brief.businessPrompt.trim()}\n"""\n`
+      : "";
+
   const videoMediaItem = videoUrlToMediaItem(brief.videoUrl);
   const briefMediasWithVideo: MediaItem[] = [
     ...(brief.medias ?? []),
@@ -2836,37 +3078,13 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
         : undefined,
       videoUrl: brief.videoUrl,
       brief,
-    }) + ctaInstruction;
+    }) + ctaInstruction + businessContext + copyDirectives(brief.language) + copyFramework(normalizedKind, brief.language) + layoutDirectives(normalizedKind, brief.language);
 
   const mainPromise = callOpenAI({
     systemMessage: SYSTEM_MESSAGE_FUNNEL,
     userPrompt: mainPromptText,
     maxTokens: 4000,
   });
-
-  let secondaryPromise: Promise<string | null> = Promise.resolve(null);
-  if (secondaryBlueprints.length > 0) {
-    const secondaryPromptText =
-      secondaryPagesPrompt({
-        brand: brief.brandName,
-        offer: brief.offerName,
-        funnelKind: normalizedKind,
-        language: brief.language,
-        pages: secondaryBlueprints.map((bp) => ({
-          role: bp.role,
-          slug: bp.slug,
-          name: bp.name,
-        })),
-        medias: toMediaInputs(briefMediasWithVideo),
-        videoUrl: brief.videoUrl,
-        brief,
-      }) + ctaInstruction;
-    secondaryPromise = callOpenAI({
-      systemMessage: SYSTEM_MESSAGE_FUNNEL,
-      userPrompt: secondaryPromptText,
-      maxTokens: 3500,
-    });
-  }
 
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Timeout AI")), 75000),
@@ -2887,21 +3105,6 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       "Le serveur AI a mis trop de temps à répondre. Réessayez avec un brief plus court ou vérifiez votre connexion.",
       err instanceof Error ? err.message : String(err),
     );
-  }
-
-  if (secondaryBlueprints.length > 0) {
-    try {
-      secondaryRawText = (await Promise.race([
-        secondaryPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000)),
-      ])) as string | null;
-    } catch (secErr) {
-      console.warn(
-        "[generateMultiPageFunnelWithAI] Échec non-bloquant des pages secondaires:",
-        secErr,
-      );
-      secondaryRawText = null;
-    }
   }
 
   const rawMainJson = JSON.parse(extractJsonPayload(mainRawText));
@@ -2955,6 +3158,64 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
 
   const sectionsByRole = new Map<PageRole, FunnelSection[]>();
   sectionsByRole.set(mainBlueprint.role, mainSections);
+
+  // ── Pages secondaires : génération SÉQUENTIELLE pour cohérence avec la home ──
+  // La home est déjà générée : on en extrait le copy clé (titre, promesse, CTA)
+  // et on l'impose au prompt secondaire pour éviter toute divergence de ton,
+  // de nom de produit ou de CTA, et toute répétition de sections.
+  if (secondaryBlueprints.length > 0) {
+    const mainHero = mainSections.find((s) => s.type === "hero");
+    const heroHeadline = (mainHero?.headline ?? "").trim();
+    const heroSub = (mainHero?.subheadline ?? "").trim();
+    const primaryCtaLabel =
+      brief.primaryCta?.label ?? canonicalCtaLabel(normalizedKind, brief.language);
+
+    const coherenceBlock =
+      `\n\nCOHÉRENCE OBLIGATOIRE AVEC LA PAGE PRINCIPALE DÉJÀ GÉNÉRÉE :\n` +
+      `- Marque : "${brief.brandName}" — Offre/produit : "${brief.offerName}"\n` +
+      (heroHeadline ? `- Titre de la home : "${heroHeadline}"\n` : "") +
+      (heroSub ? `- Promesse de la home : "${heroSub}"\n` : "") +
+      `- CTA PRINCIPAL DU TUNNEL (réutilise EXACTEMENT ce libellé et cette intention sur toutes les pages) : "${primaryCtaLabel}"\n` +
+      `Reprends le même nom de produit, le même ton et le même vocabulaire que la home. ` +
+      `Les pages secondaires sont une SUITE logique, JAMAIS une répétition : n'y remets PAS ` +
+      `les sections déjà présentes sur la home (pas de FAQ, "about", liste de bénéfices ni pricing en double). ` +
+      `Chaque page joue son rôle : "merci"/"confirmation" rassure et annonce la prochaine étape ; ` +
+      `"replay"/"watch" donne l'accès et pousse vers le CTA principal ; "optin" reste minimale (promesse + capture).` +
+      chainCtaGuidance(normalizedKind, brief.language);
+
+    const secondaryPromptText =
+      secondaryPagesPrompt({
+        brand: brief.brandName,
+        offer: brief.offerName,
+        funnelKind: normalizedKind,
+        language: brief.language,
+        pages: secondaryBlueprints.map((bp) => ({
+          role: bp.role,
+          slug: bp.slug,
+          name: bp.name,
+        })),
+        medias: toMediaInputs(briefMediasWithVideo),
+        videoUrl: brief.videoUrl,
+        brief,
+      }) + ctaInstruction + businessContext + copyDirectives(brief.language) + coherenceBlock;
+
+    try {
+      secondaryRawText = (await Promise.race([
+        callOpenAI({
+          systemMessage: SYSTEM_MESSAGE_FUNNEL,
+          userPrompt: secondaryPromptText,
+          maxTokens: 3500,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000)),
+      ])) as string | null;
+    } catch (secErr) {
+      console.warn(
+        "[generateMultiPageFunnelWithAI] Échec non-bloquant des pages secondaires:",
+        secErr,
+      );
+      secondaryRawText = null;
+    }
+  }
 
   if (secondaryRawText) {
     try {
@@ -3143,13 +3404,81 @@ if (shouldInjectPricing) {
   }
 }
 
+  // ===== ÉTAPE 9bis : 🆕 Supprimer les pages redondantes/vides =====
+  // Vente directe : le paiement est externalisé (Stripe Payment Link/Checkout),
+  // donc une page « Paiement » INTERNE est redondante → on la retire. On
+  // supprime aussi toute page vide (0 section), artefact sans intérêt. On garde
+  // toujours la page d'accueil.
+  pruneRedundantPages(finalFunnel, brief);
+
   // ===== ÉTAPE 10 : Footer meta =====
   applyFooterMeta(finalFunnel, brief);
 
   // ===== ÉTAPE 11 : Harmonisation des CTA par funnelKind/role =====
   finalFunnel = harmonizeCTAsByFunnelKind(finalFunnel, brief);
 
+  // ===== ÉTAPE 12 : 🆕 Lien de paiement (Palier 1) sur les CTA pricing =====
+  // Doit passer APRÈS l'harmonisation (sinon elle réécrirait le CTA). Si l'offre
+  // est payante et qu'un lien de paiement a été fourni, TOUS les boutons des
+  // cartes pricing redirigent vers ce lien (Stripe Payment Link, systeme.io…).
+  if (brief.paymentUrl && brief.paymentUrl.trim() && !isFreeOffer(brief.price)) {
+    applyPaymentUrlToPricingCtas(finalFunnel, brief.paymentUrl.trim());
+  }
+
   return finalFunnel;
+}
+
+/**
+ * 🆕 Force le CTA de chaque item pricing à rediriger vers le lien de paiement
+ * fourni. Couvre la page d'accueil mono-page (`funnel.sections`) ET les pages
+ * (`funnel.pages[].sections`).
+ */
+/**
+ * 🆕 Retire les pages redondantes :
+ *   - page de rôle "checkout" (Paiement interne) quand l'offre est PAYANTE :
+ *     le paiement passe par Stripe (Payment Link/Checkout), pas par une page
+ *     interne du tunnel ;
+ *   - toute page VIDE (0 section), artefact de génération.
+ * Garde toujours au moins la page d'accueil.
+ */
+function pruneRedundantPages(funnel: Funnel, brief: FunnelBrief): void {
+  if (!funnel.pages || funnel.pages.length <= 1) return;
+  const paid = !isFreeOffer(brief.price);
+
+  const kept = funnel.pages.filter((page) => {
+    const isHome = page.isHome === true;
+    if (isHome) return true;
+    const role = String(page.role ?? "").toLowerCase();
+    const isCheckout = role === "checkout" || role === "paiement";
+    if (paid && isCheckout) return false; // paiement externalisé → redondant
+    const sectionCount = Array.isArray(page.sections) ? page.sections.length : 0;
+    if (sectionCount === 0) return false; // page vide → artefact
+    return true;
+  });
+
+  // Filet de sécurité : ne jamais tout supprimer.
+  funnel.pages = kept.length > 0 ? kept : funnel.pages;
+}
+
+function applyPaymentUrlToPricingCtas(funnel: Funnel, url: string): void {
+  const patchSections = (sections?: Funnel["sections"]) => {
+    sections?.forEach((sec) => {
+      if (sec.type !== "offer" && sec.type !== "pricing") return;
+      sec.items?.forEach((it) => {
+        if (it.kind !== "pricing") return;
+        const label =
+          (it.data?.cta?.label as string | undefined) ?? "Commander maintenant";
+        it.data.cta = {
+          label,
+          mode: "redirect",
+          url,
+          target: "_blank",
+        };
+      });
+    });
+  };
+  patchSections(funnel.sections);
+  funnel.pages?.forEach((p) => patchSections(p.sections));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -193,16 +193,18 @@ export function TestimonialsRenderer({
 
   if (items.length === 0) return null;
 
-  const gridCols =
-    compact || items.length === 1
-      ? "grid-cols-1"
-      : items.length === 2
-        ? "grid-cols-1 md:grid-cols-2"
-        : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+  // 🆕 Grille auto-fit avec largeur MINIMALE de carte : les colonnes ne
+  // deviennent jamais trop étroites (le bug « cartes compactes » venait de
+  // 3 colonnes forcées dans l'aperçu desktop réduit). À une carte → centrée.
+  const gridStyle: React.CSSProperties =
+    items.length === 1
+      ? { gridTemplateColumns: "minmax(0, 520px)", justifyContent: "center" }
+      : { gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" };
 
   return (
     <div
-      className={`ff-testimonials grid ${gridCols} gap-6 md:gap-8 mt-10`}
+      className="ff-testimonials grid gap-5 md:gap-6 mt-10"
+      style={gridStyle}
       data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
@@ -219,7 +221,7 @@ export function TestimonialsRenderer({
         return (
           <div
             key={idx}
-            className="ff-testimonial-card ff-card relative rounded-2xl p-8 transition-all duration-500 hover:-translate-y-2 flex flex-col group"
+            className={`ff-testimonial-card ff-card relative rounded-2xl ${compact ? "p-5" : "p-6"} transition-all duration-500 hover:-translate-y-2 flex flex-col group`}
           >
             {/* Elegant Quote Mark */}
             <div className="absolute top-6 right-8 opacity-10 transition-opacity group-hover:opacity-20">

@@ -3,8 +3,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Download, GitBranch, LayoutDashboard,
-  PlusCircle, Upload, Users, LogOut,
+  BarChart3, GitBranch, LayoutDashboard,
+  PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,7 +14,9 @@ const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/create", label: "Créer un tunnel", icon: PlusCircle, primary: true },
   { href: "/leads", label: "Leads", icon: Users },
-  { href: "/export-systeme", label: "Export systeme.io", icon: Download },
+  { href: "/campagnes", label: "Campagnes", icon: Mail },
+  // Export systeme.io retiré du menu : la logique est intégrée à l'éditeur
+  // (bouton « Exporter »). On garde la page accessible par URL directe.
   { href: "/import", label: "Import", icon: Upload },
   { href: "/workflows", label: "Workflows", icon: GitBranch },
 ];
@@ -22,9 +24,13 @@ const NAV = [
 export function Sidebar({
   mobileOpen,
   onClose,
+  theme,
+  onToggleTheme,
 }: {
   mobileOpen?: boolean;
   onClose?: () => void;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
 }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
@@ -33,8 +39,10 @@ export function Sidebar({
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserEmail(user?.email ?? null);
+    // getSession() : lecture locale sans appel réseau (évite la contention du
+    // verrou navigator.locks qui faisait échouer les écritures Supabase).
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserEmail(session?.user?.email ?? null);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
@@ -145,6 +153,19 @@ export function Sidebar({
 
         {/* Spacer pour pousser le footer vers le bas */}
         <div className="flex-1" />
+
+        {/* Toggle thème clair/sombre */}
+        {onToggleTheme && (
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+            aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === "dark" ? "Mode clair" : "Mode sombre"}
+          </button>
+        )}
 
         {/* Carte plan */}
         <div

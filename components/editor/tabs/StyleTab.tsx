@@ -210,6 +210,31 @@ export function StyleTab({ section, onChange }: Props) {
         </div>
       </Field>
 
+      {/* 🆕 Puces numérotées (alternative aux icônes) */}
+      <Field
+        label="Style des puces"
+        hint="Affiche des numéros (1, 2, 3…) au lieu des icônes — idéal pour des étapes."
+      >
+        <div className="flex gap-1.5">
+          <ModeBtn
+            active={!style.numberedBullets}
+            onClick={() =>
+              onChange({ style: { ...style, numberedBullets: false } as SectionStyle })
+            }
+          >
+            Icônes
+          </ModeBtn>
+          <ModeBtn
+            active={!!style.numberedBullets}
+            onClick={() =>
+              onChange({ style: { ...style, numberedBullets: true } as SectionStyle })
+            }
+          >
+            Numéros
+          </ModeBtn>
+        </div>
+      </Field>
+
       {/* Couleurs de section */}
       <div>
         <div className="mb-2 flex items-center justify-between">
