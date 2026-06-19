@@ -1,19 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { requireSupabasePublicEnv } from "@/lib/supabase/env";
 
 type CookieOptions = Parameters<
   Awaited<ReturnType<typeof cookies>>["set"]
 >[2];
 
 export async function createSupabaseServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anonKey) {
-    throw new Error(
-      "Variables Supabase manquantes : NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY sont requises."
-    );
-  }
+  // Lecture nettoyée (sans espace/retour-ligne) + validation claire.
+  const { url, anonKey } = requireSupabasePublicEnv();
 
   const cookieStore = await cookies();
 

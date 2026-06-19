@@ -19,6 +19,10 @@ function friendlyAuthMessage(message: string) {
   if (message.toLowerCase().includes("password")) {
     return "Mot de passe trop faible. Minimum 8 caractères.";
   }
+  const low = message.toLowerCase();
+  if (low.includes("invalid value") || low.includes("failed to fetch")) {
+    return "Problème de configuration Supabase (URL ou clé invalide). Vérifie NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel — sans espace ni retour-ligne.";
+  }
   return message;
 }
 
@@ -46,49 +50,61 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
     event.preventDefault();
     setIsLoading(true);
     setMessage("");
-    const supabase = createSupabaseBrowserClient();
+    // try/catch : une erreur de config (URL/clé Supabase invalide) lèverait
+    // sinon une exception non gérée ("Invalid value") au lieu d'un message clair.
+    try {
+      const supabase = createSupabaseBrowserClient();
 
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMessage(friendlyAuthMessage(error.message));
-      else router.push(postAuthDestination());
-      setIsLoading(false);
-      return;
-    }
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) setMessage(friendlyAuthMessage(error.message));
+        else router.push(postAuthDestination());
+        return;
+      }
 
-    if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({ 
-        email, 
-        password, 
-        options: { data: { name } } 
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { name } },
+        });
+        if (error) setMessage(friendlyAuthMessage(error.message));
+        else router.push(postAuthDestination());
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
       });
-      if (error) setMessage(friendlyAuthMessage(error.message));
-      else router.push(postAuthDestination());
+      setMessage(error ? friendlyAuthMessage(error.message) : "Lien envoyé si l'adresse existe.");
+    } catch (e) {
+      setMessage(friendlyAuthMessage(e instanceof Error ? e.message : String(e)));
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`
-    });
-    setMessage(error ? friendlyAuthMessage(error.message) : "Lien envoyé si l'adresse existe.");
-    setIsLoading(false);
   }
 
   async function signInWithGoogle() {
     setIsLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    // Le retour Google passe par /auth/callback qui échange le code contre une
-    // session, puis redirige vers `next` (préserve aussi le flux ?plan=).
-    const next = postAuthDestination();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    if (error) {
-      setMessage(friendlyAuthMessage(error.message));
+    setMessage("");
+    try {
+      const supabase = createSupabaseBrowserClient();
+      // Le retour Google passe par /auth/callback qui échange le code contre une
+      // session, puis redirige vers `next` (préserve aussi le flux ?plan=).
+      const next = postAuthDestination();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (error) {
+        setMessage(friendlyAuthMessage(error.message));
+        setIsLoading(false);
+      }
+      // Si pas d'erreur, le navigateur part vers Google : on garde l'état chargé.
+    } catch (e) {
+      setMessage(friendlyAuthMessage(e instanceof Error ? e.message : String(e)));
       setIsLoading(false);
     }
   }
