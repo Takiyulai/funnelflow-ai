@@ -1341,7 +1341,7 @@ export default function LandingPage() {
                             </li>
                           ))}
                         </ul>
-                        <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
+                        <a href={`/signup?plan=${["starter", "pro", "agency"][i] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
                       </div>
                     </div>
                   ) : (
@@ -1362,7 +1362,7 @@ export default function LandingPage() {
                             </li>
                           ))}
                         </ul>
-                        <a href="/signup" className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
+                        <a href={`/signup?plan=${["starter", "pro", "agency"][i] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
                       </div>
                     </div>
                   )}

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sendCampaign, type Audience } from "@/lib/crm/campaigns";
 import { resendConfigured } from "@/lib/crm/email";
+import { getAccess } from "@/lib/billing/subscription";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -19,6 +20,25 @@ export async function POST(
     data: { user },
   } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+
+  // Garde de plan : l'envoi de campagnes doit être inclus dans l'abonnement.
+  const access = await getAccess(user.id);
+  if (!access.hasAccess) {
+    return NextResponse.json(
+      { ok: false, error: "subscription_required", message: "Un abonnement actif est requis." },
+      { status: 402 },
+    );
+  }
+  if (!access.limits.campaigns) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "feature_not_in_plan",
+        message: "Les campagnes email ne sont pas incluses dans ton plan.",
+      },
+      { status: 403 },
+    );
+  }
 
   if (!resendConfigured()) {
     return NextResponse.json(

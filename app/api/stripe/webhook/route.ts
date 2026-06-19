@@ -12,7 +12,12 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createStripeClient } from "@/lib/billing/stripe";
-import { markOrderPaidBySession } from "@/lib/billing/orders";
+import {
+  markOrderPaidBySession,
+  markOrderPaidByPaymentIntent,
+  markOrderFailedByPaymentIntent,
+} from "@/lib/billing/orders";
+import { syncSubscriptionToProfile, markPastDueByCustomer } from "@/lib/billing/subscriptionSync";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendEmail, resendConfigured } from "@/lib/crm/email";
 
@@ -92,8 +97,84 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid_signature" }, { status: 400 });
   }
 
+  // ───────────────────────────────────────────────────────────────────────
+  // ABONNEMENTS PLATEFORME (mode subscription).
+  // ───────────────────────────────────────────────────────────────────────
+  if (
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    const sub = event.data.object as Stripe.Subscription;
+    try {
+      await syncSubscriptionToProfile(sub);
+    } catch (e) {
+      console.error("[stripe/webhook] syncSubscription échoué:", e);
+    }
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const customerId =
+      typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+    if (customerId) {
+      try {
+        await markPastDueByCustomer(customerId);
+      } catch (e) {
+        console.error("[stripe/webhook] markPastDue échoué:", e);
+      }
+    }
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // PAIEMENTS TUNNEL (one-time) — traçabilité via PaymentIntent.
+  // Filet de sécurité + suivi des échecs. N'agit que sur des commandes
+  // existantes (achats de tunnel) → jamais sur les abonnements.
+  // ───────────────────────────────────────────────────────────────────────
+  if (event.type === "payment_intent.succeeded") {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    if (pi.metadata?.type === "funnel_purchase") {
+      try {
+        await markOrderPaidByPaymentIntent(pi.id);
+      } catch (e) {
+        console.error("[stripe/webhook] markOrderPaidByPI échoué:", e);
+      }
+    }
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  if (event.type === "payment_intent.payment_failed") {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    try {
+      await markOrderFailedByPaymentIntent(pi.id);
+    } catch (e) {
+      console.error("[stripe/webhook] markOrderFailedByPI échoué:", e);
+    }
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
+
+    // Abonnement à la plateforme : activer le profil et s'arrêter là (ne PAS
+    // exécuter le flux "commande one-time" ci-dessous).
+    if (session.mode === "subscription") {
+      const subId =
+        typeof session.subscription === "string" ? session.subscription : null;
+      if (subId) {
+        try {
+          const stripe = createStripeClient();
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await syncSubscriptionToProfile(sub);
+        } catch (e) {
+          console.error("[stripe/webhook] activation abonnement échouée:", e);
+        }
+      }
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
+
     const paymentIntent =
       typeof session.payment_intent === "string" ? session.payment_intent : null;
 

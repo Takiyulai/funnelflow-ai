@@ -36,6 +36,20 @@ export function Sidebar({
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [planInfo, setPlanInfo] = useState<{ planName: string | null; status: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/billing/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.ok) setPlanInfo({ planName: d.planName ?? null, status: d.status });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -181,12 +195,23 @@ export function Sidebar({
               className="text-[11px] font-bold uppercase tracking-wider"
               style={{ color: "#C7A436" }}
             >
-              Plan Pro
+              {planInfo?.planName ? `Plan ${planInfo.planName}` : "Abonnement"}
             </p>
           </div>
           <p className="text-xs leading-relaxed text-white/65">
-            Export systeme.io et régénération IA inclus
+            {planInfo
+              ? planInfo.status === "active" || planInfo.status === "trialing"
+                ? "Abonnement actif"
+                : "Aucun abonnement actif"
+              : "Chargement…"}
           </p>
+          <Link
+            href="/abonnement"
+            className="mt-2 inline-block text-[11px] font-semibold underline"
+            style={{ color: "#C7A436" }}
+          >
+            Gérer mon abonnement
+          </Link>
         </div>
 
         {/* Bloc utilisateur + déconnexion */}

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { FunnelSection, CtaConfig } from "@/lib/funnels/types";
 import { regenerateSectionPrompt } from "@/lib/ai/prompts";
+import { guardApiAccess, featureBlockedResponse } from "@/lib/billing/apiGuard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schémas
@@ -103,6 +104,13 @@ function fallbackSection(input: z.infer<typeof inputSchema>): FunnelSection {
 // Route
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
+  // Garde abonnement + fonctionnalité "régénération de section" (Pro/Agency).
+  const guard = await guardApiAccess();
+  if (!guard.ok) return guard.response;
+  if (!guard.access.limits.sectionRegeneration) {
+    return featureBlockedResponse("sectionRegeneration");
+  }
+
   let json: unknown;
   try {
     json = await request.json();

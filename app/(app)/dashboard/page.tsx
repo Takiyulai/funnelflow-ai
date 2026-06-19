@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Download, FileText, Globe2, Users,
   Sparkles, Upload, CheckCircle2, BookOpen,
+  CreditCard, Wallet, UserCheck, Percent,
 } from "lucide-react";
 import { getExportCount, EXPORTS_CHANGED_EVENT } from "@/lib/store/statsStore";
 import { AppShell } from "@/components/dashboard/AppShell";
@@ -32,6 +33,15 @@ export default function DashboardPage() {
   const [leadsCount, setLeadsCount] = useState<number | null>(null);
   const [exportsCount, setExportsCount] = useState(0);
 
+  // 🆕 Stats de paiement (commandes payées).
+  const [payStats, setPayStats] = useState<{
+    payments: number;
+    revenue: number;
+    currency: string;
+    clients: number;
+    conversionRate: number;
+  } | null>(null);
+
   useEffect(() => {
     let active = true;
     fetch("/api/crm/contacts?limit=1")
@@ -40,10 +50,36 @@ export default function DashboardPage() {
         if (active && d?.ok && typeof d.total === "number") setLeadsCount(d.total);
       })
       .catch(() => {});
+    fetch("/api/stats/payments")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.ok) {
+          setPayStats({
+            payments: d.payments ?? 0,
+            revenue: d.revenue ?? 0,
+            currency: d.currency ?? "eur",
+            clients: d.clients ?? 0,
+            conversionRate: d.conversionRate ?? 0,
+          });
+        }
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
+
+  const formatMoney = (cents: number, currency: string) => {
+    try {
+      return new Intl.NumberFormat("fr-FR", {
+        style: "currency",
+        currency: (currency || "eur").toUpperCase(),
+        maximumFractionDigits: 0,
+      }).format((cents ?? 0) / 100);
+    } catch {
+      return `${((cents ?? 0) / 100).toFixed(0)} €`;
+    }
+  };
 
   useEffect(() => {
     const sync = () => setExportsCount(getExportCount());
@@ -141,6 +177,34 @@ export default function DashboardPage() {
           value={String(exportsCount)}
           icon={<Download size={18} />}
           accent="blue"
+        />
+      </div>
+
+      {/* KPI Paiements */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <DashboardCard
+          label="Chiffre d'affaires"
+          value={payStats === null ? "…" : formatMoney(payStats.revenue, payStats.currency)}
+          icon={<Wallet size={18} />}
+          accent="green"
+        />
+        <DashboardCard
+          label="Paiements"
+          value={payStats === null ? "…" : String(payStats.payments)}
+          icon={<CreditCard size={18} />}
+          accent="gold"
+        />
+        <DashboardCard
+          label="Clients"
+          value={payStats === null ? "…" : String(payStats.clients)}
+          icon={<UserCheck size={18} />}
+          accent="blue"
+        />
+        <DashboardCard
+          label="Taux de conversion"
+          value={payStats === null ? "…" : `${payStats.conversionRate}%`}
+          icon={<Percent size={18} />}
+          accent="green"
         />
       </div>
 

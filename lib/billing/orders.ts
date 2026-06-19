@@ -17,6 +17,8 @@ export type CreateOrderInput = {
   productName?: string | null;
   customerEmail?: string | null;
   stripeSessionId?: string | null;
+  pageSlug?: string | null;
+  nextUrl?: string | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -128,6 +130,8 @@ export async function createPendingOrder(input: CreateOrderInput): Promise<strin
       status: "pending",
       provider: "stripe",
       stripe_session_id: input.stripeSessionId ?? null,
+      page_slug: input.pageSlug ?? null,
+      next_url: input.nextUrl ?? null,
       metadata: input.metadata ?? {},
     })
     .select("id")
@@ -168,4 +172,102 @@ export async function markOrderPaidBySession(
     amount: data.amount as number,
     currency: data.currency as string,
   };
+}
+
+/**
+ * Marque payée une commande à partir de l'ID de PaymentIntent. Idempotent.
+ * Filet de sécurité pour l'event payment_intent.succeeded (si jamais
+ * checkout.session.completed n'a pas transmis le PI). N'agit que sur une
+ * commande existante (= achat de tunnel), jamais sur un abonnement.
+ */
+export async function markOrderPaidByPaymentIntent(
+  paymentIntent: string,
+): Promise<boolean> {
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin
+    .from("orders")
+    .update({ status: "paid", paid_at: new Date().toISOString() })
+    .eq("stripe_payment_intent", paymentIntent)
+    .neq("status", "paid")
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("[orders] markOrderPaidByPaymentIntent error", error);
+    return false;
+  }
+  return Boolean(data);
+}
+
+/** Marque une commande échouée à partir de l'ID de PaymentIntent. Idempotent. */
+export async function markOrderFailedByPaymentIntent(
+  paymentIntent: string,
+): Promise<boolean> {
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin
+    .from("orders")
+    .update({ status: "failed" })
+    .eq("stripe_payment_intent", paymentIntent)
+    .eq("status", "pending") // n'écrase jamais une commande déjà payée
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("[orders] markOrderFailedByPaymentIntent error", error);
+    return false;
+  }
+  return Boolean(data);
+}
+
+export type FunnelPaymentStats = {
+  payments: number; // nb de commandes payées
+  revenue: number; // CA en centimes (somme des montants payés)
+  currency: string; // devise dominante
+  clients: number; // nb de clients distincts (emails payeurs)
+  leads: number; // nb de leads collectés (toutes sources)
+  conversionRate: number; // clients / leads, en % (0 si pas de leads)
+};
+
+/**
+ * Agrège les statistiques de paiement d'un utilisateur (toutes ses commandes
+ * payées + ses leads). Lecture via service role (appelée depuis une route
+ * serveur qui a déjà vérifié l'identité).
+ */
+export async function getFunnelPaymentStats(userId: string): Promise<FunnelPaymentStats> {
+  const admin = getSupabaseAdmin();
+
+  const { data: paidRows, error: paidErr } = await admin
+    .from("orders")
+    .select("amount, currency, customer_email")
+    .eq("user_id", userId)
+    .eq("status", "paid");
+  if (paidErr) console.error("[orders] getFunnelPaymentStats paid error", paidErr);
+
+  const rows = paidRows ?? [];
+  let revenue = 0;
+  const currencyCount = new Map<string, number>();
+  const emails = new Set<string>();
+  for (const r of rows) {
+    revenue += (r.amount as number) ?? 0;
+    const cur = ((r.currency as string) || "eur").toLowerCase();
+    currencyCount.set(cur, (currencyCount.get(cur) ?? 0) + 1);
+    const email = (r.customer_email as string | null)?.toLowerCase().trim();
+    if (email) emails.add(email);
+  }
+  let currency = "eur";
+  let max = -1;
+  for (const [cur, n] of currencyCount) {
+    if (n > max) {
+      max = n;
+      currency = cur;
+    }
+  }
+
+  const { count: leadsCount } = await admin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  const leads = leadsCount ?? 0;
+  const clients = emails.size;
+  const conversionRate = leads > 0 ? Math.round((clients / leads) * 1000) / 10 : 0;
+
+  return { payments: rows.length, revenue, currency, clients, leads, conversionRate };
 }

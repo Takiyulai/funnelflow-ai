@@ -14,11 +14,15 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createStripeClient } from "@/lib/billing/stripe";
 import { extractFunnelPrice, createPendingOrder } from "@/lib/billing/orders";
+import { normalizeFunnel } from "@/lib/store/normalizeFunnel";
+import { resolvePostPurchaseUrl } from "@/lib/funnels/postPurchase";
 
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   funnelSlug: z.string().min(1).max(100),
+  // Page d'où vient le clic d'achat → sert à calculer l'étape suivante.
+  pageSlug: z.string().max(200).nullable().optional(),
   email: z.string().email().max(255).optional(),
 });
 
@@ -79,6 +83,16 @@ export async function POST(req: Request) {
 
   const base = baseUrl(req);
   const slug = funnel.published_slug || funnel.slug;
+  const pageSlug = payload.pageSlug ?? null;
+
+  // Étape suivante du tunnel après paiement (chaînage de pages configurable).
+  let nextUrl: string;
+  try {
+    const normalized = normalizeFunnel(funnel.published_content);
+    nextUrl = resolvePostPurchaseUrl(normalized, pageSlug, slug);
+  } catch {
+    nextUrl = `/tunnel/${slug}/merci`;
+  }
 
   try {
     const stripe = createStripeClient();
@@ -95,12 +109,26 @@ export async function POST(req: Request) {
         },
       ],
       customer_email: payload.email,
-      success_url: `${base}/tunnel/${slug}/merci?order={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${base}/tunnel/${slug}`,
+      success_url: `${base}/tunnel/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${base}/tunnel/${slug}/cancel`,
+      // Métadonnées portées par la session ET par le PaymentIntent → traçables
+      // côté webhook (checkout.session.completed + payment_intent.*) et
+      // exploitables plus tard par n8n / automatisations CRM.
       metadata: {
+        type: "funnel_purchase",
         funnelId: funnel.id,
         userId: funnel.user_id,
         funnelSlug: slug,
+        pageSlug: pageSlug ?? "",
+        nextUrl,
+      },
+      payment_intent_data: {
+        metadata: {
+          type: "funnel_purchase",
+          funnelId: funnel.id,
+          userId: funnel.user_id,
+          funnelSlug: slug,
+        },
       },
     });
 
@@ -112,9 +140,11 @@ export async function POST(req: Request) {
       productName: priceInfo.productName,
       customerEmail: payload.email ?? null,
       stripeSessionId: session.id,
+      pageSlug,
+      nextUrl,
     });
 
-    return NextResponse.json({ ok: true, url: session.url }, { status: 200 });
+    return NextResponse.json({ ok: true, url: session.url, nextUrl }, { status: 200 });
   } catch (e) {
     console.error("[api/checkout] stripe error", e);
     return NextResponse.json(

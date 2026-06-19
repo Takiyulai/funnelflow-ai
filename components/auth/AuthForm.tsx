@@ -22,6 +22,17 @@ function friendlyAuthMessage(message: string) {
   return message;
 }
 
+/** Après auth : si un plan est passé en query (?plan=pro), file vers l'abonnement. */
+function postAuthDestination(): string {
+  try {
+    const p = new URLSearchParams(window.location.search).get("plan");
+    if (p === "starter" || p === "pro" || p === "agency") return `/abonnement?plan=${p}`;
+  } catch {
+    /* no-op */
+  }
+  return "/dashboard";
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -40,7 +51,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
     if (mode === "login") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setMessage(friendlyAuthMessage(error.message));
-      else router.push("/dashboard");
+      else router.push(postAuthDestination());
       setIsLoading(false);
       return;
     }
@@ -52,7 +63,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
         options: { data: { name } } 
       });
       if (error) setMessage(friendlyAuthMessage(error.message));
-      else router.push("/dashboard");
+      else router.push(postAuthDestination());
       setIsLoading(false);
       return;
     }
@@ -67,11 +78,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
   async function signInWithGoogle() {
     setIsLoading(true);
     const supabase = createSupabaseBrowserClient();
+    // Le retour Google passe par /auth/callback qui échange le code contre une
+    // session, puis redirige vers `next` (préserve aussi le flux ?plan=).
+    const next = postAuthDestination();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/dashboard`
-      }
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
     if (error) {
       setMessage(friendlyAuthMessage(error.message));
@@ -246,8 +260,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
           </p>
         )}
 
-        {/* Bouton secondaire Accès démo (sauf pour forgot) */}
-        {!isForgot && (
+        {/* Bouton secondaire Accès démo — UNIQUEMENT en développement local
+            (jamais en production : il ouvrait /dashboard sans authentification). */}
+        {!isForgot && process.env.NODE_ENV === "development" && (
           <button
             type="button"
             onClick={() => router.push("/dashboard")}

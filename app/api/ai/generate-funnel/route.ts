@@ -6,6 +6,8 @@ import {
   AiGenerationError,
 } from "@/lib/ai/generate";
 import type { FunnelSectionType } from "@/lib/funnels/types";
+import { guardApiAccess } from "@/lib/billing/apiGuard";
+import { canCreateFunnel } from "@/lib/billing/subscription";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60 secondes pour la génération multi-pages
@@ -134,6 +136,22 @@ function statusForReason(reason: string): number {
 }
 
 export async function POST(request: Request) {
+  // Garde abonnement + quota de tunnels du plan.
+  const guard = await guardApiAccess();
+  if (!guard.ok) return guard.response;
+  const quota = await canCreateFunnel(guard.access, guard.userId);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        error: "funnel_quota_reached",
+        message: `Tu as atteint la limite de ${quota.limit} tunnels de ton plan. Passe à un plan supérieur pour en créer davantage.`,
+        used: quota.used,
+        limit: quota.limit,
+      },
+      { status: 403 },
+    );
+  }
+
   let json: unknown;
   try {
     json = await request.json();

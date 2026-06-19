@@ -137,6 +137,16 @@ export default function PublicFunnelRuntime() {
       const m = window.location.pathname.match(/\/tunnel\/([^/]+)/);
       return m ? decodeURIComponent(m[1]) : "";
     }
+    // Page courante (segment après le slug) → permet de calculer l'étape
+    // suivante du tunnel après le paiement. Null sur la page d'accueil.
+    function pageSlugFromPath(): string | null {
+      const m = window.location.pathname.match(/\/tunnel\/[^/]+\/([^/]+)/);
+      if (!m) return null;
+      const seg = decodeURIComponent(m[1]);
+      // Exclure les pages techniques du tunnel.
+      if (["success", "cancel", "merci"].includes(seg)) return null;
+      return seg;
+    }
     const checkoutTriggers = Array.from(
       document.querySelectorAll<HTMLElement>(
         'a[href="#ff-checkout"], a[href$="/api/checkout"], [data-ff-checkout]',
@@ -152,7 +162,7 @@ export default function PublicFunnelRuntime() {
         const res = await fetch("/api/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ funnelSlug: slugFromPath() }),
+          body: JSON.stringify({ funnelSlug: slugFromPath(), pageSlug: pageSlugFromPath() }),
         });
         const data = (await res.json().catch(() => ({}))) as { url?: string };
         if (data.url) {
