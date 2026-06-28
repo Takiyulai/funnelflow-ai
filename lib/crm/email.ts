@@ -3,6 +3,8 @@
 // La clé reste dans .env.local : RESEND_API_KEY. L'expéditeur dans RESEND_FROM
 // (doit être un domaine/sender vérifié sur Resend ; fallback de test fourni).
 
+import { getSystemSender } from "@/lib/email/sender";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 export type SendEmailInput = {
@@ -23,10 +25,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "missing_resend_key" };
 
-  const from =
-    input.from ||
-    process.env.RESEND_FROM ||
-    "FunnelFlow AI <onboarding@resend.dev>";
+  // Expéditeur : celui fourni par l'appelant (ex. expéditeur résolu d'un
+  // utilisateur pour le marketing), sinon l'expéditeur SYSTÈME FunnelFlow
+  // (domaine + nom lus depuis l'env via getSystemSender — AUCUN en dur ici).
+  const from = input.from || getSystemSender().from;
 
   try {
     const res = await fetch(RESEND_ENDPOINT, {

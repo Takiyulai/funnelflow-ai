@@ -6,8 +6,10 @@ import {
   AiGenerationError,
 } from "@/lib/ai/generate";
 import type { FunnelSectionType } from "@/lib/funnels/types";
-import { guardApiAccess } from "@/lib/billing/apiGuard";
+import { guardApiAccess, quotaExceededResponse } from "@/lib/billing/apiGuard";
 import { canCreateFunnel } from "@/lib/billing/subscription";
+import { consumeQuota } from "@/lib/billing/usage";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60 secondes pour la génération multi-pages
@@ -66,9 +68,16 @@ const mediaItemSchema = z.object({
 });
 
 const briefSchema = z.object({
-  brandName: z.string().min(1),
+  // 🆕 Marque OPTIONNELLE : si vide, on retombe sur le nom de l'offre (cf. plus
+  // bas). Ne doit jamais bloquer la génération.
+  brandName: z.string().optional(),
   offerName: z.string().min(1),
   price: z.string().min(1),
+  // 🆕 Offres OTO optionnelles (upsell/downsell) fixées par l'utilisateur.
+  upsellPrice: z.string().max(40).optional(),
+  downsellPrice: z.string().max(40).optional(),
+  upsellOffer: z.string().max(300).optional(),
+  downsellOffer: z.string().max(300).optional(),
   targetAudience: z.string().min(1),
   mainPain: z.string().min(1),
   promise: z.string().min(1),
@@ -151,6 +160,19 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   }
+  // 🆕 Anti-burst + quota MENSUEL de générations IA de tunnel.
+  const rl = await rateLimit(`funnelgen:${guard.userId}`, 8, 60);
+  if (!rl.ok) return tooManyRequests();
+  const genQuota = await consumeQuota(
+    guard.userId,
+    "ai_funnel_gen",
+    guard.access.limits.aiFunnelGensPerMonth,
+  );
+  if (!genQuota.ok) {
+    return quotaExceededResponse(
+      "Quota mensuel de générations IA de tunnel atteint pour ton plan.",
+    );
+  }
 
   let json: unknown;
   try {
@@ -172,13 +194,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // 🆕 Marque vide → repli sur le nom de l'offre (jamais bloquant).
+  const data = {
+    ...parsed.data,
+    brandName:
+      (parsed.data.brandName ?? "").trim() ||
+      parsed.data.offerName.trim() ||
+      "Mon offre",
+  };
+
   const startTime = Date.now();
   console.info(
-    `[generate-funnel] START generation for brand="${parsed.data.brandName}" offer="${parsed.data.offerName}"`,
+    `[generate-funnel] START generation for brand="${data.brandName}" offer="${data.offerName}"`,
   );
 
   try {
-    const funnel = await generateMultiPageFunnelWithAI(parsed.data);
+    const funnel = await generateMultiPageFunnelWithAI(data);
 
     const duration = Date.now() - startTime;
     console.info(

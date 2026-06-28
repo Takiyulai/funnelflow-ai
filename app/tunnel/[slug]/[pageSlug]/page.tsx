@@ -1,11 +1,12 @@
-// app/p/[slug]/[pageSlug]/page.tsx — pages secondaires du funnel
+// app/tunnel/[slug]/[pageSlug]/page.tsx — pages secondaires du funnel publié
 import { notFound } from "next/navigation";
 import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
-import { renderFunnelHtml } from "@/lib/export/html";
 import { getPageBySlug } from "@/lib/funnels/types";
-import PublicFunnelRuntime from "@/components/funnel/PublicFunnelRuntime";
+import PublishedFunnelView from "../PublishedFunnelView";
 
-export const dynamic = "force-dynamic";
+// 🆕 Chantier 3 — caching : ISR (revalidée toutes les 60s) + revalidation
+// on-demand à la publication.
+export const revalidate = 60;
 
 export default async function PublishedFunnelSubPage({
   params,
@@ -22,17 +23,6 @@ export default async function PublishedFunnelSubPage({
     getPageBySlug(published.funnel, `/${pageSlug}`);
   if (!page) notFound();
 
-  const html = renderFunnelHtml(published.funnel, {
-    targetPageId: page.id,
-    fullDocument: false,
-    publicSlug: slug,
-  });
-
-
-  return (
-    <>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
-      <PublicFunnelRuntime />
-    </>
-  );
+  // 🆕 Rendu unifié via FunnelPreview (parité exacte avec l'aperçu).
+  return <PublishedFunnelView funnel={published.funnel} activePage={page} />;
 }

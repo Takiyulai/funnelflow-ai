@@ -28,6 +28,7 @@ import {
 } from "@/lib/store/funnelStore";
 import type { Funnel, FunnelPage, FunnelSection } from "@/lib/funnels/types";
 import SioLinkingTab from "@/components/editor/SioLinkingTab";
+import DeliveryEmailTab from "@/components/editor/DeliveryEmailTab";
 import { InlineColorToolbar } from "@/components/editor/InlineColorToolbar";
 
 type HistoryState = {
@@ -61,22 +62,6 @@ function resolveActivePage(
   return funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
 }
 
-function buildPreviewUrl(
-  funnelSlug: string,
-  page: FunnelPage | null
-): string {
-  const base = `/tunnel/${funnelSlug}`;
-  if (!page || page.isHome) return base;
-
-  const cleanPageSlug = (page.slug ?? "")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .trim();
-
-  if (!cleanPageSlug || cleanPageSlug === "/") return base;
-  return `${base}/${cleanPageSlug}`;
-}
-
 export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -102,6 +87,7 @@ export default function EditorPage() {
 
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
   const [sioLinkingOpen, setSioLinkingOpen] = useState(false);
+  const [deliveryEmailOpen, setDeliveryEmailOpen] = useState(false);
 
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -470,6 +456,13 @@ export default function EditorPage() {
       const res = await publishFunnel(updated.id);
       if (res.remoteOk) {
         const publicSlug = res.publishedSlug ?? updated.slug;
+        // 🆕 Revalidation on-demand de la page publique (cache ISR) → la mise à
+        // jour est visible immédiatement, sans attendre les 60s.
+        void fetch("/api/revalidate-tunnel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug: publicSlug }),
+        }).catch(() => {});
         toast.show({
           title: "Tunnel publié",
           description: `Disponible sur /tunnel/${publicSlug}`,
@@ -515,6 +508,53 @@ export default function EditorPage() {
       setMobileTab("preview");
     },
     [funnel, selectedPageId]
+  );
+
+  // 🆕 Ajouter une page vierge (from scratch).
+  const handleAddPage = useCallback(() => {
+    if (!funnel) return;
+    const id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `page_${Date.now()}`;
+    const n = (funnel.pages?.length ?? 0) + 1;
+    const newPage: FunnelPage = {
+      id,
+      slug: `page-${n}`,
+      name: `Nouvelle page ${n}`,
+      role: "custom" as unknown as FunnelPage["role"],
+      isHome: false,
+      visible: true,
+      sections: [
+        { id: `hero-${id}`, type: "hero", headline: "Nouvelle section", visible: true },
+      ],
+    };
+    pushHistory({ ...funnel, pages: [...(funnel.pages ?? []), newPage] });
+    setSelectedPageId(id);
+    setSelectedSectionId(newPage.sections[0].id);
+  }, [funnel, pushHistory]);
+
+  // 🆕 Supprimer une page (jamais l'accueil).
+  const handleDeletePage = useCallback(
+    (pageId: string) => {
+      if (!funnel) return;
+      const page = funnel.pages?.find((p) => p.id === pageId);
+      if (!page || page.isHome) return;
+      if (
+        !window.confirm(
+          `Supprimer la page « ${page.name} » ? Cette action est irréversible.`,
+        )
+      )
+        return;
+      const remaining = (funnel.pages ?? []).filter((p) => p.id !== pageId);
+      pushHistory({ ...funnel, pages: remaining });
+      if (selectedPageId === pageId) {
+        const home = remaining.find((p) => p.isHome) ?? remaining[0];
+        setSelectedPageId(home?.id ?? null);
+        setSelectedSectionId(home?.sections[0]?.id ?? null);
+      }
+    },
+    [funnel, pushHistory, selectedPageId],
   );
 
   const scrollToSection = useCallback((sectionId: string) => {
@@ -595,11 +635,15 @@ export default function EditorPage() {
   const brandName = extractBrandName(funnel.funnelName);
   const pages = funnel.pages ?? [];
 
-  // Publié → vraie page publique (slug public réel, pas le slug brouillon) ;
-  // non publié → aperçu local (évite le 404).
-  const previewHref = stored.publishedAt
-    ? buildPreviewUrl(stored.publishedSlug ?? stored.slug, activePage)
-    : `/preview/${stored.id}`;
+  // 🆕 « Aperçu » montre TOUJOURS le brouillon en direct (/preview/{id}), même
+  // si le tunnel est publié : sinon l'aperçu sert le snapshot PUBLIÉ figé
+  // (published_content) et l'utilisateur revoit son ancienne version tant qu'il
+  // n'a pas « Republié ». Le vrai lien public reste accessible via Republier.
+  // 🆕 On passe ?page=slug pour prévisualiser la PAGE active (et plus toujours l'accueil).
+  const previewHref =
+    activePage && !activePage.isHome
+      ? `/preview/${stored.id}?page=${encodeURIComponent(activePage.slug)}`
+      : `/preview/${stored.id}`;
 
   return (
     <AppShell>
@@ -720,8 +764,31 @@ export default function EditorPage() {
           </div>
         </div>
 
-        <div className="lg:hidden flex items-center justify-center pb-2 px-3 min-w-0">
-          <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+        <div className="lg:hidden flex flex-col gap-2 pb-2 px-3 min-w-0">
+          {/* 🆕 Slug éditable + copie du lien, visibles sur mobile (< md) où le
+              slug de la barre principale est masqué. */}
+          <div className="md:hidden flex items-center gap-1 text-[11px] text-zinc-500 min-w-0">
+            <span className="shrink-0">/tunnel/</span>
+            <input
+              type="text"
+              defaultValue={stored.slug}
+              onBlur={(e) => updateSlug(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              className="min-w-0 flex-1 rounded border border-zinc-700 bg-transparent px-1.5 py-1 font-mono text-zinc-300 outline-none focus:border-indigo-500/50 focus:text-white"
+            />
+            <button
+              onClick={handleCopyLink}
+              title="Copier le lien"
+              className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <div className="flex items-center justify-center">
+            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+          </div>
         </div>
       </div>
 
@@ -767,6 +834,8 @@ export default function EditorPage() {
             pages={pages}
             selectedPageId={selectedPageId}
             onSelect={handlePageSelect}
+            onAddPage={handleAddPage}
+            onDeletePage={handleDeletePage}
           />
 
           <EditorSidebar
@@ -781,6 +850,8 @@ export default function EditorPage() {
             onOpenGlobalStyle={() => setShowGlobalStyle(true)}
             onOpenHeader={() => setHeaderOpen(true)}
             onOpenSioLinking={() => setSioLinkingOpen(true)}
+            onOpenDeliveryEmail={() => setDeliveryEmailOpen(true)}
+            deliveryEmailEnabled={!!funnel.meta?.deliveryEmail?.enabled}
           />
         </div>
 
@@ -791,6 +862,7 @@ export default function EditorPage() {
           <FunnelPreview
             key={activePage?.id ?? "default"}
             funnel={previewFunnel}
+            activePage={activePage ?? undefined}
             defaultMode="desktop"
             showToolbar={true}
             viewportHeight="calc(100vh - 7rem)"
@@ -838,6 +910,14 @@ export default function EditorPage() {
           funnel={funnel}
           onChange={updateFunnelMeta}
           onClose={() => setSioLinkingOpen(false)}
+        />
+      )}
+
+      {deliveryEmailOpen && (
+        <DeliveryEmailTab
+          funnel={funnel}
+          onChange={updateFunnelMeta}
+          onClose={() => setDeliveryEmailOpen(false)}
         />
       )}
 

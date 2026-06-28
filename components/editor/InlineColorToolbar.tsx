@@ -171,6 +171,30 @@ export function InlineColorToolbar({
     window.getSelection()?.removeAllRanges();
   };
 
+  // 🆕 Transforme la CASSE du texte sélectionné (minuscule ⇄ majuscule). Modifie
+  // les caractères dans le champ ; les marqueurs [[texte|#hex]] sont préservés
+  // (crochets, pipe et hex insensibles à la casse).
+  const applyCase = (mode: "upper" | "lower") => {
+    if (!match) return;
+    const section = findSectionById(funnelRef.current, match.sectionId);
+    if (!section) return;
+
+    if (match.field.startsWith("bullet-")) {
+      const idx = parseInt(match.field.slice(7), 10);
+      const bullets = [...(section.bullets || [])];
+      const raw = bullets[idx] || "";
+      bullets[idx] = transformRange(raw, match.rawStart, match.rawEnd, mode);
+      updateSection(section.id, { bullets });
+    } else {
+      const raw = ((section as any)[match.field] as string) || "";
+      const next = transformRange(raw, match.rawStart, match.rawEnd, mode);
+      updateSection(section.id, { [match.field]: next } as Partial<FunnelSection>);
+    }
+    setMatch(null);
+    setPos(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
   if (!match || !pos) return null;
 
   return (
@@ -199,6 +223,23 @@ export function InlineColorToolbar({
         onChange={(e) => applyColor(e.target.value)}
         className="sr-only"
       />
+      <span className="mx-0.5 h-4 w-px bg-white/15" />
+      <button
+        type="button"
+        onClick={() => applyCase("upper")}
+        title="Mettre en MAJUSCULES"
+        className="rounded bg-white/10 px-2 py-1 text-[11px] font-bold leading-none text-white hover:bg-white/20"
+      >
+        AA
+      </button>
+      <button
+        type="button"
+        onClick={() => applyCase("lower")}
+        title="Mettre en minuscules"
+        className="rounded bg-white/10 px-2 py-1 text-[11px] font-medium leading-none text-white hover:bg-white/20"
+      >
+        aa
+      </button>
     </div>
   );
 }
@@ -314,4 +355,18 @@ function wrapRange(
     "$1"
   );
   return `${before}[[${stripped}|${color}]]${after}`;
+}
+
+function transformRange(
+  raw: string,
+  start: number,
+  end: number,
+  mode: "upper" | "lower"
+): string {
+  const before = raw.slice(0, start);
+  const selected = raw.slice(start, end);
+  const after = raw.slice(end);
+  const transformed =
+    mode === "upper" ? selected.toUpperCase() : selected.toLowerCase();
+  return `${before}${transformed}${after}`;
 }

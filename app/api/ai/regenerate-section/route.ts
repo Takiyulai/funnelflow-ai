@@ -1,9 +1,11 @@
 // app/api/ai/regenerate-section/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { FunnelSection, CtaConfig } from "@/lib/funnels/types";
+import type { FunnelSection, CtaConfig, FunnelBrief } from "@/lib/funnels/types";
 import { regenerateSectionPrompt } from "@/lib/ai/prompts";
-import { guardApiAccess, featureBlockedResponse } from "@/lib/billing/apiGuard";
+import { guardApiAccess, featureBlockedResponse, quotaExceededResponse } from "@/lib/billing/apiGuard";
+import { consumeQuota } from "@/lib/billing/usage";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schémas
@@ -46,9 +48,13 @@ const sectionSchema = z.object({
 });
 
 const inputSchema = z.object({
-  brief: briefSchema,
+  // 🆕 Brief OPTIONNEL et partiel : la régénération par prompt depuis l'éditeur
+  // n'a pas le brief complet — on dérive un contexte minimal du tunnel + section.
+  brief: briefSchema.partial().optional(),
   section: sectionSchema,
-  instruction: z.string().max(500).optional(),
+  // Le prompt libre de l'utilisateur (« rends ça plus percutant », « raccourcis »…).
+  instruction: z.string().max(800).optional(),
+  language: z.enum(["fr", "en", "es"]).optional(),
 });
 
 const aiOutputSchema = z.object({
@@ -110,6 +116,19 @@ export async function POST(request: Request) {
   if (!guard.access.limits.sectionRegeneration) {
     return featureBlockedResponse("sectionRegeneration");
   }
+  // Anti-burst (par utilisateur) puis quota mensuel de plan.
+  const rl = await rateLimit(`copyregen:${guard.userId}`, 15, 60);
+  if (!rl.ok) return tooManyRequests();
+  const quota = await consumeQuota(
+    guard.userId,
+    "ai_copy_regen",
+    guard.access.limits.aiCopyRegensPerMonth,
+  );
+  if (!quota.ok) {
+    return quotaExceededResponse(
+      "Quota mensuel de régénérations IA atteint pour ton plan.",
+    );
+  }
 
   let json: unknown;
   try {
@@ -129,7 +148,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const { brief, section, instruction } = parsed.data;
+  const { brief: briefIn, section, instruction, language: langIn } = parsed.data;
+
+  // 🆕 Brief complet reconstruit avec des replis neutres : le moteur de prompt
+  // attend un FunnelBrief, mais la régénération par prompt n'en a qu'un fragment.
+  const lang = (briefIn?.language ?? langIn ?? "fr") as FunnelBrief["language"];
+  const brief: FunnelBrief = {
+    brandName: briefIn?.brandName || "",
+    offerName: briefIn?.offerName || section.headline || "",
+    price: briefIn?.price || "",
+    targetAudience: briefIn?.targetAudience || "",
+    mainPain: briefIn?.mainPain || "",
+    promise: briefIn?.promise || "",
+    tone: briefIn?.tone || "",
+    funnelType: briefIn?.funnelType || "",
+    designStyle: briefIn?.designStyle || "",
+    language: lang,
+    primaryCta: briefIn?.primaryCta,
+    defaultImageMode: briefIn?.defaultImageMode,
+  };
 
   // Pas de clé OpenAI : on renvoie un fallback propre sans planter
   if (!process.env.OPENAI_API_KEY) {
@@ -162,7 +199,14 @@ export async function POST(request: Request) {
 
     const aiRaw = stripJsonFences(response.output_text);
     const aiJson = JSON.parse(aiRaw);
-    const aiParsed = aiOutputSchema.safeParse(aiJson);
+    // 🆕 Robustesse : le modèle peut répondre soit la section à plat
+    // ({ type, headline... }), soit enveloppée ({ section: {...} }). On gère les
+    // deux pour éviter un faux « fallback » (texte inchangé) systématique.
+    const aiCandidate =
+      aiJson && typeof aiJson === "object" && "section" in aiJson
+        ? (aiJson as { section: unknown }).section
+        : aiJson;
+    const aiParsed = aiOutputSchema.safeParse(aiCandidate);
 
     if (!aiParsed.success) {
       console.warn("regenerate-section: AI output schema mismatch, using fallback");

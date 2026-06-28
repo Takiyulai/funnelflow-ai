@@ -164,7 +164,22 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     }
 
     // Re-scan si l'éditeur modifie le DOM (changement de section, etc.)
-    const mo = new MutationObserver(() => scan());
+    // 🆕 Les éléments AJOUTÉS après le 1er rendu (ex. nouvelle section ajoutée
+    // dans l'éditeur, ou contenu saisi) sont révélés IMMÉDIATEMENT — sinon ils
+    // restent invisibles (opacity:0, animation en attente) jusqu'à un changement
+    // de viewport qui force un re-scan. WYSIWYG dans l'éditeur.
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+          if (node.matches("[data-ff-anim]")) activate(node);
+          node
+            .querySelectorAll<HTMLElement>("[data-ff-anim]")
+            .forEach((el) => activate(el));
+        });
+      }
+      scan();
+    });
     mo.observe(container, { childList: true, subtree: true });
 
     // 🆕 Re-scan au resize (changement viewport mobile/desktop)

@@ -4,6 +4,12 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
+import { runLeadCreatedWorkflows } from "@/lib/workflows/engine";
+import {
+  readDeliveryEmailConfig,
+  renderDeliveryEmail,
+} from "@/lib/funnels/deliveryEmail";
+import { rateLimit } from "@/lib/rate-limit";
 
 // ─── Schéma de validation ─────────────────────────────────────────────
 const leadSchema = z.object({
@@ -78,11 +84,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
-  // 2. Rate-limit
-  pruneRateMap();
+  // 2. Rate-limit (par IP) — 🆕 distribué via Upstash (prod multi-instance),
+  //    avec repli local en mémoire si Upstash n'est pas configuré (dev).
   const ip = getClientIp(request);
   const ipHash = hashIp(ip);
-  if (!checkRateLimit(ipHash)) {
+  const distributed = await rateLimit(`leads:${ipHash}`, RATE_MAX, 60);
+  pruneRateMap();
+  if (!distributed.ok || !checkRateLimit(ipHash)) {
     return NextResponse.json(
       { ok: false, error: "rate_limited" },
       { status: 429 }
@@ -94,14 +102,14 @@ export async function POST(request: Request) {
   const admin = getSupabaseAdmin();
   let { data: funnel, error: funnelErr } = await admin
     .from("funnels")
-    .select("id, user_id, status, language")
+    .select("id, user_id, status, language, published_content")
     .eq("published_slug", payload.funnelSlug)
     .maybeSingle();
 
   if (!funnel && !funnelErr) {
     const byDraft = await admin
       .from("funnels")
-      .select("id, user_id, status, language")
+      .select("id, user_id, status, language, published_content")
       .eq("slug", payload.funnelSlug)
       .maybeSingle();
     funnel = byDraft.data;
@@ -171,6 +179,50 @@ export async function POST(request: Request) {
     } catch (tagErr) {
       console.warn("[api/leads] auto-tag échoué (non bloquant):", tagErr);
     }
+  }
+
+  // 6. 🆕 Workflows : exécute les automatisations actives déclenchées par la
+  //    capture d'un lead (tags, statut, emails différés, notif propriétaire).
+  //    NON bloquant : toute erreur est avalée pour ne jamais perdre le lead.
+  try {
+    await runLeadCreatedWorkflows({
+      admin,
+      userId: funnel.user_id,
+      funnelId: funnel.id,
+      lead: {
+        id: lead.id,
+        email: payload.email.toLowerCase().trim(),
+        name: payload.name?.trim() || null,
+      },
+    });
+  } catch (wfErr) {
+    console.warn("[api/leads] workflows échoués (non bloquant):", wfErr);
+  }
+
+  // 7. 🆕 Email de livraison conditionnel : UNIQUEMENT si le propriétaire l'a
+  //    configuré ET activé pour ce tunnel (lu dans le snapshot publié). Jamais
+  //    d'email générique par défaut. Non bloquant.
+  try {
+    const delivery = readDeliveryEmailConfig(funnel.published_content);
+    if (delivery) {
+      const leadEmail = payload.email.toLowerCase().trim();
+      const { subject, html } = renderDeliveryEmail(delivery, {
+        email: leadEmail,
+        name: payload.name?.trim() || null,
+      });
+      await admin.from("scheduled_emails").insert({
+        user_id: funnel.user_id,
+        source_type: "delivery",
+        contact_id: lead.id,
+        recipient_email: leadEmail,
+        subject,
+        content: html,
+        scheduled_at: new Date().toISOString(),
+        status: "pending",
+      });
+    }
+  } catch (deErr) {
+    console.warn("[api/leads] email de livraison échoué (non bloquant):", deErr);
   }
 
   return NextResponse.json(

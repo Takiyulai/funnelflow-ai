@@ -59,6 +59,16 @@ const BASE_CSS = `
   --ff-accent-glow: rgba(199, 164, 54, 0.40);
   --ff-btn-glow-color: rgba(10, 16, 32, 0.5);
 
+  /* 🆕 Système de surface de CARD dérivé de la palette RÉELLE du template
+     (--ff-bg / --ff-ink / --ff-accent sont toujours définis via previewColors).
+     But : cards teintées de l'accent du template (« accent maîtrisé »), avec un
+     texte TOUJOURS contrasté — fini le doré parasite et l'illisibilité, sans
+     éditer chaque bloc [data-ff-theme]. Repli rgba(...) si color-mix non supporté. */
+  --ff-card-bg: color-mix(in srgb, var(--ff-accent) 8%, color-mix(in srgb, var(--ff-ink) 7%, var(--ff-bg)));
+  --ff-card-ink: var(--ff-ink);
+  --ff-card-ink-soft: color-mix(in srgb, var(--ff-ink) 68%, var(--ff-card-bg));
+  --ff-card-border: color-mix(in srgb, var(--ff-accent) 30%, transparent);
+
   /* Header / Footer adaptatifs : par defaut on suit le thème
      mais chaque thème peut surcharger ces variables */
   --ff-brand-bar-bg: var(--ff-surface);
@@ -144,7 +154,11 @@ const BASE_CSS = `
 @container ffpage (min-width: 1024px) {
   .ff-page { --ff-headline-scale: calc(3.4375rem * var(--ff-text-scale)); } /* 55px */
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
     .ff-page { --ff-headline-scale: calc(2.8125rem * var(--ff-text-scale)); }
   }
@@ -178,7 +192,11 @@ const BASE_CSS = `
     padding-right: 32px;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-section {
       padding-top: var(--ff-section-py-md);
@@ -199,7 +217,11 @@ const BASE_CSS = `
     padding-top: 3.5rem;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-page > .ff-section:first-of-type,
     .ff-page > .ff-brand-bar + .ff-section {
@@ -316,7 +338,11 @@ const BASE_CSS = `
     align-self: flex-start;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-split-grid { gap: 3rem; flex-wrap: nowrap; align-items: center; }
     .ff-split-text {
@@ -432,7 +458,11 @@ const BASE_CSS = `
     justify-self: start;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-page .ff-section[data-ff-layout="split-text-image"] > div.relative,
     .ff-page .ff-section[data-ff-layout="split-image-text"] > div.relative {
@@ -685,6 +715,30 @@ const BASE_CSS = `
 }
 
 /* ─── CTA — style inspire de l'ancien (min-height 58px, glow permanent, hover lift) ─── */
+/* 🆕 Lien discret « Non merci, continuer » (refus d'une offre OTO). */
+.ff-decline-wrap {
+  text-align: center;
+  margin-top: 0.9rem;
+}
+.ff-decline-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--ff-ink) 60%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.ff-decline-link:hover {
+  color: var(--ff-ink);
+}
+
+/* 🆕 Bullets « Titre | Description » : titre en gras, description en dessous. */
+.ff-bullet-title { font-weight: 700; }
+.ff-bullets--grid .ff-bullet-title { display: block; margin-bottom: 0.3rem; }
+.ff-bullets--grid .ff-bullet-desc { display: block; opacity: 0.85; font-size: 0.95em; }
+.ff-bullet-desc { opacity: 0.9; }
+
 .ff-btn,
 .ff-cta {
   position: relative;
@@ -755,7 +809,11 @@ const BASE_CSS = `
     justify-content: flex-start;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-split-text .ff-cta-wrap { justify-content: flex-start; }
     .ff-page .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-cta-wrap,
@@ -836,7 +894,11 @@ const BASE_CSS = `
 @container ffpage (min-width: 960px) {
   .ff-grid-3 { grid-template-columns: repeat(3, 1fr); }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-grid-2 { grid-template-columns: repeat(2, 1fr); }
     .ff-grid-3 { grid-template-columns: repeat(2, 1fr); }
@@ -854,16 +916,30 @@ const BASE_CSS = `
   margin: 24px 0 0;
 }
 .ff-feature-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--ff-border);
-  border-radius: 0.75rem;
+  /* 🆕 Fond dérivé de la palette du template + texte contrasté + ombre + halo accent. */
+  background: rgba(255, 255, 255, 0.05);
+  background: var(--ff-card-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--ff-card-border, var(--ff-border));
+  border-radius: 0.875rem;
   padding: 1.25rem;
   text-align: left;
   font-size: 0.9375rem;
-  color: var(--ff-ink-soft);
+  color: var(--ff-card-ink-soft, var(--ff-ink-soft));
   line-height: 1.55;
   min-width: 0;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
 }
+.ff-feature-card :is(h1,h2,h3,h4,strong,b) { color: var(--ff-card-ink, var(--ff-ink)); }
+
+/* 🆕 B2 : puces numérotées (process/programme) — parité avec l'aperçu. */
+.ff-bullet-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border-radius: 999px;
+  background: var(--ff-accent, #31845C); color: var(--ff-accent-ink, #fff);
+  font-weight: 800; font-size: 0.95rem; line-height: 1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+.ff-bullet-num--sm { width: 1.5rem; height: 1.5rem; font-size: 0.8rem; }
 
 .ff-testimonials {
   display: grid;
@@ -878,10 +954,11 @@ const BASE_CSS = `
   display: flex;
   flex-direction: column;
   padding: 1.25rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--ff-border);
+  background: var(--ff-card-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--ff-card-border, var(--ff-border));
   border-radius: 14px;
   min-width: 0;
+  color: var(--ff-card-ink-soft, var(--ff-ink-soft));
 }
 .ff-testimonial-rating {
   color: #f59e0b;
@@ -978,11 +1055,12 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   position: relative;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--ff-border);
+  background: var(--ff-card-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--ff-card-border, var(--ff-border));
   border-radius: 14px;
   padding: 1.25rem;
   min-width: 0;
+  color: var(--ff-card-ink-soft, var(--ff-ink-soft));
 }
 .ff-pricing-card--highlighted {
   background: rgba(10, 16, 32, 0.08);
@@ -1048,9 +1126,10 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   gap: 14px;
   padding: 1.125rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--ff-border);
+  background: var(--ff-card-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--ff-card-border, var(--ff-border));
   min-width: 0;
+  color: var(--ff-card-ink-soft, var(--ff-ink-soft));
 }
 .ff-bonus-icon {
   flex-shrink: 0;
@@ -1092,7 +1171,7 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   margin: 24px auto 0;
   padding: 24px;
   border-radius: 16px;
-  background: var(--ff-accent-card);
+  background: var(--ff-card-bg, var(--ff-accent-card));
   border: 2px solid var(--ff-accent);
   display: flex;
   flex-direction: column;
@@ -1104,7 +1183,11 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 @container ffpage (min-width: 640px) {
   .ff-guarantee { flex-direction: row; text-align: left; }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
     .ff-guarantee { flex-direction: row; text-align: left; }
   }
@@ -1131,7 +1214,11 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 @container ffpage (min-width: 640px) {
   .ff-guarantee-head { justify-content: flex-start; }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
     .ff-guarantee-head { justify-content: flex-start; }
   }
@@ -1162,7 +1249,7 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   min-width: 0;
 }
 .ff-card-elevated {
-  background: var(--ff-accent-card);
+  background: var(--ff-card-bg, var(--ff-accent-card));
   border: 2px solid var(--ff-accent);
   border-radius: 1rem;
   padding: 1.75rem;
@@ -1192,8 +1279,8 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   gap: 1rem;
   text-align: center;
   align-items: center;
-  background: var(--ff-accent-card);
-  border: 1px solid var(--ff-border);
+  background: var(--ff-card-bg, var(--ff-accent-card));
+  border: 1px solid var(--ff-card-border, var(--ff-border));
   border-radius: 1.25rem;
   padding: 1.75rem;
 }
@@ -1320,7 +1407,11 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 @container ffpage (min-width: 640px) {
   .ff-brand-bar img { height: 32px; max-width: 160px; }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
     .ff-brand-bar img { height: 32px; max-width: 160px; }
   }
@@ -1413,7 +1504,11 @@ a.ff-brand-cta:hover {
 @container ffpage (min-width: 760px) {
   .ff-footer { padding: 24px 32px; }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 760px) {
     .ff-footer { padding: 24px 32px; }
   }
@@ -1461,6 +1556,13 @@ a.ff-brand-cta:hover {
 .ff-page .ff-anim-zoom-in { animation-name: ff-zoom-in; }
 .ff-page .ff-anim-zoom-out { animation-name: ff-zoom-out; }
 .ff-page .ff-anim-pulse { animation: ff-pulse 0.8s ease-out 0.1s both; }
+
+/* ─── Mode SCROLL (progressive enhancement, active par JS) ───
+   Sans JS : les animations jouent au chargement (comportement historique).
+   Avec JS : on met chaque element en pause (fige au 1er keyframe = opacity:0)
+   jusqu'a ce qu'il entre dans le viewport (.ff-in) → reveal au scroll. */
+.ff-page.ff-anim-scroll [class*="ff-anim-"] { animation-play-state: paused; }
+.ff-page.ff-anim-scroll [class*="ff-anim-"].ff-in { animation-play-state: running; }
 
 @keyframes ff-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ff-fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
@@ -1535,7 +1637,11 @@ a.ff-brand-cta:hover {
 @container ffpage (min-width: 640px) {
   .ff-form-fields { grid-template-columns: 1fr 1fr; }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
     .ff-form-fields { grid-template-columns: 1fr 1fr; }
   }
@@ -1744,6 +1850,32 @@ textarea.ff-input {
   color: inherit;
 }
 
+/* 🆕 Variation subtile des cartes (anti-monotonie) — parité aperçu. */
+.ff-bullets--grid > li:nth-child(2n) {
+  background: color-mix(in srgb, var(--ff-accent) 5%, var(--ff-surface, rgba(255, 255, 255, 0.04)));
+}
+.ff-bullets--grid > li:nth-child(3n) {
+  background: color-mix(in srgb, var(--ff-accent) 9%, var(--ff-surface, rgba(255, 255, 255, 0.04)));
+  border-color: color-mix(in srgb, var(--ff-accent) 35%, var(--ff-border, rgba(255, 255, 255, 0.08)));
+}
+
+/* 🆕 Eyebrow CENTRÉ au-dessus d'un split (sorti du bloc texte). */
+.ff-split-eyebrow-top { text-align: center; margin: 0 auto 1.25rem; }
+
+/* 🆕 Colonne de CARTES d'un split sans image : pile verticale pleine largeur
+   dans sa colonne (au lieu d'une grille 2-col écrasée). */
+.ff-split-media.ff-split-cards {
+  display: block;
+  width: 100%;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.ff-split-cards .ff-bullets--grid {
+  grid-template-columns: 1fr;
+  margin: 0;
+  max-width: 100%;
+}
+
 /* Container query : si la section est etroite (mobile/editeur SIO etroit),
    on passe en 1 colonne */
 @container ff-section (max-width: 560px) {
@@ -1756,7 +1888,11 @@ textarea.ff-input {
   }
 }
 /* Fallback media query (anciens navigateurs / contextes sans container) */
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (max-width: 640px) {
     .ff-bullets--grid {
       grid-template-columns: 1fr;
@@ -1847,7 +1983,11 @@ textarea.ff-input {
   }
 }
 /* Fallback media query */
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (max-width: 640px) {
     .ff-bullets--inline-strip {
       flex-direction: column;
@@ -1965,7 +2105,11 @@ textarea.ff-input {
     padding: 0.5rem 0.625rem !important;
   }
 }
-@supports not (container-type: inline-size) {
+/* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
+   seulement en l'absence de container queries), pour activer le layout desktop
+   même quand le bloc est collé dans une colonne SIO étroite. Condition
+   toujours vraie = « que les container queries soient supportées ou non ». */
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (max-width: 640px) {
     .ff-page .ff-timer--cards > div:last-child,
     .ff-page .ff-timer--digital > div:last-child {
@@ -2393,6 +2537,129 @@ const THEMES_CSS = `
   width: 80%; height: 50%; top: -20%; left: 10%;
   background: radial-gradient(circle, rgba(34, 211, 238, 0.45), transparent 70%);
   opacity: 0.55;
+}
+
+/* ═══ WEBINAR LIVE (🆕 thème créé — indigo sur navy) ═══ */
+.ff-page[data-ff-theme="webinar-live"] {
+  --ff-bg: #0b1228;
+  --ff-surface: #141a35;
+  --ff-ink: #eef2ff;
+  --ff-ink-soft: #c7d0f5;
+  --ff-muted: #8a93c2;
+  --ff-border: rgba(99, 102, 241, 0.22);
+  --ff-accent: #6366f1;
+  --ff-accent-ink: #ffffff;
+  --ff-accent-soft: rgba(99, 102, 241, 0.20);
+  --ff-accent-card: rgba(99, 102, 241, 0.12);
+  --ff-accent-glow: rgba(99, 102, 241, 0.45);
+  --ff-btn-glow-color: rgba(99, 102, 241, 0.50);
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.02em;
+  --ff-heading-leading: 1.12;
+  --ff-btn-radius: 10px;
+  --ff-btn-bg: linear-gradient(180deg, #818cf8 0%, #6366f1 100%);
+  --ff-btn-ink: #ffffff;
+  --ff-btn-shadow: 0 8px 24px rgba(99, 102, 241, 0.40);
+  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
+  --ff-section-alt-2: rgba(99, 102, 241, 0.10);
+  --ff-section-alt-border: rgba(99, 102, 241, 0.25);
+  --ff-brand-bar-bg: #0b1228;
+  --ff-brand-bar-ink: #eef2ff;
+  --ff-brand-bar-border: rgba(99, 102, 241, 0.22);
+  --ff-footer-bg: #070c1c;
+  --ff-footer-ink: rgba(238, 242, 255, 0.65);
+  --ff-footer-business-ink: #eef2ff;
+  --ff-footer-border: rgba(99, 102, 241, 0.15);
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.16), transparent 60%),
+    linear-gradient(180deg, #0b1228 0%, #141a35 100%);
+}
+.ff-page[data-ff-theme="webinar-live"]::before {
+  width: 80%; height: 50%; top: -20%; left: 10%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.45), transparent 70%);
+  opacity: 0.5;
+}
+
+/* ═══ SHOWCASE (🆕 thème créé — émeraude sur charbon) ═══ */
+.ff-page[data-ff-theme="showcase"] {
+  --ff-bg: #0e1116;
+  --ff-surface: #161b22;
+  --ff-ink: #ecfdf5;
+  --ff-ink-soft: #b9e7d4;
+  --ff-muted: #6b8c7f;
+  --ff-border: rgba(52, 211, 153, 0.22);
+  --ff-accent: #34d399;
+  --ff-accent-ink: #04231a;
+  --ff-accent-soft: rgba(52, 211, 153, 0.20);
+  --ff-accent-card: rgba(52, 211, 153, 0.12);
+  --ff-accent-glow: rgba(52, 211, 153, 0.45);
+  --ff-btn-glow-color: rgba(52, 211, 153, 0.50);
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.02em;
+  --ff-heading-leading: 1.12;
+  --ff-btn-radius: 12px;
+  --ff-btn-bg: linear-gradient(180deg, #6ee7b7 0%, #34d399 100%);
+  --ff-btn-ink: #04231a;
+  --ff-btn-shadow: 0 8px 24px rgba(52, 211, 153, 0.38);
+  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
+  --ff-section-alt-2: rgba(52, 211, 153, 0.10);
+  --ff-section-alt-border: rgba(52, 211, 153, 0.25);
+  --ff-brand-bar-bg: #0e1116;
+  --ff-brand-bar-ink: #ecfdf5;
+  --ff-brand-bar-border: rgba(52, 211, 153, 0.22);
+  --ff-footer-bg: #090c10;
+  --ff-footer-ink: rgba(236, 253, 245, 0.65);
+  --ff-footer-business-ink: #ecfdf5;
+  --ff-footer-border: rgba(52, 211, 153, 0.15);
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(52, 211, 153, 0.15), transparent 60%),
+    linear-gradient(180deg, #0e1116 0%, #161b22 100%);
+}
+.ff-page[data-ff-theme="showcase"]::before {
+  width: 80%; height: 50%; top: -20%; left: 10%;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.42), transparent 70%);
+  opacity: 0.5;
+}
+
+/* ═══ VSL FOCUS (🆕 thème créé — bleu ciel sur nuit) ═══ */
+.ff-page[data-ff-theme="vsl-focus"] {
+  --ff-bg: #070a12;
+  --ff-surface: #0e1422;
+  --ff-ink: #eef2f8;
+  --ff-ink-soft: #c2cde0;
+  --ff-muted: #6b7894;
+  --ff-border: rgba(56, 189, 248, 0.22);
+  --ff-accent: #38bdf8;
+  --ff-accent-ink: #04141f;
+  --ff-accent-soft: rgba(56, 189, 248, 0.20);
+  --ff-accent-card: rgba(56, 189, 248, 0.12);
+  --ff-accent-glow: rgba(56, 189, 248, 0.45);
+  --ff-btn-glow-color: rgba(56, 189, 248, 0.50);
+  --ff-heading-weight: 800;
+  --ff-heading-tracking: -0.02em;
+  --ff-heading-leading: 1.12;
+  --ff-btn-radius: 10px;
+  --ff-btn-bg: linear-gradient(180deg, #7dd3fc 0%, #38bdf8 100%);
+  --ff-btn-ink: #04141f;
+  --ff-btn-shadow: 0 8px 24px rgba(56, 189, 248, 0.38);
+  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
+  --ff-section-alt-2: rgba(56, 189, 248, 0.10);
+  --ff-section-alt-border: rgba(56, 189, 248, 0.25);
+  --ff-brand-bar-bg: #070a12;
+  --ff-brand-bar-ink: #eef2f8;
+  --ff-brand-bar-border: rgba(56, 189, 248, 0.22);
+  --ff-footer-bg: #04060c;
+  --ff-footer-ink: rgba(238, 242, 248, 0.65);
+  --ff-footer-business-ink: #eef2f8;
+  --ff-footer-border: rgba(56, 189, 248, 0.15);
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.15), transparent 60%),
+    linear-gradient(180deg, #070a12 0%, #0e1422 100%);
+}
+.ff-page[data-ff-theme="vsl-focus"]::before {
+  width: 80%; height: 50%; top: -20%; left: 10%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.42), transparent 70%);
+  opacity: 0.5;
 }
 
 /* ═══ TRUST PRO ═══ */
@@ -2856,6 +3123,10 @@ const ALLOWED_THEMES = [
   "cosmos-night",
   "sunset-coral",
   "neo-brutalist",
+  // 🆕 Thèmes ajoutés (avaient un template mais PAS de bloc CSS → repli story-sell).
+  "webinar-live",
+  "showcase",
+  "vsl-focus",
 ] as const;
 
 type ThemeId = typeof ALLOWED_THEMES[number];
@@ -2913,4 +3184,69 @@ export function buildThemeRootAttrs(funnel: Funnel): ThemeRootAttrs {
     dataAttrs,
     inlineStyle: styleParts.join(";"),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. 🆕 Résolution des couleurs RÉELLES du thème (bg/ink/accent) — pour générer
+// du CSS hors .ff-page (ex. restylage d'un popup systeme.io aux vraies couleurs
+// du template, pas aux couleurs génériques de funnel.design).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ThemeColors = { bg: string; ink: string; accent: string };
+
+const THEME_COLOR_DEFAULTS: ThemeColors = {
+  bg: "#ffffff",
+  ink: "#0f172a",
+  accent: "#c7a436",
+};
+
+const _themeColorCache = new Map<string, ThemeColors>();
+
+/** Extrait --ff-bg/--ff-ink/--ff-accent du bloc racine d'un thème dans THEMES_CSS. */
+function extractThemeColors(theme: string): ThemeColors {
+  const cached = _themeColorCache.get(theme);
+  if (cached) return cached;
+
+  const css = THEMES_CSS;
+  const blockRe = new RegExp(
+    `\\.ff-page\\[data-ff-theme="${theme}"\\][^{]*\\{([^}]*)\\}`,
+    "g",
+  );
+  let m: RegExpExecArray | null;
+  let result = { ...THEME_COLOR_DEFAULTS };
+  while ((m = blockRe.exec(css)) !== null) {
+    const body = m[1];
+    if (body.includes("--ff-bg")) {
+      const grab = (v: string): string | undefined =>
+        body.match(new RegExp(`--ff-${v}\\s*:\\s*([^;]+)`))?.[1]?.trim();
+      result = {
+        bg: grab("bg") || THEME_COLOR_DEFAULTS.bg,
+        ink: grab("ink") || THEME_COLOR_DEFAULTS.ink,
+        accent: grab("accent") || THEME_COLOR_DEFAULTS.accent,
+      };
+      break;
+    }
+  }
+  _themeColorCache.set(theme, result);
+  return result;
+}
+
+/** Couleurs résolues (bg/ink/accent) telles qu'affichées pour ce funnel. */
+export function getThemeColors(funnel: Funnel): ThemeColors {
+  const design = (funnel.design ?? {}) as Record<string, unknown>;
+  const meta = funnel.meta as { templateId?: string } | undefined;
+  const templateId = meta?.templateId ?? design.templateId ?? "story-sell";
+  const theme = isAllowedTheme(templateId) ? templateId : "story-sell";
+
+  const colors = extractThemeColors(theme);
+
+  // Override d'accent explicite (même règle que buildThemeRootAttrs).
+  if (
+    design.userAccentOverride === true &&
+    typeof design.accentColor === "string" &&
+    /^#[0-9a-fA-F]{3,8}$/.test(design.accentColor)
+  ) {
+    return { ...colors, accent: design.accentColor };
+  }
+  return colors;
 }

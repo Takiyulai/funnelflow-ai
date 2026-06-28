@@ -191,7 +191,18 @@ function InternalPopup({
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (isPreview || state.kind === "submitting" || state.kind === "success") return;
+    if (state.kind === "submitting" || state.kind === "success") return;
+
+    // En aperçu (pas de slug de tunnel), une vraie soumission à /api/leads
+    // échouerait : on SIMULE le succès pour pouvoir tester le rendu du popup,
+    // sans envoyer aucune donnée.
+    if (isPreview) {
+      const previewMsg =
+        section.formConfig?.successMessage ||
+        "Merci ! (aperçu — aucune donnée envoyée)";
+      setState({ kind: "success", message: previewMsg });
+      return;
+    }
 
     const formEl = e.currentTarget;
     const formData = new FormData(formEl);
@@ -353,16 +364,16 @@ function InternalPopup({
               <X size={16} />
             </button>
 
-            <div className="mb-4 pr-8">
+            <div className="mb-4 px-8">
               <h2
                 id="ff-popup-title"
-                className="text-xl font-black leading-tight"
+                className="text-xl font-black uppercase leading-tight text-center"
                 style={{ color: "var(--ff-ink, #0f172a)" }}
               >
                 {title}
               </h2>
               {body && (
-                <p className="mt-1.5 text-sm" style={{ opacity: 0.75 }}>
+                <p className="mt-1.5 text-center text-sm" style={{ opacity: 0.75 }}>
                   {body}
                 </p>
               )}
@@ -381,7 +392,7 @@ function InternalPopup({
               <button
                 type="submit"
                 disabled={
-                  state.kind === "submitting" || state.kind === "success" || isPreview
+                  state.kind === "submitting" || state.kind === "success"
                 }
                 className="mt-2 w-full rounded-lg px-4 py-3 text-sm font-bold transition disabled:opacity-70 disabled:cursor-not-allowed"
                 style={{
@@ -389,7 +400,7 @@ function InternalPopup({
                   color: "var(--ff-accent-ink, #ffffff)",
                   border: "none",
                   cursor:
-                    state.kind === "submitting" || state.kind === "success" || isPreview
+                    state.kind === "submitting" || state.kind === "success"
                       ? "not-allowed"
                       : "pointer",
                 }}
@@ -401,9 +412,9 @@ function InternalPopup({
                     : cta.label || "Valider"}
               </button>
 
-              {isPreview && (
+              {isPreview && state.kind !== "success" && (
                 <p className="text-center text-[11px]" style={{ opacity: 0.5 }}>
-                  Aperçu : le formulaire est désactivé.
+                  Aperçu — soumission simulée, aucune donnée n'est envoyée.
                 </p>
               )}
 

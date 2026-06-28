@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Send, Save, AlertCircle, Eye, Pencil } from "lucide-react";
+import { Plus, X, Send, Save, AlertCircle, Eye, Pencil, Clock } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
@@ -26,6 +26,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const STATUS_LABEL: Record<CampaignStatus, string> = {
   draft: "Brouillon",
+  scheduled: "Programmée",
   sending: "Envoi…",
   sent: "Envoyée",
   failed: "Échec",
@@ -33,10 +34,30 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
 
 const STATUS_COLOR: Record<CampaignStatus, string> = {
   draft: "#6B7280",
+  scheduled: "#08498D",
   sending: "#C7A436",
   sent: "#31845C",
   failed: "#DC2626",
 };
+
+/** Formate une Date en valeur `datetime-local` (heure LOCALE, sans fuseau). */
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+/** Valeur par défaut du picker : maintenant + 15 min (format local). */
+function defaultScheduleValue(): string {
+  return toLocalInputValue(new Date(Date.now() + 15 * 60 * 1000));
+}
+
+/** Borne MIN du picker : maintenant (permet de programmer dans l'heure). */
+function minScheduleValue(): string {
+  return toLocalInputValue(new Date());
+}
 
 const AUDIENCES: { value: string; label: string }[] = [
   { value: "all", label: "Tous les contacts" },
@@ -62,6 +83,9 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
   const [form, setForm] = useState({ subject: "", content: "" });
   const [audience, setAudience] = useState("all");
   const [busy, setBusy] = useState(false);
+  // 🆕 Mode d'envoi : maintenant ou programmé (date/heure).
+  const [sendMode, setSendMode] = useState<"now" | "schedule">("now");
+  const [scheduledAt, setScheduledAt] = useState<string>("");
 
   async function createCampaign() {
     if (!newName.trim() || busy) return;
@@ -90,6 +114,65 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
     setEditing(c);
     setForm({ subject: c.subject, content: c.content });
     setAudience("all");
+    setSendMode("now");
+    setScheduledAt(defaultScheduleValue());
+  }
+
+  function audiencePayload() {
+    return audience === "all"
+      ? { type: "all" as const }
+      : { type: "status" as const, status: audience as LeadStatus };
+  }
+
+  // 🆕 Programme la campagne à la date choisie (file scheduled_emails + cron).
+  async function scheduleCampaign() {
+    if (!editing || busy) return;
+    if (!form.subject.trim()) {
+      alert("Renseigne un objet avant de programmer.");
+      return;
+    }
+    if (!scheduledAt) {
+      alert("Choisis une date et une heure d'envoi.");
+      return;
+    }
+    // datetime-local est en heure LOCALE → on convertit en ISO (UTC) pour l'API.
+    const iso = new Date(scheduledAt).toISOString();
+    if (new Date(iso).getTime() < Date.now() - 60_000) {
+      alert("La date d'envoi doit être dans le futur.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await fetch(`/api/crm/campaigns/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const res = await fetch(`/api/crm/campaigns/${editing.id}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audience: audiencePayload(), scheduledAt: iso }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        alert(
+          `Campagne programmée pour ${fmtDate(json.scheduledAt)} · ${json.scheduled} email(s) en file. 📅`,
+        );
+        setEditing(null);
+        router.refresh();
+      } else {
+        const map: Record<string, string> = {
+          no_recipients: "Aucun destinataire pour ce ciblage.",
+          subject_required: "Objet requis.",
+          date_in_past: "La date d'envoi doit être dans le futur.",
+          invalid_date: "Date invalide.",
+          scheduledAt_required: "Choisis une date d'envoi.",
+        };
+        alert(map[json.error] || json.error || "Programmation impossible.");
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function save() {
@@ -144,8 +227,8 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
             `Envoyé : ${json.sent}/${json.total} · Échecs : ${json.failed}.\n\n` +
               `Raison Resend : ${json.error || "inconnue"}\n\n` +
               `Astuce : un expéditeur @gmail.com n'est PAS accepté par Resend. ` +
-              `Utilise RESEND_FROM="… <onboarding@resend.dev>" (test, livre à l'email de ton compte Resend) ` +
-              `ou un domaine vérifié.`,
+              `Configure RESEND_FROM_EMAIL (ex. noreply@tondomaine.com) et RESEND_FROM_NAME, ` +
+              `avec un domaine vérifié dans Resend (ou onboarding@resend.dev en test, qui ne livre qu'à l'email de ton compte Resend).`,
           );
         } else {
           alert(`Campagne envoyée : ${json.sent} réussi(s) sur ${json.total}. ✅`);
@@ -183,7 +266,7 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
       {!resendReady && (
         <div className="mb-5 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          Resend n&apos;est pas configuré : ajoute <code className="mx-1 font-mono">RESEND_API_KEY</code> (et <code className="mx-1 font-mono">RESEND_FROM</code> vérifié) dans <code className="ml-1 font-mono">.env.local</code>.
+          Resend n&apos;est pas configuré : ajoute <code className="mx-1 font-mono">RESEND_API_KEY</code> (et <code className="mx-1 font-mono">RESEND_FROM_EMAIL</code> / <code className="mx-1 font-mono">RESEND_FROM_NAME</code> avec un domaine vérifié) dans <code className="ml-1 font-mono">.env.local</code>.
         </div>
       )}
 
@@ -235,7 +318,11 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
                     "—"
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted whitespace-nowrap">{fmtDate(c.sent_at)}</td>
+                <td className="px-4 py-3 text-muted whitespace-nowrap">
+                  {c.status === "scheduled"
+                    ? `⏳ ${fmtDate(c.scheduled_at)}`
+                    : fmtDate(c.sent_at)}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     <button
@@ -324,14 +411,58 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
                   ))}
                 </select>
               </label>
+
+              {/* 🆕 Mode d'envoi : maintenant ou programmé */}
+              <div className="grid gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">Envoi</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSendMode("now")}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                      sendMode === "now"
+                        ? "border-[#08498D] bg-[#08498D]/10 text-[#08498D]"
+                        : "border-line text-muted hover:text-ink"
+                    }`}
+                  >
+                    Envoyer maintenant
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendMode("schedule")}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                      sendMode === "schedule"
+                        ? "border-[#08498D] bg-[#08498D]/10 text-[#08498D]"
+                        : "border-line text-muted hover:text-ink"
+                    }`}
+                  >
+                    Programmer
+                  </button>
+                  {sendMode === "schedule" && (
+                    <input
+                      type="datetime-local"
+                      value={scheduledAt}
+                      min={minScheduleValue()}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="rounded-lg border border-line px-3 py-2 text-sm focus:outline-none focus:border-[#08498D]"
+                    />
+                  )}
+                </div>
+              </div>
             </div>
             <div className="mt-6 flex items-center justify-end gap-2">
               <Button variant="secondary" onClick={save} disabled={busy}>
                 <Save className="h-4 w-4" /> Enregistrer
               </Button>
-              <Button onClick={send} disabled={busy || !resendReady}>
-                <Send className="h-4 w-4" /> {busy ? "Envoi…" : "Envoyer"}
-              </Button>
+              {sendMode === "schedule" ? (
+                <Button onClick={scheduleCampaign} disabled={busy || !resendReady}>
+                  <Clock className="h-4 w-4" /> {busy ? "Programmation…" : "Programmer l'envoi"}
+                </Button>
+              ) : (
+                <Button onClick={send} disabled={busy || !resendReady}>
+                  <Send className="h-4 w-4" /> {busy ? "Envoi…" : "Envoyer maintenant"}
+                </Button>
+              )}
             </div>
           </div>
         </div>

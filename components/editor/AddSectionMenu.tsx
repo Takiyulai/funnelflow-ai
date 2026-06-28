@@ -30,6 +30,7 @@ const GROUPS: Group[] = [
     label: "Persuasion",
     items: [
       { type: "problem", label: "Problème", hint: "Identifie le pain point" },
+      { type: "agitation", label: "Amplification", hint: "Amplifie la douleur / l'enjeu" },
       { type: "solution", label: "Solution", hint: "Présente ta réponse" },
       { type: "benefits", label: "Bénéfices", hint: "Liste de bénéfices" },
       { type: "proof", label: "Preuve", hint: "Témoignages/résultats" },
@@ -49,6 +50,7 @@ const GROUPS: Group[] = [
   {
     label: "Conversion",
     items: [
+      { type: "urgency", label: "Urgence / Rareté", hint: "Crée l'urgence avant le CTA" },
       { type: "cta", label: "CTA", hint: "Bouton d'action" },
       { type: "form", label: "Formulaire", hint: "Capture de leads" },
       { type: "qualification", label: "Qualification", hint: "Questions de qualif" },
@@ -85,6 +87,8 @@ const DEFAULT_HEADLINES: Record<FunnelSectionType, string> = {
   webinar: "Réservez votre place",
   video: "Découvrez en vidéo",
   qualification: "Êtes-vous au bon endroit ?",
+  agitation: "Et si rien ne change ?",
+  urgency: "L'offre ne durera pas",
   "raw-html": "Section HTML personnalisée",
 };
 

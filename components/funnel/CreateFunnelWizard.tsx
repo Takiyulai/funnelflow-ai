@@ -27,7 +27,7 @@ import { getFunnelKind } from "@/lib/funnels/kinds";
 import type {
   Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs,
 } from "@/lib/funnels/types";
-import { makeAnchorCta } from "@/lib/funnels/types";
+import { makeAnchorCta, makeRedirectCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
 import { useRouter } from "next/navigation";
 import {
@@ -57,7 +57,8 @@ const initialBrief: FunnelBrief = {
   funnelType: "Vente ebook premium",
   designStyle: "premium",
   language: "fr",
-  primaryCta: makeAnchorCta("Recevoir l'offre", "lead-form"),
+  // 🆕 Défaut = lien de redirection (l'utilisateur colle l'URL de destination).
+  primaryCta: makeRedirectCta("Recevoir l'offre", ""),
   defaultImageMode: "none",
   funnelKind: undefined,
   creationMode: "guided",
@@ -109,12 +110,15 @@ export function CreateFunnelWizard() {
     // Express IA : parcours allégé (le copy vient du prompt, le type est choisi
     // dans l'écran express) → on ne garde que thème, médias et finalisation.
     if (brief.creationMode === "express") {
-      const express: StepLabel[] = ["Template", "Médias", "Visuels", "Ambiance", "Génération"];
+      const express: StepLabel[] = ["Template", "Médias", "Ambiance", "Génération"];
       // Tunnel qui a besoin d'une vidéo (ex. webinaire) → on insère l'étape Vidéo.
       if (includeVideo) express.splice(1, 0, "Vidéo");
       return express;
     }
-    return ALL_STEPS.filter((label) => label !== "Vidéo" || includeVideo);
+    // 🆕 Step « Visuels » retiré du parcours (jugé redondant avec « Médias »).
+    return ALL_STEPS.filter(
+      (label) => (label !== "Vidéo" || includeVideo) && label !== "Visuels",
+    );
   }, [brief.funnelKind, brief.creationMode]);
 
   useEffect(() => {
@@ -840,6 +844,34 @@ function OfferStep({
         <Field label="Prix">
           <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
         </Field>
+
+        <div className="rounded-xl border border-line/60 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+            Upsell (optionnel) — proposé après l'achat
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+            <Field label="Offre upsell" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
+              <Input value={brief.upsellOffer ?? ""} onChange={(e) => update("upsellOffer", e.target.value)} placeholder="Pack modèles + coaching de groupe..." />
+            </Field>
+            <Field label="Prix upsell">
+              <Input value={brief.upsellPrice ?? ""} onChange={(e) => update("upsellPrice", e.target.value)} placeholder="27€..." />
+            </Field>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-line/60 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+            Downsell (optionnel) — repli si l'upsell est refusé
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+            <Field label="Offre downsell" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
+              <Input value={brief.downsellOffer ?? ""} onChange={(e) => update("downsellOffer", e.target.value)} placeholder="Les modèles seuls, sans le coaching..." />
+            </Field>
+            <Field label="Prix downsell">
+              <Input value={brief.downsellPrice ?? ""} onChange={(e) => update("downsellPrice", e.target.value)} placeholder="17€..." />
+            </Field>
+          </div>
+        </div>
 
         <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
           <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />

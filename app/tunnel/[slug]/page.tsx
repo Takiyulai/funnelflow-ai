@@ -1,11 +1,12 @@
-// app/p/[slug]/page.tsx — page d'entrée (home) du funnel publié
+// app/tunnel/[slug]/page.tsx — page d'entrée (home) du funnel publié
 import { notFound } from "next/navigation";
 import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
-import { renderFunnelHtml } from "@/lib/export/html";
 import { getHomePage } from "@/lib/funnels/types";
-import PublicFunnelRuntime from "@/components/funnel/PublicFunnelRuntime";
+import PublishedFunnelView from "./PublishedFunnelView";
 
-export const dynamic = "force-dynamic";
+// 🆕 Chantier 3 — caching : page PUBLIQUE identique pour tous → ISR (revalidée
+// toutes les 60s) + revalidation ON-DEMAND à la publication (cf. funnelRepository).
+export const revalidate = 60;
 
 export default async function PublishedFunnelPage({
   params,
@@ -16,18 +17,7 @@ export default async function PublishedFunnelPage({
   const published = await getPublishedFunnelBySlug(slug);
   if (!published) notFound();
 
+  // 🆕 Rendu unifié via FunnelPreview (parité exacte avec l'aperçu).
   const home = getHomePage(published.funnel);
-  const html = renderFunnelHtml(published.funnel, {
-    targetPageId: home?.id,
-    fullDocument: false,
-    publicSlug: slug,
-  });
-
-
-  return (
-    <>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
-      <PublicFunnelRuntime />
-    </>
-  );
+  return <PublishedFunnelView funnel={published.funnel} activePage={home} />;
 }

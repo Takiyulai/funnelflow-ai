@@ -92,13 +92,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="lg:flex">
-        <Sidebar
-          mobileOpen={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
+      <div className="lg:flex lg:items-stretch">
+        {/* 🆕 Colonne sidebar qui s'étire sur TOUTE la hauteur (fond sombre),
+            pour éviter le « trou » clair sous la sidebar sticky quand le contenu
+            de la page est plus long que l'écran. La sidebar reste sticky à
+            l'intérieur. Sur mobile, l'aside est `fixed` → ce wrapper n'a aucun
+            impact visuel. */}
+        <div className="lg:shrink-0 lg:bg-[#0D1628]">
+          <Sidebar
+            mobileOpen={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        </div>
 
         {/* overflow-x-clip (et non hidden) : empêche le débordement horizontal
             SANS faire de <main> un conteneur de défilement — sinon les éléments

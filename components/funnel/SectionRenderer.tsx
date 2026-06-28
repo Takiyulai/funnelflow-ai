@@ -2,7 +2,11 @@
 
 import { CtaButton } from "@/components/funnel/CtaButton";
 import { RichText } from "@/components/funnel/RichText";
-import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
+import {
+  effectiveLayoutVariant,
+  resolveImageUrl,
+  sectionHasUsableImage,
+} from "@/lib/funnels/resolveMedia";
 import type {
   AnimationPreset,
   Funnel,
@@ -94,6 +98,7 @@ if (section.type === "raw-html") {
       <div className="ff-section-inner">
         <LayoutBody
           section={section}
+          funnel={funnel}
           layout={layout}
           mode={mode}
           videoEmbedUrl={videoEmbedUrl ?? null}
@@ -110,6 +115,7 @@ if (section.type === "raw-html") {
 
 type LayoutBodyProps = {
   section: FunnelSection;
+  funnel?: Funnel;
   layout: SectionLayoutVariant;
   mode: "preview" | "public";
   videoEmbedUrl: string | null;
@@ -163,6 +169,7 @@ function CenteredLayout({
 
 function SplitLayout({
   section,
+  funnel,
   mode,
   videoEmbedUrl,
   animOf,
@@ -171,23 +178,37 @@ function SplitLayout({
   // Le sens visuel (image gauche/droite) est géré en CSS via .ff-layout-split-image-text
   // (flex-direction: row-reverse). On garde le markup identique pour les deux.
   void reverse;
+
+  const hasVideo = !!videoEmbedUrl;
+  const hasImage = sectionHasUsableImage(section, funnel);
+  const hasMedia = hasVideo || hasImage;
+
+  const TextBlock = (
+    <div className="ff-split-text">
+      <Eyebrow section={section} animOf={animOf} />
+      <Headline section={section} animOf={animOf} />
+      <Subheadline section={section} animOf={animOf} />
+      <Body section={section} animOf={animOf} />
+      <Bullets section={section} animOf={animOf} />
+      <CtaBlock section={section} mode={mode} animOf={animOf} />
+    </div>
+  );
+
+  // 🆕 Pas de média réel → on NE réserve PAS de colonne vide / placeholder :
+  // le texte occupe toute la largeur. L'utilisateur ajoutera un média via
+  // l'éditeur s'il le souhaite (le layout s'adaptera alors).
+  if (!hasMedia) {
+    return TextBlock;
+  }
+
   return (
     <div className="ff-split-grid">
-      <div className="ff-split-text">
-        <Eyebrow section={section} animOf={animOf} />
-        <Headline section={section} animOf={animOf} />
-        <Subheadline section={section} animOf={animOf} />
-        <Body section={section} animOf={animOf} />
-        <Bullets section={section} animOf={animOf} />
-        <CtaBlock section={section} mode={mode} animOf={animOf} />
-      </div>
+      {TextBlock}
       <div className="ff-split-media">
-        {videoEmbedUrl ? (
-          <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />
-        ) : section.image?.url ? (
-          <ImageBlock section={section} animOf={animOf} />
+        {hasVideo ? (
+          <VideoEmbed url={videoEmbedUrl as string} anim={animOf("video")} />
         ) : (
-          <ImagePlaceholder anim={animOf("image")} />
+          <ImageBlock section={section} funnel={funnel} animOf={animOf} />
         )}
       </div>
     </div>
@@ -387,12 +408,15 @@ function Bullets({
 
 function ImageBlock({
   section,
+  funnel,
   animOf,
 }: {
   section: FunnelSection;
+  funnel?: Funnel;
   animOf: AnimOf;
 }) {
-  if (!section.image?.url) return null;
+  const url = resolveImageUrl(section.image, funnel);
+  if (!url) return null;
   return (
     <figure
       className="ff-image-wrap"
@@ -400,19 +424,11 @@ function ImageBlock({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={section.image.url}
-        alt={section.image.alt ?? ""}
+        src={url}
+        alt={section.image?.alt ?? ""}
         className="ff-image"
       />
     </figure>
-  );
-}
-
-function ImagePlaceholder({ anim }: { anim: AnimationPreset }) {
-  return (
-    <div data-ff-anim={anim || "fade-in"} className="ff-image-placeholder">
-      Visuel
-    </div>
   );
 }
 

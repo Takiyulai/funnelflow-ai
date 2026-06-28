@@ -27,6 +27,21 @@ type RichTextProps = {
 const HIGHLIGHT_RE = /\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g;
 const HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
 
+/**
+ * Une couleur de surlignage quasi blanche est presque toujours une erreur (IA)
+ * → texte invisible sur fond clair. On l'ignore et on retombe sur l'accent du
+ * template. Les couleurs manuelles légitimes (jamais blanches) restent honorées.
+ */
+function isTooLightHex(hex: string): boolean {
+  let h = hex.replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return false;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.82;
+}
+
 export function RichText({
   text,
   className,
@@ -58,7 +73,7 @@ export function RichText({
     }
     const inner = (match[1] || "").trim();
     const rawColor = (match[2] || "").trim();
-    const useCustomColor = HEX_RE.test(rawColor);
+    const useCustomColor = HEX_RE.test(rawColor) && !isTooLightHex(rawColor);
 
     if (inner) {
       parts.push(

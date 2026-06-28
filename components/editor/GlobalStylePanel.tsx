@@ -276,6 +276,53 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
           </Field>
         </div>
 
+        {/* 🆕 Paiement (Stripe Connect) — niveau tunnel */}
+        <div className="mt-6 grid gap-3">
+          <SectionTitle>Paiement</SectionTitle>
+          <p className="text-[11px] leading-relaxed text-white/40">
+            Le prix et le nom de l&apos;offre se règlent dans la section «&nbsp;Offre /
+            Tarifs&nbsp;». Connectez votre compte dans «&nbsp;Paiements&nbsp;» pour encaisser.
+          </p>
+          <Field label="Devise" hint="Par défaut, déduite du symbole du prix.">
+            <select
+              className={inputClass}
+              value={funnel.payment?.currency ?? ""}
+              onChange={(e) =>
+                onChange({
+                  payment: {
+                    ...(funnel.payment ?? {}),
+                    currency: e.target.value || undefined,
+                  },
+                })
+              }
+            >
+              <option value="">Auto (selon le prix)</option>
+              <option value="eur">EUR (€)</option>
+              <option value="usd">USD ($)</option>
+              <option value="gbp">GBP (£)</option>
+            </select>
+          </Field>
+          <Field
+            label="Redirection après paiement (optionnel)"
+            hint="Vide = page suivante du tunnel (aboutit au « merci » automatique). Sinon, collez une URL (accès produit, upsell externe…)."
+          >
+            <input
+              type="url"
+              className={inputClass}
+              placeholder="https://…"
+              value={funnel.payment?.postPurchaseUrl ?? ""}
+              onChange={(e) =>
+                onChange({
+                  payment: {
+                    ...(funnel.payment ?? {}),
+                    postPurchaseUrl: e.target.value || undefined,
+                  },
+                })
+              }
+            />
+          </Field>
+        </div>
+
         <div className="mt-5 flex justify-end">
           <button
             type="button"

@@ -15,8 +15,10 @@ import { z } from "zod";
 import { cloneFunnelFromUrl } from "@/lib/clone/pipeline";
 import { CloneFetchError } from "@/lib/clone/fetcher";
 import type { CloneErrorCode } from "@/lib/clone/types";
-import { guardApiAccess } from "@/lib/billing/apiGuard";
+import { guardApiAccess, quotaExceededResponse } from "@/lib/billing/apiGuard";
 import { canCreateFunnel } from "@/lib/billing/subscription";
+import { consumeQuota } from "@/lib/billing/usage";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Vercel : autoriser 60s (ScrapingBee peut prendre 25-30s)
@@ -54,6 +56,19 @@ export async function POST(request: Request) {
         error: `Tu as atteint la limite de ${quota.limit} tunnels de ton plan. Passe à un plan supérieur pour en cloner davantage.`,
       },
       { status: 403 },
+    );
+  }
+  // 🆕 Anti-burst (scraping coûteux) + quota MENSUEL d'imports URL.
+  const rl = await rateLimit(`urlimport:${guard.userId}`, 5, 60);
+  if (!rl.ok) return tooManyRequests();
+  const importQuota = await consumeQuota(
+    guard.userId,
+    "url_import",
+    guard.access.limits.urlImportsPerMonth,
+  );
+  if (!importQuota.ok) {
+    return quotaExceededResponse(
+      "Quota mensuel d'imports/clonages URL atteint pour ton plan.",
     );
   }
 

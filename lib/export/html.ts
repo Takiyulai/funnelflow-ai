@@ -41,16 +41,18 @@ import type {
   CtaSpacing,
   TimerItem,
 } from "@/lib/funnels/types";
-import { normalizeIconName, resolveIconSizePx } from "@/lib/funnels/types";
+import { normalizeIconName, resolveIconSizePx, getHomePage } from "@/lib/funnels/types";
 import {
   materializeSectionImage,
   effectiveLayoutVariant,
+  isUsableMediaUrl,
 } from "@/lib/funnels/resolveMedia";
 import {
   getFunnelThemeCss,
   getFunnelThemeCssNoGlobalReset,
   getScopedFunnelThemeCss,
   buildThemeRootAttrs,
+  getThemeColors,
 } from "./theme-css";
 import { createReadme } from "./readme";
 import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
@@ -209,7 +211,9 @@ function applyInlineHighlights(escaped: string): string {
       if (!safeText) return match;
       if (color) {
         const c = color.trim();
-        if (/^#[0-9a-fA-F]{3,8}$/.test(c)) {
+        // Couleur honorée seulement si valide ET pas quasi-blanche (un hex clair
+        // = erreur IA → texte invisible). Sinon on retombe sur l'accent.
+        if (/^#[0-9a-fA-F]{3,8}$/.test(c) && hexLuminance(c) <= 0.82) {
           return `<span class="ff-hl" style="color:${c}">${safeText}</span>`;
         }
       }
@@ -882,7 +886,7 @@ function renderImage(
   fallbackAnim: AnimationPreset = "fade-in",
 ): string {
   const image = materializeSectionImage(rawImage, funnel);
-  if (!image || image.mode === "none" || !image.url) return "";
+  if (!image || image.mode === "none" || !isUsableMediaUrl(image.url)) return "";
 
   const alt = escapeAttr(image.alt ?? "");
   const transparent = image.transparentBg === true;
@@ -1110,6 +1114,21 @@ function bulletsFitInlineStrip(bullets: string[]): boolean {
   });
 }
 
+/** Sépare un bullet « Titre | Description » (ou —, –, ::). Mirroir de
+ *  splitBulletTitleDescription côté aperçu. */
+function splitBulletTitleDesc(
+  raw: string,
+): { title: string; description: string } | null {
+  if (!raw) return null;
+  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
+  if (!m) return null;
+  const title = m[1].trim();
+  const description = m[2].trim();
+  if (!title || !description) return null;
+  if (description.length < 20) return null;
+  return { title, description };
+}
+
 function renderBullets(section: FunnelSection): string {
   if (!section.bullets?.length) return "";
   const defaultIconName = section.iconName || "check";
@@ -1120,7 +1139,11 @@ function renderBullets(section: FunnelSection): string {
     !isListOnly && BULLET_LAYOUT_SECTIONS.has(sectionType);
 
   let mode: "list" | "grid" | "strip" = "list";
-  if (isLayoutCompatible) {
+  // 🆕 B2 : bullets du HERO en bande « | » UNIQUEMENT si le calcul le permet
+  // (≤4 puces, peu de mots / chiffres) ; sinon liste. Parité avec l'aperçu.
+  if (sectionType === "hero") {
+    mode = bulletsFitInlineStrip(section.bullets) ? "strip" : "list";
+  } else if (isLayoutCompatible) {
     if (bulletsFitInlineStrip(section.bullets)) mode = "strip";
     else mode = "grid";
   }
@@ -1128,6 +1151,9 @@ function renderBullets(section: FunnelSection): string {
   const ulClasses = ["ff-bullets"];
   if (mode === "grid") ulClasses.push("ff-bullets--grid");
   if (mode === "strip") ulClasses.push("ff-bullets--inline-strip");
+
+  // 🆕 B2 : puces numérotées (process/programme) — parité avec l'aperçu.
+  const numbered = section.style?.numberedBullets === true;
 
   const itemsHtml = section.bullets
     .map((bullet, i) => {
@@ -1142,7 +1168,16 @@ function renderBullets(section: FunnelSection): string {
         return `<li><span class="ff-strip-value">${applyInlineHighlights(escapeHtml(value))}</span></li>`;
       }
 
-      return `<li><span class="ff-bullet-ic">${svg}</span><span class="ff-bullet-text">${applyInlineHighlights(escapeHtml(bullet))}</span></li>`;
+      const leading = numbered
+        ? `<span class="ff-bullet-num">${i + 1}</span>`
+        : `<span class="ff-bullet-ic">${svg}</span>`;
+      // 🆕 Format « Titre | Description » → titre en gras + description (jamais
+      // le « | » littéral). Parité avec l'aperçu (splitBulletTitleDescription).
+      const td = splitBulletTitleDesc(bullet);
+      const textHtml = td
+        ? `<span class="ff-bullet-text"><strong class="ff-bullet-title">${applyInlineHighlights(escapeHtml(td.title))}</strong> <span class="ff-bullet-desc">${applyInlineHighlights(escapeHtml(td.description))}</span></span>`
+        : `<span class="ff-bullet-text">${applyInlineHighlights(escapeHtml(bullet))}</span>`;
+      return `<li>${leading}${textHtml}</li>`;
     })
     .join("");
 
@@ -1734,6 +1769,60 @@ const FF_TIMER_SCRIPT = `
 })();
 </script>`;
 
+// 🆕 Scroll-reveal pour l'export : sans JS les `ff-anim-*` jouent au chargement
+// (fallback). Avec JS, on bascule en mode scroll (.ff-anim-scroll) : chaque
+// élément reste figé (opacity:0) jusqu'à entrer dans le viewport → reveal animé
+// au scroll, avec un léger stagger entre frères. Respecte reduced-motion et
+// data-ff-animations="off". Pur vanilla, aucune dépendance.
+const FF_SCROLL_ANIM_SCRIPT = `<script>
+(function(){
+  if (window.__ffScrollAnimBooted) return;
+  window.__ffScrollAnimBooted = true;
+  function boot(){
+    var roots = document.querySelectorAll(".ff-page");
+    if (!roots.length) return;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+    var all = [];
+    for (var r = 0; r < roots.length; r++) {
+      var root = roots[r];
+      if (root.getAttribute("data-ff-animations") === "off") continue;
+      var els = root.querySelectorAll('[class*="ff-anim-"]');
+      if (!els.length) continue;
+      root.classList.add("ff-anim-scroll");
+      for (var i = 0; i < els.length; i++) all.push(els[i]);
+    }
+    if (!all.length) return;
+    function reveal(el){
+      if (el.classList.contains("ff-in")) return;
+      var p = el.parentElement, idx = 0;
+      if (p) {
+        var sibs = p.children;
+        for (var k = 0; k < sibs.length; k++) {
+          if (sibs[k] === el) break;
+          if (sibs[k].className && String(sibs[k].className).indexOf("ff-anim-") > -1) idx++;
+        }
+      }
+      if (idx > 0) el.style.animationDelay = Math.min(idx * 0.07, 0.28) + "s";
+      el.classList.add("ff-in");
+    }
+    var vh = function(){ return window.innerHeight || document.documentElement.clientHeight; };
+    if (!("IntersectionObserver" in window)) { all.forEach(reveal); return; }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.08 });
+    all.forEach(function(el){
+      var rect = el.getBoundingClientRect();
+      if (rect.top < vh() && rect.bottom > 0) reveal(el);
+      else io.observe(el);
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else { boot(); }
+})();
+</script>`;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // renderSection
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1753,6 +1842,41 @@ function resolveLayout(section: FunnelSection, ctx: SectionContext): string {
   if (raw === "wide-banner") return "wide-banner";
   if (raw === "stacked-card") return "stacked-card";
   return "centered";
+}
+
+/** 🆕 Nb de bullets rendues en CARTES (grid) pour cette section. 0 si la section
+ *  rend ses bullets en liste/bande (pas des cartes) → pas de split par cartes. */
+function sectionCardCount(section: FunnelSection): number {
+  if (!section.bullets?.length) return 0;
+  const t = String(section.type || "");
+  if (BULLET_LIST_ONLY_SECTIONS.has(t)) return 0;
+  if (!BULLET_LAYOUT_SECTIONS.has(t)) return 0;
+  if (bulletsFitInlineStrip(section.bullets)) return 0;
+  return section.bullets.length;
+}
+
+/** 🆕 Équilibre d'un split SANS image mais AVEC cartes : côte-à-côte si la pile
+ *  reste proche de la hauteur du texte, sinon empilé (texte centré + grille).
+ *  Mirroir de splitCardsBalance côté aperçu. */
+function splitCardsBalanceExport(section: FunnelSection): "side" | "stacked" {
+  const n = sectionCardCount(section);
+  if (n <= 2) return "side";
+  if (n >= 4) return "stacked";
+  const textChars =
+    (section.headline?.length ?? 0) +
+    (section.subheadline?.length ?? 0) +
+    (section.body?.length ?? 0);
+  const textLines = Math.ceil(textChars / 42) + 2;
+  const cardLines = n * 2.4;
+  return cardLines <= textLines * 1.3 ? "side" : "stacked";
+}
+
+/** 🆕 Eyebrow rendu CENTRÉ au-dessus du split (sorti du bloc texte). */
+function renderSplitEyebrowTop(section: FunnelSection): string {
+  if (!section.eyebrow) return "";
+  return `<div class="ff-split-eyebrow-top"><span class="ff-eyebrow ${animClass(
+    animOf(section, "eyebrow", "fade-in"),
+  )}">${applyInlineHighlights(escapeHtml(section.eyebrow))}</span></div>`;
 }
 
 function renderSectionHeroIcon(
@@ -1840,7 +1964,12 @@ function renderSectionInnerContent(
       ? `<div class="ff-cta-wrap ${animClass(animOf(section, "cta", "fade-up"))}"${ctaStyleAttr}>${renderCtaButton(section.cta, "", animOf(section, "cta", "fade-up"), ctx.nav)}</div>`
       : "";
 
-  return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}`;
+  // 🆕 CTA secondaire (lien discret « Non merci, continuer » des pages OTO).
+  const decline = section.secondaryCta?.label
+    ? `<div class="ff-decline-wrap"><a href="${escapeAttr(ctaHref(section.secondaryCta, ctx.nav))}" class="ff-decline-link" data-ff-decline="true">${escapeHtml(section.secondaryCta.label)}</a></div>`
+    : "";
+
+  return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}${decline}`;
 }
 
 function renderFormFields(
@@ -1927,8 +2056,12 @@ function renderSection(
 ): string {
   const layout = resolveLayout(section, ctx);
   const isHero = section.type === "hero" || isFirst;
-  const hasVideo = !!section.video?.url;
-  const hasImage = !!section.image && section.image.mode !== "none";
+  const hasVideo = isUsableMediaUrl(section.video?.url);
+  const hasImage =
+    !!section.image &&
+    section.image.mode !== "none" &&
+    (isUsableMediaUrl(section.image.url) ||
+      isUsableMediaUrl(materializeSectionImage(section.image, ctx.funnel)?.url));
 
   const shadow = buildShadowStyle(section.style);
 
@@ -1956,8 +2089,9 @@ function renderSection(
 
   let inner = "";
   if (layout === "split" && hasImage && !hasVideo) {
+    const eyebrowTop = renderSplitEyebrowTop(section);
     const textBlock = renderSectionInnerContent(
-      { ...section, image: undefined, video: undefined } as FunnelSection,
+      { ...section, eyebrow: undefined, image: undefined, video: undefined } as FunnelSection,
       ctx,
     );
     const mediaBlock = renderImage(
@@ -1970,7 +2104,27 @@ function renderSection(
       variant === "split-image-text"
         ? `<div class="ff-split-media">${mediaBlock}</div><div class="ff-split-text">${textBlock}</div>`
         : `<div class="ff-split-text">${textBlock}</div><div class="ff-split-media">${mediaBlock}</div>`;
-    inner = `<div class="ff-section-inner"><div class="ff-split-grid">${order}</div></div>`;
+    inner = `<div class="ff-section-inner">${eyebrowTop}<div class="ff-split-grid">${order}</div></div>`;
+  } else if (
+    layout === "split" &&
+    !hasImage &&
+    !hasVideo &&
+    sectionCardCount(section) > 0 &&
+    splitCardsBalanceExport(section) === "side"
+  ) {
+    // 🆕 Split SANS image mais AVEC cartes : texte d'un côté, cartes de l'autre.
+    const eyebrowTop = renderSplitEyebrowTop(section);
+    const textBlock = renderSectionInnerContent(
+      { ...section, eyebrow: undefined, bullets: undefined, image: undefined, video: undefined } as FunnelSection,
+      ctx,
+    );
+    const cardsBlock = renderBullets(section);
+    const variant = effectiveLayoutVariant(section, ctx.funnel);
+    const order =
+      variant === "split-image-text"
+        ? `<div class="ff-split-media ff-split-cards">${cardsBlock}</div><div class="ff-split-text">${textBlock}</div>`
+        : `<div class="ff-split-text">${textBlock}</div><div class="ff-split-media ff-split-cards">${cardsBlock}</div>`;
+    inner = `<div class="ff-section-inner">${eyebrowTop}<div class="ff-split-grid">${order}</div></div>`;
   } else if (hasVideo) {
     const textBlock = renderSectionInnerContent(
       { ...section, image: undefined, video: undefined } as FunnelSection,
@@ -2168,6 +2322,146 @@ export async function prepareImagesForExport(funnel: Funnel): Promise<Funnel> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 PARTIE 2 — Restylage du POPUP NATIF systeme.io aux couleurs du tunnel.
+// On NE crée PAS de contenu (ça doublait la carte) : on génère un <style> CSS
+// ciblé sur l'id du popup SIO, qui recolore fond/texte/bouton. Aucun JS, aucun
+// overlay : SIO garde son formulaire, son CTA et son déclencheur. À coller dans
+// un bloc Code HTML à l'intérieur du popup (un <style> s'applique globalement).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Luminance perçue 0..1 d'une couleur hex (#rgb ou #rrggbb). 0.5 si inconnue. */
+function hexLuminance(hex?: string): number {
+  if (!hex) return 0.5;
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return 0.5;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Texte lisible (sombre/clair) sur un fond donné. */
+function inkOn(bg?: string): string {
+  return hexLuminance(bg) < 0.5 ? "#ffffff" : "#0f172a";
+}
+
+/**
+ * Extrait l'id du popup systeme.io depuis ce que l'utilisateur colle (script,
+ * bloc HTML, ou id brut comme « row-c66ce9c8 »). Retourne un id CSS sûr ou null.
+ */
+export function extractSioPopupId(raw: string): string | null {
+  if (!raw) return null;
+  const text = raw.trim();
+
+  // ⚠️ `form-script-tag-…` est l'id du SCRIPT de formulaire SIO, PAS un élément
+  // du DOM du popup → inutilisable comme sélecteur. On l'exclut.
+  const isUsable = (id: string) =>
+    /^[A-Za-z][\w-]*$/.test(id) && !/^form-script-tag/i.test(id) && !/script/i.test(id);
+
+  // 1) id brut collé tel quel (ex. row-c66ce9c8 ou #row-c66ce9c8)
+  if (/^#?[A-Za-z][\w-]*$/.test(text)) {
+    const id = text.replace(/^#/, "");
+    if (isUsable(id)) return id;
+  }
+
+  // 2) Priorité aux ids d'ÉLÉMENTS stylables SIO (row-/col-/section-/el-)
+  const elPat = text.match(/\b((?:row|col|section|el)[-_][0-9a-zA-Z]{4,})\b/);
+  if (elPat?.[1] && isUsable(elPat[1])) return elPat[1];
+
+  // 3) Repli : id="..." (en excluant les ids de script)
+  const idAttrs = [...text.matchAll(/id\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
+  for (const cand of idAttrs) {
+    if (isUsable(cand)) return cand;
+  }
+
+  // 4) Repli : sélecteur #... (en excluant les ids de script)
+  const hashes = [...text.matchAll(/#([A-Za-z][\w-]+)/g)].map((m) => m[1]);
+  for (const cand of hashes) {
+    if (isUsable(cand)) return cand;
+  }
+
+  return null;
+}
+
+/** Mélange deux couleurs hex (ratio 0..1 vers `target`). Repli : retourne base. */
+function mixHex(base: string, target: string, ratio: number): string {
+  const parse = (hx: string): [number, number, number] | null => {
+    let h = hx.trim().replace(/^#/, "");
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const a = parse(base);
+  const b = parse(target);
+  if (!a || !b) return base;
+  const mix = a.map((v, i) => Math.round(v + (b[i] - v) * ratio));
+  return "#" + mix.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Génère un <style> qui recolore le popup natif SIO aux VRAIES couleurs du
+ * thème du tunnel. CSS pur, aucun JS. Cible le bloc du popup, et optionnellement
+ * le CTA (dégradé animé) et les champs de saisie via leurs ids.
+ */
+export function renderPopupRestyleCss(
+  funnel: Funnel,
+  popupId: string,
+  opts: { ctaId?: string; inputIds?: string[]; textIds?: string[] } = {},
+): string {
+  const id = popupId.replace(/^#/, "");
+  // 🆕 Vraies couleurs du thème (pas funnel.design générique).
+  const { bg, ink, accent } = getThemeColors(funnel);
+  const btnInk = inkOn(accent);
+  const accent2 = mixHex(accent, "#ffffff", 0.38); // 2ᵉ teinte pour le dégradé
+  const fieldBorder = "rgba(0,0,0,0.15)";
+
+  const ctaId = opts.ctaId?.replace(/^#/, "");
+  const inputIds = (opts.inputIds ?? []).map((x) => x.replace(/^#/, "")).filter(Boolean);
+
+  const rules: string[] = [
+    `#${id}{background:${bg} !important;}`,
+    `#${id},#${id} h1,#${id} h2,#${id} h3,#${id} h4,#${id} h5,#${id} p,#${id} span,#${id} li,#${id} label,#${id} div{color:${ink} !important;}`,
+    // Boutons génériques du popup → accent (repli si pas d'id CTA précis)
+    `#${id} a,#${id} button,#${id} [type="submit"],#${id} input[type="button"],#${id} input[type="submit"]{background:${accent} !important;border-color:${accent} !important;}`,
+    `#${id} a,#${id} a *,#${id} button,#${id} button *,#${id} [type="submit"],#${id} [type="submit"] *{color:${btnInk} !important;}`,
+    // Champs de saisie du popup → lisibles
+    `#${id} input[type="text"],#${id} input[type="email"],#${id} input[type="tel"],#${id} input[type="number"],#${id} textarea,#${id} select{color:#0f172a !important;background:#ffffff !important;border:1px solid ${fieldBorder} !important;}`,
+  ];
+
+  // 🆕 CTA précis : dégradé animé aux couleurs du thème.
+  if (ctaId) {
+    rules.push(
+      `@keyframes ffPopupCtaGrad{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}`,
+      `#${ctaId},#${ctaId} button{background:linear-gradient(90deg,${accent},${accent2},${accent}) !important;background-size:200% 100% !important;border:0 !important;animation:ffPopupCtaGrad 3s ease infinite !important;box-shadow:0 6px 18px ${mixHex(accent, "#000000", 0.2)}55 !important;}`,
+      `#${ctaId},#${ctaId} *{color:${btnInk} !important;}`,
+    );
+  }
+
+  // 🆕 Champs de saisie précis (ids fournis).
+  for (const inId of inputIds) {
+    rules.push(
+      `#${inId}{color:#0f172a !important;background:#ffffff !important;border:1px solid ${fieldBorder} !important;}`,
+    );
+  }
+
+  // 🆕 Textes / titres précis (ids fournis) → couleur d'encre du thème, y
+  // compris les <span> internes qui portent une couleur inline.
+  const textIds = (opts.textIds ?? []).map((x) => x.replace(/^#/, "")).filter(Boolean);
+  for (const tId of textIds) {
+    rules.push(`#${tId},#${tId} *{color:${ink} !important;}`);
+  }
+
+  const css = rules.join("\n");
+  return (
+    `<!-- Restyle du popup systeme.io « ${id} » aux couleurs du thème (CSS only, no JS).\n` +
+    `     À coller dans un bloc Code HTML placé À L'INTÉRIEUR du popup. SIO garde\n` +
+    `     son formulaire, son CTA et son déclencheur. -->\n` +
+    `<style>\n${css}\n</style>`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MODE 1 — Page complète standalone
 // ─────────────────────────────────────────────────────────────────────────────
 export type RenderFunnelHtmlOptions = {
@@ -2288,6 +2582,9 @@ ${getFunnelThemeCss()}
     ? renderInternalPopupOverlay(funnel, nav, popupLabel, pageId, popupCaptureTags)
     : "";
   const formScript = isFullyClonedFunnel ? "" : FF_FORM_SCRIPT;
+  // 🆕 Animations au scroll (révèle les sections en descendant). Inutile sur un
+  // funnel entièrement cloné (HTML brut → pas de classes ff-anim-*).
+  const scrollAnimScript = isFullyClonedFunnel ? "" : FF_SCROLL_ANIM_SCRIPT;
 
   const body = `${themeCssBlock}
 ${designOverrideBlock}
@@ -2302,7 +2599,7 @@ ${sectionsHtml}
 ${footerHtml}
 </div>
 ${popupOverlayHtml}
-${systemeIntegrationScript}${timerScript}${faqRuntimeScript}${formScript}`;
+${systemeIntegrationScript}${timerScript}${faqRuntimeScript}${formScript}${scrollAnimScript}`;
 
   if (!options.fullDocument) return body;
 

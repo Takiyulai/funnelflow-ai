@@ -131,8 +131,30 @@ const NARRATIVE_SECTION_TYPES: ReadonlySet<FunnelSectionType> = new Set<FunnelSe
  * - sections à bullets (benefits/process) : bullets pauvres + pas de body → VIDE
  * - sections narratives : image SEULE sans texte → VIDE
  */
+/** Titres « placeholder » génériques qui ne comptent PAS comme un vrai contenu
+ *  (sinon une section vide à headline « Section » survit et décrédibilise le
+ *  tunnel). Comparaison insensible à la casse/accents légère. */
+const PLACEHOLDER_HEADLINES = new Set<string>([
+  "section",
+  "nouvelle section",
+  "en cours",
+  "in progress",
+  "en curso",
+  "cette page est en cours de personnalisation",
+  "this page is being customized",
+  "esta página está siendo personalizada",
+  "que faire ensuite ?",
+]);
+
+export function isPlaceholderHeadline(headline?: string): boolean {
+  if (!headline) return false;
+  return PLACEHOLDER_HEADLINES.has(headline.trim().toLowerCase());
+}
+
 export function isSectionEmpty(section: FunnelSection): boolean {
-  const hasHeadline = (section.headline?.trim().length ?? 0) >= 5;
+  const hasHeadline =
+    (section.headline?.trim().length ?? 0) >= 5 &&
+    !isPlaceholderHeadline(section.headline);
   const hasSubheadline = (section.subheadline?.trim().length ?? 0) >= 10;
   const hasBody = (section.body?.trim().length ?? 0) >= 30;
   const hasBullets = Array.isArray(section.bullets) && section.bullets.length > 0;
@@ -442,16 +464,31 @@ export function tryFillSectionFromBrief(
       return true;
 
     case "about": {
-      // Priorité 1 : aboutText du brief
+      const aboutTitle = lang === "fr"
+        ? `À propos de ${brief.brandName}`
+        : lang === "es"
+          ? `Acerca de ${brief.brandName}`
+          : `About ${brief.brandName}`;
+
+      // 🆕 Priorité 0 : si l'IA a DÉJÀ rédigé un corps (version enrichie via le
+      // bloc « à propos » du prompt), on le GARDE — on ne l'écrase plus avec le
+      // texte brut de l'utilisateur. On complète juste le titre si besoin.
+      if (section.body && section.body.trim().length >= 30) {
+        if (!section.headline?.trim()) section.headline = aboutTitle;
+        return true;
+      }
+
+      // Priorité 1 : enrichir le texte « à propos » saisi (au lieu de le reporter
+      // brut) en l'encadrant d'une phrase d'autorité contextualisée.
       if (brief.aboutText && brief.aboutText.trim().length >= 30) {
-        section.body = brief.aboutText;
-        if (!section.headline?.trim()) {
-          section.headline = lang === "fr"
-            ? `À propos de ${brief.brandName}`
-            : lang === "es"
-              ? `Acerca de ${brief.brandName}`
-              : `About ${brief.brandName}`;
-        }
+        const raw = brief.aboutText.trim();
+        const closing = lang === "fr"
+          ? ` Aujourd'hui, ${brief.brandName} aide ${brief.targetAudience || "ses clients"} à ${brief.promise || "obtenir des résultats concrets"} grâce à une méthode éprouvée et un accompagnement clair.`
+          : lang === "es"
+            ? ` Hoy, ${brief.brandName} ayuda a ${brief.targetAudience || "sus clientes"} a ${brief.promise || "obtener resultados concretos"} con un método probado y un acompañamiento claro.`
+            : ` Today, ${brief.brandName} helps ${brief.targetAudience || "its clients"} ${brief.promise || "get concrete results"} through a proven method and clear guidance.`;
+        section.body = /[.!?…]$/.test(raw) ? raw + closing : raw + "." + closing;
+        if (!section.headline?.trim()) section.headline = aboutTitle;
         return true;
       }
       // Priorité 2 : générer depuis brandName + promise + targetAudience
@@ -594,6 +631,42 @@ export function tryFillSectionFromBrief(
       return false;
     }
 
+    // 🆕 Sous-étape C : amplification de la douleur (suite du "problem")
+    case "agitation": {
+      if (!section.body?.trim()) {
+        const pain = brief.mainPain
+          || (lang === "fr" ? "ce problème" : lang === "es" ? "este problema" : "this problem");
+        section.body = lang === "fr"
+          ? `Si rien ne change, ${brief.targetAudience || "vous"} continuerez à subir ${pain} — du temps, de l'argent et de la motivation perdus, jour après jour. Plus on attend, plus l'écart se creuse.`
+          : lang === "es"
+            ? `Si nada cambia, ${brief.targetAudience || "tú"} seguirás sufriendo ${pain} — tiempo, dinero y motivación perdidos, día tras día. Cuanto más esperas, mayor es la brecha.`
+            : `If nothing changes, ${brief.targetAudience || "you"} will keep facing ${pain} — wasted time, money and motivation, day after day. The longer you wait, the wider the gap grows.`;
+      }
+      if (!section.headline?.trim()) {
+        section.headline = lang === "fr"
+          ? "Et si rien ne change ?"
+          : lang === "es" ? "¿Y si nada cambia?" : "What if nothing changes?";
+      }
+      return true;
+    }
+
+    // 🆕 Sous-étape C : urgence / rareté légitime avant le CTA final
+    case "urgency": {
+      if (!section.body?.trim()) {
+        section.body = lang === "fr"
+          ? "Cette offre n'est pas éternelle : les places et les conditions actuelles sont limitées. Agissez maintenant pour ne pas repartir les mains vides."
+          : lang === "es"
+            ? "Esta oferta no es eterna: las plazas y las condiciones actuales son limitadas. Actúa ahora para no quedarte fuera."
+            : "This offer won't last: current spots and conditions are limited. Act now so you don't miss out.";
+      }
+      if (!section.headline?.trim()) {
+        section.headline = lang === "fr"
+          ? "L'offre ne durera pas"
+          : lang === "es" ? "La oferta no durará" : "This offer won't last";
+      }
+      return true;
+    }
+
     default:
       // faq, testimonials, pricing, offer, form, qualification
       // → couverts ailleurs (enrichSectionsWithDefaults dans generate.ts) ou non remplissables
@@ -728,13 +801,39 @@ const PRICING_FORBIDDEN_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
  * Types de sections qui peuvent légitimement apparaître sur PLUSIEURS pages
  * sans être considérés comme des doublons (outils contextuels à chaque page).
  */
-const REPEATABLE_SECTION_TYPES: ReadonlySet<FunnelSectionType> =
-  new Set<FunnelSectionType>(["hero", "cta", "form", "thank_you"]);
+/**
+ * 🆕 Régression fix : on ne dédoublonne QUE les types « une seule fois par
+ * tunnel » (présentation, FAQ, témoignages, preuve). Tout le reste — offre,
+ * pricing, bonus, bénéfices, garantie, process, CTA, urgence… — peut
+ * légitimement se répéter d'une page à l'autre (upsell, downsell et merci ont
+ * leur PROPRE offre/contenu). Sans ça, les pages secondaires étaient vidées.
+ */
+const DEDUPE_ONCE_TYPES: ReadonlySet<FunnelSectionType> =
+  new Set<FunnelSectionType>(["about", "faq", "testimonials", "proof"]);
+
+/**
+ * 🆕 Sous-étape F : signature de contenu normalisée (headline + body) d'une
+ * section. Retourne null si le contenu est trop court pour être significatif
+ * (évite les faux positifs sur des sections quasi-vides).
+ */
+function sectionContentSignature(section: FunnelSection): string | null {
+  const h = (section.headline ?? "").trim().toLowerCase();
+  const b = (section.body ?? "").trim().toLowerCase();
+  const combined = `${h} ${b}`.replace(/\s+/g, " ").trim();
+  if (combined.length < 20) return null;
+  return combined.slice(0, 160);
+}
 
 /**
  * Supprime les occurrences N+1 des sections narratives à travers toutes les
  * pages du funnel. La PREMIÈRE page (dans l'ordre du tableau funnel.pages)
  * garde la section ; les suivantes la perdent.
+ *
+ * 🆕 Sous-étape F : deux niveaux de dédoublonnage —
+ *  1. par TYPE narratif (about/benefits/faq… une seule fois dans tout le tunnel) ;
+ *  2. par CONTENU : tout bloc dont le texte (headline+body) a déjà été vu sur
+ *     une page précédente est retiré, même si son type diffère — sauf hero/cta/
+ *     form qui doivent se répéter de page en page.
  */
 export function dedupeSectionsAcrossPages(funnel: Funnel): {
   removedByPage: Record<string, number>;
@@ -744,6 +843,7 @@ export function dedupeSectionsAcrossPages(funnel: Funnel): {
   }
 
   const seenTypes = new Set<FunnelSectionType>();
+  const seenContent = new Set<string>();
   const removedByPage: Record<string, number> = {};
 
   for (const page of funnel.pages) {
@@ -752,16 +852,22 @@ export function dedupeSectionsAcrossPages(funnel: Funnel): {
     const kept: FunnelSection[] = [];
 
     for (const section of page.sections) {
-      if (REPEATABLE_SECTION_TYPES.has(section.type)) {
+      // On ne dédoublonne QUE les types « une fois par tunnel ». Tout le reste
+      // (offre, bénéfices, cta, urgence…) est conservé sur chaque page.
+      if (!DEDUPE_ONCE_TYPES.has(section.type)) {
         kept.push(section);
         continue;
       }
-      if (!seenTypes.has(section.type)) {
-        seenTypes.add(section.type);
-        kept.push(section);
+      const sig = sectionContentSignature(section);
+      const dupType = seenTypes.has(section.type);
+      const dupContent = sig ? seenContent.has(sig) : false;
+      if (dupType || dupContent) {
+        removedHere++;
         continue;
       }
-      removedHere++;
+      seenTypes.add(section.type);
+      if (sig) seenContent.add(sig);
+      kept.push(section);
     }
 
     page.sections = kept;

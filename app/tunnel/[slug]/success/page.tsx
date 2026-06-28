@@ -4,36 +4,130 @@
 // Rôle : vérifier que la session est bien payée, afficher une confirmation,
 // puis ENCHAÎNER vers l'étape suivante du tunnel (bonus / upsell / merci).
 //
-// ⚠️ Cette page ne MODIFIE PAS la base. La source de vérité reste le webhook
-// (/api/stripe/webhook) qui marque la commande payée, promeut le contact en
-// client et envoie l'email. Ici on se contente de LIRE le statut Stripe pour
-// décider de continuer le parcours. Cela évite toute course/duplication.
+// 🆕 FILET DE SÉCURITÉ : le webhook reste la source de vérité (email de
+// livraison, etc.), MAIS si Stripe confirme ici que la session est payée, on
+// marque AUSSI la commande "paid" + on promeut le contact en client. Ainsi les
+// stats du dashboard se peuplent même quand le webhook local n'est pas branché
+// (cas fréquent en dev sans `stripe listen --forward-connect-to`). Les écritures
+// sont idempotentes (markOrderPaidBySession ignore une commande déjà payée).
 
 import type { ReactNode } from "react";
 import { createStripeClient } from "@/lib/billing/stripe";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  markOrderPaidBySession,
+  markOrderPaidByCinetpayTransaction,
+  promoteContactToClient,
+} from "@/lib/billing/orders";
+import { getCinetpayCredentials, checkCinetpayPayment } from "@/lib/billing/cinetpay";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+// On lit d'abord la COMMANDE (Connect-agnostique : elle porte la redirection et,
+// si c'est un paiement Connect, l'id du compte connecté). Si le webhook l'a déjà
+// marquée "paid", on le sait sans appeler Stripe ; sinon on vérifie la session
+// SUR LE BON COMPTE (la session d'un Direct charge vit sur le compte connecté).
 async function isSessionPaid(
   sessionId: string,
 ): Promise<{ paid: boolean; nextUrl: string | null }> {
-  if (!process.env.STRIPE_SECRET_KEY) return { paid: true, nextUrl: null };
+  const admin = getSupabaseAdmin();
+  const { data: order } = await admin
+    .from("orders")
+    .select("status, redirect_url, next_url, stripe_connect_account_id, user_id, funnel_id, amount, currency")
+    .eq("stripe_session_id", sessionId)
+    .maybeSingle();
+
+  const nextUrl =
+    (order?.redirect_url as string | null) ||
+    (order?.next_url as string | null) ||
+    null;
+
+  if (order?.status === "paid") return { paid: true, nextUrl };
+  if (!process.env.STRIPE_SECRET_KEY) return { paid: true, nextUrl };
+
   try {
     const stripe = createStripeClient();
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const acct = (order?.stripe_connect_account_id as string | null) ?? null;
+    const session = await stripe.checkout.sessions.retrieve(
+      sessionId,
+      undefined,
+      acct ? { stripeAccount: acct } : undefined,
+    );
     const paid =
       session.payment_status === "paid" ||
       session.payment_status === "no_payment_required";
-    const nextUrl =
+    const metaNext =
       typeof session.metadata?.nextUrl === "string" && session.metadata.nextUrl
         ? session.metadata.nextUrl
         : null;
-    return { paid, nextUrl };
+
+    // 🆕 Filet : si payé, on marque la commande (idempotent) + promeut le client
+    // → le dashboard se peuple même sans webhook local.
+    if (paid && order) {
+      const email =
+        session.customer_details?.email || session.customer_email || null;
+      const paymentIntent =
+        typeof session.payment_intent === "string" ? session.payment_intent : null;
+      try {
+        const marked = await markOrderPaidBySession(sessionId, paymentIntent, email);
+        if (marked && email) {
+          await promoteContactToClient({
+            userId: marked.userId,
+            funnelId: marked.funnelId,
+            email,
+            amount: marked.amount,
+            currency: marked.currency,
+          });
+        }
+      } catch (e) {
+        console.error("[success] mark paid fallback échoué", e);
+      }
+    }
+
+    return { paid, nextUrl: nextUrl || metaNext };
   } catch {
-    return { paid: false, nextUrl: null };
+    return { paid: false, nextUrl };
   }
+}
+
+// 🆕 Retour CinetPay : on vérifie le statut via l'API (clés du créateur) puis on
+// marque la commande payée (filet, idempotent) — même logique que pour Stripe.
+async function isCinetpayPaid(
+  txnId: string,
+): Promise<{ paid: boolean; nextUrl: string | null }> {
+  const admin = getSupabaseAdmin();
+  const { data: order } = await admin
+    .from("orders")
+    .select("status, redirect_url, next_url, user_id")
+    .eq("cinetpay_transaction_id", txnId)
+    .maybeSingle();
+  const nextUrl =
+    (order?.redirect_url as string | null) || (order?.next_url as string | null) || null;
+  if (!order) return { paid: false, nextUrl };
+  if (order.status === "paid") return { paid: true, nextUrl };
+
+  const creds = await getCinetpayCredentials(order.user_id as string);
+  if (!creds) return { paid: false, nextUrl };
+  const check = await checkCinetpayPayment(creds.apikey, creds.siteId, txnId);
+  if (check.paid) {
+    try {
+      const marked = await markOrderPaidByCinetpayTransaction(txnId, null);
+      if (marked?.email) {
+        await promoteContactToClient({
+          userId: marked.userId,
+          funnelId: marked.funnelId,
+          email: marked.email,
+          amount: marked.amount,
+          currency: marked.currency,
+        });
+      }
+    } catch (e) {
+      console.error("[success] mark paid CinetPay fallback échoué", e);
+    }
+  }
+  return { paid: check.paid, nextUrl };
 }
 
 export default async function CheckoutSuccessPage({
@@ -46,11 +140,14 @@ export default async function CheckoutSuccessPage({
   const { slug } = await params;
   const sp = await searchParams;
   const sessionId = (Array.isArray(sp.session_id) ? sp.session_id[0] : sp.session_id) ?? "";
+  const cpmTrans = (Array.isArray(sp.cpm_trans_id) ? sp.cpm_trans_id[0] : sp.cpm_trans_id) ?? "";
 
   const fallbackNext = `/tunnel/${slug}/merci`;
-  const { paid, nextUrl } = sessionId
-    ? await isSessionPaid(sessionId)
-    : { paid: false, nextUrl: null };
+  const { paid, nextUrl } = cpmTrans
+    ? await isCinetpayPaid(cpmTrans)
+    : sessionId
+      ? await isSessionPaid(sessionId)
+      : { paid: false, nextUrl: null };
   const continueUrl = nextUrl || fallbackNext;
 
   const shell = (children: ReactNode) => (

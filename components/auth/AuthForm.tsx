@@ -276,22 +276,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
           </p>
         )}
 
-        {/* Bouton secondaire Accès démo — UNIQUEMENT en développement local
-            (jamais en production : il ouvrait /dashboard sans authentification). */}
-        {!isForgot && process.env.NODE_ENV === "development" && (
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="w-full rounded-xl border py-2.5 text-xs font-semibold transition-all hover:bg-white/5"
-            style={{
-              background: "transparent",
-              borderColor: "rgba(255,255,255,0.15)",
-              color: "rgba(255,255,255,0.5)",
-            }}
-          >
-            Accès démo local
-          </button>
-        )}
+        {/* Bouton « Accès démo » retiré : il ouvrait /dashboard SANS session,
+            ce que la garde d'accès (app/(app)/layout.tsx) bloque désormais
+            (redirection vers /login). Pour tester, utiliser un vrai compte. */}
       </form>
 
       {/* Liens de bas de formulaire */}

@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import {
   Download, FileText, Globe2, Users,
-  Sparkles, Upload, CheckCircle2, BookOpen,
+  Sparkles,
   CreditCard, Wallet, UserCheck, Percent,
 } from "lucide-react";
 import { getExportCount, EXPORTS_CHANGED_EVENT } from "@/lib/store/statsStore";
@@ -209,7 +209,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Contenu */}
-      <div className="mt-6 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="mt-6">
         {/* Liste tunnels */}
         <Card className="p-4 sm:p-5">
           <div className="mb-4">
@@ -234,49 +234,6 @@ export default function DashboardPage() {
             )}
           </div>
         </Card>
-
-        {/* Panneau latéral */}
-        <div className="grid gap-4">
-          <Card className="p-4 sm:p-5">
-            <h2 className="text-lg font-black text-ink">Actions rapides</h2>
-            <div className="mt-3 grid gap-2">
-              <Button href="/export-systeme" variant="secondary" className="w-full justify-center">
-                <Download size={14} /> Exporter vers systeme.io
-              </Button>
-              <Button href="/leads" variant="secondary" className="w-full justify-center">
-                <Users size={14} /> Voir les leads
-              </Button>
-              <Button href="/import" variant="secondary" className="w-full justify-center">
-                <Upload size={14} /> Importer une URL
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="p-4 sm:p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <BookOpen size={15} className="text-navy" />
-              <h2 className="text-sm font-black text-ink">Bien démarrer</h2>
-            </div>
-            <ul className="grid gap-2 text-xs text-muted">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green" />
-                Définissez l'objectif et l'audience de votre tunnel
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green" />
-                Configurez le comportement des CTA et les visuels
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green" />
-                Ajustez chaque section dans l'éditeur si nécessaire
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green" />
-                Exportez vers systeme.io en un clic
-              </li>
-            </ul>
-          </Card>
-        </div>
       </div>
     </AppShell>
   );

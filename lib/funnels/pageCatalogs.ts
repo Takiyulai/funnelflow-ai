@@ -172,19 +172,25 @@ const DIGITAL_PRODUCT: FunnelBlueprint = {
       role: "sales",
       slug: "offre",
       name: "Page de vente",
+      // 🆕 Sous-étape C : squelette de page de vente DIRECT-RESPONSE complet :
+      // Hero → Problème → Amplification (agitation) → Solution → Bénéfices →
+      // Présentation/Autorité (about, APRÈS les bénéfices) → Preuve sociale →
+      // Offre+Bonus → Garantie → Objections (FAQ) → Urgence/Rareté → CTA final.
+      // L'ordre final est ré-appliqué de façon déterministe (ÉTAPE 13).
       defaultSectionTypes: [
-        "hero", "benefits", "video", "testimonials",
-        "pricing", "bonus", "guarantee", "faq", "cta",
+        "hero", "problem", "agitation", "solution", "benefits",
+        "about", "testimonials", "pricing", "bonus", "guarantee",
+        "faq", "urgency", "cta",
       ],
       allowedSectionTypes: [
         "hero", "benefits", "video", "testimonials", "pricing",
         "bonus", "guarantee", "faq", "cta", "about", "proof", "process",
-        "offer", "problem", "solution",
+        "offer", "problem", "agitation", "solution", "urgency",
       ],
       copywritingFramework: "PAS",
       secondaryFrameworks: ["4P", "FAB", "SCARCITY-URGENCY"],
       heroMediaPolicy: "prefer-video",
-      minSections: 6,
+      minSections: 8,
       publiclyLinked: true,
     },
     {
@@ -203,13 +209,50 @@ const DIGITAL_PRODUCT: FunnelBlueprint = {
       publiclyLinked: false,
     },
     {
+      // 🆕 Sous-étape D : upsell — offre complémentaire après l'achat.
+      role: "upsell",
+      slug: "offre-complementaire",
+      name: "Offre complémentaire (upsell)",
+      // Accroche offre additionnelle → complémentarité → bénéfice spécifique →
+      // CTA accepter (le lien « refuser » mène à la page suivante = downsell).
+      defaultSectionTypes: ["hero", "benefits", "offer", "guarantee", "urgency", "cta"],
+      allowedSectionTypes: [
+        "hero", "benefits", "offer", "guarantee", "urgency", "cta",
+        "about", "testimonials", "video", "pricing",
+      ],
+      copywritingFramework: "4P",
+      secondaryFrameworks: ["SCARCITY-URGENCY", "FAB"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
+      // 🆕 Sous-étape D : downsell — repli si l'upsell est refusé.
+      role: "downsell",
+      slug: "offre-allegee",
+      name: "Offre allégée (downsell)",
+      // Version réduite / moins chère de l'upsell. CTA accepter, lien refuser
+      // vers la page suivante (= merci).
+      defaultSectionTypes: ["hero", "benefits", "offer", "cta"],
+      allowedSectionTypes: [
+        "hero", "benefits", "offer", "cta",
+        "guarantee", "urgency", "testimonials", "pricing",
+      ],
+      copywritingFramework: "4P",
+      secondaryFrameworks: ["REASSURANCE"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
       role: "thankyou",
       slug: "merci",
       name: "Page de remerciement",
-      // next-steps → process, download → offer, reminder → about
-      defaultSectionTypes: ["hero", "process", "offer", "about", "cta"],
+      // 🆕 Sous-étape D/F : PAS de "about" ici (déjà sur la page de vente) pour
+      // éviter la duplication inter-pages. next-steps → process, download → offer.
+      defaultSectionTypes: ["hero", "process", "offer", "cta"],
       allowedSectionTypes: [
-        "hero", "process", "offer", "about", "cta",
+        "hero", "process", "offer", "cta",
         "video", "testimonials", "thank_you",
       ],
       copywritingFramework: "REASSURANCE",
@@ -531,6 +574,7 @@ export const SECTION_TYPES_ACCEPTING_IMAGE: ReadonlySet<FunnelSectionType> = new
   "about",
   "proof",
   "problem",
+  "agitation",
   "solution",
   "offer",
   "video",

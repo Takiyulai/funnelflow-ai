@@ -18,6 +18,7 @@ import {
   listRemote,
   deleteRemote as deleteRemoteFn,
   publishRemote,
+  getCurrentUserId,
 } from "./funnelRepository";
 import { normalizeFunnel } from "./normalizeFunnel";
 import { compressToUTF16, decompressFromUTF16 } from "lz-string";
@@ -81,6 +82,51 @@ const INDEX_KEY = "ff:funnel-index";
 // distante n'est peut-être pas (encore) confirmée. Empêche l'hydratation
 // Supabase de les faire « réapparaître » dans le dashboard.
 const DELETED_KEY = "ff:funnel-deleted";
+
+// 🆕 Propriétaire du cache local : id de l'utilisateur à qui appartiennent les
+// tunnels en localStorage. Sur le MÊME navigateur, deux comptes différents
+// partageraient sinon le même cache → un utilisateur verrait les tunnels d'un
+// autre. On purge le cache dès que le propriétaire change (cf. useFunnelList).
+const CACHE_OWNER_KEY = "ff:funnel-cache-owner";
+
+function getCacheOwner(): string | null {
+  try {
+    return window.localStorage.getItem(CACHE_OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setCacheOwner(userId: string): void {
+  try {
+    window.localStorage.setItem(CACHE_OWNER_KEY, userId);
+  } catch {
+    /* non bloquant */
+  }
+}
+
+/**
+ * Purge TOUT le cache local des tunnels (index, entrées, snapshots publics,
+ * tombstones). Appelé au changement de compte et à la déconnexion pour éviter
+ * toute fuite de données entre utilisateurs sur un même navigateur.
+ */
+export function clearFunnelCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const k of Object.keys(window.localStorage)) {
+      if (
+        k === INDEX_KEY ||
+        k === DELETED_KEY ||
+        k.startsWith(STORAGE_PREFIX) ||
+        k.startsWith(PUBLISHED_PREFIX)
+      ) {
+        window.localStorage.removeItem(k);
+      }
+    }
+  } catch {
+    /* non bloquant */
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Erreur typée pour quota localStorage
@@ -921,44 +967,64 @@ export function useFunnelList(): StoredFunnel[] {
       );
     }
 
-    // 1) Affichage instantané depuis le cache local
-    setList(listFunnels());
-
     // 2) 🆕 SUPABASE — source de vérité : on récupère la liste distante,
     //    on hydrate le cache local, puis on rafraîchit l'affichage.
-    listRemote()
-      .then((remoteList) => {
-        if (cancelled) return;
-        // Liste distante vide = potentiellement transitoire (session non encore
-        // prête) → on NE touche PAS aux tombstones (sinon risque de ressusciter
-        // un tunnel supprimé) et on garde l'affichage local.
-        if (remoteList.length === 0) return;
+    function hydrateFromRemote() {
+      listRemote()
+        .then((remoteList) => {
+          if (cancelled) return;
+          // Liste distante vide = potentiellement transitoire (session non encore
+          // prête) → on NE touche PAS aux tombstones (sinon risque de ressusciter
+          // un tunnel supprimé) et on garde l'affichage local.
+          if (remoteList.length === 0) return;
 
-        // 🆕 Réconciliation des tombstones (suppressions) :
-        //  - un tunnel supprimé ABSENT du distant → suppression confirmée,
-        //    on retire le tombstone (ménage, évite l'accumulation) ;
-        //  - un tunnel supprimé ENCORE présent (orphelin/RLS) → on GARDE le
-        //    tombstone (hydratation le saute) et on RE-TENTE la suppression
-        //    distante, pour finir par nettoyer la ligne fantôme.
-        const remoteIds = new Set(remoteList.map((r) => r.id));
-        for (const deletedId of readDeleted()) {
-          if (!remoteIds.has(deletedId)) {
-            clearDeleted(deletedId);
-          } else {
-            deleteRemoteFn(deletedId)
-              .then(() => clearDeleted(deletedId))
-              .catch(() => {
-                /* toujours bloqué : reste masqué via tombstone */
-              });
+          // 🆕 Réconciliation des tombstones (suppressions) :
+          //  - un tunnel supprimé ABSENT du distant → suppression confirmée,
+          //    on retire le tombstone (ménage, évite l'accumulation) ;
+          //  - un tunnel supprimé ENCORE présent (orphelin/RLS) → on GARDE le
+          //    tombstone (hydratation le saute) et on RE-TENTE la suppression
+          //    distante, pour finir par nettoyer la ligne fantôme.
+          const remoteIds = new Set(remoteList.map((r) => r.id));
+          for (const deletedId of readDeleted()) {
+            if (!remoteIds.has(deletedId)) {
+              clearDeleted(deletedId);
+            } else {
+              deleteRemoteFn(deletedId)
+                .then(() => clearDeleted(deletedId))
+                .catch(() => {
+                  /* toujours bloqué : reste masqué via tombstone */
+                });
+            }
           }
-        }
 
-        for (const remote of remoteList) {
-          hydrateLocalFromRemote(remote);
+          for (const remote of remoteList) {
+            hydrateLocalFromRemote(remote);
+          }
+          if (!cancelled) setList(listFunnels());
+        })
+        .catch((e) => console.warn("[useFunnelList] listRemote:", e));
+    }
+
+    // 1) 🆕 Garde anti-fuite inter-comptes : si le cache local appartient à un
+    //    AUTRE utilisateur, on le purge AVANT tout affichage. Sinon affichage
+    //    instantané depuis le cache local du bon compte.
+    getCurrentUserId()
+      .then((userId) => {
+        if (cancelled) return;
+        if (userId && getCacheOwner() !== userId) {
+          clearFunnelCache();
+          setCacheOwner(userId);
+          setList([]); // rien tant que le remote du bon compte n'est pas chargé
+        } else {
+          setList(listFunnels());
         }
-        if (!cancelled) setList(listFunnels());
+        hydrateFromRemote();
       })
-      .catch((e) => console.warn("[useFunnelList] listRemote:", e));
+      .catch(() => {
+        if (cancelled) return;
+        setList(listFunnels());
+        hydrateFromRemote();
+      });
 
     const unsub = subscribe(() => {
       if (!cancelled) setList(listFunnels());

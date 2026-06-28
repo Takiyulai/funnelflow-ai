@@ -5,9 +5,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Campaign, LeadStatus } from "./types";
 import { sendEmail } from "./email";
+import { getUserMarketingSender } from "@/lib/email/userSender";
+import { getAccess } from "@/lib/billing/subscription";
+import { consumeQuota } from "@/lib/billing/usage";
 
 const COLS =
-  "id, user_id, name, subject, content, status, segment_id, recipient_ids, recipients_count, sent_count, failed_count, sent_at, created_at, updated_at";
+  "id, user_id, name, subject, content, status, scheduled_at, segment_id, recipient_ids, recipients_count, sent_count, failed_count, sent_at, created_at, updated_at";
 
 export type CampaignInput = {
   name: string;
@@ -160,6 +163,16 @@ export async function sendCampaign(
   const recipients = await resolveRecipients(sb, userId, audience);
   if (recipients.length === 0) throw new Error("no_recipients");
 
+  // 🆕 Quota mensuel d'emails du plan (consommé pour tout le lot).
+  const access = await getAccess(userId);
+  const emailQuota = await consumeQuota(
+    userId,
+    "email_send",
+    access.limits.monthlyEmailSends,
+    recipients.length,
+  );
+  if (!emailQuota.ok) throw new Error("email_quota_exceeded");
+
   let firstError: string | undefined;
 
   await sb
@@ -173,12 +186,21 @@ export async function sendCampaign(
     .eq("user_id", userId)
     .eq("id", id);
 
+  // 🆕 Expéditeur MARKETING résolu pour cet utilisateur (Option C).
+  const sender = await getUserMarketingSender(userId);
+
   let sent = 0;
   let failed = 0;
 
   for (const r of recipients) {
     const html = renderEmailHtml(campaign.content, r);
-    const result = await sendEmail({ to: r.email, subject: campaign.subject, html });
+    const result = await sendEmail({
+      to: r.email,
+      subject: campaign.subject,
+      html,
+      from: sender.from,
+      replyTo: sender.replyTo,
+    });
     await sb.from("crm_email_sends").insert({
       campaign_id: id,
       contact_id: r.id,
@@ -209,4 +231,83 @@ export async function sendCampaign(
     .eq("id", id);
 
   return { sent, failed, total: recipients.length, error: firstError };
+}
+
+/**
+ * 🆕 PROGRAMME une newsletter : ne l'envoie PAS maintenant. On résout les
+ * destinataires, on fige (snapshot) l'email rendu par destinataire dans la file
+ * `scheduled_emails` à la date voulue, et on passe la campagne en "scheduled".
+ * Le cron (ÉTAPE 6) enverra ces emails quand leur date sera atteinte.
+ */
+export async function scheduleCampaign(
+  sb: SupabaseClient,
+  userId: string,
+  id: string,
+  audience: Audience,
+  scheduledAtISO: string,
+): Promise<{ scheduled: number; total: number; scheduledAt: string }> {
+  const campaign = await getCampaign(sb, userId, id);
+  if (!campaign) throw new Error("campaign_not_found");
+  if (!campaign.subject.trim()) throw new Error("subject_required");
+
+  const when = new Date(scheduledAtISO);
+  if (Number.isNaN(when.getTime())) throw new Error("invalid_date");
+  // Tolérance d'1 min pour éviter les faux « passé » dus à la latence/UI.
+  if (when.getTime() < Date.now() - 60_000) throw new Error("date_in_past");
+
+  const recipients = await resolveRecipients(sb, userId, audience);
+  if (recipients.length === 0) throw new Error("no_recipients");
+
+  // 🆕 Quota mensuel d'emails : on RÉSERVE le volume dès la programmation
+  // (les emails sont engagés dans la file ; le cron se contentera d'envoyer).
+  const access = await getAccess(userId);
+  const emailQuota = await consumeQuota(
+    userId,
+    "email_send",
+    access.limits.monthlyEmailSends,
+    recipients.length,
+  );
+  if (!emailQuota.ok) throw new Error("email_quota_exceeded");
+
+  // Re-programmation : on purge les emails encore EN ATTENTE de cette campagne.
+  await sb
+    .from("scheduled_emails")
+    .delete()
+    .eq("user_id", userId)
+    .eq("campaign_id", id)
+    .eq("status", "pending");
+
+  const whenISO = when.toISOString();
+  const rows = recipients.map((r) => ({
+    user_id: userId,
+    source_type: "newsletter",
+    campaign_id: id,
+    contact_id: r.id,
+    recipient_email: r.email,
+    subject: campaign.subject,
+    content: renderEmailHtml(campaign.content, r), // snapshot personnalisé
+    scheduled_at: whenISO,
+    status: "pending",
+  }));
+
+  // Insertion par lots (évite une requête trop volumineuse).
+  const CHUNK = 500;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await sb.from("scheduled_emails").insert(rows.slice(i, i + CHUNK));
+    if (error) throw new Error(error.message);
+  }
+
+  await sb
+    .from("crm_campaigns")
+    .update({
+      status: "scheduled",
+      scheduled_at: whenISO,
+      recipients_count: recipients.length,
+      recipient_ids: recipients.map((r) => r.id),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("id", id);
+
+  return { scheduled: rows.length, total: recipients.length, scheduledAt: whenISO };
 }

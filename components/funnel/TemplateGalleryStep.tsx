@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Check, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   PREMIUM_TEMPLATES,
   getRecommendedTemplates,
@@ -42,6 +42,31 @@ export default function TemplateGalleryStep({
   const selected = selectedTemplateId ?? DEFAULT_PREMIUM_TEMPLATE_ID;
   const labels = LABELS[language] ?? LABELS.fr;
 
+  // 🆕 Liste unique ordonnée (recommandés d'abord) pour la pagination.
+  const allItems = useMemo(() => {
+    const reco = others.length > 0;
+    return [
+      ...recommended.map((tpl) => ({ tpl, isReco: reco })),
+      ...others.map((tpl) => ({ tpl, isReco: false })),
+    ];
+  }, [recommended, others]);
+
+  // 🆕 Pagination : 6 templates par page (évite la liste pleine hauteur).
+  const PAGE_SIZE = 6;
+  const pageCount = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+  const [page, setPage] = useState(0);
+
+  // Au changement de format, on revient sur la page contenant le template
+  // sélectionné (ou la première).
+  useEffect(() => {
+    const idx = allItems.findIndex((it) => it.tpl.id === selected);
+    setPage(idx >= 0 ? Math.floor(idx / PAGE_SIZE) : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funnelKind, allItems.length]);
+
+  const safePage = Math.min(page, pageCount - 1);
+  const visible = allItems.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
   return (
     <div className="space-y-5 min-w-0">
       <header className="space-y-2">
@@ -52,46 +77,42 @@ export default function TemplateGalleryStep({
         <h2 className="text-xl font-black text-ink">{labels.title}</h2>
         <p className="max-w-2xl text-xs text-muted leading-relaxed">{labels.subtitle}</p>
       </header>
-      {recommended.length > 0 && (
-        <section className="space-y-3 min-w-0">
-          {others.length > 0 && (
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#31845C]">
-              {labels.recommended}
-            </h3>
-          )}
-          <div className="grid gap-3 min-w-0 justify-start [grid-template-columns:repeat(auto-fill,minmax(180px,220px))]">
-            {recommended.map((tpl) => (
-              <TemplateCardItem
-                key={tpl.id}
-                template={tpl}
-                language={language}
-                isSelected={selected === tpl.id}
-                isRecommended={others.length > 0}
-                onClick={() => onSelect(tpl.id)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
 
-      {others.length > 0 && (
-        <section className="space-y-3 min-w-0">
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted">
-            {labels.others}
-          </h3>
-          <div className="grid gap-3 min-w-0 justify-start [grid-template-columns:repeat(auto-fill,minmax(180px,220px))]">
-            {others.map((tpl) => (
-              <TemplateCardItem
-                key={tpl.id}
-                template={tpl}
-                language={language}
-                isSelected={selected === tpl.id}
-                isRecommended={false}
-                onClick={() => onSelect(tpl.id)}
-              />
-            ))}
-          </div>
-        </section>
+      <div className="grid grid-cols-2 gap-3 min-w-0 sm:grid-cols-3">
+        {visible.map(({ tpl, isReco }) => (
+          <TemplateCardItem
+            key={tpl.id}
+            template={tpl}
+            language={language}
+            isSelected={selected === tpl.id}
+            isRecommended={isReco}
+            onClick={() => onSelect(tpl.id)}
+          />
+        ))}
+      </div>
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink transition hover:bg-canvas disabled:opacity-40"
+          >
+            <ChevronLeft className="h-4 w-4" /> {labels.prev}
+          </button>
+          <span className="text-xs font-semibold text-muted">
+            {safePage + 1} / {pageCount}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={safePage >= pageCount - 1}
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink transition hover:bg-canvas disabled:opacity-40"
+          >
+            {labels.next} <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       )}
     </div>
   );
@@ -285,6 +306,8 @@ const LABELS: Record<
     subtitle: string;
     recommended: string;
     others: string;
+    prev: string;
+    next: string;
   }
 > = {
   fr: {
@@ -294,6 +317,8 @@ const LABELS: Record<
       "Chaque template apporte une personnalité visuelle distincte. Vous pourrez tout ajuster ensuite dans l'éditeur.",
     recommended: "Recommandés pour votre format",
     others: "Autres templates disponibles",
+    prev: "Précédent",
+    next: "Suivant",
   },
   en: {
     eyebrow: "Premium templates",
@@ -302,6 +327,8 @@ const LABELS: Record<
       "Each template brings a distinct visual personality. You can fine-tune everything later in the editor.",
     recommended: "Recommended for your format",
     others: "Other available templates",
+    prev: "Previous",
+    next: "Next",
   },
   es: {
     eyebrow: "Plantillas premium",
@@ -310,6 +337,8 @@ const LABELS: Record<
       "Cada plantilla aporta una personalidad visual distinta. Podrás ajustar todo después en el editor.",
     recommended: "Recomendadas para tu formato",
     others: "Otras plantillas disponibles",
+    prev: "Anterior",
+    next: "Siguiente",
   },
 };
 

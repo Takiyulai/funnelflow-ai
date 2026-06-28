@@ -445,11 +445,42 @@ function decideBulletsMode(
   isSuccess: boolean,
 ): BulletsMode {
   if (isSuccess) return "list";
+  // 🆕 B2 : bullets du HERO en bande « | » UNIQUEMENT si le calcul le permet
+  // (≤4 puces, peu de mots / chiffres) ; sinon liste verticale.
+  if (sectionType === "hero") {
+    return bulletsFitInlineStrip(bullets) ? "inline-strip" : "list";
+  }
   if (BULLET_LIST_ONLY_SECTIONS.has(sectionType)) return "list";
   if (!BULLET_LAYOUT_SECTIONS.has(sectionType)) return "list";
   if (bulletsFitInlineStrip(bullets)) return "inline-strip";
   if (bullets.length >= 2) return "grid";
   return "list";
+}
+
+/* 🆕 Équilibre d'une section split SANS image mais AVEC cartes (texte d'un
+ * côté, cartes de l'autre). On compare la hauteur approximative de la pile de
+ * cartes à celle du bloc texte. Si les cartes débordent largement le texte, le
+ * côte-à-côte devient laid → on bascule en "stacked" (texte centré en haut,
+ * cartes en grille équilibrée dessous). Calcul basé sur la quantité de contenu,
+ * jamais codé en dur. */
+function splitCardsBalance(section: FunnelSection): "side" | "stacked" {
+  const bullets = Array.isArray(section.bullets) ? section.bullets : [];
+  const cardCount = bullets.length;
+  // 1–2 cartes : toujours équilibré côte-à-côte.
+  if (cardCount <= 2) return "side";
+  // 🆕 4 cartes et + : la pile déborde toujours le texte → on EMPILE (texte
+  // centré en haut, cartes en grille équilibrée 2×N dessous).
+  if (cardCount >= 4) return "stacked";
+  const textChars =
+    (section.headline?.length ?? 0) +
+    (section.subheadline?.length ?? 0) +
+    (section.body?.length ?? 0);
+  // Colonne ≈ 42 caractères/ligne ; +2 lignes pour eyebrow + titre.
+  const textLines = Math.ceil(textChars / 42) + 2;
+  // Chaque carte ≈ 2.4 lignes de haut (icône + titre + description + padding).
+  const cardLines = cardCount * 2.4;
+  // 3 cartes : côte-à-côte seulement si le texte est assez long pour équilibrer.
+  return cardLines <= textLines * 1.3 ? "side" : "stacked";
 }
 
 /* ─── 🆕 Phase 1C : bouton flottant WhatsApp (niveau page) ─────────────── */
@@ -615,7 +646,10 @@ export function FunnelPreview({
   const innerStyle: React.CSSProperties = isEmbed
     ? {}
     : {
-        height: viewportHeight,
+        // 🆕 maxHeight (et non height fixe) : la zone d'aperçu épouse la hauteur
+        // réelle du tunnel. Plus de bande grise vide sous le footer pour les
+        // pages courtes ; les pages longues scrollent jusqu'à la limite.
+        maxHeight: viewportHeight,
         overflowY: "auto",
         background: "#1a1a1a",
       };
@@ -1231,13 +1265,42 @@ function SectionBlock({
     : effectiveLayoutVariant(section, funnel);
   const isSplit =
     rawLayout === "split-text-image" || rawLayout === "split-image-text";
-  const hasBullets =
-    Array.isArray(section.bullets) && section.bullets.length > 0;
+  const bulletsArr: string[] = Array.isArray(section.bullets)
+    ? section.bullets
+    : [];
+  const hasBullets = bulletsArr.length > 0;
   const hasImg = !!resolvedImage || !!section.video?.url;
   // Split sans image : si on a des cartes/puces, on les envoie dans la colonne
   // libre (texte d'un côté, cartes de l'autre). Sinon on retombe sur "centered".
-  const splitTextOnly = isSplit && !hasImg && hasBullets;
-  const layout = isSplit && !hasImg && !hasBullets ? "centered" : rawLayout;
+  // 🆕 Mais si les cartes débordent largement le texte (déséquilibre), on
+  // restructure : texte centré en haut + cartes en grille équilibrée dessous.
+  const cardsBalance =
+    isSplit && !hasImg && hasBullets ? splitCardsBalance(section) : "side";
+  const splitTextOnly =
+    isSplit && !hasImg && hasBullets && cardsBalance === "side";
+  const stackedFromSplit =
+    isSplit && !hasImg && hasBullets && cardsBalance === "stacked";
+  const layout =
+    (isSplit && !hasImg && !hasBullets) || stackedFromSplit
+      ? "centered"
+      : rawLayout;
+
+  // 🆕 Mode des bullets au niveau section : forcé en "grid" (cartes) quand on
+  // restructure un split déséquilibré, sinon décidé normalement.
+  const sectionBulletsMode: BulletsMode = hasBullets
+    ? stackedFromSplit
+      ? "grid"
+      : decideBulletsMode(section.type as string, bulletsArr, isSuccess)
+    : "list";
+  // 🆕 Une liste à puces simple sous un bloc centré est encapsulée dans UNE
+  // card centrée (cohérence visuelle au lieu d'une liste alignée à gauche).
+  const wrapListInCard =
+    !useSpecialized &&
+    hasBullets &&
+    sectionBulletsMode === "list" &&
+    layout === "centered" &&
+    !isSuccess &&
+    section.type !== "hero";
 
   return (
     <section
@@ -1320,27 +1383,37 @@ function SectionBlock({
         )}
 
         {!useSpecialized &&
-          Array.isArray(section.bullets) &&
-          section.bullets.length > 0 && (
-            <BulletsList
-              bullets={section.bullets}
-              bulletIcons={section.bulletIcons}
-              defaultIconName={
-                section.iconName ||
-                getTemplateDefaultIcon(
-                  (funnel.meta as { templateId?: string } | undefined)?.templateId
-                )
-              }
-              iconSize={section.iconSize ?? "md"}
-              iconAnim={section.iconAnimation ?? "none"}
-              animations={section.animations}
-              bodySize={bodySize}
-              isSuccess={isSuccess}
-              sectionType={section.type as string}
-              shadowSize={shadowSize}
-              numbered={section.style?.numberedBullets}
-            />
-          )}
+          hasBullets &&
+          (() => {
+            const list = (
+              <BulletsList
+                bullets={bulletsArr}
+                bulletIcons={section.bulletIcons}
+                defaultIconName={
+                  section.iconName ||
+                  getTemplateDefaultIcon(
+                    (funnel.meta as { templateId?: string } | undefined)?.templateId
+                  )
+                }
+                iconSize={section.iconSize ?? "md"}
+                iconAnim={section.iconAnimation ?? "none"}
+                animations={section.animations}
+                bodySize={bodySize}
+                isSuccess={isSuccess}
+                sectionType={section.type as string}
+                shadowSize={shadowSize}
+                numbered={section.style?.numberedBullets}
+                forceMode={stackedFromSplit ? "grid" : undefined}
+              />
+            );
+            return wrapListInCard ? (
+              <div className="ff-list-card" data-ff-shadow={shadowAttr}>
+                {list}
+              </div>
+            ) : (
+              list
+            );
+          })()}
 
         {(section.video?.url || resolvedImage) && (
           <>
@@ -1393,6 +1466,25 @@ function SectionBlock({
             <InlineDecorativeIcon icons={decoIcons} position="after-cta" />
           </div>
         )}
+
+        {/* 🆕 CTA secondaire : lien discret « Non merci, continuer » (OTO). */}
+        {section.secondaryCta?.label &&
+          (() => {
+            const sc = section.secondaryCta!;
+            let href = "#";
+            if (sc.pageId && pageLinks.has(sc.pageId)) {
+              href = pageLinks.get(sc.pageId) ?? "#";
+            } else if (sc.url) {
+              href = sc.url;
+            }
+            return (
+              <div className="ff-decline-wrap">
+                <a href={href} className="ff-decline-link" data-ff-decline="true">
+                  {sc.label}
+                </a>
+              </div>
+            );
+          })()}
 
         {isForm && (
           <div data-ff-shadow={shadowAttr}>
@@ -1459,6 +1551,7 @@ function BulletsList({
   sectionType,
   shadowSize,
   numbered,
+  forceMode,
 }: {
   bullets: string[];
   bulletIcons?: string[];
@@ -1472,9 +1565,12 @@ function BulletsList({
   shadowSize?: ShadowSize;
   /** 🆕 Cartes/puces numérotées (1, 2, 3…) au lieu d'icônes. */
   numbered?: boolean;
+  /** 🆕 Force le mode de rendu (ex: "grid" quand on restructure un split
+   * déséquilibré en pile texte-centré + cartes dessous). */
+  forceMode?: BulletsMode;
 }) {
   const DefaultBulletIcon = getIconByName(defaultIconName);
-  const mode = decideBulletsMode(sectionType, bullets, isSuccess);
+  const mode = forceMode ?? decideBulletsMode(sectionType, bullets, isSuccess);
   const shadowAttr =
     shadowSize && shadowSize !== "none" ? shadowSize : undefined;
 

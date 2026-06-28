@@ -42,6 +42,20 @@ export async function guardApiAccess(): Promise<GuardResult> {
   return { ok: true, userId: user.id, access };
 }
 
+/** Réponse standard quand le QUOTA MENSUEL d'une métrique est atteint. */
+export function quotaExceededResponse(message?: string): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "quota_exceeded",
+      message:
+        message ??
+        "Quota mensuel de ton plan atteint. Passe à un plan supérieur ou attends le renouvellement.",
+    },
+    { status: 429 },
+  );
+}
+
 /** Réponse standard quand une fonctionnalité n'est pas incluse dans le plan. */
 export function featureBlockedResponse(feature: BooleanFeature): NextResponse {
   const labels: Partial<Record<BooleanFeature, string>> = {

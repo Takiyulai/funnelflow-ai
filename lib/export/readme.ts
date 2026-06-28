@@ -77,6 +77,8 @@ Pour **chaque** bloc :
 
 > 💡 **Astuce** : pour aller plus vite, vous pouvez ouvrir tous les fichiers \`.html\` du dossier \`blocs-systeme-io/\` en même temps dans VSCode et copier-coller dans l'ordre.
 
+> ⚠️ **Pleine largeur (important)** : par défaut, systeme.io ajoute du **Rembourrage (≈40)** sur la **Section** et la **Rangée**, plus des **marges** sur le bloc Code HTML — ce qui rétrécit le rendu. Pour que le tunnel occupe toute la largeur : sélectionnez la **Section** puis la **Rangée** et mettez leur **Rembourrage à 0** ; mettez aussi les **Marges du bloc Code HTML à 0** (ou réglez la ligne sur **pleine largeur**).
+
 ### Étape 4 — Configurer les formulaires (si vous avez des popups)
 
 ${
@@ -109,6 +111,21 @@ Si vous avez une section formulaire (\`99-form-...\`), elle utilise un formulair
    - Les boutons **"aller au formulaire"** doivent faire défiler jusqu'au formulaire en bas.
    - Les boutons **popup** doivent ouvrir l'overlay correctement.
 4. Si tout fonctionne : cliquez sur **Publier**.
+
+---
+
+## 💬 Popup aux couleurs du tunnel (optionnel)
+
+Pour que votre **popup natif systeme.io** prenne automatiquement les couleurs de votre tunnel :
+
+1. Dans **systeme.io**, créez votre **popup** (texte, champ/formulaire, CTA) et configurez son **déclencheur natif** (délai, exit-intent, au clic, etc.).
+2. **Cliquez sur le bloc/la rangée** du popup : son **id** s'affiche (ex. \`row-c66ce9c8\`). ⚠️ N'utilisez **pas** l'id du script de formulaire (\`form-script-tag-…\`), ce n'est pas un élément visible.
+3. Dans **FunnelFlow** → menu **Export systeme.io** → **« Styliser un popup systeme.io »** → collez cet **id** (ou le bloc HTML). Optionnel : l'**id du bouton CTA** (ex. \`button-…\`, pour un **dégradé animé**) et les **ids des champs de saisie** (ex. \`form-input-…\`). Puis **Générer & copier le CSS**.
+4. Dans le popup systeme.io, glissez un bloc **Code HTML** et **collez-y** ce CSS.
+
+Le popup garde son **formulaire, son CTA et son ouverture/fermeture** (gérés par systeme.io) ; seules les **couleurs** (fond, texte, bouton) sont adaptées à votre branding. CSS pur, aucun script.
+
+> 💡 Astuce : le \`<style>\` s'applique globalement, vous pouvez donc coller le bloc Code HTML n'importe où dans le popup.
 
 ---
 

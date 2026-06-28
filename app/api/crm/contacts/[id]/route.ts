@@ -6,8 +6,31 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getContact, updateContact, deleteContact } from "@/lib/crm/contacts";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { runWorkflowsForEvent } from "@/lib/workflows/engine";
+import { LEAD_STATUSES, type LeadStatus } from "@/lib/workflows/types";
 
 export const dynamic = "force-dynamic";
+
+// 🆕 Workflows déclenchés par "status.changed". Best-effort (erreur avalée).
+// Branché AU NIVEAU ROUTE : l'action `set_status` du moteur écrit directement
+// dans `leads` via le client admin, pas via cette route → pas de boucle.
+async function fireStatusChangedWorkflows(
+  userId: string,
+  contact: { id: string; email: string; name?: string | null },
+  status: LeadStatus,
+): Promise<void> {
+  try {
+    const admin = getSupabaseAdmin();
+    await runWorkflowsForEvent(admin, userId, {
+      event: "status.changed",
+      lead: { id: contact.id, email: contact.email, name: contact.name ?? null },
+      status,
+    });
+  } catch (e) {
+    console.warn("[workflows] hook status.changed échoué (non bloquant):", e);
+  }
+}
 
 async function requireUser() {
   const sb = await createSupabaseServerClient();
@@ -40,6 +63,13 @@ export async function PATCH(
   if (!body) return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   try {
     const contact = await updateContact(sb, user.id, id, body);
+    // 🆕 Déclencheur workflow "status.changed" si le PATCH a posé un statut valide.
+    if (
+      typeof body?.status === "string" &&
+      (LEAD_STATUSES as readonly string[]).includes(body.status)
+    ) {
+      await fireStatusChangedWorkflows(user.id, contact, body.status as LeadStatus);
+    }
     return NextResponse.json({ ok: true, contact });
   } catch (e) {
     return NextResponse.json(

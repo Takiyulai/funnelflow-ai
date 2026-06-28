@@ -238,6 +238,11 @@ async function getUserId(): Promise<string | null> {
   return _sessionPromise;
 }
 
+/** Id de l'utilisateur connecté (cache léger). Public pour la garde de cache. */
+export async function getCurrentUserId(): Promise<string | null> {
+  return getUserId();
+}
+
 /** Formate une erreur PostgREST/Supabase en message lisible AVEC le code. */
 function formatPgError(
   prefix: string,

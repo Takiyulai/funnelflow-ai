@@ -178,15 +178,16 @@ export async function POST(req: Request) {
     const paymentIntent =
       typeof session.payment_intent === "string" ? session.payment_intent : null;
 
-    const order = await markOrderPaidBySession(session.id, paymentIntent);
+    // 🆕 Email collecté par Stripe Checkout → on le persiste sur la commande
+    // (sinon « Clients » reste à 0) et on l'utilise pour le contact/email.
+    const sessionEmail =
+      session.customer_details?.email || session.customer_email || null;
+
+    const order = await markOrderPaidBySession(session.id, paymentIntent, sessionEmail);
 
     // Si la commande n'existe pas/déjà payée, on s'arrête (idempotence).
     if (order) {
-      const email =
-        order.email ||
-        session.customer_email ||
-        session.customer_details?.email ||
-        null;
+      const email = order.email || sessionEmail;
 
       if (email) {
         try {

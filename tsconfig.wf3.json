@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "lib/workflows/types.ts",
+    "lib/workflows/repository.ts",
+    "lib/workflows/engine.ts",
+    "lib/workflows/validate.ts",
+    "app/api/workflows/route.ts",
+    "app/api/workflows/[id]/route.ts"
+  ]
+}

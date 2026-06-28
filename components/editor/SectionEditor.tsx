@@ -16,6 +16,7 @@ import { StyleTab } from "@/components/editor/tabs/StyleTab";
 import { BackgroundTab } from "@/components/editor/tabs/BackgroundTab";
 import { DecorativeIconsPanel } from "@/components/editor/tabs/DecorativeIconsPanel";
 import { RawHtmlContentTab } from "@/components/editor/tabs/RawHtmlContentTab";
+import { SectionRegenPanel } from "@/components/editor/SectionRegenPanel";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 
 type TabId = "content" | "media" | "cta" | "style" | "background";
@@ -140,11 +141,20 @@ export function SectionEditor({ section, language, funnel, onChange }: Props) {
           (isRawHtml ? (
             <RawHtmlContentTab section={section} onChange={onChange} />
           ) : (
-            <ContentTab
-              section={section}
-              language={language}
-              onChange={onChange}
-            />
+            <>
+              {/* 🆕 Régénération du copy par prompt (IA) — sections natives. */}
+              <SectionRegenPanel
+                section={section}
+                language={language}
+                funnel={funnel}
+                onChange={onChange}
+              />
+              <ContentTab
+                section={section}
+                language={language}
+                onChange={onChange}
+              />
+            </>
           ))}
 
         {/* Les onglets natifs ne sont disponibles que pour les sections natives.

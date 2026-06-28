@@ -2,7 +2,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Copy, Check, ExternalLink, Code2, ChevronDown, X, BookOpen, FileText, Layers } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Copy, Check, ExternalLink, Code2, ChevronDown, X, BookOpen, FileText, Layers, MessageSquare } from "lucide-react";
 import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 import { useToast } from "@/components/ui/Toast";
 import { incrementExportCount } from "@/lib/store/statsStore";
@@ -95,6 +96,13 @@ export function SystemeIoExportMenu({
   const [showGuide, setShowGuide] = useState(false);
   const [mode, setMode] = useState<Mode>("full");
   const [scope, setScope] = useState<Scope>("active");
+  const [popupCopied, setPopupCopied] = useState(false);
+  const [showPopupModal, setShowPopupModal] = useState(false);
+  const [popupScript, setPopupScript] = useState("");
+  const [ctaScript, setCtaScript] = useState("");
+  const [inputsScript, setInputsScript] = useState("");
+  const [textsScript, setTextsScript] = useState("");
+  const [popupError, setPopupError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -206,6 +214,59 @@ export function SystemeIoExportMenu({
       setOpen(false);
     } else {
       toast.show({ title: "Erreur de copie", variant: "error" });
+    }
+  }
+
+  // 🆕 PARTIE 2 — Génère un <style> qui recolore le popup natif SIO aux couleurs
+  // du tunnel, à partir du script/id du popup collé par l'utilisateur.
+  async function generatePopupCss() {
+    if (loading) return;
+    setLoading(true);
+    setPopupError(null);
+    try {
+      const res = await fetch("/api/export/systeme", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ funnel, mode: "popup", scope: "active", popupScript, ctaScript, inputsScript, textsScript }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        html?: string;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok || !data.html) {
+        setPopupError(data.message || "Id du popup introuvable. Colle le script du popup (ou son id).");
+        return;
+      }
+      const html = data.html;
+
+      let ok = false;
+      try { window.focus(); } catch { /* ignore */ }
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard?.writeText &&
+        document.hasFocus()
+      ) {
+        try { await navigator.clipboard.writeText(html); ok = true; } catch { /* fallback */ }
+      }
+      if (!ok) ok = copyViaTextarea(html);
+
+      if (ok) {
+        setPopupCopied(true);
+        setTimeout(() => setPopupCopied(false), 1800);
+        setShowPopupModal(false);
+        toast.show({
+          title: "CSS du popup copié",
+          description: "Colle-le dans un bloc Code HTML à l'intérieur de ton popup systeme.io.",
+          variant: "success",
+        });
+      } else {
+        setPopupError("Copie impossible. Réessaie.");
+      }
+    } catch {
+      setPopupError("Erreur de génération. Réessaie.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -352,6 +413,31 @@ export function SystemeIoExportMenu({
 
             <button
               onClick={() => {
+                setPopupError(null);
+                setShowPopupModal(true);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-900 transition disabled:opacity-50"
+            >
+              {popupCopied ? (
+                <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+              ) : (
+                <MessageSquare className="h-4 w-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="flex-1">
+                <span className="block font-semibold">
+                  {popupCopied ? "CSS popup copié !" : "Styliser un popup systeme.io"}
+                </span>
+                <span className="block text-[10px] text-zinc-500">
+                  Recolore le popup natif SIO aux couleurs du tunnel
+                </span>
+              </span>
+            </button>
+
+            <div className="my-1 h-px bg-zinc-800" />
+
+            <button
+              onClick={() => {
                 setShowGuide(true);
                 setOpen(false);
               }}
@@ -371,6 +457,104 @@ export function SystemeIoExportMenu({
           scope={scope}
           pageLabel={activePageLabel}
         />
+      )}
+
+      {showPopupModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/70 p-4"
+          onClick={() => !loading && setShowPopupModal(false)}
+        >
+          <div
+            className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">Styliser un popup systeme.io</h2>
+              <button
+                type="button"
+                onClick={() => setShowPopupModal(false)}
+                className="text-zinc-500 hover:text-zinc-200"
+                aria-label="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mb-3 text-xs leading-relaxed text-zinc-400">
+              Dans systeme.io, <strong className="text-zinc-200">clique sur le bloc/la
+              rangée</strong> de ton popup : son <strong className="text-zinc-200">id</strong>{" "}
+              apparaît (ex. <code className="text-amber-300">row-c66ce9c8</code>). Colle cet
+              id ci-dessous. On génère un CSS qui recolore ce bloc aux couleurs de ton
+              tunnel — le formulaire et le CTA restent gérés par systeme.io.
+              <br />
+              <span className="text-zinc-500">
+                ⚠️ N&apos;utilise PAS l&apos;id du script de formulaire
+                (<code>form-script-tag-…</code>) : ce n&apos;est pas un élément visible.
+                Tu peux aussi coller le bloc HTML, on en extrait l&apos;id <code>row-…</code>.
+              </span>
+            </p>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Id du bloc / rangée du popup (obligatoire)
+            </label>
+            <input
+              value={popupScript}
+              onChange={(e) => setPopupScript(e.target.value)}
+              placeholder="ex. row-c66ce9c8"
+              className="w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-[11px] text-zinc-200 outline-none focus:border-indigo-500/40"
+            />
+
+            <label className="mb-1 mt-3 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Ids des textes / titres (optionnel — séparés par des virgules)
+            </label>
+            <input
+              value={textsScript}
+              onChange={(e) => setTextsScript(e.target.value)}
+              placeholder="ex. text-d02d11fc, headline-38ecf13f"
+              className="w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-[11px] text-zinc-200 outline-none focus:border-indigo-500/40"
+            />
+
+            <label className="mb-1 mt-3 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Id du bouton CTA (optionnel — dégradé animé)
+            </label>
+            <input
+              value={ctaScript}
+              onChange={(e) => setCtaScript(e.target.value)}
+              placeholder="ex. button-b3b1f6d6"
+              className="w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-[11px] text-zinc-200 outline-none focus:border-indigo-500/40"
+            />
+
+            <label className="mb-1 mt-3 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Ids des champs de saisie (optionnel — séparés par des virgules)
+            </label>
+            <input
+              value={inputsScript}
+              onChange={(e) => setInputsScript(e.target.value)}
+              placeholder="ex. form-input-acb23f66, form-input-29970db8"
+              className="w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-[11px] text-zinc-200 outline-none focus:border-indigo-500/40"
+            />
+
+            {popupError && (
+              <p className="mt-2 text-xs text-amber-400">{popupError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPopupModal(false)}
+                className="rounded-md border border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={generatePopupCss}
+                disabled={loading || !popupScript.trim()}
+                className="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {loading ? "Génération…" : "Générer & copier le CSS"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </>
   );
@@ -451,6 +635,10 @@ function ImportGuideModal({
             {
               title: "Collez le code copié",
               desc: "Cliquez sur le bloc, puis collez (Ctrl+V / Cmd+V) le HTML que nous avons copié pour vous.",
+            },
+            {
+              title: "Mettez la zone en pleine largeur",
+              desc: "Systeme.io ajoute par défaut du Rembourrage (≈40) et des marges qui rétrécissent le rendu. Sélectionnez la Section, puis la Rangée, et mettez leur « Rembourrage » à 0 ; mettez aussi les « Marges » du bloc Code HTML à 0 (ou réglez la ligne sur pleine largeur). Le tunnel occupera alors toute la largeur.",
             },
             {
               title: "Sauvegardez et publiez",

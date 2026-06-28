@@ -3,7 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getAccess } from "@/lib/billing/subscription";
+import { getProfile } from "@/lib/billing/subscription";
 import { PLANS } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +16,18 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
-  const access = await getAccess(user.id);
+  // On renvoie le plan RÉELLEMENT souscrit (profil), pas le plan « effectif »
+  // de getAccess (qui retombe sur Agency quand le gating est désactivé) — sinon
+  // la Sidebar afficherait « Plan Agency » à tout le monde.
+  const profile = await getProfile(user.id);
+  const planId = profile?.plan ?? null;
+  const status = profile?.status ?? "inactive";
+  const active = status === "active" || status === "trialing";
   return NextResponse.json({
     ok: true,
-    planId: access.planId,
-    planName: access.planId ? PLANS[access.planId].name : null,
-    status: access.status,
-    hasAccess: access.hasAccess,
-    enforced: access.enforced,
+    planId,
+    planName: planId ? PLANS[planId].name : null,
+    status,
+    active,
   });
 }

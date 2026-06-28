@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import type { EmailSequenceItem } from "@/lib/funnels/types";
+import { getSystemSender } from "@/lib/email/sender";
 
 export function createResendClient() {
   if (!process.env.RESEND_API_KEY) {
@@ -11,7 +12,8 @@ export function createResendClient() {
 export async function sendSequenceEmail(to: string, email: EmailSequenceItem) {
   const resend = createResendClient();
   return resend.emails.send({
-    from: process.env.RESEND_FROM ?? "FunnelFlow AI <hello@example.com>",
+    // Expéditeur résolu depuis l'env (aucune adresse en dur).
+    from: getSystemSender().from,
     to,
     subject: email.subject,
     html: email.html,

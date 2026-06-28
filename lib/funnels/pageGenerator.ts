@@ -1023,6 +1023,48 @@ const PAGE_COPY: PageCopyMap = {
 
 function getGenericRoleCopy(role: PageRole, lang: Language): SectionTemplate[] {
   const map: Partial<Record<PageRole, RoleCopy>> = {
+    // 🆕 OTO upsell : confirmation + offre complémentaire + bénéfices + CTA.
+    upsell: {
+      fr: [
+        { type: "hero", eyebrow: "COMMANDE CONFIRMÉE ✓", headline: "Une dernière chose avant de commencer", subheadline: "Profitez d'une offre complémentaire réservée aux nouveaux clients.", body: "Votre commande est confirmée. Ajoutez maintenant cette option pour aller plus vite et tirer le maximum de votre achat." },
+        { type: "benefits", eyebrow: "POURQUOI L'AJOUTER", headline: "Ce que cette option vous apporte", bullets: ["Des résultats plus rapides dès le départ", "Tout ce qu'il vous faut, déjà prêt", "Une longueur d'avance, sans effort en plus"] },
+        { type: "offer", eyebrow: "OFFRE UNIQUE", headline: "Ajoutez-la à votre commande", body: "Cette offre n'apparaît qu'une seule fois, maintenant." },
+        { type: "cta", eyebrow: "DÉCISION", headline: "Oui, je l'ajoute", ctaLabel: "Oui, je l'ajoute" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "ORDER CONFIRMED ✓", headline: "One last thing before you start", subheadline: "Grab a complementary offer reserved for new customers.", body: "Your order is confirmed. Add this option now to move faster and get the most out of your purchase." },
+        { type: "benefits", eyebrow: "WHY ADD IT", headline: "What this option gives you", bullets: ["Faster results from day one", "Everything you need, ready to go", "A head start, with no extra effort"] },
+        { type: "offer", eyebrow: "ONE-TIME OFFER", headline: "Add it to your order", body: "This offer only appears once — right now." },
+        { type: "cta", eyebrow: "DECISION", headline: "Yes, add it", ctaLabel: "Yes, add it" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "PEDIDO CONFIRMADO ✓", headline: "Una última cosa antes de empezar", subheadline: "Aprovecha una oferta complementaria reservada a nuevos clientes.", body: "Tu pedido está confirmado. Añade ahora esta opción para avanzar más rápido y sacar el máximo de tu compra." },
+        { type: "benefits", eyebrow: "POR QUÉ AÑADIRLA", headline: "Lo que te aporta esta opción", bullets: ["Resultados más rápidos desde el inicio", "Todo lo que necesitas, ya listo", "Una ventaja, sin esfuerzo extra"] },
+        { type: "offer", eyebrow: "OFERTA ÚNICA", headline: "Añádela a tu pedido", body: "Esta oferta aparece una sola vez — ahora." },
+        { type: "cta", eyebrow: "DECISIÓN", headline: "Sí, la añado", ctaLabel: "Sí, la añado" },
+      ],
+    },
+    // 🆕 OTO downsell : alternative allégée + bénéfices + CTA.
+    downsell: {
+      fr: [
+        { type: "hero", eyebrow: "DERNIÈRE OPPORTUNITÉ", headline: "Une version plus accessible", subheadline: "Pas tout à fait prêt pour l'offre complète ? Voici une alternative allégée.", body: "Vous gardez l'essentiel à un prix réduit. C'est la dernière fois que cette option vous est proposée." },
+        { type: "benefits", eyebrow: "L'ESSENTIEL", headline: "Ce que vous obtenez", bullets: ["L'essentiel pour démarrer sans attendre", "Un investissement réduit", "Évolutif quand vous voudrez plus"] },
+        { type: "offer", eyebrow: "OFFRE ALLÉGÉE", headline: "Profitez-en maintenant", body: "Une porte d'entrée simple, sans renoncer au résultat." },
+        { type: "cta", eyebrow: "DÉCISION", headline: "Oui, je profite de cette offre", ctaLabel: "Oui, je la prends" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "LAST CHANCE", headline: "A more accessible version", subheadline: "Not quite ready for the full offer? Here's a lighter alternative.", body: "You keep the essentials at a reduced price. This is the last time this option will be offered." },
+        { type: "benefits", eyebrow: "THE ESSENTIALS", headline: "What you get", bullets: ["The essentials to start right away", "A smaller investment", "Upgrade whenever you want more"] },
+        { type: "offer", eyebrow: "LIGHT OFFER", headline: "Take advantage now", body: "A simple way in, without giving up the result." },
+        { type: "cta", eyebrow: "DECISION", headline: "Yes, I'll take this offer", ctaLabel: "Yes, I'll take it" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "ÚLTIMA OPORTUNIDAD", headline: "Una versión más accesible", subheadline: "¿No del todo listo para la oferta completa? Aquí tienes una alternativa ligera.", body: "Conservas lo esencial a un precio reducido. Es la última vez que se te ofrece esta opción." },
+        { type: "benefits", eyebrow: "LO ESENCIAL", headline: "Lo que obtienes", bullets: ["Lo esencial para empezar ya", "Una inversión menor", "Amplía cuando quieras más"] },
+        { type: "offer", eyebrow: "OFERTA LIGERA", headline: "Aprovéchala ahora", body: "Una entrada sencilla, sin renunciar al resultado." },
+        { type: "cta", eyebrow: "DECISIÓN", headline: "Sí, aprovecho esta oferta", ctaLabel: "Sí, la tomo" },
+      ],
+    },
     thankyou: {
       fr: [
         {

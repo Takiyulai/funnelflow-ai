@@ -24,8 +24,13 @@ import {
   completeFunnelPrompt,
   mainPagePrompt,
   secondaryPagesPrompt,
+  sequenceGenerationPrompt,
   type MediaInput,
 } from "./prompts";
+import type {
+  SequenceEmailDraft,
+  SequenceGenerationInput,
+} from "@/lib/crm/types";
 import { getMood } from "@/lib/funnels/moods";
 import {
   PREMIUM_TEMPLATES,
@@ -38,10 +43,12 @@ import {
 } from "@/lib/funnels/applyTemplate";
 import {
   buildPagesFromBlueprints,
+  buildPlaceholderPage,
   chainPagesNavigation,
   filterSectionsByBlueprint,
 } from "@/lib/funnels/pageGenerator";
 import { normalizeFunnelKind } from "@/lib/funnels/kinds";
+import { isUsableMediaUrl } from "@/lib/funnels/resolveMedia";
 import {
   getFunnelBlueprint,
   getPageBlueprint,
@@ -52,7 +59,8 @@ import {
   sectionTypeAcceptsVideo,
 } from "@/lib/funnels/pageCatalogs";
 import { removeOrFillEmptySections, dedupeSectionsAcrossPages,
-  ensurePricingOnConversionPage, } from "@/lib/funnels/sectionFillers";
+  ensurePricingOnConversionPage, tryFillSectionFromBrief,
+  isSectionEmpty, isPlaceholderHeadline, } from "@/lib/funnels/sectionFillers";
 import {
   getCTAConfig,
   getArchetype,
@@ -125,16 +133,24 @@ function detectVideoProvider(url: string): VideoSource["provider"] {
 /*  PLACEMENT DÉTERMINISTE DES MÉDIAS                                  */
 /* ================================================================== */
 
+// 🆕 Sous-étape A (P1) : l'ordre compte (1re règle qui matche gagne).
+// "about" (photo de l'auteur/coach) est placé AVANT "testimonials" pour qu'une
+// photo de l'auteur décrite avec ses clients ("moi, le coach, qui aide mes
+// clients") soit reconnue comme média auteur, jamais comme témoignage.
+// La règle "testimonials" n'accepte plus que des marqueurs EXPLICITES de
+// témoignage client : on a retiré les mots génériques "client", "customer",
+// "screenshot", "capture d'écran", "opinion" qui faisaient fuiter des photos
+// d'auteur ou des visuels produit dans les témoignages.
 const MEDIA_KEYWORD_MAP: Array<{ section: FunnelSectionType; keywords: RegExp }> = [
-  {
-    section: "testimonials",
-    keywords:
-      /\b(t[ée]moignage|avis client|review|testimonial|screenshot|capture\s*d['e]?\s*[ée]cran|client|customer|rese[ñn]a|testimonio|opini[oó]n)\b/i,
-  },
   {
     section: "about",
     keywords:
       /\b(coach|fondateur|founder|about\s*me|[àa]\s*propos|portrait|photo\s*de\s*moi|profile|profil|equipo|sobre\s*m[ií]|biographie|bio)\b/i,
+  },
+  {
+    section: "testimonials",
+    keywords:
+      /\b(t[ée]moignage|avis\s*client|client\s*review|customer\s*review|testimonial|testimonio|rese[ñn]a)\b/i,
   },
   {
     section: "pricing",
@@ -246,10 +262,24 @@ export function placeMediasIntoSections(
     const ref = media.id || media.url;
     if (!ref || alreadyPlaced.has(ref)) continue;
 
+    const hintType = media.sectionHint as FunnelSectionType | undefined;
+    const detectedType = detectSectionFromKeywords(media);
     let targetType: FunnelSectionType =
-      (media.sectionHint as FunnelSectionType | undefined) ||
-      detectSectionFromKeywords(media) ||
+      hintType ||
+      detectedType ||
       fallbackSectionByKind(media.kind || "image");
+
+    // 🆕 Sous-étape A (P1) — INVARIANT TÉMOIGNAGES :
+    // Une section "testimonials" ne peut recevoir QUE des médias explicitement
+    // fournis comme témoignages clients, c.-à-d. sectionHint="testimonials" ou
+    // un mot-clé de témoignage explicite détecté. Tout autre média qui
+    // retomberait sur "testimonials" (photo auteur, fallback…) est redirigé
+    // vers "about" — un média auteur n'apparaît JAMAIS dans les témoignages.
+    const isExplicitTestimonial =
+      hintType === "testimonials" || detectedType === "testimonials";
+    if (targetType === "testimonials" && !isExplicitTestimonial) {
+      targetType = "about";
+    }
 
     if (allowed && !allowed.includes(targetType)) {
       // Si la cible était "testimonials" mais qu'elle n'est pas autorisée,
@@ -293,12 +323,17 @@ export function placeMediasIntoSections(
     }
   }
 
-  // ─── PASS 3 : distribuer les images restantes sur les avatars testimonials
+  // ─── PASS 3 : remplir les avatars testimonials UNIQUEMENT avec des images
+  // explicitement destinées aux témoignages (sectionHint="testimonials").
+  // 🆕 Avant, toute image uploadée non placée (photo du coach, visuel produit…)
+  // était versée dans les avatars de témoignages → elle se retrouvait à tort en
+  // haut de page. Les images génériques passent désormais au PASS 4 (about/…).
   const unplacedImages = medias.filter(
     (m) =>
       (m.kind || "image") === "image" &&
       m.url &&
-      !alreadyPlaced.has(m.id || m.url),
+      !alreadyPlaced.has(m.id || m.url) &&
+      m.sectionHint === "testimonials",
   );
   if (unplacedImages.length > 0) {
     for (const section of result) {
@@ -350,6 +385,27 @@ export function placeMediasIntoSections(
           `aucune section "about" ou compatible disponible.`,
       );
     }
+  }
+
+  // ─── PASS 5 : 🆕 l'image auteur doit apparaître AUSSI dans le hero (en plus
+  // du about). Demande explicite : la photo de l'auteur est visible dans le hero
+  // ET dans le about. On copie l'image du "about" vers le "hero" SI ce dernier
+  // n'a ni image ni vidéo (la vidéo prime sur le hero). Duplication VOULUE.
+  const heroSection = result.find((s) => s.type === "hero");
+  const aboutWithImg = result.find((s) => s.type === "about" && s.image?.url);
+  if (
+    heroSection &&
+    aboutWithImg?.image?.url &&
+    !heroSection.image?.url &&
+    !heroSection.video?.url
+  ) {
+    heroSection.image = {
+      ...aboutWithImg.image,
+      mode:
+        aboutWithImg.image.mode && aboutWithImg.image.mode !== "none"
+          ? aboutWithImg.image.mode
+          : "upload",
+    };
   }
 
   return result;
@@ -404,21 +460,12 @@ function hasMediaAttached(section: FunnelSection): boolean {
 function attachMediaToSection(section: FunnelSection, media: MediaItem): void {
   const ref = media.url || "";
 
-  if (
-    section.type === "testimonials" &&
-    media.kind !== "video" &&
-    Array.isArray(section.items) &&
-    section.items.length > 0
-  ) {
-    const firstWithoutAvatar = section.items.find(
-      (it) =>
-        it.kind === "testimonial" &&
-        (!it.data.avatarUrl || extractPlaceholderId(it.data.avatarUrl)),
-    );
-    if (firstWithoutAvatar && firstWithoutAvatar.kind === "testimonial") {
-      firstWithoutAvatar.data.avatarUrl = ref;
-      return;
-    }
+  // 🆕 RÈGLE STRICTE : une image uploadée au wizard ne va JAMAIS dans les
+  // témoignages (ni en avatar, ni en image de section). Les avatars de
+  // témoignages ne sont remplis que par des images EXPLICITEMENT destinées aux
+  // témoignages (sectionHint="testimonials"), géré ailleurs — pas ici.
+  if (section.type === "testimonials") {
+    return;
   }
 
   if (media.kind === "video") {
@@ -459,8 +506,22 @@ function defaultHeadlineForType(type: FunnelSectionType): string {
     video: "Découvrez en vidéo",
     proof: "Résultats concrets",
     pricing: "Votre offre",
+    offer: "Votre offre",
+    benefits: "Ce que vous allez gagner",
+    bonus: "Vos bonus",
+    guarantee: "Garantie sans risque",
+    faq: "Vos questions",
+    problem: "Le vrai problème",
+    agitation: "Ce que ça vous coûte",
+    solution: "La solution",
+    urgency: "C'est maintenant",
+    process: "Comment ça marche",
+    hero: "",
+    cta: "",
   };
-  return titles[type] ?? "Section";
+  // 🆕 Plus JAMAIS de "Section" littéral : à défaut on renvoie une chaîne vide
+  // → isSectionEmpty traitera la section comme vide (remplie ou supprimée).
+  return titles[type] ?? "";
 }
 
 function pickFallbackAllowedSection(
@@ -715,6 +776,7 @@ export type AiErrorReason =
   | "empty-response"
   | "invalid-json"
   | "schema-mismatch"
+  | "invalid-model"
   | "unknown";
 
 export class AiGenerationError extends Error {
@@ -2475,6 +2537,105 @@ REGLA ESTRICTA PARA SECCIONES "about":
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Abstraction fournisseur IA — AI_PROVIDER = "openai" (défaut) | "anthropic".
+// Tout le pipeline (prompts, schémas, assemblage) reste identique : seul l'appel
+// réseau change. Permet de basculer sur Claude sans réécrire la génération.
+// ─────────────────────────────────────────────────────────────────────────────
+type AiCallArgs = {
+  systemMessage: string;
+  userPrompt: string;
+  maxTokens?: number;
+  temperature?: number;
+};
+
+async function callAI(args: AiCallArgs): Promise<string> {
+  const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  if (provider === "anthropic" || provider === "claude") {
+    return callAnthropic(args);
+  }
+  return callOpenAI(args);
+}
+
+// 🆕 Appel Anthropic (Messages API) via fetch — AUCUNE dépendance npm requise
+// (évite de casser le build si @anthropic-ai/sdk n'est pas installé).
+async function callAnthropic(args: AiCallArgs): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new AiGenerationError(
+      "missing-key",
+      "Aucune clé Anthropic détectée. Ajoutez ANTHROPIC_API_KEY dans .env.local puis redémarrez",
+    );
+  }
+  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: args.maxTokens ?? 8000,
+        temperature: args.temperature ?? 0.7,
+        system:
+          args.systemMessage +
+          "\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte ni balises markdown autour.",
+        messages: [{ role: "user", content: args.userPrompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      const status = res.status;
+      if (status === 401 || status === 403) {
+        throw new AiGenerationError(
+          "invalid-key",
+          "La clé Anthropic a été refusée. Vérifiez ANTHROPIC_API_KEY",
+          errText,
+        );
+      }
+      if (status === 429) {
+        throw new AiGenerationError(
+          "rate-limit",
+          "Trop de requêtes Anthropic en peu de temps. Réessayez dans une minute",
+          errText,
+        );
+      }
+      if (status === 404 || status === 400) {
+        throw new AiGenerationError(
+          "invalid-model",
+          `Le modèle Anthropic "${model}" est introuvable ou refuse ces paramètres (vérifie ANTHROPIC_MODEL). Détail : ${errText}`,
+          errText,
+        );
+      }
+      throw new AiGenerationError(
+        "network-error",
+        "Impossible de joindre Anthropic. Vérifiez la connexion ou réessayez",
+        errText,
+      );
+    }
+
+    const data = (await res.json()) as { content?: Array<{ text?: string }> };
+    const rawText = (data?.content?.[0]?.text ?? "").trim();
+    if (!rawText || rawText.length < 20) {
+      throw new AiGenerationError(
+        "empty-response",
+        "Anthropic a retourné une réponse vide. Réessayez la génération",
+      );
+    }
+    return rawText;
+  } catch (error) {
+    if (error instanceof AiGenerationError) throw error;
+    throw new AiGenerationError(
+      "network-error",
+      "Impossible de joindre Anthropic. Vérifiez la connexion ou réessayez",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Wrapper appel OpenAI réutilisable
 // ─────────────────────────────────────────────────────────────────────────────
 async function callOpenAI(args: {
@@ -2490,22 +2651,108 @@ async function callOpenAI(args: {
     );
   }
 
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  // 🆕 Provider courant. L'endpoint OpenAI-compatible (base_url) permet de
+  // pointer le MÊME client SDK vers OpenAI (défaut) OU vers un fournisseur
+  // compatible comme Z.AI / GLM, sans réécrire les routes. OpenAI reste le
+  // défaut tant qu'AI_PROVIDER n'est pas explicitement basculé.
+  const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  const isZai = provider === "zai" || provider === "z.ai" || provider === "glm";
+
+  // 🆕 Modèle : toujours piloté par OPENAI_MODEL (jamais en dur). Le fallback ne
+  // sert que si la variable est absente ; en Z.AI l'utilisateur fixe lui-même
+  // l'identifiant exact (ex. "glm-5.2"). On NE choisit donc pas le modèle.
+  const model = process.env.OPENAI_MODEL ?? (isZai ? "glm-4.6" : "gpt-4o-mini");
+
+  // 🆕 base_url optionnel. Pour Z.AI, défaut documenté = endpoint OpenAI-compat.
+  // Pour OpenAI, on laisse undefined (le SDK utilise son endpoint natif).
+  const baseURL =
+    process.env.OPENAI_BASE_URL?.trim() ||
+    (isZai ? "https://api.z.ai/api/paas/v4/" : undefined);
+
+  // 🆕 Les modèles de raisonnement OpenAI (GPT-5.x, série o1/o3/o4…) REFUSENT
+  // `max_tokens` et un `temperature` personnalisé : ils exigent
+  // `max_completion_tokens` et la température par défaut. Envoyer
+  // `max_tokens`/`temperature:0.7` provoque un 400 immédiat (faussement
+  // rapporté comme « timeout »). On adapte donc les paramètres. Ce chemin est
+  // réservé à OpenAI : GLM (glm-x.y) accepte `max_tokens` + `temperature`.
+  const isReasoningModel = !isZai && /^(gpt-5|o[1-9])/i.test(model);
+
+  // 🆕 Les modèles de raisonnement consomment des tokens en RAISONNEMENT INTERNE
+  // AVANT de produire la sortie. Avec un JSON de tunnel volumineux, un budget de
+  // 8000 tokens peut être ENTIÈREMENT mangé par le raisonnement → JSON tronqué /
+  // pages tardives vides (upsell/downsell/merci), à tort imputé au modèle.
+  // On élargit donc fortement le budget de complétion ET on baisse l'effort de
+  // raisonnement (gpt-5.x accepte `reasoning_effort`) pour réserver des tokens
+  // à la sortie réelle. Surchargeable via OPENAI_REASONING_MAX_TOKENS / EFFORT.
+  const reasoningMaxTokens = Number(
+    process.env.OPENAI_REASONING_MAX_TOKENS ?? "16000",
+  );
+  const reasoningEffort = process.env.OPENAI_REASONING_EFFORT ?? "low";
+
+  // 🆕 Budget de sortie par défaut configurable (sans hardcoder une limite basse
+  // héritée d'OpenAI) : GLM-5.2 supporte jusqu'à 128K en sortie. Surchargeable
+  // via OPENAI_MAX_TOKENS. Reste 8000 par défaut pour ne rien changer côté OpenAI.
+  const defaultMaxTokens = Number(process.env.OPENAI_MAX_TOKENS ?? "8000");
+  // 🆕 Température par défaut : GLM = 1.0 (défaut Z.AI), OpenAI = 0.7 (inchangé).
+  const defaultTemperature = isZai ? 1.0 : 0.7;
+  // 🆕 top_p optionnel (GLM défaut 0.95). N'ajuster QU'UN seul de temperature/top_p
+  // à la fois → on n'envoie top_p que s'il est explicitement configuré.
+  const topP =
+    process.env.OPENAI_TOP_P != null && process.env.OPENAI_TOP_P !== ""
+      ? Number(process.env.OPENAI_TOP_P)
+      : undefined;
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      ...(baseURL ? { baseURL } : {}),
+    });
 
-    const response = await client.chat.completions.create({
+    const createParams = {
       model,
       messages: [
-        { role: "system", content: args.systemMessage },
-        { role: "user", content: args.userPrompt },
+        { role: "system" as const, content: args.systemMessage },
+        { role: "user" as const, content: args.userPrompt },
       ],
-      temperature: args.temperature ?? 0.7,
-      response_format: { type: "json_object" },
-      max_tokens: args.maxTokens ?? 8000,
-    });
+      response_format: { type: "json_object" as const },
+      ...(isReasoningModel
+        ? {
+            max_completion_tokens: Math.max(
+              args.maxTokens ?? defaultMaxTokens,
+              reasoningMaxTokens,
+            ),
+          }
+        : {
+            max_tokens: args.maxTokens ?? defaultMaxTokens,
+            temperature: args.temperature ?? defaultTemperature,
+            ...(topP != null && !Number.isNaN(topP) ? { top_p: topP } : {}),
+          }),
+    };
+
+    // `reasoning_effort` n'est pas typé dans toutes les versions du SDK : on
+    // l'ajoute via un cast pour rester compatible (l'API OpenAI l'accepte pour
+    // les modèles de raisonnement). Réserve plus de tokens à la sortie réelle.
+    if (isReasoningModel) {
+      (createParams as Record<string, unknown>).reasoning_effort = reasoningEffort;
+    }
+
+    // 🆕 Paramètres SPÉCIFIQUES à Z.AI/GLM — jamais envoyés à OpenAI (gate isZai).
+    //   - thinking={"type":"enabled"|"disabled"} → ZAI_THINKING
+    //   - reasoning_effort=("high"|"max")        → ZAI_REASONING_EFFORT
+    // Optionnels : on ne les inclut que s'ils sont explicitement configurés.
+    if (isZai) {
+      const zaiThinking = process.env.ZAI_THINKING?.trim();
+      if (zaiThinking) {
+        (createParams as Record<string, unknown>).thinking = { type: zaiThinking };
+      }
+      const zaiEffort = process.env.ZAI_REASONING_EFFORT?.trim();
+      if (zaiEffort) {
+        (createParams as Record<string, unknown>).reasoning_effort = zaiEffort;
+      }
+    }
+
+    const response = await client.chat.completions.create(createParams);
 
     const rawText = response.choices?.[0]?.message?.content?.trim() ?? "";
     if (!rawText || rawText.length < 20) {
@@ -2536,6 +2783,22 @@ async function callOpenAI(args: {
         insufficient
           ? "Quota OpenAI épuisé. Ajoutez du crédit sur platform.openai.com/account/billing"
           : "Trop de requêtes en peu de temps. Réessayez dans une minute",
+        message,
+      );
+    }
+    // 🆕 Modèle inexistant (404) ou requête refusée (400 : paramètre/format non
+    // supporté par ce modèle, ex. GPT-5 + max_tokens). À NE PAS confondre avec un
+    // timeout : on remonte la vraie cause pour faciliter le diagnostic.
+    if (
+      status === 404 ||
+      status === 400 ||
+      code === "model_not_found" ||
+      code === "unsupported_parameter" ||
+      code === "unknown_parameter"
+    ) {
+      throw new AiGenerationError(
+        "invalid-model",
+        `Le modèle "${model}" est introuvable ou refuse ces paramètres (vérifie OPENAI_MODEL et l'accès du compte). Détail OpenAI : ${message}`,
         message,
       );
     }
@@ -2885,16 +3148,20 @@ function copyDirectives(lang: Language): string {
 function copyFramework(kind: string, lang: Language): string {
   const fr: Record<string, string> = {
     "digital-product":
-      `PAGE DE VENTE — applique CETTE structure de copywriting direct-response, DÉTAILLÉE :\n` +
-      `1) ACCROCHE (hero) : promesse forte centrée sur la transformation + sous-titre (pour qui + résultat concret).\n` +
-      `2) PROBLÈME : nomme la douleur réelle et quotidienne du prospect (frustrations, échecs passés).\n` +
-      `3) AMPLIFICATION : conséquences si rien ne change (coût émotionnel, temps, argent perdus).\n` +
-      `4) SOLUTION : présente le produit comme le pont vers le résultat (mécanisme unique).\n` +
-      `5) BÉNÉFICES : 4 à 6 transformations concrètes (avant→après), orientées résultat.\n` +
-      `6) PREUVE : témoignages crédibles + résultats chiffrés si possible.\n` +
-      `7) OFFRE : ce qui est inclus (relié au résultat), prix, garantie, urgence légitime.\n` +
-      `8) OBJECTIONS (FAQ) : 5 à 6 vraies objections d'achat levées.\n` +
-      `9) CTA d'achat clair, répété aux moments clés.`,
+      `PAGE DE VENTE — applique CETTE structure de copywriting direct-response, DÉTAILLÉE.\n` +
+      `Émets une section pour CHAQUE étape, en utilisant le "type" indiqué entre crochets :\n` +
+      `1) ACCROCHE [type:hero] : promesse forte centrée sur la transformation + sous-titre (pour qui + résultat concret).\n` +
+      `2) PROBLÈME [type:problem] : nomme la douleur réelle et quotidienne du prospect (frustrations, échecs passés).\n` +
+      `3) AMPLIFICATION [type:agitation] : conséquences si rien ne change (coût émotionnel, temps, argent perdus). Section DISTINCTE du problème.\n` +
+      `4) SOLUTION [type:solution] : présente le produit comme le pont vers le résultat (mécanisme unique).\n` +
+      `5) BÉNÉFICES [type:benefits] : 4 à 6 transformations concrètes (avant→après), orientées résultat.\n` +
+      `6) PRÉSENTATION/AUTORITÉ [type:about] : qui tu es, ton expérience, pourquoi te faire confiance — APRÈS les bénéfices.\n` +
+      `7) PREUVE SOCIALE [type:testimonials] : témoignages crédibles (uniquement de vrais clients).\n` +
+      `8) OFFRE [type:pricing] + BONUS [type:bonus] : ce qui est inclus (relié au résultat), prix, bonus.\n` +
+      `9) GARANTIE [type:guarantee] : renversement de risque clair.\n` +
+      `10) OBJECTIONS [type:faq] : 5 à 6 vraies objections d'achat levées.\n` +
+      `11) URGENCE/RARETÉ [type:urgency] : raison LÉGITIME d'agir maintenant (places, délai, bonus limité) — sans chiffre inventé.\n` +
+      `12) CTA d'achat clair [type:cta], et RÉPÈTE un CTA après le hero, après les bénéfices et après l'offre.`,
     "lead-magnet":
       `PAGE DE CAPTURE — structure :\n` +
       `1) ACCROCHE : le bénéfice n°1 du lead magnet (résultat rapide et désirable).\n` +
@@ -3035,6 +3302,23 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     blueprints.find((b) => b.role === homeRole) ?? blueprints[0];
   let secondaryBlueprints = blueprints.filter((b) => b !== mainBlueprint);
 
+  // 🆕 OTO CONDITIONNELS : on ne génère les pages upsell/downsell QUE si
+  // l'utilisateur a renseigné le prix correspondant dans le wizard. Sinon on les
+  // retire — pas de pages OTO génériques inventées par l'IA.
+  const hasUpsell = !!(
+    (brief.upsellPrice && brief.upsellPrice.trim()) ||
+    (brief.upsellOffer && brief.upsellOffer.trim())
+  );
+  const hasDownsell = !!(
+    (brief.downsellPrice && brief.downsellPrice.trim()) ||
+    (brief.downsellOffer && brief.downsellOffer.trim())
+  );
+  secondaryBlueprints = secondaryBlueprints.filter((b) => {
+    if (b.role === "upsell") return hasUpsell;
+    if (b.role === "downsell") return hasDownsell;
+    return true;
+  });
+
   // Express IA : on cale le nombre de pages sur le choix de l'utilisateur
   // (1 = page principale seule ; N = page principale + (N-1) pages secondaires).
   if (brief.creationMode === "express" && typeof brief.pageCount === "number") {
@@ -3080,7 +3364,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       brief,
     }) + ctaInstruction + businessContext + copyDirectives(brief.language) + copyFramework(normalizedKind, brief.language) + layoutDirectives(normalizedKind, brief.language);
 
-  const mainPromise = callOpenAI({
+  const mainPromise = callAI({
     systemMessage: SYSTEM_MESSAGE_FUNNEL,
     userPrompt: mainPromptText,
     maxTokens: 4000,
@@ -3091,7 +3375,6 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   );
 
   let mainRawText: string;
-  let secondaryRawText: string | null = null;
 
   try {
     mainRawText = (await Promise.race([mainPromise, timeoutPromise])) as string;
@@ -3159,10 +3442,13 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
   const sectionsByRole = new Map<PageRole, FunnelSection[]>();
   sectionsByRole.set(mainBlueprint.role, mainSections);
 
-  // ── Pages secondaires : génération SÉQUENTIELLE pour cohérence avec la home ──
-  // La home est déjà générée : on en extrait le copy clé (titre, promesse, CTA)
-  // et on l'impose au prompt secondaire pour éviter toute divergence de ton,
-  // de nom de produit ou de CTA, et toute répétition de sections.
+  // ── Pages secondaires : génération PAGE PAR PAGE, EN PARALLÈLE ──
+  // 🆕 Chaque page secondaire est générée par un appel IA INDÉPENDANT (timeout +
+  // fallback propres). Vs l'ancien one-shot « toutes les pages d'un coup » : si
+  // une page échoue, SEULE celle-là retombe en placeholder (pas toutes) ; chaque
+  // page dispose de tout le budget de tokens ; c'est plus rapide (parallèle).
+  // ⚠️ L'ORDRE, les LIENS et les REDIRECTIONS ne dépendent PAS de la génération :
+  // ils sont reconstruits ensuite par buildPagesFromBlueprints + chainPagesNavigation.
   if (secondaryBlueprints.length > 0) {
     const mainHero = mainSections.find((s) => s.type === "hero");
     const heroHeadline = (mainHero?.headline ?? "").trim();
@@ -3173,102 +3459,149 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     const coherenceBlock =
       `\n\nCOHÉRENCE OBLIGATOIRE AVEC LA PAGE PRINCIPALE DÉJÀ GÉNÉRÉE :\n` +
       `- Marque : "${brief.brandName}" — Offre/produit : "${brief.offerName}"\n` +
+      (brief.upsellOffer && brief.upsellOffer.trim()
+        ? `- OFFRE UPSELL IMPOSÉE (la page upsell DOIT présenter EXACTEMENT cette offre, pas une offre générique inventée) : "${brief.upsellOffer.trim()}"\n`
+        : "") +
+      (brief.upsellPrice && brief.upsellPrice.trim()
+        ? `- PRIX UPSELL IMPOSÉ (utilise EXACTEMENT ce montant pour l'offre de la page upsell, n'invente AUCUN autre prix) : "${brief.upsellPrice.trim()}"\n`
+        : "") +
+      (brief.downsellOffer && brief.downsellOffer.trim()
+        ? `- OFFRE DOWNSELL IMPOSÉE (la page downsell DOIT présenter EXACTEMENT cette offre, pas une offre générique inventée) : "${brief.downsellOffer.trim()}"\n`
+        : "") +
+      (brief.downsellPrice && brief.downsellPrice.trim()
+        ? `- PRIX DOWNSELL IMPOSÉ (utilise EXACTEMENT ce montant pour l'offre de la page downsell, n'invente AUCUN autre prix) : "${brief.downsellPrice.trim()}"\n`
+        : "") +
       (heroHeadline ? `- Titre de la home : "${heroHeadline}"\n` : "") +
       (heroSub ? `- Promesse de la home : "${heroSub}"\n` : "") +
       `- CTA PRINCIPAL DU TUNNEL (réutilise EXACTEMENT ce libellé et cette intention sur toutes les pages) : "${primaryCtaLabel}"\n` +
       `Reprends le même nom de produit, le même ton et le même vocabulaire que la home. ` +
-      `Les pages secondaires sont une SUITE logique, JAMAIS une répétition : n'y remets PAS ` +
+      `Cette page est une SUITE logique, JAMAIS une répétition : n'y remets PAS ` +
       `les sections déjà présentes sur la home (pas de FAQ, "about", liste de bénéfices ni pricing en double). ` +
       `Chaque page joue son rôle : "merci"/"confirmation" rassure et annonce la prochaine étape ; ` +
+      `"upsell"/"downsell" OUVRENT par une confirmation rassurante ("Commande confirmée ✓") PUIS présentent UNE offre additionnelle UNIQUE (OTO) — DIFFÉRENTE de l'offre principale, avec son propre prix — et un CTA "Oui, je l'ajoute" + un lien discret "Non merci, continuer" ; ` +
       `"replay"/"watch" donne l'accès et pousse vers le CTA principal ; "optin" reste minimale (promesse + capture).` +
+      `\n\nSTYLE DES PAGES SECONDAIRES — CONCISION STRICTE : ces pages viennent APRÈS l'achat, le visiteur veut décider vite. ` +
+      `Va DROIT À L'ESSENTIEL : titres courts (max ~6 mots), AU PLUS une phrase de sous-titre, body de 1-2 phrases maximum, ` +
+      `bullets de 4 à 7 mots. PAS de blabla, pas de longs paragraphes, pas de remplissage, pas de storytelling. ` +
+      `Le ton reste direct et chaleureux mais ULTRA concis.` +
       chainCtaGuidance(normalizedKind, brief.language);
 
-    const secondaryPromptText =
-      secondaryPagesPrompt({
-        brand: brief.brandName,
-        offer: brief.offerName,
-        funnelKind: normalizedKind,
-        language: brief.language,
-        pages: secondaryBlueprints.map((bp) => ({
-          role: bp.role,
-          slug: bp.slug,
-          name: bp.name,
-        })),
-        medias: toMediaInputs(briefMediasWithVideo),
-        videoUrl: brief.videoUrl,
-        brief,
-      }) + ctaInstruction + businessContext + copyDirectives(brief.language) + coherenceBlock;
+    // Génère UNE page secondaire via un appel IA isolé. Retourne null en cas
+    // d'échec (timeout / schema / vide) → la page tombera sur un placeholder
+    // enrichi côté buildPagesFromBlueprints.
+    const results = await Promise.allSettled(
+      secondaryBlueprints.map(async (bp) => {
+        const promptText =
+          secondaryPagesPrompt({
+            brand: brief.brandName,
+            offer: brief.offerName,
+            funnelKind: normalizedKind,
+            language: brief.language,
+            pages: [{ role: bp.role, slug: bp.slug, name: bp.name }],
+            medias: toMediaInputs(briefMediasWithVideo),
+            videoUrl: brief.videoUrl,
+            brief,
+          }) + ctaInstruction + businessContext + copyDirectives(brief.language) + coherenceBlock;
 
-    try {
-      secondaryRawText = (await Promise.race([
-        callOpenAI({
-          systemMessage: SYSTEM_MESSAGE_FUNNEL,
-          userPrompt: secondaryPromptText,
-          maxTokens: 3500,
-        }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000)),
-      ])) as string | null;
-    } catch (secErr) {
-      console.warn(
-        "[generateMultiPageFunnelWithAI] Échec non-bloquant des pages secondaires:",
-        secErr,
-      );
-      secondaryRawText = null;
-    }
-  }
+        const rawText = (await Promise.race([
+          callAI({
+            systemMessage: SYSTEM_MESSAGE_FUNNEL,
+            userPrompt: promptText,
+            maxTokens: 3000,
+          }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000)),
+        ])) as string | null;
 
-  if (secondaryRawText) {
-    try {
-      console.log("=== RAW AI SECONDARY PAGES RESPONSE ===");
-      console.log(secondaryRawText);
-      console.log("=== END RAW SECONDARY ===");
-
-      const secondaryParsed = secondaryPagesSchema.safeParse(
-        normalizeSecondaryPagesRawJson(JSON.parse(extractJsonPayload(secondaryRawText))),
-      );
-
-      if (secondaryParsed.success) {
-        for (const page of secondaryParsed.data.pages) {
-          const role = page.role as PageRole;
-          const sections = parseSectionsArray(page.sections, fallbackCta, brief);
-          sectionsByRole.set(role, sections);
-          console.info(
-            `[generateMultiPageFunnelWithAI] Page secondaire "${role}" : ${sections.length} sections OK.`,
-          );
+        if (!rawText) {
+          console.warn(`[generateMultiPageFunnelWithAI] Page "${bp.role}" : timeout → placeholder.`);
+          return null;
         }
+
+        const parsed = secondaryPagesSchema.safeParse(
+          normalizeSecondaryPagesRawJson(JSON.parse(extractJsonPayload(rawText))),
+        );
+        if (!parsed.success) {
+          console.warn(`[generateMultiPageFunnelWithAI] Page "${bp.role}" : schema mismatch → placeholder.`);
+          return null;
+        }
+
+        // On a demandé UNE page : on prend celle qui matche le role, sinon la 1re.
+        const page =
+          parsed.data.pages.find((p) => (p.role as PageRole) === bp.role) ??
+          parsed.data.pages[0];
+        if (!page) return null;
+
+        const sections = parseSectionsArray(page.sections, fallbackCta, brief);
+        if (sections.length === 0) return null;
+        return { role: bp.role as PageRole, sections };
+      }),
+    );
+
+    let okCount = 0;
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        sectionsByRole.set(r.value.role, r.value.sections);
+        okCount++;
         console.info(
-          "[generateMultiPageFunnelWithAI] Pages secondaires intégrées avec succès.",
+          `[generateMultiPageFunnelWithAI] Page secondaire "${r.value.role}" : ${r.value.sections.length} sections OK.`,
         );
-      } else {
+      } else if (r.status === "rejected") {
         console.warn(
-          "[generateMultiPageFunnelWithAI] Schema mismatch sur pages secondaires, utilisation des placeholders.",
+          "[generateMultiPageFunnelWithAI] Échec non-bloquant d'une page secondaire:",
+          r.reason,
         );
-        console.warn("=== ZOD ERRORS (secondary pages) — detailed ===");
-        console.warn(JSON.stringify(secondaryParsed.error.issues, null, 2));
-        console.warn("=== END ZOD ERRORS ===");
       }
-    } catch (err) {
-      console.warn(
-        "[generateMultiPageFunnelWithAI] Erreur de parsing des pages secondaires:",
-        err,
-      );
     }
+    console.info(
+      `[generateMultiPageFunnelWithAI] Pages secondaires : ${okCount}/${secondaryBlueprints.length} générées par IA (le reste → placeholder enrichi).`,
+    );
   }
+
+  // 🆕 On ne construit QUE les pages retenues (main + secondaires filtrées) :
+  // c'est ici que les OTO non demandés (upsell/downsell vides) étaient malgré
+  // tout recréés en placeholder. On respecte l'ordre du catalogue.
+  const keptBlueprints = new Set<(typeof blueprints)[number]>([
+    mainBlueprint,
+    ...secondaryBlueprints,
+  ]);
+  const effectiveBlueprints = blueprints.filter((b) => keptBlueprints.has(b));
 
   const pages = buildPagesFromBlueprints({
-    blueprints,
+    blueprints: effectiveBlueprints,
     sectionsByRole,
     brief,
     homeRole,
   });
+
+  // 🆕 Sous-étape E : instrumentation — confirme que TOUTES les pages de la
+  // chaîne sont générées (et lesquelles proviennent de l'IA vs d'un placeholder).
+  console.info(
+    `[generateMultiPageFunnelWithAI] Chaîne de ${pages.length} page(s) construite : ` +
+      pages
+        .map((p) => {
+          const fromAi = sectionsByRole.has(p.role) ? "IA" : "placeholder";
+          return `${p.role}(${p.sections.length} sect., ${fromAi})`;
+        })
+        .join(" → "),
+  );
 
   const media = buildMediaLibraryFromBrief(brief);
   const homePageRaw = pages.find((p) => p.isHome) ?? pages[0];
   const homeSectionsRaw = homePageRaw?.sections ?? mainSections;
 
   // ===== ÉTAPE 1 : Funnel brut =====
+  // 🆕 Nom du tunnel : on IGNORE le défaut générique "Mon Tunnel" de l'IA (qui
+  // donnait à TOUS les tunnels le même slug). On dérive du brief (marque +
+  // offre) → nom et slug personnalisés par tunnel. On garde le nom de l'IA
+  // seulement s'il est spécifique.
+  const aiName = (mainData.funnelName ?? "").trim();
+  const briefName = `${brief.brandName} — ${brief.offerName}`
+    .replace(/^\s*—\s*|\s*—\s*$/g, "")
+    .trim();
+  const resolvedFunnelName =
+    aiName && aiName.toLowerCase() !== "mon tunnel" ? aiName : briefName || aiName || "Tunnel";
   const aiFunnel: Funnel = {
-    funnelName: mainData.funnelName,
+    funnelName: resolvedFunnelName,
     language: mainData.language,
     pages,
     sections: homeSectionsRaw,
@@ -3333,6 +3666,31 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       );
     }
     return page;
+  });
+
+  // ===== ÉTAPE 6bis : 🆕 GARDE-FOU ANTI-PAGE-VIDE/FALLBACK =====
+  // Après nettoyage, si une page n'a plus AUCUNE section réelle (tout était vide
+  // ou placeholder « Section »), on la reconstruit avec le placeholder ENRICHI
+  // (copy conversion-first du rôle). Une page fallback/vide décrédibilise le
+  // tunnel : exigence maximale ici.
+  cleanedPages.forEach((page) => {
+    const meaningful = page.sections.filter(
+      (s) => !isSectionEmpty(s) && !isPlaceholderHeadline(s.headline),
+    );
+    // 🆕 Les pages OTO (upsell/downsell) sont des PAGES DE VENTE : un simple CTA
+    // ne suffit pas. On exige ≥ 2 sections utiles, sinon on reconstruit avec le
+    // placeholder enrichi (offre + bénéfices + CTA) — fini le downsell vide.
+    const minMeaningful = page.role === "upsell" || page.role === "downsell" ? 2 : 1;
+    if (meaningful.length < minMeaningful) {
+      const bp = blueprints.find((b) => b.role === page.role) ?? blueprints[0];
+      if (bp) {
+        const rebuilt = buildPlaceholderPage(bp, brief, page.isHome);
+        page.sections = rebuilt.sections;
+        console.warn(
+          `[anti-empty] page "${page.role}" trop pauvre (${meaningful.length} section utile) → reconstruite (placeholder enrichi, ${rebuilt.sections.length} sections).`,
+        );
+      }
+    }
   });
 
   // ===== ÉTAPE 7 : Re-chaînage =====
@@ -3417,15 +3775,573 @@ if (shouldInjectPricing) {
   // ===== ÉTAPE 11 : Harmonisation des CTA par funnelKind/role =====
   finalFunnel = harmonizeCTAsByFunnelKind(finalFunnel, brief);
 
+  // ===== ÉTAPE 11bis : 🆕 Prix OFFRE PRINCIPALE + OTO fixés par l'utilisateur =====
+  // Le prix du wizard est AUTORITAIRE : il remplace toute valeur inventée par
+  // l'IA (ex. « Sur devis ») sur la card pricing de la page de vente, sinon le
+  // checkout ne trouve pas de montant payable. Idem upsell/downsell.
+  applyMainOfferPrice(finalFunnel, brief);
+  applyOtoPrices(finalFunnel, brief);
+
   // ===== ÉTAPE 12 : 🆕 Lien de paiement (Palier 1) sur les CTA pricing =====
   // Doit passer APRÈS l'harmonisation (sinon elle réécrirait le CTA). Si l'offre
   // est payante et qu'un lien de paiement a été fourni, TOUS les boutons des
   // cartes pricing redirigent vers ce lien (Stripe Payment Link, systeme.io…).
   if (brief.paymentUrl && brief.paymentUrl.trim() && !isFreeOffer(brief.price)) {
     applyPaymentUrlToPricingCtas(finalFunnel, brief.paymentUrl.trim());
+  } else if (!isFreeOffer(brief.price)) {
+    // 🆕 Stripe Connect : pas de lien externe → les boutons d'offre déclenchent
+    // le CHECKOUT INTERNE (#ff-checkout → /api/checkout → session sur le compte
+    // connecté du créateur). Le bouton « achète » sans config supplémentaire.
+    applyInternalCheckoutCtas(finalFunnel);
   }
 
+  // ===== ÉTAPE 12ter : 🆕 Lien « Non merci » sur les pages OTO =====
+  // Upsell/downsell : le CTA principal achète (#ff-checkout), on ajoute un lien
+  // discret qui DÉCLINE l'offre et passe à l'étape suivante du tunnel.
+  applyUpsellDeclineLinks(finalFunnel, brief.language);
+
+  // ===== ÉTAPE 12quater : 🆕 Prix sur le CTA FINAL de la page de vente =====
+  if (!isFreeOffer(brief.price)) appendPriceToFinalCta(finalFunnel);
+
+  // ===== ÉTAPE 12bis : 🆕 Sous-étape B — garantir la section Présentation/Autorité =====
+  // Si l'utilisateur a saisi un texte « à propos » mais que la page principale
+  // n'a PAS de section "about", on en injecte une (remplie depuis aboutText).
+  ensureAuthoritySection(finalFunnel, brief);
+
+  // ===== ÉTAPE 13 : 🆕 Ordre canonique des sections =====
+  // L'IA renvoie parfois les sections dans un ordre incohérent (ex. témoignages
+  // juste après le hero). On force un ordre de page de vente déterministe :
+  // hero en tête, témoignages vers la FIN (juste avant la FAQ), CTA/FAQ en bas.
+  reorderFunnelSectionsCanonically(finalFunnel);
+
+  // ===== ÉTAPE 13bis : 🆕 NETTOYAGE DES MÉDIAS NON RÉSOLUS =====
+  // L'IA émet parfois un placeholder `[uploaded-xxx]` (ou un texte descriptif)
+  // qui ne correspond à AUCUN média réellement uploadé. Laissé tel quel, il
+  // produit une <img> cassée + une colonne split vide. On purge donc toute
+  // image/vidéo non chargeable AVANT d'assigner les layouts split.
+  stripUnresolvedMedia(finalFunnel);
+
+  // ===== ÉTAPE 14 : 🆕 B2 — alternance STRICTE des sections split =====
+  // L'ordre canonique est figé : on assigne ensuite text↔image en alternance
+  // aux sections « split-éligibles » (image + texte). Le renderer ET l'export
+  // lisent déjà section.layoutVariant → aucun changement de rendu nécessaire.
+  assignAlternatingSplitLayouts(finalFunnel);
+
+  // ===== ÉTAPE 15 : 🆕 B2 — variation des cards (icônes distinctes) =====
+  assignCardVariation(finalFunnel);
+
+  // ===== ÉTAPE 16 : 🆕 hero épuré + image auteur partagée hero/about =====
+  tidyHeroSections(finalFunnel);
+  shareAuthorImageHeroAbout(finalFunnel);
+
+  // ===== ÉTAPE 17 : 🆕 pages post-achat épurées (merci/confirmation centrés) =====
+  simplifyPostConversionPages(finalFunnel);
+
+  // ===== ÉTAPE 18 : 🆕 page merci/confirmation CÉLÉBRATOIRE (icône ✓ + message) =====
+  ensureCelebratoryThankYou(finalFunnel, brief.language);
+
+  // ===== ÉTAPE 19 : 🆕 ACCENT COULEUR sur les mots les plus captivants =====
+  // Met en valeur prix / pourcentages / chiffres marquants avec la couleur accent
+  // du template (`var(--ff-accent)` via [[...]] sans hex). N'écrase JAMAIS un
+  // surlignage déjà choisi par l'IA (champ contenant déjà `[[`).
+  applyAccentHighlights(finalFunnel);
+
   return finalFunnel;
+}
+
+/**
+ * 🆕 Surligne automatiquement les éléments les plus « captivants » d'un texte —
+ * prix, pourcentages, chiffres marquants — avec la syntaxe `[[texte]]` (sans
+ * couleur explicite → hérite de `var(--ff-accent)`, donc TOUJOURS la couleur du
+ * template). Conservateur : max 2 surlignages par champ, et on ne touche pas un
+ * champ que l'IA a déjà surligné (présence de `[[`).
+ */
+const ACCENT_TOKEN_RE =
+  /(\d[\d  .,]*\d|\d)\s?(?:%|€|\$|£|FCFA|XOF|XAF|USD|EUR)|\b\d{2,}(?:[.,]\d+)?\b/g;
+
+function highlightCaptivatingTokens(text: string | undefined): string | undefined {
+  if (!text) return text;
+  if (text.includes("[[")) return text; // déjà surligné par l'IA → on respecte
+  let count = 0;
+  return text.replace(ACCENT_TOKEN_RE, (m) => {
+    if (count >= 2) return m;
+    count++;
+    return `[[${m.trim()}]]`;
+  });
+}
+
+/**
+ * 🆕 Retire toute COULEUR choisie par l'IA dans un surlignage : `[[mot|#fff]]`
+ * → `[[mot]]`. Raison : l'IA choisissait parfois un hex clair (blanc) → texte
+ * invisible sur fond clair. Sans hex, le rendu reprend `var(--ff-accent)` du
+ * template (contraste garanti). N'affecte PAS les couleurs posées MANUELLEMENT
+ * par l'utilisateur ensuite (outil « Colorer la sélection »), appliquées après
+ * génération.
+ */
+function stripAiHighlightColors(text: string | undefined): string | undefined {
+  if (!text || text.indexOf("[[") === -1) return text;
+  return text.replace(/\[\[([^\]|]+?)\|[^\]]+\]\]/g, "[[$1]]");
+}
+
+function applyAccentHighlights(funnel: Funnel): void {
+  const apply = (s: FunnelSection): void => {
+    // 1) On neutralise d'abord les couleurs IA (évite le blanc-sur-blanc).
+    //    `headline` est un champ requis (string) → on garde l'original si la
+    //    fonction renvoie undefined (cas entrée vide), pour rester type-safe.
+    s.headline = stripAiHighlightColors(s.headline) ?? s.headline;
+    s.subheadline = stripAiHighlightColors(s.subheadline);
+    s.body = stripAiHighlightColors(s.body);
+    if (Array.isArray(s.bullets)) {
+      s.bullets = s.bullets.map((b) => stripAiHighlightColors(b) ?? b);
+    }
+    // 2) Puis on ajoute l'accent du template sur titre/sous-titre si rien.
+    s.headline = highlightCaptivatingTokens(s.headline) ?? s.headline;
+    s.subheadline = highlightCaptivatingTokens(s.subheadline);
+  };
+  funnel.sections?.forEach(apply);
+  funnel.pages?.forEach((p) => p.sections?.forEach(apply));
+}
+
+/**
+ * 🆕 Garantit que les pages post-achat (merci/confirmation/livraison/accès)
+ * portent un HERO célébratoire : le renderer y ajoute l'icône ✓ (layout
+ * « success » lié au rôle) + un message de félicitations. Sans hero, la page
+ * paraissait vide (« Que faire ensuite ? » seul, sans ✓).
+ */
+function ensureCelebratoryThankYou(funnel: Funnel, lang: Language): void {
+  const ROLES: PageRole[] = ["thankyou", "confirmation", "delivery", "access"];
+  type Tri = Record<Language, string>;
+  type Block = { eyebrow: Tri; h: Tri; b: Tri };
+
+  // 🆕 Le copy de remerciement doit s'adapter : un lead magnet GRATUIT ne parle
+  // pas de « commande ». On ne garde la langue « commande/achat » que pour des
+  // tunnels clairement PAYANTS.
+  const PAID_KINDS = ["digital-product", "coaching-high-ticket", "vsl", "formation", "service", "saas"];
+  const isPaid = PAID_KINDS.includes((funnel.meta?.funnelKind as string) ?? "");
+
+  const thankyouPaid: Block = {
+    eyebrow: { fr: "C'EST CONFIRMÉ", en: "CONFIRMED", es: "CONFIRMADO" },
+    h: {
+      fr: "Félicitations, votre commande est confirmée",
+      en: "Congratulations, your order is confirmed",
+      es: "Felicidades, tu pedido está confirmado",
+    },
+    b: {
+      fr: "Merci pour votre confiance. Un email avec tous les détails d'accès arrive dans votre boîte de réception. Suivez l'étape ci-dessous pour démarrer.",
+      en: "Thank you for your trust. An email with all your access details is on its way. Follow the step below to get started.",
+      es: "Gracias por tu confianza. Un email con todos los detalles de acceso está en camino. Sigue el paso de abajo para empezar.",
+    },
+  };
+  const thankyouFree: Block = {
+    eyebrow: { fr: "C'EST FAIT", en: "ALL SET", es: "LISTO" },
+    h: {
+      fr: "Votre inscription est confirmée",
+      en: "You're in — registration confirmed",
+      es: "Tu inscripción está confirmada",
+    },
+    b: {
+      fr: "Votre accès arrive par email d'ici quelques minutes. Pensez à regarder dans les spams ou promotions, et ajoutez l'expéditeur à vos contacts pour ne rien manquer.",
+      en: "Your access is arriving by email within minutes. Check spam or promotions if needed, and add the sender to your contacts so you don't miss it.",
+      es: "Tu acceso llega por email en unos minutos. Revisa spam o promociones si hace falta, y añade al remitente a tus contactos.",
+    },
+  };
+
+  const copy: Partial<Record<PageRole, Block>> = {
+    thankyou: isPaid ? thankyouPaid : thankyouFree,
+    confirmation: {
+      eyebrow: { fr: "C'EST CONFIRMÉ", en: "CONFIRMED", es: "CONFIRMADO" },
+      h: {
+        fr: "Votre inscription est confirmée",
+        en: "Your registration is confirmed",
+        es: "Tu inscripción está confirmada",
+      },
+      b: {
+        fr: "Tout est bon de votre côté. Notez bien la prochaine étape ci-dessous.",
+        en: "You're all set. Note the next step below.",
+        es: "Todo listo. Anota el siguiente paso abajo.",
+      },
+    },
+    delivery: {
+      eyebrow: { fr: "ACCÈS PRÊT", en: "ACCESS READY", es: "ACCESO LISTO" },
+      h: {
+        fr: "Votre accès est prêt",
+        en: "Your access is ready",
+        es: "Tu acceso está listo",
+      },
+      b: {
+        fr: "Récupérez votre contenu ci-dessous et commencez dès maintenant.",
+        en: "Grab your content below and start right now.",
+        es: "Obtén tu contenido abajo y empieza ahora mismo.",
+      },
+    },
+    access: {
+      eyebrow: { fr: "BIENVENUE", en: "WELCOME", es: "BIENVENIDO" },
+      h: {
+        fr: "Bienvenue, votre accès est ouvert",
+        en: "Welcome, your access is open",
+        es: "Bienvenido, tu acceso está abierto",
+      },
+      b: {
+        fr: "Vous y êtes. Suivez l'étape ci-dessous pour démarrer.",
+        en: "You're in. Follow the step below to get started.",
+        es: "Ya estás dentro. Sigue el paso de abajo para empezar.",
+      },
+    },
+  };
+
+  funnel.pages?.forEach((page) => {
+    if (!ROLES.includes(page.role)) return;
+    if (!Array.isArray(page.sections)) page.sections = [];
+    const c = copy[page.role] ?? copy.thankyou!;
+    let hero = page.sections.find((s) => s.type === "hero");
+    if (!hero) {
+      hero = {
+        id: `hero_thanks_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        type: "hero",
+        headline: c.h[lang] ?? c.h.fr,
+        visible: true,
+      };
+      page.sections.unshift(hero);
+    }
+    if (!hero.headline?.trim() || isPlaceholderHeadline(hero.headline)) {
+      hero.headline = c.h[lang] ?? c.h.fr;
+    }
+    if (!hero.eyebrow?.trim()) hero.eyebrow = c.eyebrow[lang] ?? c.eyebrow.fr;
+    if (!hero.body?.trim() || hero.body.trim().length < 20) {
+      hero.body = c.b[lang] ?? c.b.fr;
+    }
+    hero.image = { mode: "none" };
+    hero.layoutVariant = "centered";
+  });
+}
+
+/**
+ * 🆕 Hero SIMPLE : retire les puces du hero si elles ne tiennent pas sur UNE
+ * seule ligne (bande « | »). Sinon on garde un hero épuré (titre, sous-titre,
+ * média, CTA). Seuil : ≤4 puces ET ≤12 mots cumulés (≤6 mots chacune).
+ */
+function heroBulletsFitOneLine(bullets: string[]): boolean {
+  if (bullets.length === 0 || bullets.length > 4) return false;
+  const words = (b: string) => b.trim().split(/\s+/).filter(Boolean).length;
+  const total = bullets.reduce((n, b) => n + words(b), 0);
+  return total <= 12 && bullets.every((b) => words(b) <= 6);
+}
+
+function tidyHeroSections(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    for (const s of sections) {
+      if (s.type !== "hero") continue;
+      if (
+        Array.isArray(s.bullets) &&
+        s.bullets.length > 0 &&
+        !heroBulletsFitOneLine(s.bullets)
+      ) {
+        delete s.bullets;
+        delete s.bulletIcons;
+      }
+    }
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => apply(p.sections));
+}
+
+/**
+ * 🆕 L'image de l'auteur doit apparaître DANS le hero ET dans le about. On prend
+ * l'image disponible (de préférence celle du about = photo auteur) et on la copie
+ * sur l'autre section si elle en manque. Page par page.
+ */
+function sectionHasImg(s: FunnelSection | undefined): boolean {
+  return !!(s?.image && s.image.mode !== "none" && (s.image.url || s.image.mediaRef));
+}
+
+function shareAuthorImageHeroAbout(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    const hero = sections.find((s) => s.type === "hero");
+    const about = sections.find((s) => s.type === "about");
+    if (!hero || !about) return;
+    const src = sectionHasImg(about)
+      ? about.image
+      : sectionHasImg(hero)
+        ? hero.image
+        : undefined;
+    if (!src) return;
+    if (!sectionHasImg(hero)) hero.image = { ...src };
+    if (!sectionHasImg(about)) about.image = { ...src };
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => apply(p.sections));
+}
+
+/**
+ * 🆕 B2 — Mise en page PILOTÉE PAR CALCUL, appliquée à TOUTES les sections
+ * narratives (pas seulement problème/agitation), inspirée des tunnels premium
+ * (systeme.io & co). Pour chaque section éligible, on choisit :
+ *   - SPLIT MÉDIA : média (image/vidéo) d'un côté, texte de l'autre — dès qu'il
+ *     y a un média + du texte.
+ *   - SPLIT ÉDITORIAL : texte d'un côté, puces en CARTES de l'autre — quand il
+ *     n'y a pas de média mais un corps consistant + 2 à 5 puces (le renderer
+ *     pose data-ff-split-mode="text", déjà stylé dans funnel-theme.css).
+ *   - Sinon : pas de split (grille de cartes pleine largeur ou centré selon le
+ *     calcul des bullets), pour éviter de tasser de longues listes.
+ * L'alternance gauche/droite est STRICTE (split-text-image ↔ split-image-text)
+ * sur l'ensemble de la page, conformément à layout-design-tunnel.
+ */
+const SPLIT_ELIGIBLE_TYPES: ReadonlySet<FunnelSectionType> = new Set<FunnelSectionType>([
+  "about",
+  "problem",
+  "agitation",
+  "solution",
+  "proof",
+  "offer",
+  "benefits",
+]);
+
+/**
+ * 🆕 Purge des médias non résolus. Une image n'est conservée que si elle pointe
+ * vers une ressource réellement chargeable : soit son `url` est utilisable
+ * (http/https/data/blob/chemin), soit son `mediaRef` résout vers un média du
+ * funnel possédant une URL utilisable. Sinon → `{ mode: "none" }` (aucune colonne
+ * réservée, aucune <img> cassée). Idem pour les vidéos.
+ */
+function stripUnresolvedMedia(funnel: Funnel): void {
+  const mediaById = new Map<string, MediaItem>();
+  for (const m of funnel.media ?? []) {
+    if (m.id) mediaById.set(m.id, m);
+  }
+
+  const refResolvesToUsable = (ref: string | undefined): boolean => {
+    if (!ref) return false;
+    if (isUsableMediaUrl(ref)) return true;
+    const m = mediaById.get(ref);
+    return !!(m && isUsableMediaUrl(m.url));
+  };
+
+  const cleanSection = (s: FunnelSection): void => {
+    if (s.image && s.image.mode !== "none") {
+      const usable =
+        isUsableMediaUrl(s.image.url) || refResolvesToUsable(s.image.mediaRef);
+      if (!usable) s.image = { mode: "none" };
+    }
+    if (s.video && !isUsableMediaUrl(s.video.url)) {
+      s.video = undefined;
+    }
+  };
+
+  funnel.sections?.forEach(cleanSection);
+  funnel.pages?.forEach((p) => p.sections?.forEach(cleanSection));
+}
+
+function assignAlternatingSplitLayouts(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    let splitIndex = 0;
+    for (const s of sections) {
+      if (!SPLIT_ELIGIBLE_TYPES.has(s.type)) continue;
+
+      const hasImage = !!(
+        s.image &&
+        s.image.mode !== "none" &&
+        (s.image.url || s.image.mediaRef)
+      );
+      const hasVideo = !!(s.video && s.video.url);
+      const hasMedia = hasImage || hasVideo;
+      const bodyLen = (s.body ?? "").trim().length;
+      const bulletCount = Array.isArray(s.bullets) ? s.bullets.length : 0;
+      const hasText = !!(s.headline?.trim() || bodyLen > 0 || bulletCount > 0);
+
+      // Calcul : split média seulement si TEXTE SUBSTANTIEL (sinon une section
+      // pauvre — juste un titre + image — donne un split bancal, image « flottante »
+      // et colonne vide). Split éditorial : corps consistant + 2 à 5 puces, sans média.
+      void hasText;
+      const mediaSplit = hasMedia && (bodyLen >= 40 || bulletCount >= 2);
+      const editorialSplit =
+        !hasMedia && bodyLen >= 80 && bulletCount >= 2 && bulletCount <= 5;
+      if (!mediaSplit && !editorialSplit) continue;
+
+      s.layoutVariant = splitIndex % 2 === 0 ? "split-text-image" : "split-image-text";
+      splitIndex++;
+    }
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => {
+    // 🆕 Pages post-achat (merci/confirmation/accès…) : PAS de split → rendu
+    // simple et centré (cf. simplifyPostConversionPages).
+    if (POST_CONVERSION_ROLES.has(p.role)) return;
+    apply(p.sections);
+  });
+}
+
+/**
+ * 🆕 Pages POST-ACHAT (merci, confirmation, livraison, accès) : rendu épuré et
+ * centré, à l'image des meilleurs tunnels. On retire les images de section
+ * (pas de visuel parasite ni de split) et on force le hero en centré — le
+ * renderer y ajoute déjà l'icône ✓ et le layout « success » via le rôle de page.
+ */
+const POST_CONVERSION_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
+  "thankyou",
+  "confirmation",
+  "delivery",
+  "access",
+]);
+
+function simplifyPostConversionPages(funnel: Funnel): void {
+  funnel.pages?.forEach((p) => {
+    if (p.isHome || !Array.isArray(p.sections)) return;
+    const isPostConv = POST_CONVERSION_ROLES.has(p.role);
+    for (const s of p.sections) {
+      // 🆕 STRICT : aucune image sur les pages AUTRES que l'accueil.
+      if (s.image && s.image.mode !== "none") s.image = { mode: "none" };
+      // Sans image, ces sections ne peuvent plus être en split média → on les
+      // recentre (évite les colonnes vides / cartes qui « flottent »).
+      if (s.layoutVariant === "split-text-image" || s.layoutVariant === "split-image-text") {
+        s.layoutVariant = "centered";
+      }
+      if (isPostConv && s.type === "hero") s.layoutVariant = "centered";
+    }
+  });
+}
+
+/**
+ * 🆕 B2 — Variation visuelle des cards (anti « toutes pareilles ») :
+ *  - Sections à cards (bénéfices, bonus, problème, agitation, solution) →
+ *    rotation d'icônes DISTINCTES (au lieu de la même « check » partout).
+ * Data-level : le renderer (FunnelPreview) lit déjà bulletIcons[i].
+ * N'écrase pas des icônes déjà fournies par l'IA.
+ * NB : on ne force PLUS numberedBullets sur process/program — ces sections ont
+ * déjà leur propre numérotation, ce qui créait un DOUBLON de numéros.
+ */
+const CARD_ICON_ROTATIONS: Partial<Record<FunnelSectionType, IconName[]>> = {
+  benefits: ["target", "trendingUp", "zap", "star", "checkCircle", "award"],
+  bonus: ["gift", "sparkles", "rocket", "crown", "star", "zap"],
+  problem: ["flame", "clock", "trendingDown", "lock", "barChart", "shield"],
+  agitation: ["flame", "clock", "trendingDown", "lock", "barChart", "shield"],
+  solution: ["lightbulb", "rocket", "checkCircle", "zap", "target", "sparkles"],
+};
+
+function assignCardVariation(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    for (const s of sections) {
+      const bulletCount = Array.isArray(s.bullets) ? s.bullets.length : 0;
+      if (bulletCount === 0) continue;
+
+      // Cards → icônes distinctes (si l'IA n'en a pas déjà fourni).
+      const rotation = CARD_ICON_ROTATIONS[s.type];
+      const hasIcons = Array.isArray(s.bulletIcons) && s.bulletIcons.length > 0;
+      if (rotation && !hasIcons) {
+        s.bulletIcons = (s.bullets ?? []).map((_, i) => rotation[i % rotation.length]);
+      }
+    }
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => apply(p.sections));
+}
+
+/**
+ * 🆕 Sous-étape B : garantit une section "about" (Présentation/Autorité) sur la
+ * page principale quand l'utilisateur a fourni un texte « à propos ».
+ * - N'agit que si brief.aboutText est non vide.
+ * - Ne fait rien si une section "about" existe déjà (sur n'importe quelle page).
+ * - Respecte la whitelist : n'injecte que si "about" est autorisé sur la page.
+ * - Le positionnement final (après les bénéfices) est géré par l'ordre canonique.
+ */
+function ensureAuthoritySection(funnel: Funnel, brief: FunnelBrief): void {
+  const aboutText = brief.aboutText?.trim();
+  if (!aboutText) return;
+
+  const pages = funnel.pages ?? [];
+  const alreadyHasAbout =
+    pages.some((p) => p.sections?.some((s) => s.type === "about")) ||
+    (Array.isArray(funnel.sections) && funnel.sections.some((s) => s.type === "about"));
+  if (alreadyHasAbout) return;
+
+  const kind =
+    (funnel.meta?.funnelKind as FunnelKind | undefined) ??
+    normalizeFunnelKind(brief.funnelKind) ??
+    "lead-magnet";
+
+  const homePage = pages.find((p) => p.isHome) ?? pages[0];
+  if (!homePage || !Array.isArray(homePage.sections)) return;
+
+  const allowed = getAllowedSectionTypes(kind, homePage.role);
+  if (allowed && !allowed.includes("about")) return;
+
+  const aboutSection: FunnelSection = {
+    id: "about-authority",
+    type: "about",
+    headline: "",
+    image: { mode: "none" },
+    visible: true,
+  };
+  // Remplit headline + body depuis aboutText (et marque-place autorité).
+  tryFillSectionFromBrief(aboutSection, brief);
+
+  // Insère après le hero (l'ordre canonique le replacera après les bénéfices).
+  const heroIdx = homePage.sections.findIndex((s) => s.type === "hero");
+  if (heroIdx >= 0) {
+    homePage.sections.splice(heroIdx + 1, 0, aboutSection);
+  } else {
+    homePage.sections.unshift(aboutSection);
+  }
+
+  // Garde la home mono-page (funnel.sections) cohérente si elle reflète la home.
+  if (homePage.isHome && Array.isArray(funnel.sections)) {
+    funnel.sections = homePage.sections;
+  }
+}
+
+/**
+ * Rang canonique d'une page de vente (plus petit = plus haut). Inspiré des
+ * règles layout-design-tunnel, MAIS les témoignages sont placés volontairement
+ * vers la fin (juste avant la FAQ) conformément à la préférence produit.
+ */
+const CANONICAL_SECTION_RANK: Record<string, number> = {
+  hero: 0,
+  problem: 20,
+  agitation: 25, // 🆕 amplification : juste après le problème
+  solution: 30,
+  process: 40,
+  program: 45,
+  webinar: 48,
+  benefits: 50,
+  about: 55, // 🆕 Présentation/Autorité APRÈS les bénéfices (copywriting DR)
+  video: 60,
+  proof: 65,
+  qualification: 68,
+  offer: 70,
+  pricing: 72,
+  bonus: 80,
+  guarantee: 90,
+  testimonials: 100, // près de la fin, avant la FAQ
+  faq: 110,
+  urgency: 115, // 🆕 urgence/rareté juste avant le CTA final
+  cta: 120,
+  form: 125,
+  thank_you: 130,
+};
+
+function reorderSectionsCanonically(sections?: FunnelSection[]): FunnelSection[] | undefined {
+  if (!Array.isArray(sections) || sections.length < 2) return sections;
+  // Tri STABLE : on conserve l'ordre relatif d'origine à rang égal (tie-break
+  // par index) et un rang neutre (55) pour un type inconnu.
+  return sections
+    .map((s, i) => ({ s, i, rank: CANONICAL_SECTION_RANK[s.type] ?? 55 }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((x) => x.s);
+}
+
+/** Applique l'ordre canonique à la home mono-page ET à chaque page. */
+function reorderFunnelSectionsCanonically(funnel: Funnel): void {
+  if (Array.isArray(funnel.sections)) {
+    funnel.sections = reorderSectionsCanonically(funnel.sections) ?? funnel.sections;
+  }
+  funnel.pages?.forEach((p) => {
+    if (Array.isArray(p.sections)) {
+      p.sections = reorderSectionsCanonically(p.sections) ?? p.sections;
+    }
+  });
 }
 
 /**
@@ -3481,6 +4397,194 @@ function applyPaymentUrlToPricingCtas(funnel: Funnel, url: string): void {
   funnel.pages?.forEach((p) => patchSections(p.sections));
 }
 
+/**
+ * 🆕 Stripe Connect — pose le CHECKOUT INTERNE sur les boutons d'offre/pricing :
+ * un CTA d'ancre `#ff-checkout`, intercepté par PublicFunnelRuntime → POST
+ * /api/checkout → session Stripe sur le compte connecté du créateur. Aucun lien
+ * de paiement manuel à créer : le bouton « achète » directement.
+ */
+function pageHasPaidOffer(sections?: Funnel["sections"]): boolean {
+  if (!sections) return false;
+  for (const sec of sections) {
+    if (sec.type !== "offer" && sec.type !== "pricing") continue;
+    for (const it of sec.items ?? []) {
+      if (it.kind === "pricing" && !isFreeOffer(it.data?.price)) return true;
+    }
+  }
+  return false;
+}
+
+function applyInternalCheckoutCtas(funnel: Funnel): void {
+  // 1) Boutons des cards pricing/offer → #ff-checkout (sur toutes les pages).
+  const patchOfferItems = (sections?: Funnel["sections"]) => {
+    sections?.forEach((sec) => {
+      if (sec.type !== "offer" && sec.type !== "pricing") return;
+      sec.items?.forEach((it) => {
+        if (it.kind !== "pricing") return;
+        const label =
+          (it.data?.cta?.label as string | undefined) ?? "Commander maintenant";
+        it.data.cta = makeAnchorCta(label, "ff-checkout");
+      });
+    });
+  };
+  patchOfferItems(funnel.sections);
+  funnel.pages?.forEach((p) => patchOfferItems(p.sections));
+
+  // (suite ci-dessous)
+  // 2) 🆕 Sur la page de VENTE (accueil/sales) avec offre payante : TOUS les CTA
+  //    de section pointent aussi vers le checkout (le visiteur achète depuis
+  //    n'importe quel bouton). On épargne les formulaires et les popups (capture
+  //    de lead) qui ont un rôle distinct.
+  const retargetSectionCtas = (sections?: Funnel["sections"]) => {
+    sections?.forEach((sec) => {
+      if (sec.type === "form") return;
+      if (!sec.cta) return;
+      if (sec.cta.mode === "popup") return;
+      sec.cta = makeAnchorCta(sec.cta.label, "ff-checkout");
+    });
+  };
+  if (pageHasPaidOffer(funnel.sections)) retargetSectionCtas(funnel.sections);
+  funnel.pages?.forEach((p) => {
+    if ((p.isHome || p.role === "sales") && pageHasPaidOffer(p.sections)) {
+      retargetSectionCtas(p.sections);
+    }
+  });
+}
+
+/**
+ * 🆕 Pages OTO (upsell/downsell) : ajoute un lien discret « Non merci » qui
+ * DÉCLINE l'offre additionnelle et passe à l'étape suivante du tunnel. Le CTA
+ * principal d'achat reste #ff-checkout (posé par applyInternalCheckoutCtas).
+ * Le lien cible la page suivante via `pageId` (résolu en URL publique par les
+ * renderers preview ET export).
+ */
+/**
+ * 🆕 Applique les prix OTO saisis par l'utilisateur aux items pricing des pages
+ * upsell/downsell — l'IA ne fixe plus le montant au hasard. N'agit que pour les
+ * rôles dont un prix a été fourni.
+ */
+/**
+ * 🆕 Force le prix du wizard (brief.price) sur les items pricing de la PAGE DE
+ * VENTE (accueil/sales). L'IA met parfois « Sur devis » / un prix inventé, ce
+ * qui casse le checkout (montant non payable). Le prix saisi par l'utilisateur
+ * fait foi. N'agit pas si l'offre est gratuite.
+ */
+function applyMainOfferPrice(funnel: Funnel, brief: FunnelBrief): void {
+  if (isFreeOffer(brief.price)) return;
+  const price = (brief.price ?? "").trim();
+  if (!price) return;
+  const setOn = (sections?: Funnel["sections"]) => {
+    sections?.forEach((sec) => {
+      if (sec.type !== "offer" && sec.type !== "pricing") return;
+      sec.items?.forEach((it) => {
+        if (it.kind === "pricing") it.data.price = price;
+      });
+    });
+  };
+  setOn(funnel.sections);
+  const homePage = funnel.pages?.find((p) => p.isHome);
+  if (homePage && homePage.sections !== funnel.sections) setOn(homePage.sections);
+  // Les pages OTO sont gérées par applyOtoPrices (prix dédiés) → on ne touche
+  // QUE l'accueil ici pour ne pas écraser un prix upsell/downsell.
+}
+
+function applyOtoPrices(funnel: Funnel, brief: FunnelBrief): void {
+  const map: Partial<Record<PageRole, string>> = {};
+  if (brief.upsellPrice && brief.upsellPrice.trim())
+    map.upsell = brief.upsellPrice.trim();
+  if (brief.downsellPrice && brief.downsellPrice.trim())
+    map.downsell = brief.downsellPrice.trim();
+  if (Object.keys(map).length === 0) return;
+  funnel.pages?.forEach((page) => {
+    const price = map[page.role];
+    if (!price) return;
+    page.sections?.forEach((sec) => {
+      if (sec.type !== "offer" && sec.type !== "pricing") return;
+      sec.items?.forEach((it) => {
+        if (it.kind === "pricing") it.data.price = price;
+      });
+    });
+  });
+}
+
+/** 🆕 Renvoie le libellé de prix payant de la page d'accueil/sales (item
+ * highlighted en priorité), ou null. */
+function findHomePriceLabel(funnel: Funnel): string | null {
+  const collect = (sections?: Funnel["sections"]): string | null => {
+    if (!sections) return null;
+    let firstPaid: string | null = null;
+    for (const sec of sections) {
+      if (sec.type !== "offer" && sec.type !== "pricing") continue;
+      for (const it of sec.items ?? []) {
+        if (it.kind !== "pricing" || isFreeOffer(it.data?.price)) continue;
+        const p = (it.data.price ?? "").trim();
+        if (!p) continue;
+        if (it.data.highlighted) return p;
+        if (!firstPaid) firstPaid = p;
+      }
+    }
+    return firstPaid;
+  };
+  const homePage = funnel.pages?.find((p) => p.isHome);
+  return collect(funnel.sections) ?? collect(homePage?.sections);
+}
+
+/** 🆕 Ajoute le prix au libellé du CTA FINAL de la page de vente (ex.
+ * « Je commande maintenant — 97€ »), pour lever la dernière objection. */
+function appendPriceToFinalCta(funnel: Funnel): void {
+  const price = findHomePriceLabel(funnel);
+  if (!price) return;
+  const homePage = funnel.pages?.find((p) => p.isHome);
+  const sections = (homePage?.sections ?? funnel.sections) ?? [];
+  let target: FunnelSection | undefined;
+  for (let i = sections.length - 1; i >= 0; i--) {
+    if (sections[i].type === "cta" && sections[i].cta?.label) {
+      target = sections[i];
+      break;
+    }
+  }
+  if (!target) {
+    for (let i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].cta?.label) {
+        target = sections[i];
+        break;
+      }
+    }
+  }
+  if (!target?.cta?.label) return;
+  if (target.cta.label.includes(price)) return;
+  target.cta.label = `${target.cta.label} — ${price}`;
+}
+
+function applyUpsellDeclineLinks(funnel: Funnel, language: Language): void {
+  const pages = funnel.pages ?? [];
+  const label =
+    language === "en"
+      ? "No thanks, continue"
+      : language === "es"
+        ? "No gracias, continuar"
+        : "Non merci, continuer";
+  pages.forEach((page, idx) => {
+    if (page.role !== "upsell" && page.role !== "downsell") return;
+    if (!Array.isArray(page.sections) || page.sections.length === 0) return;
+    // Cible du refus : nextPageId si défini, sinon page suivante dans l'ordre.
+    let nextId = page.nextPageId;
+    if (!nextId && idx < pages.length - 1) nextId = pages[idx + 1].id;
+    if (!nextId) return; // dernière page → pas d'étape suivante, pas de lien.
+    // On pose le lien sur la section offre/pricing (sinon la dernière section).
+    const offer = page.sections.find(
+      (s) => s.type === "offer" || s.type === "pricing",
+    );
+    const host = offer ?? page.sections[page.sections.length - 1];
+    host.secondaryCta = {
+      mode: "redirect",
+      label,
+      pageId: nextId,
+      target: "_self",
+    };
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Génération legacy single-page
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3502,7 +4606,7 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
   const ctaInstruction = buildCtaInstruction(brief.language, brief);
   const finalPrompt = basePrompt + templateInstruction + ctaInstruction;
 
-  const rawText = await callOpenAI({
+  const rawText = await callAI({
     systemMessage: SYSTEM_MESSAGE_FUNNEL,
     userPrompt: finalPrompt,
     maxTokens: 8000,
@@ -3653,4 +4757,71 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
       logoUrl: brief.logoUrl,
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 ÉTAPE 4 — Génération de séquence email par IA.
+// Service pur : prend l'input (type, contexte, nb d'emails, langue, contexte
+// tunnel) et retourne des brouillons d'emails. Réutilise l'abstraction `callAI`
+// (OPENAI_MODEL / AI_PROVIDER, jamais en dur). Pas d'accès base ici : la lecture
+// du tunnel se fait dans la route API.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SYSTEM_MESSAGE_SEQUENCE =
+  "You are an expert direct-response email copywriter. " +
+  "You MUST respond with a single JSON object { \"emails\": [...] } that strictly matches the requested schema. " +
+  "Do not wrap the JSON in markdown code fences. Do not add any prose before or after the JSON. " +
+  "Write all copy in the requested language and tone. Never invent figures, results or promises that were not provided.";
+
+const sequenceEmailSchema = z.object({
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  delayDays: z.coerce.number().int().min(0).max(365).optional(),
+});
+const sequenceResponseSchema = z.object({
+  emails: z.array(sequenceEmailSchema).min(1),
+});
+
+export async function generateEmailSequenceWithAI(
+  input: SequenceGenerationInput,
+): Promise<SequenceEmailDraft[]> {
+  const userPrompt = sequenceGenerationPrompt(input);
+
+  const raw = await callAI({
+    systemMessage: SYSTEM_MESSAGE_SEQUENCE,
+    userPrompt,
+    maxTokens: 6000,
+  });
+
+  // Parsing tolérant : on isole l'objet JSON même si le modèle a ajouté du texte.
+  let parsedJson: unknown;
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+    parsedJson = JSON.parse(slice);
+  } catch (e) {
+    throw new AiGenerationError(
+      "invalid-json",
+      "L'IA a renvoyé une réponse illisible. Réessayez la génération.",
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+
+  const result = sequenceResponseSchema.safeParse(parsedJson);
+  if (!result.success) {
+    throw new AiGenerationError(
+      "schema-mismatch",
+      "La séquence générée est mal structurée. Réessayez la génération.",
+      JSON.stringify(result.error.flatten().fieldErrors),
+    );
+  }
+
+  // Normalisation : position 0-based, 1er email à J+0, délais croissants.
+  return result.data.emails.map((e, idx) => ({
+    position: idx,
+    delayDays: idx === 0 ? 0 : typeof e.delayDays === "number" ? e.delayDays : idx * 2,
+    subject: e.subject.trim(),
+    body: e.body.trim(),
+  }));
 }

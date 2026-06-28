@@ -20,6 +20,15 @@ export type CreateOrderInput = {
   pageSlug?: string | null;
   nextUrl?: string | null;
   metadata?: Record<string, unknown>;
+  // 🆕 Stripe Connect
+  stripeConnectAccountId?: string | null;
+  redirectUrl?: string | null;
+  applicationFeeAmount?: number;
+  sectionId?: string | null;
+  customerName?: string | null;
+  // 🆕 Multi-fournisseur
+  provider?: "stripe" | "cinetpay";
+  cinetpayTransactionId?: string | null;
 };
 
 /**
@@ -58,37 +67,13 @@ export function parsePriceToAmount(
   return { amount: Math.round(value * 100), currency };
 }
 
-/**
- * Extrait le prix « principal » d'un funnel publié (published_content) : on
- * cherche un item pricing (de préférence `highlighted`) dans une section
- * offer/pricing. Retourne montant + devise + nom du produit.
- */
-export function extractFunnelPrice(
-  publishedContent: unknown,
-): { amount: number; currency: string; productName: string } | null {
-  const funnel = publishedContent as
-    | {
-        offerName?: string;
-        sections?: unknown[];
-        pages?: Array<{ sections?: unknown[] }>;
-      }
-    | null;
-  if (!funnel) return null;
+type PricingCandidate = { price?: string; name?: string; highlighted?: boolean };
 
-  const allSections: Array<Record<string, unknown>> = [];
-  if (Array.isArray(funnel.sections)) {
-    allSections.push(...(funnel.sections as Array<Record<string, unknown>>));
-  }
-  if (Array.isArray(funnel.pages)) {
-    for (const p of funnel.pages) {
-      if (Array.isArray(p?.sections)) {
-        allSections.push(...(p.sections as Array<Record<string, unknown>>));
-      }
-    }
-  }
-
-  const pricingItems: Array<{ price?: string; name?: string; highlighted?: boolean }> = [];
-  for (const sec of allSections) {
+/** Collecte les items pricing d'une liste de sections (offer/pricing). */
+function collectPricingItems(sections: unknown): PricingCandidate[] {
+  const out: PricingCandidate[] = [];
+  if (!Array.isArray(sections)) return out;
+  for (const sec of sections as Array<Record<string, unknown>>) {
     const type = sec?.type as string | undefined;
     if (type !== "offer" && type !== "pricing") continue;
     const items = sec?.items as Array<Record<string, unknown>> | undefined;
@@ -96,7 +81,7 @@ export function extractFunnelPrice(
     for (const it of items) {
       if ((it?.kind as string) === "pricing") {
         const data = (it?.data ?? {}) as Record<string, unknown>;
-        pricingItems.push({
+        out.push({
           price: data.price as string | undefined,
           name: data.name as string | undefined,
           highlighted: data.highlighted === true,
@@ -104,6 +89,53 @@ export function extractFunnelPrice(
       }
     }
   }
+  return out;
+}
+
+const cleanSlug = (s: string) => s.replace(/^\/+/, "").replace(/\/+$/, "");
+
+/**
+ * Extrait le prix d'un funnel publié (published_content) pour la PAGE
+ * concernée. Quand `pageSlug` est fourni (upsell, downsell…), on lit en
+ * priorité le prix de CETTE page — chaque offre OTO a son propre montant,
+ * distinct de l'offre principale. À défaut (ou page d'accueil), on retombe sur
+ * le prix global (item `highlighted` de tout le tunnel). Retourne montant +
+ * devise + nom du produit.
+ */
+export function extractFunnelPrice(
+  publishedContent: unknown,
+  pageSlug?: string | null,
+): { amount: number; currency: string; productName: string } | null {
+  const funnel = publishedContent as
+    | {
+        offerName?: string;
+        sections?: unknown[];
+        pages?: Array<{ slug?: string; isHome?: boolean; sections?: unknown[] }>;
+      }
+    | null;
+  if (!funnel) return null;
+
+  let pricingItems: PricingCandidate[] = [];
+
+  // 1) Page ciblée : on lit SON offre d'abord (l'upsell/downsell a son prix).
+  if (pageSlug && Array.isArray(funnel.pages)) {
+    const target = cleanSlug(pageSlug);
+    const page = funnel.pages.find(
+      (p) => typeof p?.slug === "string" && cleanSlug(p.slug) === target,
+    );
+    if (page) pricingItems = collectPricingItems(page.sections);
+  }
+
+  // 2) Repli : offre globale (mono-page funnel.sections + toutes les pages).
+  if (pricingItems.length === 0) {
+    pricingItems = collectPricingItems(funnel.sections);
+    if (Array.isArray(funnel.pages)) {
+      for (const p of funnel.pages) {
+        pricingItems.push(...collectPricingItems(p?.sections));
+      }
+    }
+  }
+
   if (pricingItems.length === 0) return null;
 
   const chosen = pricingItems.find((p) => p.highlighted) ?? pricingItems[0];
@@ -128,11 +160,18 @@ export async function createPendingOrder(input: CreateOrderInput): Promise<strin
       product_name: input.productName ?? null,
       customer_email: input.customerEmail ?? null,
       status: "pending",
-      provider: "stripe",
+      provider: input.provider ?? "stripe",
+      cinetpay_transaction_id: input.cinetpayTransactionId ?? null,
       stripe_session_id: input.stripeSessionId ?? null,
       page_slug: input.pageSlug ?? null,
       next_url: input.nextUrl ?? null,
       metadata: input.metadata ?? {},
+      // 🆕 Connect
+      stripe_connect_account_id: input.stripeConnectAccountId ?? null,
+      redirect_url: input.redirectUrl ?? null,
+      application_fee_amount: input.applicationFeeAmount ?? 0,
+      section_id: input.sectionId ?? null,
+      customer_name: input.customerName ?? null,
     })
     .select("id")
     .single();
@@ -143,25 +182,64 @@ export async function createPendingOrder(input: CreateOrderInput): Promise<strin
   return data.id as string;
 }
 
-/** Marque une commande payée à partir de l'ID de session Stripe. Idempotent. */
+/** Marque une commande payée à partir de l'ID de session Stripe. Idempotent.
+ * 🆕 Écrit aussi l'email client (Stripe Checkout le collecte) pour que les
+ * stats « Clients » se peuplent. */
 export async function markOrderPaidBySession(
   sessionId: string,
   paymentIntent?: string | null,
+  customerEmail?: string | null,
 ): Promise<{ userId: string; funnelId: string | null; email: string | null; amount: number; currency: string } | null> {
   const admin = getSupabaseAdmin();
+  const email = customerEmail?.toLowerCase().trim() || null;
+  const patch: Record<string, unknown> = {
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    stripe_payment_intent: paymentIntent ?? null,
+  };
+  if (email) patch.customer_email = email;
   const { data, error } = await admin
     .from("orders")
-    .update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      stripe_payment_intent: paymentIntent ?? null,
-    })
+    .update(patch)
     .eq("stripe_session_id", sessionId)
     .neq("status", "paid")
     .select("user_id, funnel_id, customer_email, amount, currency")
     .maybeSingle();
   if (error) {
     console.error("[orders] markOrderPaidBySession error", error);
+    return null;
+  }
+  if (!data) return null;
+  return {
+    userId: data.user_id as string,
+    funnelId: (data.funnel_id as string | null) ?? null,
+    email: (data.customer_email as string | null) ?? null,
+    amount: data.amount as number,
+    currency: data.currency as string,
+  };
+}
+
+/** 🆕 Marque payée une commande CinetPay via son transaction_id. Idempotent. */
+export async function markOrderPaidByCinetpayTransaction(
+  transactionId: string,
+  customerEmail?: string | null,
+): Promise<{ userId: string; funnelId: string | null; email: string | null; amount: number; currency: string } | null> {
+  const admin = getSupabaseAdmin();
+  const email = customerEmail?.toLowerCase().trim() || null;
+  const patch: Record<string, unknown> = {
+    status: "paid",
+    paid_at: new Date().toISOString(),
+  };
+  if (email) patch.customer_email = email;
+  const { data, error } = await admin
+    .from("orders")
+    .update(patch)
+    .eq("cinetpay_transaction_id", transactionId)
+    .neq("status", "paid")
+    .select("user_id, funnel_id, customer_email, amount, currency")
+    .maybeSingle();
+  if (error) {
+    console.error("[orders] markOrderPaidByCinetpayTransaction error", error);
     return null;
   }
   if (!data) return null;
@@ -215,6 +293,57 @@ export async function markOrderFailedByPaymentIntent(
     return false;
   }
   return Boolean(data);
+}
+
+/** 🆕 Promeut (ou crée) un contact en « client » payant. Partagé entre le
+ * webhook Stripe et la page success (laquelle sert de filet quand le webhook
+ * local n'est pas branché). Idempotent côté statut. */
+export async function promoteContactToClient(params: {
+  userId: string;
+  funnelId: string | null;
+  email: string;
+  amount: number;
+  currency: string;
+}): Promise<string | null> {
+  const admin = getSupabaseAdmin();
+  const email = params.email.toLowerCase().trim();
+  if (!email) return null;
+
+  const { data: existing } = await admin
+    .from("leads")
+    .select("id, metadata")
+    .eq("user_id", params.userId)
+    .eq("email", email)
+    .maybeSingle();
+
+  const purchase = {
+    last_purchase_amount: params.amount,
+    last_purchase_currency: params.currency,
+    last_purchase_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const meta = (existing.metadata as Record<string, unknown> | null) ?? {};
+    await admin
+      .from("leads")
+      .update({ status: "client", metadata: { ...meta, ...purchase } })
+      .eq("id", existing.id);
+    return existing.id as string;
+  }
+
+  const { data: inserted } = await admin
+    .from("leads")
+    .insert({
+      user_id: params.userId,
+      funnel_id: params.funnelId,
+      email,
+      status: "client",
+      source: "stripe_checkout",
+      metadata: purchase,
+    })
+    .select("id")
+    .maybeSingle();
+  return (inserted?.id as string | undefined) ?? null;
 }
 
 export type FunnelPaymentStats = {

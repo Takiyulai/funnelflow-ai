@@ -7,6 +7,7 @@ import type {
   FunnelKind,
   PageRole,
 } from "@/lib/funnels/types";
+import type { SequenceType, TunnelContext } from "@/lib/crm/types";
 import type { PageBlueprint } from "@/lib/funnels/pageCatalogs";
 import {
   getPageBlueprint,
@@ -293,6 +294,7 @@ function strictSectionRequirementsBlock(lang: Language = "fr"): string {
         "",
         "2. HEADLINE (OBLIGATOIRE) :",
         "   - Au moins 5 mots, apporte du sens. JAMAIS de placeholder type \"BRAND — type\".",
+        "   - ACCENT COULEUR : entoure 1 à 2 mots/groupes les plus FORTS de la headline (et au besoin de la subheadline) avec [[ ]], ex. \"Doublez vos [[résultats]] en [[30 jours]]\". N'utilise PAS de couleur (#hex) : la syntaxe [[mot]] reprend automatiquement la couleur du template. Maximum 2 par champ, jamais sur toute la phrase.",
         "",
         "3. SUBHEADLINE (recommandé, ≥ 4 mots) : développe la headline.",
         "",
@@ -346,6 +348,7 @@ function strictSectionRequirementsBlock(lang: Language = "fr"): string {
         "",
         "2. HEADLINE (REQUIRED):",
         "   - At least 5 meaningful words. NEVER placeholders like \"BRAND — type\".",
+        "   - COLOR ACCENT: wrap the 1-2 STRONGEST words/phrases of the headline (and subheadline if useful) with [[ ]], e.g. \"Double your [[results]] in [[30 days]]\". Do NOT add a color (#hex): the [[word]] syntax automatically inherits the template color. Max 2 per field, never the whole sentence.",
         "",
         "3. SUBHEADLINE (recommended, ≥ 4 words).",
         "",
@@ -388,6 +391,7 @@ function strictSectionRequirementsBlock(lang: Language = "fr"): string {
         "",
         "1. EYEBROW (OBLIGATORIO para CADA sección): 2 a 5 palabras en MAYÚSCULAS.",
         "2. HEADLINE (OBLIGATORIO): al menos 5 palabras significativas.",
+        "   - ACENTO DE COLOR: envuelve 1-2 palabras/grupos más FUERTES del headline (y del subheadline si conviene) con [[ ]], ej. \"Duplica tus [[resultados]] en [[30 días]]\". NO uses color (#hex): la sintaxis [[palabra]] hereda automáticamente el color de la plantilla. Máx 2 por campo, nunca toda la frase.",
         "3. SUBHEADLINE (recomendado, ≥ 4 palabras).",
         "4. BODY: 1 a 3 frases, sin guiones ni listas.",
         "5. BULLETS: array de 3 a 6 strings cortas.",
@@ -932,6 +936,61 @@ export function heroSingleMediaBlock(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Bloc : TON & VOCABULAIRE par type de tunnel
+// Le framework fixe la STRUCTURE ; ce bloc fixe le REGISTRE, les verbes d'action
+// autorisés/interdits, le niveau de pression commerciale et les mots-clés de CTA.
+// Empêche qu'un lead magnet gratuit reçoive le même ton qu'une offre payante.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TONE_RULES: Partial<Record<FunnelKind, { fr: string; en: string; es: string }>> = {
+  "lead-magnet": {
+    fr: "Registre : chaleureux, généreux, ZÉRO pression commerciale (c'est GRATUIT). Verbes autorisés : recevez, téléchargez, accédez, obtenez gratuitement. INTERDITS : achetez, investissez, commandez, payez, réservez. Pression commerciale : NULLE — aucun prix, aucune fausse urgence agressive. CTA type : « Recevoir le guide gratuit », « Télécharger maintenant », « Je veux mon accès gratuit ».",
+    en: "Register: warm, generous, ZERO sales pressure (it's FREE). Allowed verbs: get, download, access, grab for free. FORBIDDEN: buy, invest, order, pay, book. Sales pressure: NONE — no price, no aggressive fake urgency. CTA style: “Get the free guide”, “Download now”, “I want my free access”.",
+    es: "Registro: cálido, generoso, CERO presión comercial (es GRATIS). Verbos permitidos: recibe, descarga, accede, obtén gratis. PROHIBIDOS: compra, invierte, paga, reserva. Presión comercial: NULA — sin precio ni urgencia falsa. CTA: «Recibir la guía gratis», «Descargar ahora», «Quiero mi acceso gratis».",
+  },
+  "digital-product": {
+    fr: "Registre : orienté valeur et transformation, vente ASSUMÉE mais honnête. Verbes : obtenez, accédez, débloquez, procurez-vous, rejoignez. Pression commerciale : MODÉRÉE — prix visible, garantie, bonus, valeur perçue. CTA type : « Obtenir l'accès », « Je veux la formation », « Débloquer maintenant ».",
+    en: "Register: value- and transformation-driven, sales OWNED but honest. Verbs: get, access, unlock, grab, join. Sales pressure: MODERATE — visible price, guarantee, bonuses, perceived value. CTA style: “Get access”, “I want the course”, “Unlock now”.",
+    es: "Registro: orientado a valor y transformación, venta ASUMIDA pero honesta. Verbos: obtén, accede, desbloquea, únete. Presión comercial: MODERADA — precio visible, garantía, bonos. CTA: «Obtener acceso», «Quiero la formación», «Desbloquear ahora».",
+  },
+  webinar: {
+    fr: "Registre : crédibilité, anticipation, exclusivité de la session. Verbes : inscrivez-vous, réservez votre place, rejoignez. Pression commerciale : rareté RÉELLE (places/horaire), jamais de vente dure. CTA type : « Réserver ma place », « Je m'inscris », « Garder ma place ».",
+    en: "Register: credibility, anticipation, session exclusivity. Verbs: register, save your seat, join. Sales pressure: REAL scarcity (seats/time), never hard-sell. CTA style: “Save my seat”, “Register now”, “Hold my spot”.",
+    es: "Registro: credibilidad, anticipación, exclusividad de la sesión. Verbos: regístrate, reserva tu plaza, únete. Presión: escasez REAL (plazas/horario), nunca venta dura. CTA: «Reservar mi plaza», «Me inscribo», «Guardar mi lugar».",
+  },
+  booking: {
+    fr: "Registre : autorité, simplicité, posture de conseil — JAMAIS de hard-sell. Verbes : réservez, planifiez, prenez rendez-vous, échangeons. Pression commerciale : FAIBLE — valoriser l'appel découverte sans engagement. CTA type : « Réserver mon appel », « Planifier un échange », « Prendre rendez-vous ».",
+    en: "Register: authority, simplicity, advisory stance — NEVER hard-sell. Verbs: book, schedule, set up a call, let's talk. Sales pressure: LOW — highlight the no-commitment discovery call. CTA style: “Book my call”, “Schedule a chat”, “Get on a call”.",
+    es: "Registro: autoridad, simplicidad, postura de asesor — NUNCA venta dura. Verbos: reserva, agenda, hablemos. Presión: BAJA — destacar la llamada sin compromiso. CTA: «Reservar mi llamada», «Agendar una charla», «Pedir cita».",
+  },
+  "coaching-high-ticket": {
+    fr: "Registre : statut, exclusivité, transformation profonde, SÉLECTIF. Verbes : candidatez, postulez, réservez un appel de qualification, rejoignez le programme. ÉVITER tout langage promo/discount. Pression commerciale : exclusivité et qualification (places limitées RÉELLES), jamais de rabais. CTA type : « Candidater », « Postuler au programme », « Réserver mon appel de qualification ».",
+    en: "Register: status, exclusivity, deep transformation, SELECTIVE. Verbs: apply, request a qualification call, join the program. AVOID promo/discount language. Sales pressure: exclusivity and qualification (REAL limited spots), never discounts. CTA style: “Apply now”, “Apply to the program”, “Book my qualification call”.",
+    es: "Registro: estatus, exclusividad, transformación profunda, SELECTIVO. Verbos: postula, solicita una llamada de calificación, únete al programa. EVITAR lenguaje promo/descuento. Presión: exclusividad y calificación (plazas REALMENTE limitadas). CTA: «Postular», «Aplicar al programa», «Reservar mi llamada».",
+  },
+  challenge: {
+    fr: "Registre : énergique, motivant, communauté et momentum. Verbes : rejoignez, relevez le défi, participez, inscrivez-vous. Pression commerciale : urgence RÉELLE de la date de lancement, enthousiasme collectif. CTA type : « Je relève le défi », « Rejoindre le challenge », « Je m'inscris ».",
+    en: "Register: energetic, motivating, community and momentum. Verbs: join, take the challenge, participate, sign up. Sales pressure: REAL launch-date urgency, collective enthusiasm. CTA style: “I'm in”, “Join the challenge”, “Sign me up”.",
+    es: "Registro: enérgico, motivador, comunidad y momentum. Verbos: únete, acepta el reto, participa, inscríbete. Presión: urgencia REAL de la fecha de lanzamiento. CTA: «Acepto el reto», «Unirme al reto», «Me inscribo».",
+  },
+};
+
+export function toneAndVocabularyBlock(kind: FunnelKind | undefined, lang: Language): string {
+  if (!kind) return "";
+  const rules = TONE_RULES[kind];
+  if (!rules) return ""; // kind legacy/inconnu → on laisse le framework décider
+  const header = tr(
+    {
+      fr: "TON & VOCABULAIRE (impératif — adapter le registre au type de tunnel) :",
+      en: "TONE & VOCABULARY (mandatory — match the register to the funnel type):",
+      es: "TONO Y VOCABULARIO (obligatorio — adapta el registro al tipo de embudo):",
+    },
+    lang,
+  );
+  return `${header}\n${tr(rules, lang)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROMPT 1 : Funnel complet (legacy single-page)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -941,6 +1000,7 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
   const homeRole = kind ? getHomeRoleForKind(kind) : undefined;
 
   const frameworkBlock = kind && homeRole ? copywritingFrameworkBlock(kind, homeRole, lang) : "";
+  const toneBlock = toneAndVocabularyBlock(kind, lang);
   const heroRule = kind && homeRole ? heroSingleMediaBlock(kind, homeRole, lang) : "";
 
   return [
@@ -958,6 +1018,8 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
     copywritingPrefsBlock(brief.copywritingPrefs, lang),
     "",
     frameworkBlock,
+    "",
+    toneBlock,
     "",
     heroRule,
     "",
@@ -1141,6 +1203,162 @@ export function emailSequencePrompt(brief: FunnelBrief): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 PROMPT — Génération de séquence email (Étape 4), alignée sur un tunnel
+// publié quand il est rattaché. Multilingue FR/EN/ES.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SEQUENCE_TYPE_GUIDANCE: Record<SequenceType, Record<Language, string>> = {
+  bienvenue: {
+    fr: "Séquence de BIENVENUE : accueillir, livrer la ressource/promesse, instaurer la confiance, poser le décor du problème.",
+    en: "WELCOME sequence: greet, deliver the resource/promise, build trust, set up the problem.",
+    es: "Secuencia de BIENVENIDA: saludar, entregar el recurso/promesa, generar confianza, plantear el problema.",
+  },
+  nurturing: {
+    fr: "Séquence de NURTURING : apporter de la valeur, éduquer sur le problème, prouver l'expertise, amener doucement vers l'offre.",
+    en: "NURTURING sequence: give value, educate on the problem, prove expertise, gently lead to the offer.",
+    es: "Secuencia de NURTURING: aportar valor, educar sobre el problema, demostrar experiencia, guiar hacia la oferta.",
+  },
+  relance: {
+    fr: "Séquence de RELANCE : réactiver l'intérêt, lever les objections, créer l'urgence, pousser un CTA clair vers la page de vente.",
+    en: "FOLLOW-UP sequence: reactivate interest, handle objections, create urgency, push a clear CTA to the sales page.",
+    es: "Secuencia de SEGUIMIENTO: reactivar interés, superar objeciones, crear urgencia, CTA claro a la página de venta.",
+  },
+  lancement: {
+    fr: "Séquence de LANCEMENT produit : teasing, ouverture des inscriptions, preuves, rareté/échéance, fermeture.",
+    en: "Product LAUNCH sequence: teasing, cart open, proof, scarcity/deadline, cart close.",
+    es: "Secuencia de LANZAMIENTO: teasing, apertura, pruebas, escasez/fecha límite, cierre.",
+  },
+  reengagement: {
+    fr: "Séquence de RÉENGAGEMENT : reconquérir un contact inactif, rappeler la valeur, proposer un nouveau point de départ.",
+    en: "RE-ENGAGEMENT sequence: win back an inactive contact, remind the value, offer a fresh start.",
+    es: "Secuencia de REACTIVACIÓN: recuperar un contacto inactivo, recordar el valor, ofrecer un nuevo comienzo.",
+  },
+  autre: {
+    fr: "Séquence sur-mesure : suis fidèlement le contexte fourni par l'utilisateur.",
+    en: "Custom sequence: follow the user's provided context faithfully.",
+    es: "Secuencia personalizada: sigue fielmente el contexto del usuario.",
+  },
+};
+
+function tunnelContextBlock(tunnel: TunnelContext, lang: Language): string {
+  const lines = [
+    tr(
+      {
+        fr: "CONTEXTE DU TUNNEL RATTACHÉ (aligne-toi DESSUS : même offre, même promesse, même problème, même prix, même ton, même langue) :",
+        en: "ATTACHED FUNNEL CONTEXT (ALIGN with it: same offer, promise, problem, price, tone, language):",
+        es: "CONTEXTO DEL EMBUDO (ALINÉATE: misma oferta, promesa, problema, precio, tono, idioma):",
+      },
+      lang,
+    ),
+    `- Offre / Offer: ${tunnel.offerName || "—"}`,
+    `- Promesse / Promise: ${tunnel.promise || "—"}`,
+    `- Problème / Pain: ${tunnel.mainPain || "—"}`,
+    `- Cible / Audience: ${tunnel.targetAudience || "—"}`,
+    `- Ton / Tone: ${tunnel.tone || "—"}`,
+    `- Prix / Price: ${tunnel.price || "—"}`,
+    tunnel.benefits.length ? `- Bénéfices / Benefits: ${tunnel.benefits.join(" · ")}` : "",
+    tunnel.bonuses.length ? `- Bonus: ${tunnel.bonuses.join(" · ")}` : "",
+    tunnel.guarantee ? `- Garantie / Guarantee: ${tunnel.guarantee}` : "",
+    tunnel.url
+      ? tr(
+          {
+            fr: `- URL du tunnel : ${tunnel.url} → insère ce lien dans les CTA quand c'est pertinent (ex. relance vers la page de vente).`,
+            en: `- Funnel URL: ${tunnel.url} → insert this link in CTAs when relevant (e.g. follow-up to the sales page).`,
+            es: `- URL del embudo: ${tunnel.url} → inserta este enlace en los CTA cuando sea pertinente.`,
+          },
+          lang,
+        )
+      : tr(
+          {
+            fr: "- (Tunnel non publié : pas d'URL — n'invente AUCUN lien.)",
+            en: "- (Funnel not published: no URL — do NOT invent any link.)",
+            es: "- (Embudo no publicado: sin URL — NO inventes ningún enlace.)",
+          },
+          lang,
+        ),
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+export function sequenceGenerationPrompt(args: {
+  type: SequenceType;
+  context: string;
+  emailCount: number;
+  language: Language;
+  tunnel: TunnelContext | null;
+}): string {
+  const { type, context, emailCount, language: lang, tunnel } = args;
+  const n = Math.max(1, Math.min(10, Math.round(emailCount) || 3));
+
+  return [
+    tr(
+      {
+        fr: `Tu es un expert en email marketing direct-response. Génère une séquence de ${n} email(s) en ${langName(lang)}.`,
+        en: `You are a direct-response email marketing expert. Generate a sequence of ${n} email(s) in ${langName(lang)}.`,
+        es: `Eres un experto en email marketing de respuesta directa. Genera una secuencia de ${n} email(s) en ${langName(lang)}.`,
+      },
+      lang,
+    ),
+    "",
+    SEQUENCE_TYPE_GUIDANCE[type][lang],
+    "",
+    tr(
+      {
+        fr: `CONTEXTE FOURNI PAR L'UTILISATEUR :\n${context || "(aucun)"}`,
+        en: `USER-PROVIDED CONTEXT:\n${context || "(none)"}`,
+        es: `CONTEXTO DEL USUARIO:\n${context || "(ninguno)"}`,
+      },
+      lang,
+    ),
+    "",
+    tunnel ? tunnelContextBlock(tunnel, lang) : "",
+    "",
+    tr(
+      {
+        fr: [
+          "RÈGLES :",
+          "- Parle de la DOULEUR/du problème AVANT la solution.",
+          "- N'invente AUCUN chiffre, résultat, témoignage ou promesse non fourni.",
+          "- Reste cohérent avec l'offre, le prix, le ton et la langue du tunnel ci-dessus.",
+          `- Échelonne les délais : le 1er email à J+0, puis des délais croissants réalistes (ex. J+0, J+2, J+4…), un délai par email.`,
+          "- Chaque email : un objet court et accrocheur + un corps clair et orienté action (texte simple, sauts de ligne autorisés).",
+        ].join("\n"),
+        en: [
+          "RULES:",
+          "- Address the PAIN/problem BEFORE the solution.",
+          "- Do NOT invent any number, result, testimonial or promise not provided.",
+          "- Stay consistent with the funnel's offer, price, tone and language above.",
+          "- Stagger delays: 1st email at Day 0, then realistic increasing delays (e.g. 0, 2, 4…), one per email.",
+          "- Each email: a short catchy subject + a clear action-oriented body (plain text, line breaks allowed).",
+        ].join("\n"),
+        es: [
+          "REGLAS:",
+          "- Habla del DOLOR/problema ANTES de la solución.",
+          "- NO inventes cifras, resultados, testimonios ni promesas no proporcionados.",
+          "- Mantén coherencia con la oferta, precio, tono e idioma del embudo.",
+          "- Escalona los retrasos: 1er email en Día 0, luego retrasos crecientes (0, 2, 4…), uno por email.",
+          "- Cada email: asunto corto y atractivo + cuerpo claro orientado a la acción.",
+        ].join("\n"),
+      },
+      lang,
+    ),
+    "",
+    antiHypeBlock(lang),
+    "",
+    tr(
+      {
+        fr: `Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, de la forme :\n{ "emails": [ { "subject": "...", "body": "...", "delayDays": 0 } ] }\nLe tableau "emails" doit contenir EXACTEMENT ${n} élément(s), "delayDays" est un entier (jours), et le 1er email a delayDays = 0.`,
+        en: `Reply ONLY with a valid JSON object, no surrounding text, of the form:\n{ "emails": [ { "subject": "...", "body": "...", "delayDays": 0 } ] }\nThe "emails" array MUST contain EXACTLY ${n} item(s), "delayDays" is an integer (days), and the 1st email has delayDays = 0.`,
+        es: `Responde SOLO con un objeto JSON válido, sin texto alrededor:\n{ "emails": [ { "subject": "...", "body": "...", "delayDays": 0 } ] }\nEl array "emails" debe contener EXACTAMENTE ${n} elemento(s), "delayDays" es un entero (días), y el 1.º tiene delayDays = 0.`,
+      },
+      lang,
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROMPT 5 : Export systeme.io
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1154,6 +1372,24 @@ export function exportSystemePrompt(args: { funnelName: string; lang: Language }
     },
     lang,
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Sous-étape B : bloc « À propos » — injecte le texte saisi par l'utilisateur
+// dans le prompt pour que l'IA l'EXPLOITE dans la section about (Présentation/
+// Autorité). Auparavant aboutText n'était jamais transmis à l'IA.
+// ─────────────────────────────────────────────────────────────────────────────
+export function authorAboutBlock(brief?: FunnelBrief): string {
+  const txt = brief?.aboutText?.trim();
+  if (!txt) return "";
+  const lang: Language = brief?.language ?? "fr";
+  const intro =
+    lang === "en"
+      ? 'AUTHOR / "ABOUT ME" TEXT provided by the user — you MUST use it to write the "about" section (Presentation/Authority), placed AFTER the benefits. Rephrase it as persuasive copy that builds authority (who they are, experience, why they do it, who they help). Never ignore it and never invent a different identity. If an author photo is provided, the "about" section carries it.'
+      : lang === "es"
+        ? 'TEXTO DEL AUTOR / "SOBRE MÍ" proporcionado por el usuario — DEBES usarlo para redactar la sección "about" (Presentación/Autoridad), ubicada DESPUÉS de los beneficios. Reformúlalo como copy persuasivo que construya autoridad (quién es, experiencia, por qué lo hace, a quién ayuda). Nunca lo ignores ni inventes otra identidad. Si hay una foto del autor, la sección "about" la lleva.'
+        : "TEXTE AUTEUR / « À PROPOS DE MOI » fourni par l'utilisateur — tu DOIS l'utiliser pour rédiger la section \"about\" (Présentation/Autorité), placée APRÈS les bénéfices. Reformule-le en copywriting persuasif qui installe l'autorité (qui il est, son expérience, pourquoi il le fait, qui il aide). Ne l'ignore JAMAIS et n'invente pas une autre identité. Si une photo de l'auteur est fournie, la section \"about\" la porte.";
+  return `\n\n## À propos (source utilisateur — à exploiter)\n${intro}\n"""\n${txt}\n"""\n`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1202,6 +1438,8 @@ ${recommendedSections} (minimum ${minSections} sections riches)
 
 ${copywritingFrameworkBlock(args.funnelKind, homeRole, lang)}
 
+${toneAndVocabularyBlock(args.funnelKind, lang)}
+
 ${heroSingleMediaBlock(args.funnelKind, homeRole, lang)}
 
 ${roleSemanticsBlock([homeRole], lang)}
@@ -1213,6 +1451,7 @@ ${noInventedFilenamesBlock(lang)}
 ${briefVideoBlock(args.videoUrl, lang, false)}
 
 ${briefDrivenBlocks}
+${authorAboutBlock(args.brief)}
 
 ## Règle de titre
 Le titre du hero doit être une **promesse claire et spécifique** orientée résultat pour l'audience. Pas de slogan vague. Maximum 12 mots.
@@ -1288,6 +1527,8 @@ Les **titres de hero** des pages secondaires NE DOIVENT JAMAIS contenir le nom d
 Le titre doit être **orienté bénéfice ou état du prospect**, écrit comme un message direct à la 2e personne, sans préfixe de marque.
 
 ${roleSemanticsBlock(roles, lang)}
+
+${toneAndVocabularyBlock(args.funnelKind, lang)}
 
 ${frameworksByPage}
 

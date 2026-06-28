@@ -10,8 +10,6 @@ import {
   Send, LineChart, Menu, X,
 } from "lucide-react";
 
-import { TemplateCard } from "@/components/funnel/TemplateCard";
-import { funnelTemplates } from "@/lib/funnels/templates";
 
 // ── Scroll animation wrapper ──────────────────────────────────────────────────
 function FadeInWhenVisible({
@@ -68,33 +66,33 @@ const translations = {
 
     // Hero
     hero: {
-      label: "Optimisé pour systeme.io",
-      titleStart: "Créez des tunnels plus vite,",
-      titleMid: "plus propres,",
-      titleDynamic: ["prêts à convertir.", "prêts à publier.", "prêts à vendre."],
-      desc: "FunnelFlow AI génère la structure, les pages et le copywriting de votre tunnel avec une logique orientée conversion. Pensé d'abord pour systeme.io, compatible avec d'autres plateformes.",
+      label: "Lance enfin ton offre",
+      titleStart: "Le tunnel de vente",
+      titleMid: "qui capture tes leads",
+      titleDynamic: ["et les convertit en clients"],
+      desc: "Tu décris ton offre. L'IA construit ton tunnel de vente, le publie et capture tes emails. Ensuite il relance tes leads et les amène à l'achat, pendant que tu fais autre chose.",
       ctaPrimary: "Créer mon premier tunnel",
-      ctaSecondary: "Voir comment ça fonctionne",
-      proofBar: ["Structure claire", "Copywriting orienté conversion", "Export propre", "Rendu mobile soigné"],
-      footnote: "Pensé d'abord pour systeme.io",
+      ctaSecondary: "Voir comment ça marche",
+      proofBar: ["En ligne aujourd'hui", "Leads captés et relancés sans toi", "Tu régénères ce qui ne te plaît pas", "Exportable vers systeme.io"],
+      footnote: "On t'accompagne jusqu'à ce que ton premier tunnel soit en ligne.",
     },
 
     // Hero preview card
     preview: {
-      badge: "Tunnel généré",
-      title: "Aperçu du résultat",
-      desc: "Tunnel structuré, prêt à éditer et à publier.",
+      badge: "Tunnel en ligne",
+      title: "Ton tunnel travaille pour toi",
+      desc: "Il capture tes leads et les relance sans toi",
       modify: "Modifier",
       publish: "Publier",
-      exportHtml: "Export HTML/CSS",
+      exportHtml: "Export HTML",
       exportSysteme: "Export systeme.io",
       productTag: "Tunnel · Ebook premium",
-      productName: "Page de vente prête à convertir",
-      productDesc: "Structure, sections et copywriting alignés sur votre offre.",
-      mainExportBtn: "Export systeme.io",
-      planTitle: "Plan du tunnel",
-      planItems: ["Page de vente", "Capture email", "Page de remerciement", "Séquence email", "Export"],
-      multiPlatformNote: "Compatible HTML universel",
+      productName: "Page de vente qui capture tes leads",
+      productDesc: "Structure, sections et copy alignés sur ton offre",
+      mainExportBtn: "Voir mon tunnel en ligne",
+      planTitle: "Ce que fait ton tunnel",
+      planItems: ["Page de vente", "Capture des leads", "CRM intégré", "Relance automatique", "En ligne"],
+      multiPlatformNote: "Exportable vers systeme.io si tu veux",
     },
 
     // Problem
@@ -199,7 +197,7 @@ const translations = {
     pricing: {
       tag: "Tarifs",
       title: "Trois plans, une logique claire.",
-      desc: "Pas de plan gratuit. Une offre directe, alignée sur votre niveau d'usage.",
+      desc: "Un tunnel conçu par un pro coûte des centaines à des milliers d'euros. Ici tu en génères autant que ton plan le permet",
       popular: "Recommandé",
       guarantee: "Paiement sécurisé · Sans engagement · Annulation à tout moment",
       plans: [
@@ -207,13 +205,13 @@ const translations = {
           name: "Starter",
           price: "29€",
           period: "/mois",
-          desc: "Pour lancer vos premiers tunnels sur systeme.io.",
+          desc: "Pour lancer tes premiers tunnels et capturer tes leads",
           features: [
-            "Jusqu'à 3 tunnels par mois",
-            "Export systeme.io",
-            "Export HTML / CSS",
-            "Modèles de base",
-            "Support par email",
+            "3 tunnels générés par mois",
+            "Éditeur visuel et régénération par section",
+            "Publication en ligne en un clic",
+            "Capture des leads et CRM intégré",
+            "Export systeme.io et HTML",
           ],
           cta: "Choisir Starter",
         },
@@ -221,13 +219,16 @@ const translations = {
           name: "Pro",
           price: "59€",
           period: "/mois",
-          desc: "Pour créer plus vite et aller plus loin.",
+          desc: "Pour automatiser tes relances et passer à l'échelle",
           features: [
-            "Jusqu'à 15 tunnels par mois",
-            "Export systeme.io prioritaire",
-            "Compatibilité multi-plateforme",
-            "Régénération ciblée par section",
-            "Bibliothèque complète de cas d'usage",
+            "15 tunnels générés par mois",
+            "Éditeur visuel et régénération par section",
+            "Publication en ligne en un clic",
+            "Capture des leads et CRM intégré",
+            "Workflows et séquences email automatiques",
+            "Email de livraison automatique",
+            "Clonage et import de tunnels",
+            "Export systeme.io et HTML",
             "Support prioritaire",
           ],
           cta: "Choisir Pro",
@@ -236,13 +237,18 @@ const translations = {
           name: "Agency",
           price: "97€",
           period: "/mois",
-          desc: "Pour gérer plusieurs clients et industrialiser la production.",
+          desc: "Pour gérer plusieurs clients et industrialiser ta production",
           features: [
             "Tunnels illimités",
-            "Export systeme.io et multi-plateforme",
+            "Éditeur visuel et régénération par section",
+            "Publication en ligne en un clic",
+            "Capture des leads et CRM intégré",
+            "Workflows et séquences email automatiques",
+            "Email de livraison automatique",
+            "Clonage et import de tunnels",
             "Espaces clients séparés",
-            "Brief client structuré",
             "Branding personnalisable",
+            "Export systeme.io et HTML",
             "Support dédié",
           ],
           cta: "Choisir Agency",
@@ -1003,10 +1009,9 @@ export default function LandingPage() {
               <div className="rounded-2xl p-px" style={{ background: "linear-gradient(145deg,rgba(199,164,54,0.35),rgba(49,132,92,0.18),rgba(8,73,141,0.12))" }}>
                 <div className="rounded-2xl overflow-hidden" style={{ background: "linear-gradient(135deg, rgba(8,73,141,0.25), rgba(199,164,54,0.2), rgba(49,132,92,0.25))", backdropFilter: "blur(6px)" }}>
                   <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(13,22,40,0.7)" }}>
-                    <div className="flex gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#31845C" }} />
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#C7A436" }} />
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#08498D" }} />
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ background: "#31845C", boxShadow: "0 0 0 3px rgba(49,132,92,0.18)" }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>En direct</span>
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#C7A436" }}>{t.preview.badge}</span>
                   </div>
@@ -1021,9 +1026,9 @@ export default function LandingPage() {
                     <div className="preview-buttons mb-5 flex flex-wrap gap-2">
                       {[
                         { label: t.preview.modify, primary: false },
-                        { label: t.preview.publish, primary: false },
+                        { label: t.preview.publish, primary: true },
                         { label: t.preview.exportHtml, primary: false },
-                        { label: t.preview.exportSysteme, primary: true },
+                        { label: t.preview.exportSysteme, primary: false },
                       ].map((btn, index) => (
                         <div key={index} className="preview-btn rounded-xl px-3 py-1.5 ff-body" style={{ background: btn.primary ? "#C7A436" : "rgba(255,255,255,0.06)", color: btn.primary ? "#08111F" : "#fff", border: btn.primary ? "1px solid #C7A436" : "1px solid rgba(255,255,255,0.1)", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
                           {btn.label}
@@ -1256,16 +1261,6 @@ export default function LandingPage() {
           })}
         </div>
 
-        {/* Templates concrets existants — preuve de catalogue */}
-        {funnelTemplates && funnelTemplates.length > 0 && (
-          <div className="mx-auto mt-10 max-w-7xl px-4 sm:px-6 lg:px-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {funnelTemplates.slice(0, 4).map((template, i) => (
-              <FadeInWhenVisible key={template.id} direction="up" delay={i * 0.08}>
-                <TemplateCard template={template} />
-              </FadeInWhenVisible>
-            ))}
-          </div>
-        )}
       </section>
 
       {/* TESTIMONIALS */}

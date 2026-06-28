@@ -54,7 +54,29 @@ export function materializeSectionImage(
 }
 
 /**
- * Détection robuste de l'image utilisable (mode != none + URL valide).
+ * Vrai SI l'URL pointe vers une ressource média réellement chargeable
+ * (http(s), data:, blob:, ou chemin absolu/relatif local). Les placeholders
+ * laissés par l'IA — `[uploaded-xxx]` — ou un simple texte descriptif NE sont
+ * PAS des médias utilisables : on ne doit jamais réserver d'espace pour eux.
+ */
+export function isUsableMediaUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  const u = url.trim();
+  if (u.length === 0) return false;
+  if (/^\[uploaded-/i.test(u)) return false; // placeholder IA non résolu
+  return (
+    /^https?:\/\//i.test(u) ||
+    u.startsWith("data:") ||
+    u.startsWith("blob:") ||
+    u.startsWith("/") ||
+    u.startsWith("./") ||
+    u.startsWith("../")
+  );
+}
+
+/**
+ * Détection robuste de l'image utilisable (mode != none + URL réellement
+ * chargeable). Un placeholder IA non résolu compte comme « pas d'image ».
  */
 export function sectionHasUsableImage(
   section: FunnelSection,
@@ -62,7 +84,19 @@ export function sectionHasUsableImage(
 ): boolean {
   if (!section.image) return false;
   const resolved = materializeSectionImage(section.image, funnel);
-  return !!(resolved && resolved.mode !== "none" && resolved.url);
+  return !!(resolved && resolved.mode !== "none" && isUsableMediaUrl(resolved.url));
+}
+
+/**
+ * Détection robuste d'une vidéo utilisable.
+ */
+export function sectionHasUsableVideo(section: FunnelSection): boolean {
+  return isUsableMediaUrl(section.video?.url);
+}
+
+/** Au moins deux puces → la section peut tenir un split « éditorial » (cartes). */
+function sectionHasSideCards(section: FunnelSection): boolean {
+  return Array.isArray(section.bullets) && section.bullets.length >= 2;
 }
 
 /**
@@ -86,8 +120,24 @@ export function effectiveLayoutVariant(
   funnel: Funnel | undefined
 ): string {
   const v = section.layoutVariant;
-  if (v) return v;
-  if (sectionHasUsableImage(section, funnel) && sectionHasSubstantialText(section)) {
+  const isSplit = v === "split-text-image" || v === "split-image-text";
+
+  // Variant non-split explicite → on respecte tel quel.
+  if (v && !isSplit) return v;
+
+  const hasMedia =
+    sectionHasUsableImage(section, funnel) || sectionHasUsableVideo(section);
+
+  // Un split n'est valide QUE s'il y a un média réel à mettre dans la colonne,
+  // ou au moins des cartes (split éditorial). Sinon → centré pleine largeur :
+  // on ne réserve JAMAIS d'espace media vide / placeholder.
+  if (isSplit) {
+    if (hasMedia || sectionHasSideCards(section)) return v as string;
+    return "centered";
+  }
+
+  // Pas de variant : on déduit un split uniquement si média réel + texte.
+  if (hasMedia && sectionHasSubstantialText(section)) {
     return "split-text-image";
   }
   return "centered";

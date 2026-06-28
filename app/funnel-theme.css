@@ -35,6 +35,22 @@
   --ff-accent-ink: #0f172a;
   --ff-primary: #080e1a;
 
+  /* 🆕 Alternance de bandes ACTIVÉE PAR DÉFAUT (le système existait mais
+     retombait sur transparent → fonds plats). Teintes très légères d'accent sur
+     le fond du template ; les sections « à cartes » (offre/preuve/faq…) ont une
+     bande un peu plus marquée + filets, pour grouper visuellement. */
+  --ff-section-alt-1: color-mix(in srgb, var(--ff-accent) 4%, var(--ff-bg));
+  --ff-section-alt-2: color-mix(in srgb, var(--ff-accent) 7%, var(--ff-bg));
+  --ff-section-alt-border: color-mix(in srgb, var(--ff-accent) 12%, transparent);
+  /* 🆕 Carte « rangée » (style systeme.io) par défaut : teintée vers l'accent
+     mais JAMAIS la couleur primaire, bordure subtile, ombre douce. Surchargée
+     par template plus bas si défini. */
+  --ff-card-bg: color-mix(in srgb, var(--ff-accent) 6%, var(--ff-surface));
+  --ff-card-border: color-mix(in srgb, var(--ff-accent) 16%, transparent);
+  --ff-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05),
+    0 18px 40px -24px rgba(15, 23, 42, 0.28);
+  --ff-card-radius: 16px;
+
   --ff-brand-bar-bg: #0a0a0a;
   --ff-brand-bar-ink: #ffffff;
   --ff-footer-bg: #0a0a0a;
@@ -118,6 +134,31 @@
 [data-ff-template] .ff-footer {
   background-color: var(--ff-footer-bg) !important;
   color: var(--ff-footer-ink) !important;
+}
+
+/* 🆕 Page publiée : « sticky footer ». Si le tunnel est plus court que l'écran,
+   on pousse le footer tout en bas (margin-top:auto) au lieu de laisser une
+   bande blanche vide en dessous. Le vide éventuel passe AU-DESSUS du footer et
+   prend le fond du template (continuité visuelle), jamais sous le footer.
+   Chaîne flex : main → div RawFrame → .ff-page → div interne → footer. */
+.ff-public-main > div {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ff-public-main .ff-page {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.ff-public-main .ff-page > div {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.ff-public-main .ff-footer {
+  margin-top: auto;
 }
 
 [data-ff-template] > * {
@@ -230,14 +271,19 @@
 
 /* ───────── 6. Typography ───────── */
 [data-ff-template] .ff-eyebrow {
-  display: inline-block;
+  /* 🆕 Pastille à la LARGEUR DU TEXTE (jamais pleine largeur), centrée en haut.
+     display:table + marges auto = largeur=contenu ET centrage, peu importe le parent. */
+  display: table;
+  width: auto;
+  max-width: 100%;
+  text-align: center;
   color: var(--ff-accent);
   font-family: var(--ff-font-eyebrow);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-size: 0.75rem;
-  margin: 0 0 14px 0;
+  margin: 0 auto 14px auto;
   padding: 7px 16px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ff-accent) 15%, transparent);
@@ -272,6 +318,21 @@
   [data-ff-template] .ff-body { font-size: calc(1rem * var(--ff-text-scale)); }
 }
 
+/* 🆕 TITRES EN MAJUSCULES PAR DÉFAUT — 4 templates au caractère bold/géométrique
+   où les capitales rendent bien. Surchargeable par section via le contrôle de
+   casse de l'éditeur (style inline text-transform, qui bat cette règle). */
+[data-ff-template="aurora-glow"] .ff-headline,
+[data-ff-template="aurora-glow"] .ff-headline-scaled,
+[data-ff-template="mint-fresh"] .ff-headline,
+[data-ff-template="mint-fresh"] .ff-headline-scaled,
+[data-ff-template="cosmos-night"] .ff-headline,
+[data-ff-template="cosmos-night"] .ff-headline-scaled,
+[data-ff-template="sunset-coral"] .ff-headline,
+[data-ff-template="sunset-coral"] .ff-headline-scaled {
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
 [data-ff-template] .ff-card {
   background: var(--ff-card-bg);
   border: 1px solid var(--ff-card-border);
@@ -291,7 +352,7 @@
 
 /* ───────── Templates spécifiques (inchangés) ───────── */
 [data-ff-template="clean-light"] {
-  --ff-bg: #FFFFFF; --ff-ink: #09090B; --ff-ink-soft: #52525B; --ff-muted: #A1A1AA;
+  --ff-bg: #F6F6F4; --ff-ink: #09090B; --ff-ink-soft: #52525B; --ff-muted: #A1A1AA;
   --ff-border: rgba(24, 24, 27, 0.06); --ff-accent: #000000; --ff-accent-ink: #FFFFFF;
   --ff-font-heading: "Inter", system-ui, sans-serif;
   --ff-heading-weight: 800; --ff-heading-tracking: -0.04em;
@@ -1024,13 +1085,52 @@
 [data-ff-template] .ff-eyebrow {
   text-align: center;
 }
-[data-ff-template] .ff-body {
-  text-align: center;
-  max-width: 65ch;
+/* 🆕 HIÉRARCHIE DE LARGEUR : le titre est le plus large, puis le sous-titre,
+   puis le corps. Aucun texte ne prend toute la largeur. Centré par défaut ;
+   les layouts split repassent à gauche et annulent ces marges (plus bas). */
+[data-ff-template] .ff-headline {
+  max-width: 44rem;
   margin-left: auto;
   margin-right: auto;
 }
-[data-ff-template] .ff-cta-wrap { text-align: center; }
+[data-ff-template] .ff-subheadline {
+  max-width: 38rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-ff-template] .ff-body {
+  text-align: center;
+  max-width: 34rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 🆕 Espacement vertical entre blocs (titre / sous-titre / corps) — évite le
+   contenu serré. Les layouts split définissent leurs propres marges plus bas. */
+[data-ff-template] .ff-section .ff-eyebrow { margin-bottom: 1rem; }
+[data-ff-template] .ff-section .ff-headline { margin-bottom: 0.9rem; }
+[data-ff-template] .ff-section .ff-subheadline { margin-bottom: 1.1rem; }
+[data-ff-template] .ff-section .ff-body { margin-bottom: 1.1rem; }
+
+/* 🆕 Contenu des CARDS aligné à GAUCHE (jamais à droite). Les témoignages
+   gardent leur centrage via leur propre règle plus spécifique. */
+[data-ff-template] .ff-feature-card,
+[data-ff-template] .ff-bonus-card,
+[data-ff-template] .ff-card {
+  text-align: left;
+}
+
+[data-ff-template] .ff-cta-wrap { text-align: center; margin-top: 1.75rem; }
+
+/* 🆕 Espace entre le contenu d'une card (pricing/bonus/feature) et son bouton,
+   qui étaient trop collés. Le bouton est poussé en bas de la card. */
+[data-ff-template] .ff-pricing-card .ff-btn,
+[data-ff-template] .ff-pricing-card [data-ff-cta],
+[data-ff-template] .ff-pricing-card a[href],
+[data-ff-template] .ff-pricing-card button:not([aria-label]) {
+  margin-top: 1.5rem;
+}
+[data-ff-template] .ff-pricing-card { gap: 0.5rem; }
 
 /* DESKTOP UNIQUEMENT : layouts split passent à gauche */
 @media (min-width: 768px) {
@@ -1049,6 +1149,8 @@
   [data-ff-template] .ff-section[data-ff-layout="left-aligned"] .ff-subheadline,
   [data-ff-template] .ff-section[data-ff-layout="dense-list"] .ff-subheadline {
     text-align: left;
+    margin-left: 0;
+    margin-right: 0;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] .ff-body,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] .ff-body,
@@ -1106,6 +1208,21 @@
   text-align: center !important;
 }
 
+/* 🆕 CARTES sur mobile : le texte ne reste JAMAIS à gauche (règle stricte mobile
+   = centré ou justifié). Couvre le vrai mobile ET le cadre preview de l'éditeur. */
+@media (max-width: 767px) {
+  [data-ff-template] .ff-feature-card,
+  [data-ff-template] .ff-bonus-card,
+  [data-ff-template] .ff-card {
+    text-align: center !important;
+  }
+}
+[data-ff-mobile-frame] [data-ff-template] .ff-feature-card,
+[data-ff-mobile-frame] [data-ff-template] .ff-bonus-card,
+[data-ff-mobile-frame] [data-ff-template] .ff-card {
+  text-align: center !important;
+}
+
 /* Hero centered force */
 [data-ff-template] .ff-section[data-ff-section="hero"][data-ff-layout="centered"],
 [data-ff-template] .ff-section[data-ff-section="hero"][data-ff-layout="centered"] .ff-headline,
@@ -1140,6 +1257,27 @@
   [data-ff-template] .ff-cta-wrap [data-ff-cta] {
     width: 100%; max-width: 320px;
   }
+}
+
+/* ───────── 13bis. 🆕 MOBILE : jamais d'alignement gauche/droite ─────────
+   Sur petit écran le texte d'une section est CENTRÉ (le left/right desktop des
+   sections split casse la lisibilité sur mobile). On couvre le vrai mobile ET
+   le cadre mobile de l'aperçu éditeur ([data-ff-mobile-frame]). */
+@media (max-width: 767px) {
+  [data-ff-template] .ff-section .ff-eyebrow,
+  [data-ff-template] .ff-section .ff-headline,
+  [data-ff-template] .ff-section .ff-headline-scaled,
+  [data-ff-template] .ff-section .ff-subheadline,
+  [data-ff-template] .ff-section .ff-body {
+    text-align: center !important;
+  }
+}
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-eyebrow,
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-headline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-headline-scaled,
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-subheadline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-body {
+  text-align: center !important;
 }
 
 /* ───────── 14. Highlight section ciblée ───────── */
@@ -1230,7 +1368,7 @@
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-image-wrap,
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > figure.ff-image-wrap {
-    grid-column: 2; grid-row: 1 / span 99;
+    grid-column: 2; grid-row: 2 / span 99;
     align-self: center; justify-self: center; margin: 0 !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow,
@@ -1244,14 +1382,30 @@
     grid-column: 2; align-self: end; justify-self: start;
     padding-top: 1.5rem; margin: 0 !important;
   }
+  /* 🆕 CTA des sections split NON-hero : centré sur toute la largeur (jamais
+     collé d'un seul côté). Le hero garde son CTA dans sa colonne. */
+  [data-ff-template] .ff-section[data-ff-layout="split-text-image"]:not([data-ff-section="hero"]) > div.relative > .ff-cta-wrap,
+  [data-ff-template] .ff-section[data-ff-layout="split-image-text"]:not([data-ff-section="hero"]) > div.relative > .ff-cta-wrap {
+    grid-column: 1 / -1 !important;
+    justify-self: center !important;
+    justify-content: center;
+    padding-top: 1.5rem;
+  }
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-image-wrap,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > figure.ff-image-wrap {
-    grid-column: 1; grid-row: 1 / span 99;
+    grid-column: 1; grid-row: 2 / span 99;
     align-self: center; justify-self: center; margin: 0 !important;
   }
+  /* 🆕 Eyebrow CENTRÉ pleine largeur, sur sa propre ligne (grid-row 1).
+     L'image / les cards démarrent à grid-row 2 (cf. règles image-wrap et
+     split-mode=text), donc l'eyebrow ne traverse plus une colonne occupée
+     par un élément span 99 → plus de collision qui le poussait sous l'image. */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
-    margin: 0 0 0.75rem 0 !important;
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+    justify-self: center !important;
+    margin: 0 auto 1.5rem auto !important;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-headline {
@@ -1271,10 +1425,10 @@
   }
   /* Split SANS image : les cartes occupent la colonne libre (texte d'un côté, cartes de l'autre) */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"][data-ff-split-mode="text"] > div.relative > .ff-bullets {
-    grid-column: 2; grid-row: 1 / span 99; align-self: center; margin: 0 !important; max-width: none;
+    grid-column: 2; grid-row: 2 / span 99; align-self: center; margin: 0 !important; max-width: none;
   }
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"][data-ff-split-mode="text"] > div.relative > .ff-bullets {
-    grid-column: 1; grid-row: 1 / span 99; align-self: center; margin: 0 !important; max-width: none;
+    grid-column: 1; grid-row: 2 / span 99; align-self: center; margin: 0 !important; max-width: none;
   }
   /* En split text-only, les cartes s'empilent verticalement dans leur demi-colonne */
   [data-ff-template] .ff-section[data-ff-split-mode="text"] > div.relative > .ff-bullets--grid {
@@ -1295,11 +1449,12 @@
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"],
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] { padding-top: 3rem; padding-bottom: 3rem; }
 
-  /* Eyebrow centré dans split desktop */
+  /* Eyebrow en split desktop : pilule largeur-contenu, CENTRÉE en haut de
+     la section (sur sa propre ligne grid-row 1, pleine largeur). */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-eyebrow,
   [data-ff-template] .ff-section[data-ff-layout="split-image-text"] > div.relative > .ff-eyebrow {
-    text-align: center !important; justify-self: center !important; width: 100%;
-    display: flex !important; justify-content: center !important; align-items: center !important;
+    text-align: center !important; justify-self: center !important; width: auto !important;
+    display: inline-flex !important; justify-content: center !important; align-items: center !important;
   }
   /* Headline / Subheadline / Body alignés à GAUCHE en split desktop */
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative > .ff-headline,
@@ -1772,6 +1927,10 @@
 [data-ff-template="sharp-launch"]   { --ff-card-bg: #0E141A; --ff-card-border: rgba(34,211,238,0.22); --ff-card-icon-bg: rgba(34,211,238,0.16); --ff-card-icon-ink: #22D3EE; }
 [data-ff-template="trust-pro"]      { --ff-card-bg: #112A4D; --ff-card-border: rgba(6,182,212,0.22); --ff-card-icon-bg: rgba(6,182,212,0.16); --ff-card-icon-ink: #22D3EE; }
 [data-ff-template="lead-snap"]      { --ff-card-bg: #241640; --ff-card-border: rgba(192,132,252,0.24); --ff-card-icon-bg: rgba(192,132,252,0.18); --ff-card-icon-ink: #C084FC; }
+/* 🆕 Cards dérivées de l'accent pour les 3 templates qui retombaient sur un voile blanc identique. */
+[data-ff-template="webinar-live"]   { --ff-card-bg: #141A35; --ff-card-border: rgba(99,102,241,0.26); --ff-card-icon-bg: rgba(99,102,241,0.18); --ff-card-icon-ink: #818CF8; }
+[data-ff-template="showcase"]       { --ff-card-bg: #161B22; --ff-card-border: rgba(52,211,153,0.24); --ff-card-icon-bg: rgba(52,211,153,0.18); --ff-card-icon-ink: #34D399; }
+[data-ff-template="vsl-focus"]      { --ff-card-bg: #0E1422; --ff-card-border: rgba(56,189,248,0.24); --ff-card-icon-bg: rgba(56,189,248,0.18); --ff-card-icon-ink: #38BDF8; }
 [data-ff-template="aurora-glow"]    { --ff-card-bg: #FFFFFF; --ff-card-icon-bg: color-mix(in srgb, #6D5DF6 12%, #FFFFFF); --ff-card-icon-ink: #6D5DF6; --ff-card-shadow: 0 1px 2px rgba(15,16,49,0.05), 0 24px 50px -28px rgba(109,93,246,0.35); }
 [data-ff-template="coaching-premium"]{ --ff-card-bg: #FFFFFF; --ff-card-border: rgba(28,26,23,0.10); --ff-card-radius: 0px; --ff-card-icon-bg: color-mix(in srgb, #9A7B3F 14%, #FFFFFF); --ff-card-icon-ink: #9A7B3F; --ff-card-shadow: 0 1px 2px rgba(28,26,23,0.04), 0 20px 44px -26px rgba(28,26,23,0.20); }
 [data-ff-template="mint-fresh"]     { --ff-card-bg: #FFFFFF; --ff-card-border: rgba(8,35,26,0.08); --ff-card-icon-bg: color-mix(in srgb, #10B981 14%, #FFFFFF); --ff-card-icon-ink: #0E9F6E; --ff-card-shadow: 0 1px 2px rgba(8,35,26,0.05), 0 22px 46px -28px rgba(16,185,129,0.4); }
@@ -1803,7 +1962,9 @@
   align-items: flex-start;
   gap: 0.75rem;
   text-align: left;
-  box-shadow: var(--ff-card-shadow);
+  /* 🆕 Ombrage par défaut si le thème n'en définit pas, pour que les cards ne
+     soient jamais plates. */
+  box-shadow: var(--ff-card-shadow, 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 30px -20px rgba(15, 23, 42, 0.28));
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   /* Encre du thème FORCÉE : garantit la lisibilité du texte des cards, même si
      la section porte une couleur inline (override de génération). */
@@ -1827,6 +1988,197 @@
   background: var(--ff-card-icon-bg);
   color: var(--ff-card-icon-ink);
   border-radius: 12px;
+}
+
+/* 🆕 Variation subtile des cards (casse la monotonie) : alternance de teintes
+   dérivées de l'accent + bordure accentuée une carte sur trois. Fonctionne sur
+   les fonds clairs comme foncés car color-mix tire la carte vers l'accent.
+   ⚠️ EXCLUT les templates à cartes PLEINES accent (bold-energy/sharp-launch/
+   lead-snap) : sinon la variation écrasait une carte sur deux → rendu incohérent. */
+[data-ff-template]:not([data-ff-template="bold-energy"]):not([data-ff-template="sharp-launch"]):not([data-ff-template="lead-snap"]) .ff-bullets--grid > li:nth-child(2n) {
+  background: color-mix(in srgb, var(--ff-accent) 5%, var(--ff-card-bg));
+}
+[data-ff-template]:not([data-ff-template="bold-energy"]):not([data-ff-template="sharp-launch"]):not([data-ff-template="lead-snap"]) .ff-bullets--grid > li:nth-child(3n) {
+  background: color-mix(in srgb, var(--ff-accent) 9%, var(--ff-card-bg));
+  border-color: color-mix(in srgb, var(--ff-accent) 38%, var(--ff-card-border));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🆕 BANDES DE COULEUR ALTERNÉES — templates CLAIRS
+   ───────────────────────────────────────────────────────────────────────────
+   Inspiration : Marcenaria (alternance crème / espresso + CTA doré), landing
+   pages premium. Au lieu d'une alternance ultra-subtile, on crée de vraies
+   BANDES franches : section impaire = fond clair du template, section paire =
+   bande FONCÉE assortie à la palette (jamais du blanc partout). Le hero (1ʳᵉ
+   section) reste toujours clair. À l'intérieur d'une bande foncée on inverse
+   le texte, les cartes, les icônes et le CTA pour rester lisible et élégant.
+   Concerne : Clean Light, Elite Minimal, Luxe Ivoire, Éditorial chaleureux,
+   Aurora Glow. (Les templates déjà foncés gardent leur propre alternance.)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. Jeux de jetons « bande foncée » par template clair. */
+[data-ff-template="clean-light"] {
+  --ff-band-bg: #101012; --ff-band-ink: #FAFAFA; --ff-band-ink-soft: #C7C7CE; --ff-band-muted: #8A8A93;
+  --ff-band-border: rgba(255, 255, 255, 0.10);
+  --ff-band-card-bg: #1B1B1F; --ff-band-card-border: rgba(255, 255, 255, 0.12);
+  --ff-band-eyebrow: #FFFFFF; --ff-band-btn-bg: #FFFFFF; --ff-band-btn-ink: #0A0A0B;
+}
+[data-ff-template="premium-minimal"] {
+  --ff-band-bg: #121212; --ff-band-ink: #F5F4F1; --ff-band-ink-soft: #CAC8C2; --ff-band-muted: #8E8C86;
+  --ff-band-border: rgba(255, 255, 255, 0.10);
+  --ff-band-card-bg: #1C1C1C; --ff-band-card-border: rgba(255, 255, 255, 0.12);
+  --ff-band-eyebrow: #E8E6E1; --ff-band-btn-bg: #FFFFFF; --ff-band-btn-ink: #000000;
+}
+[data-ff-template="coaching-premium"] {
+  --ff-band-bg: #1C1A17; --ff-band-ink: #F6F1E7; --ff-band-ink-soft: #CFC6B4; --ff-band-muted: #9A9183;
+  --ff-band-border: rgba(212, 175, 55, 0.20);
+  --ff-band-card-bg: #26221C; --ff-band-card-border: rgba(212, 175, 55, 0.24);
+  --ff-band-eyebrow: #C9A85C;
+  --ff-band-btn-bg: linear-gradient(135deg, #C9A85C 0%, #9A7B3F 100%); --ff-band-btn-ink: #1C1A17;
+}
+[data-ff-template="editorial-warm"] {
+  --ff-band-bg: #241710; --ff-band-ink: #FBF7F1; --ff-band-ink-soft: #DAC9BC; --ff-band-muted: #A1907F;
+  --ff-band-border: rgba(232, 155, 108, 0.20);
+  --ff-band-card-bg: #32221A; --ff-band-card-border: rgba(194, 65, 12, 0.28);
+  --ff-band-eyebrow: #E89B6C;
+  --ff-band-btn-bg: linear-gradient(135deg, #E2542F 0%, #C2410C 100%); --ff-band-btn-ink: #FFFFFF;
+}
+[data-ff-template="aurora-glow"] {
+  --ff-band-bg: #0F1031; --ff-band-ink: #F7F8FF; --ff-band-ink-soft: #C9CBE6; --ff-band-muted: #9094B8;
+  --ff-band-border: rgba(109, 93, 246, 0.26);
+  --ff-band-card-bg: #1B1D45; --ff-band-card-border: rgba(109, 93, 246, 0.30);
+  --ff-band-eyebrow: #A9A0FB;
+  --ff-band-btn-bg: linear-gradient(135deg, #6D5DF6 0%, #0EA5E9 100%); --ff-band-btn-ink: #FFFFFF;
+}
+
+/* 2. La BANDE foncée (sections paires, hero exclu). !important + ordre source
+   pour battre l'alternance générique (alt-1/alt-2) à spécificité égale. */
+[data-ff-template="clean-light"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="premium-minimal"]  .ff-section:nth-of-type(even):not([data-ff-section="hero"]):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="coaching-premium"] .ff-section:nth-of-type(even):not([data-ff-section="hero"]):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="editorial-warm"]   .ff-section:nth-of-type(even):not([data-ff-section="hero"]):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="aurora-glow"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: var(--ff-band-bg) !important;
+  background-image: none !important;
+  border-top: 1px solid var(--ff-band-border) !important;
+  border-bottom: 1px solid var(--ff-band-border) !important;
+  color: var(--ff-band-ink) !important;
+  /* Inversion des jetons → tout le contenu de la bande devient lisible. */
+  --ff-ink: var(--ff-band-ink);
+  --ff-ink-soft: var(--ff-band-ink-soft);
+  --ff-muted: var(--ff-band-muted);
+  --ff-border: var(--ff-band-border);
+  --ff-card-bg: var(--ff-band-card-bg);
+  --ff-card-border: var(--ff-band-card-border);
+  --ff-card-icon-bg: color-mix(in srgb, var(--ff-band-eyebrow) 16%, transparent);
+  --ff-card-icon-ink: var(--ff-band-eyebrow);
+  --ff-btn-bg: var(--ff-band-btn-bg);
+  --ff-btn-ink: var(--ff-band-btn-ink);
+}
+
+/* 3. Titres / corps / sous-titres dans la bande : couleur claire forcée
+   (certains templates fixent une couleur de titre en dur). */
+[data-ff-template="clean-light"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-headline, .ff-headline-scaled, .ff-subheadline, .ff-body, p, h1, h2, h3, strong),
+[data-ff-template="premium-minimal"]  .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-headline, .ff-headline-scaled, .ff-subheadline, .ff-body, p, h1, h2, h3, strong),
+[data-ff-template="coaching-premium"] .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-headline, .ff-headline-scaled, .ff-subheadline, .ff-body, p, h1, h2, h3, strong),
+[data-ff-template="editorial-warm"]   .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-headline, .ff-headline-scaled, .ff-subheadline, .ff-body, p, h1, h2, h3, strong),
+[data-ff-template="aurora-glow"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-headline, .ff-headline-scaled, .ff-subheadline, .ff-body, p, h1, h2, h3, strong) {
+  color: var(--ff-band-ink) !important;
+}
+
+/* 4. Eyebrow dans la bande : couleur d'accent claire (sinon noir invisible). */
+[data-ff-template="clean-light"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) .ff-eyebrow,
+[data-ff-template="premium-minimal"]  .ff-section:nth-of-type(even):not([data-ff-section="hero"]) .ff-eyebrow,
+[data-ff-template="coaching-premium"] .ff-section:nth-of-type(even):not([data-ff-section="hero"]) .ff-eyebrow,
+[data-ff-template="editorial-warm"]   .ff-section:nth-of-type(even):not([data-ff-section="hero"]) .ff-eyebrow,
+[data-ff-template="aurora-glow"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) .ff-eyebrow {
+  color: var(--ff-band-eyebrow) !important;
+}
+
+/* 5. Cartes dans la bande : fond foncé forcé (certains templates fixent un
+   fond de carte clair en dur → on l'écrase). */
+[data-ff-template="clean-light"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-card, .ff-list-card),
+[data-ff-template="premium-minimal"]  .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-card, .ff-list-card),
+[data-ff-template="coaching-premium"] .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-card, .ff-list-card),
+[data-ff-template="editorial-warm"]   .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-card, .ff-list-card),
+[data-ff-template="aurora-glow"]      .ff-section:nth-of-type(even):not([data-ff-section="hero"]) :is(.ff-card, .ff-list-card) {
+  background: var(--ff-band-card-bg) !important;
+  border-color: var(--ff-band-card-border) !important;
+  color: var(--ff-band-ink) !important;
+}
+
+/* 6. Accent clair dans la bande pour les 2 templates à accent NOIR
+   (sinon prix / liens / puces colorés disparaissent sur fond foncé). */
+[data-ff-template="clean-light"]     .ff-section:nth-of-type(even):not([data-ff-section="hero"]),
+[data-ff-template="premium-minimal"] .ff-section:nth-of-type(even):not([data-ff-section="hero"]) {
+  --ff-accent: var(--ff-band-eyebrow);
+}
+
+/* 7. Sections IMPAIRES (claires) : on neutralise toute teinte alt-2 générique
+   (testimonials/pricing/offer… reçoivent alt-2 quelle que soit la position) →
+   alternance nette claire / foncée. */
+[data-ff-template="clean-light"]      .ff-section:nth-of-type(odd):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="premium-minimal"]  .ff-section:nth-of-type(odd):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="coaching-premium"] .ff-section:nth-of-type(odd):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="editorial-warm"]   .ff-section:nth-of-type(odd):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]),
+[data-ff-template="aurora-glow"]      .ff-section:nth-of-type(odd):not([data-ff-custom-bg="true"]):not([data-ff-has-bg-image="true"]) {
+  background-color: transparent !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* 🆕 Texte DANS les cards : JUSTIFIÉ (bloc propre) plutôt que centré. Les
+   titres (strong) restent à gauche ; seules les descriptions/paragraphes sont
+   justifiés (effet visible uniquement sur le texte multi-lignes). */
+[data-ff-template] .ff-bullets--grid > li .ff-bullet-desc,
+[data-ff-template] .ff-bullets--grid > li > span:not(.ff-bullet-ic):not(.ff-bullet-num),
+[data-ff-template] .ff-bullets--grid > li p,
+[data-ff-template] .ff-list-card .ff-bullets li,
+[data-ff-template] .ff-card p,
+[data-ff-template] .ff-card .ff-card-desc {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+}
+
+/* 🆕 Liste à puces simple encapsulée dans UNE card centrée (sous un bloc
+   centré) — cohérence visuelle au lieu d'une liste alignée à gauche nue. */
+[data-ff-template] .ff-list-card {
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
+  border-radius: var(--ff-card-radius);
+  box-shadow: var(--ff-card-shadow, 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 30px -20px rgba(15, 23, 42, 0.28));
+  padding: 1.75rem 2rem;
+  max-width: 620px;
+  margin: 1.25rem auto 0 auto;
+}
+[data-ff-template] .ff-list-card .ff-bullets {
+  margin: 0 auto;
+  max-width: none;
+}
+[data-ff-template] .ff-list-card .ff-bullets li,
+[data-ff-template] .ff-list-card .ff-bullets li strong,
+[data-ff-template] .ff-list-card .ff-bullets li span,
+[data-ff-template] .ff-list-card .ff-bullets li p {
+  color: var(--ff-ink);
+}
+
+/* 🆕 Lien discret « Non merci, continuer » (refus d'une offre OTO). */
+[data-ff-template] .ff-decline-wrap {
+  text-align: center;
+  margin-top: 0.9rem;
+}
+[data-ff-template] .ff-decline-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--ff-ink) 60%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+[data-ff-template] .ff-decline-link:hover {
+  color: var(--ff-ink);
 }
 
 /* Cartes NUMÉROTÉES (étapes / process / programme / qualification) : 01, 02, 03… */
@@ -2229,8 +2581,8 @@
   text-transform: uppercase; letter-spacing: 0.14em;
 }
 [data-ff-template="vsl-focus"] .ff-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(56, 189, 248, 0.18);
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
@@ -2264,8 +2616,8 @@
   text-transform: uppercase; letter-spacing: 0.14em;
 }
 [data-ff-template="webinar-live"] .ff-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
@@ -2299,8 +2651,8 @@
   text-transform: uppercase; letter-spacing: 0.16em;
 }
 [data-ff-template="showcase"] .ff-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(52, 211, 153, 0.16);
+  background: var(--ff-card-bg);
+  border: 1px solid var(--ff-card-border);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
 }
 

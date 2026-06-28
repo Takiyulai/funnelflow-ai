@@ -16,12 +16,24 @@ export type PlanId = "starter" | "pro" | "agency";
 export type PlanLimits = {
   /** Nombre max de tunnels (générés + clonés). Infinity = illimité. */
   funnels: number;
-  /** Import / clonage d'un tunnel depuis une URL externe. */
+  /** 🆕 Nombre max de tunnels PUBLIÉS simultanément. Infinity = illimité. */
+  publishedFunnels: number;
+  /** Import / clonage d'un tunnel depuis une URL externe (drapeau d'accès). */
   urlImport: boolean;
-  /** Régénération IA d'une section. */
+  /** 🆕 Quota mensuel d'imports/clonages URL. Infinity = illimité. */
+  urlImportsPerMonth: number;
+  /** Régénération IA d'une section (drapeau d'accès). */
   sectionRegeneration: boolean;
+  /** 🆕 Quota mensuel de générations IA de TUNNEL. Infinity = illimité. */
+  aiFunnelGensPerMonth: number;
+  /** 🆕 Quota mensuel de générations IA de SÉQUENCE email. Infinity = illimité. */
+  aiSequenceGensPerMonth: number;
+  /** 🆕 Quota mensuel de régénérations de COPY (section). Infinity = illimité. */
+  aiCopyRegensPerMonth: number;
   /** CRM : gestion des contacts / leads. */
   crm: boolean;
+  /** 🆕 Nombre max de leads/contacts stockés. Infinity = illimité. */
+  maxLeads: number;
   /** Export CSV des leads. */
   leadsExport: boolean;
   /** Campagnes email (broadcast). */
@@ -38,8 +50,16 @@ export type PlanLimits = {
   multiPlatform: boolean;
   /** Espaces de travail clients (mode agence). */
   clientWorkspaces: number;
-  /** Domaines personnalisés rattachables (feature à venir). Infinity = illimité. */
+  /** Domaine d'ENVOI email personnalisé (Resend) — feature premium. */
+  customSendingDomain: boolean;
+  /** Domaines personnalisés rattachables aux tunnels. Infinity = illimité. */
   customDomains: number;
+  /** 🆕 Paiement dans les tunnels (Stripe Connect / CinetPay) activé. */
+  paymentsInFunnels: boolean;
+  /** 🆕 Commission plateforme sur les ventes de tunnels (% — Stripe Connect
+   *  application_fee). 0 = aucune. Dégressive selon le plan. Prête mais peut
+   *  rester inappliquée tant qu'on ne la branche pas dans le checkout. */
+  platformFeePercent: number;
   /** Support prioritaire. */
   prioritySupport: boolean;
 };
@@ -62,9 +82,15 @@ export const PLANS: Record<PlanId, Plan> = {
     envPriceKey: "STRIPE_PRICE_STARTER",
     limits: {
       funnels: 3,
-      urlImport: false,
-      sectionRegeneration: false,
+      publishedFunnels: 1,
+      urlImport: true,
+      urlImportsPerMonth: 3,
+      sectionRegeneration: true,
+      aiFunnelGensPerMonth: 5,
+      aiSequenceGensPerMonth: 1,
+      aiCopyRegensPerMonth: 20,
       crm: true,
+      maxLeads: 500,
       leadsExport: true,
       campaigns: true,
       monthlyEmailSends: 500,
@@ -73,7 +99,10 @@ export const PLANS: Record<PlanId, Plan> = {
       htmlExport: true,
       multiPlatform: false,
       clientWorkspaces: 0,
+      customSendingDomain: false,
       customDomains: 0,
+      paymentsInFunnels: true,
+      platformFeePercent: 2,
       prioritySupport: false,
     },
   },
@@ -84,9 +113,15 @@ export const PLANS: Record<PlanId, Plan> = {
     envPriceKey: "STRIPE_PRICE_PRO",
     limits: {
       funnels: 15,
+      publishedFunnels: 5,
       urlImport: true,
+      urlImportsPerMonth: 10,
       sectionRegeneration: true,
+      aiFunnelGensPerMonth: 30,
+      aiSequenceGensPerMonth: 10,
+      aiCopyRegensPerMonth: 200,
       crm: true,
+      maxLeads: 5000,
       leadsExport: true,
       campaigns: true,
       monthlyEmailSends: 5000,
@@ -95,7 +130,10 @@ export const PLANS: Record<PlanId, Plan> = {
       htmlExport: true,
       multiPlatform: true,
       clientWorkspaces: 0,
+      customSendingDomain: true,
       customDomains: 1,
+      paymentsInFunnels: true,
+      platformFeePercent: 0,
       prioritySupport: true,
     },
   },
@@ -106,9 +144,15 @@ export const PLANS: Record<PlanId, Plan> = {
     envPriceKey: "STRIPE_PRICE_AGENCY",
     limits: {
       funnels: Infinity,
+      publishedFunnels: Infinity,
       urlImport: true,
+      urlImportsPerMonth: Infinity,
       sectionRegeneration: true,
+      aiFunnelGensPerMonth: 150,
+      aiSequenceGensPerMonth: Infinity,
+      aiCopyRegensPerMonth: Infinity,
       crm: true,
+      maxLeads: Infinity,
       leadsExport: true,
       campaigns: true,
       monthlyEmailSends: Infinity,
@@ -117,7 +161,10 @@ export const PLANS: Record<PlanId, Plan> = {
       htmlExport: true,
       multiPlatform: true,
       clientWorkspaces: 25,
+      customSendingDomain: true,
       customDomains: Infinity,
+      paymentsInFunnels: true,
+      platformFeePercent: 0,
       prioritySupport: true,
     },
   },

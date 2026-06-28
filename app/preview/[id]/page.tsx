@@ -6,17 +6,41 @@
 // via FunnelPreview, sans le chrome de l'éditeur. Évite le 404 de /tunnel/[slug]
 // qui, lui, exige un tunnel publié côté serveur (Supabase).
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { loadFunnelWithMedia } from "@/lib/store/funnelStore";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
-import type { Funnel } from "@/lib/funnels/types";
+import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 
+// 🆕 useSearchParams() exige un <Suspense> parent (sinon échec du build Next 15).
 export default function LocalPreviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <LocalPreviewInner />
+    </Suspense>
+  );
+}
+
+function LocalPreviewInner() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  // 🆕 ?page=slug → aperçu d'une page SECONDAIRE précise (et plus toujours l'accueil).
+  const searchParams = useSearchParams();
+  const pageSlug = (searchParams?.get("page") ?? "").replace(/^\/+|\/+$/g, "");
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+
+  // Résout la page demandée (par slug) ; repli sur l'accueil si absente.
+  const activePage = useMemo<FunnelPage | undefined>(() => {
+    if (!funnel?.pages || funnel.pages.length === 0) return undefined;
+    if (pageSlug) {
+      const found = funnel.pages.find(
+        (p) => p.slug.replace(/^\/+|\/+$/g, "") === pageSlug,
+      );
+      if (found) return found;
+    }
+    return funnel.pages.find((p) => p.isHome) ?? funnel.pages[0];
+  }, [funnel, pageSlug]);
 
   useEffect(() => {
     if (!id) return;
@@ -83,7 +107,13 @@ export default function LocalPreviewPage() {
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      <FunnelPreview funnel={funnel} showToolbar={false} viewportHeight="auto" />
+      <FunnelPreview
+        funnel={funnel}
+        activePage={activePage}
+        showToolbar={false}
+        viewportHeight="auto"
+        pageRole={activePage?.role}
+      />
     </div>
   );
 }

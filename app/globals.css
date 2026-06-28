@@ -47,6 +47,25 @@
 .ff-theme-dark .bg-white\/90 { background-color: rgba(19, 28, 46, 0.90) !important; }
 .ff-theme-dark .bg-white\/80 { background-color: rgba(19, 28, 46, 0.80) !important; }
 .ff-theme-dark .bg-white\/70 { background-color: rgba(19, 28, 46, 0.70) !important; }
+.ff-theme-dark .bg-white\/60 { background-color: rgba(19, 28, 46, 0.60) !important; }
+.ff-theme-dark .bg-white\/50 { background-color: rgba(19, 28, 46, 0.50) !important; }
+.ff-theme-dark .bg-white\/40 { background-color: rgba(19, 28, 46, 0.40) !important; }
+
+/* 🆕 FIX DARK — éléments rendus BLANCS/CLAIRS qui masquaient le contenu.
+   (a) `bg-ink` utilisé comme FOND (onglet actif, chip) : en dark --ff-ink est
+   CLAIR → le pavé devenait blanc et son `text-white` invisible. On force une
+   surface sombre élevée (le texte blanc redevient lisible). */
+.ff-theme-dark .bg-ink { background-color: #26334D !important; }
+
+/* (b) Gris/blancs LITTÉRAUX arbitraires (en-têtes & lignes de tableaux, items
+   de menus, panneaux) très répandus dans Leads/CRM → surfaces sombres. On
+   couvre la classe de base ET la variante :hover. */
+.ff-theme-dark .bg-\[\#F8F9FB\],
+.ff-theme-dark .hover\:bg-\[\#F8F9FB\]:hover { background-color: rgba(255, 255, 255, 0.05) !important; }
+.ff-theme-dark .bg-\[\#FAFAFA\] { background-color: rgba(255, 255, 255, 0.04) !important; }
+.ff-theme-dark .bg-\[\#F4F5F8\] { background-color: rgba(255, 255, 255, 0.05) !important; }
+.ff-theme-dark .bg-\[\#F2F6FC\] { background-color: rgba(8, 73, 141, 0.20) !important; }
+.ff-theme-dark .bg-\[\#FFF8E6\] { background-color: rgba(199, 164, 54, 0.14) !important; }
 
 /* Fonds doux clairs → variantes sombres translucides. */
 .ff-theme-dark .bg-slate-50,

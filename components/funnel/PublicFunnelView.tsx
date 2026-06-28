@@ -50,7 +50,7 @@ export function PublicFunnelView({ funnel, activePageSlug }: Props) {
   }
 
   return (
-    <main className="min-h-screen w-full">
+    <main className="ff-public-main flex min-h-screen w-full flex-col">
       <FunnelPreview
         funnel={funnel}
         activePage={activePage ?? undefined}

@@ -4,21 +4,23 @@
 import { useEffect, useState } from "react";
 import {
   BarChart3, GitBranch, LayoutDashboard,
-  PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun,
+  PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun, CreditCard, LifeBuoy,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { clearFunnelCache } from "@/lib/store/funnelStore";
 
 const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/create", label: "Créer un tunnel", icon: PlusCircle, primary: true },
   { href: "/leads", label: "Leads", icon: Users },
-  { href: "/campagnes", label: "Campagnes", icon: Mail },
+  { href: "/emails", label: "Emails", icon: Mail },
   // Export systeme.io retiré du menu : la logique est intégrée à l'éditeur
   // (bouton « Exporter »). On garde la page accessible par URL directe.
   { href: "/import", label: "Import", icon: Upload },
   { href: "/workflows", label: "Workflows", icon: GitBranch },
+  { href: "/paiements", label: "Paiements", icon: CreditCard },
 ];
 
 export function Sidebar({
@@ -73,6 +75,9 @@ export function Sidebar({
     try {
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.signOut();
+      // Purge le cache local des tunnels : évite que le prochain compte
+      // connecté sur ce navigateur ne voie les tunnels du compte précédent.
+      clearFunnelCache();
       onClose?.();
       router.push("/login");
       router.refresh();
@@ -167,6 +172,28 @@ export function Sidebar({
 
         {/* Spacer pour pousser le footer vers le bas */}
         <div className="flex-1" />
+
+        {/* Nous contacter / aide — mailto pré-rempli */}
+        <a
+          href={
+            "mailto:jwdemanou@gmail.com" +
+            "?subject=" +
+            encodeURIComponent("Aide & Contact — FunnelFlow AI") +
+            "&body=" +
+            encodeURIComponent(
+              "Bonjour l'équipe FunnelFlow AI,\n\n" +
+                "J'ai besoin d'aide concernant :\n\n" +
+                "(décrivez votre demande ici)\n\n" +
+                "Mon email de compte : " +
+                (userEmail ?? "") +
+                "\n\nMerci d'avance.",
+            )
+          }
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+        >
+          <LifeBuoy size={14} />
+          Nous contacter
+        </a>
 
         {/* Toggle thème clair/sombre */}
         {onToggleTheme && (

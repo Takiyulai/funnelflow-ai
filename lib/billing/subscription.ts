@@ -45,9 +45,15 @@ export type Access = {
 /** Limites « aucun accès » : tout verrouillé. */
 const NO_ACCESS: PlanLimits = {
   funnels: 0,
+  publishedFunnels: 0,
   urlImport: false,
+  urlImportsPerMonth: 0,
   sectionRegeneration: false,
+  aiFunnelGensPerMonth: 0,
+  aiSequenceGensPerMonth: 0,
+  aiCopyRegensPerMonth: 0,
   crm: false,
+  maxLeads: 0,
   leadsExport: false,
   campaigns: false,
   monthlyEmailSends: 0,
@@ -56,7 +62,10 @@ const NO_ACCESS: PlanLimits = {
   htmlExport: false,
   multiPlatform: false,
   clientWorkspaces: 0,
+  customSendingDomain: false,
   customDomains: 0,
+  paymentsInFunnels: false,
+  platformFeePercent: 0,
   prioritySupport: false,
 };
 

@@ -5,6 +5,8 @@ import {
   renderFunnelHtml,
   createSystemeBlocks,
   createSystemeFormBlock,
+  renderPopupRestyleCss,
+  extractSioPopupId,
 } from "@/lib/export/html";
 import { demoFunnel } from "@/lib/funnels/demo";
 import type { Funnel } from "@/lib/funnels/types";
@@ -61,15 +63,50 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       funnel: Funnel;
-      mode: "full" | "block";
+      mode: "full" | "block" | "popup";
       scope: "active" | "all";
       targetPageId?: string;
+      popupScript?: string;
+      ctaScript?: string;
+      inputsScript?: string;
+      textsScript?: string;
     };
 
-    const { funnel, mode, scope, targetPageId } = body;
+    const { funnel, mode, scope, targetPageId, popupScript, ctaScript, inputsScript, textsScript } = body;
 
     if (!funnel) {
       return NextResponse.json({ error: "Missing funnel" }, { status: 400 });
+    }
+
+    // ── Mode "popup" : restyle le popup natif SIO aux couleurs du tunnel.
+    //    On extrait l'id du bloc popup (+ CTA + inputs optionnels) depuis ce que
+    //    l'utilisateur a collé, puis on renvoie un <style> CSS ciblé.
+    if (mode === "popup") {
+      const popupId = extractSioPopupId(popupScript ?? "");
+      if (!popupId) {
+        return NextResponse.json(
+          {
+            error: "popup_id_not_found",
+            message:
+              "Impossible de trouver l'id du bloc popup. Colle son id (ex. row-c66ce9c8).",
+          },
+          { status: 400 },
+        );
+      }
+      const ctaId = ctaScript ? extractSioPopupId(ctaScript) ?? undefined : undefined;
+      const splitIds = (s: string) =>
+        (s ?? "")
+          .split(/[\s,;]+/)
+          .map((tok) => extractSioPopupId(tok))
+          .filter((x): x is string => !!x);
+
+      const inputIds = splitIds(inputsScript ?? "");
+      const textIds = splitIds(textsScript ?? "");
+
+      return NextResponse.json({
+        html: renderPopupRestyleCss(funnel, popupId, { ctaId, inputIds, textIds }),
+        popupId,
+      });
     }
 
     // ── Mode "full" + scope "all" : toutes les pages concaténées

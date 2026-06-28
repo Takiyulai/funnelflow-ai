@@ -70,6 +70,9 @@ export type FunnelSectionType =
   | "video"
   | "qualification"
   | "testimonials"
+  // 🆕 Sous-étape C : sections direct-response distinctes
+  | "agitation" // amplification de la douleur (suite du "problem")
+  | "urgency" // urgence / rareté légitime, juste avant le CTA final
   |"raw-html";
   
 
@@ -509,6 +512,9 @@ export type FunnelSection = {
   body?: string;
   bullets?: string[];
   cta?: CtaConfig;
+  /** 🆕 CTA secondaire rendu en lien discret sous le CTA principal. Sert
+   *  notamment au « Non merci, continuer » des pages OTO (upsell/downsell). */
+  secondaryCta?: CtaConfig;
   image?: SectionImage;
   video?: VideoSource;
   bulletIcons?: IconName[];
@@ -706,6 +712,17 @@ export type Funnel = {
    */
   integrations?: FunnelIntegrations;
 
+  /**
+   * 🆕 Paiement (Stripe Connect) au niveau tunnel.
+   * - currency : devise forcée (sinon déduite du symbole du prix). 'eur'|'usd'|'gbp'.
+   * - postPurchaseUrl : redirection personnalisée après paiement. Vide = défaut
+   *   (page suivante du tunnel via le chaînage, qui aboutit au « merci » auto).
+   */
+  payment?: {
+    currency?: string;
+    postPurchaseUrl?: string;
+  };
+
   meta?: {
     funnelKind?: FunnelKind;
     moodId?: MoodId;
@@ -717,6 +734,18 @@ export type Funnel = {
     businessName?: string;
     legalNotice?: string;
     contactEmail?: string;
+    /**
+     * 🆕 Email de livraison/bienvenue conditionnel envoyé au lead à la capture.
+     * UNIQUEMENT si `enabled` ET au moins un objet/corps : jamais de générique
+     * par défaut. Envoyé via la file `scheduled_emails` (source_type='delivery').
+     */
+    deliveryEmail?: {
+      enabled: boolean;
+      subject: string;
+      body: string;
+      /** Lien optionnel (PDF, accès…) ajouté en bas de l'email. */
+      attachmentUrl?: string;
+    };
     /** 🆕 Version du schéma de données (pour migrations futures) */
     schemaVersion?: number;
   };
@@ -816,6 +845,13 @@ export type FunnelBrief = {
   brandName: string;
   offerName: string;
   price: string;
+  /** 🆕 Offres OTO (optionnelles). Si VIDES, les pages upsell/downsell ne sont
+   *  PAS générées. La description dit À L'IA ce qu'est l'offre (sinon générique),
+   *  le prix fixe le montant (sinon l'IA l'invente). */
+  upsellPrice?: string;
+  downsellPrice?: string;
+  upsellOffer?: string;
+  downsellOffer?: string;
   targetAudience: string;
   mainPain: string;
   promise: string;

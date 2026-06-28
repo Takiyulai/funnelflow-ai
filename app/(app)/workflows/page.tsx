@@ -1,42 +1,60 @@
-import { Bell, Clock, Mail, Tag, UserCheck, Zap } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
-import { Button } from "@/components/ui/Button";
-import { WorkflowNode } from "@/components/workflows/WorkflowNode";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { listWorkflows } from "@/lib/workflows/repository";
+import { listSequences } from "@/lib/crm/sequences";
+import { WorkflowsClient } from "@/components/workflows/WorkflowsClient";
+import type { Workflow } from "@/lib/workflows/types";
 
-const nodes = [
-  { title: "Nouveau lead", label: "Trigger", icon: Zap },
-  { title: "Envoyer email", label: "Action", icon: Mail },
-  { title: "Attendre 24 heures", label: "Action", icon: Clock },
-  { title: "Ajouter statut CRM", label: "Action", icon: UserCheck },
-  { title: "Ajouter tag", label: "Action", icon: Tag },
-  { title: "Notification interne", label: "Action", icon: Bell }
-];
+export const dynamic = "force-dynamic";
 
-export default function WorkflowsPage() {
+type FunnelOption = { id: string; name: string };
+type SequenceOption = { id: string; name: string };
+type TagOption = { id: string; name: string };
+
+export default async function WorkflowsPage() {
+  const sb = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+
+  let workflows: Workflow[] = [];
+  let funnels: FunnelOption[] = [];
+  let sequences: SequenceOption[] = [];
+  let tags: TagOption[] = [];
+
+  if (user) {
+    workflows = await listWorkflows(sb, user.id).catch(() => [] as Workflow[]);
+    const { data } = await sb
+      .from("funnels")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    funnels = (data ?? []).map((f) => ({
+      id: f.id as string,
+      name: (f.name as string) ?? "Tunnel",
+    }));
+    const seqs = await listSequences(sb, user.id).catch(() => []);
+    sequences = seqs.map((s) => ({ id: s.id, name: s.name }));
+    // 🆕 Tags pour le filtre du déclencheur « tag ajouté ».
+    const { data: tagData } = await sb
+      .from("crm_tags")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .order("name", { ascending: true });
+    tags = (tagData ?? []).map((t) => ({
+      id: t.id as string,
+      name: (t.name as string) ?? "Tag",
+    }));
+  }
+
   return (
     <AppShell>
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-3xl font-black text-ink">Workflows simples</h1>
-          <p className="mt-2 text-sm text-muted">Un parcours lisible en blocs, pensé pour les automatisations V1.</p>
-        </div>
-        <Button>Créer un workflow</Button>
-      </div>
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
-        {nodes.map(({ title, label, icon: Icon }) => {
-          return <WorkflowNode key={title} title={title} label={label} icon={<Icon size={20} />} />;
-        })}
-      </div>
-      <div className="mt-8 rounded-lg border border-line bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-4">
-          {["Formulaire rempli", "Email envoyé", "Attendre X jours", "Statut qualifié"].map((item, index) => (
-            <div key={item} className="rounded-lg bg-canvas p-4 text-sm font-black text-ink">
-              <span className="mb-2 grid h-7 w-7 place-items-center rounded-full bg-gold text-xs text-navy">{index + 1}</span>
-              {item}
-            </div>
-          ))}
-        </div>
-      </div>
+      <WorkflowsClient
+        initialWorkflows={workflows}
+        funnels={funnels}
+        sequences={sequences}
+        tags={tags}
+      />
     </AppShell>
   );
 }
