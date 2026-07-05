@@ -21,9 +21,9 @@ export default function LoginPage() {
               className="flex h-7 w-7 items-center justify-center rounded-lg"
               style={{ background: "linear-gradient(135deg,#31845C,#08498D)" }}
             >
-              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>FF</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>AF</span>
             </div>
-            FunnelFlow<span style={{ color: "#C7A436" }}> AI</span>
+            AutoFunnel<span style={{ color: "#C7A436" }}> AI</span>
           </a>
         </div>
         

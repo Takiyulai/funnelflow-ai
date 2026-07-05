@@ -3,6 +3,10 @@
 import { Star } from "lucide-react";
 import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
 import { IconRenderer } from "@/components/funnel/IconRenderer";
+import {
+  PRICING_PATTERNS,
+  type PriceTier,
+} from "./patterns/pricing/PricingPatterns";
 
 type Props = {
   section: FunnelSection;
@@ -20,6 +24,22 @@ export function PricingRenderer({
   );
 
   if (items.length === 0) return null;
+
+  // 🆕 Dispatch pattern (zip) si présent ; sinon rendu par défaut ci-dessous.
+  const Pattern = section.pattern ? PRICING_PATTERNS[section.pattern] : undefined;
+  if (Pattern) {
+    const tiers: PriceTier[] = items.map((it) => ({
+      name: it.data.name || "",
+      price: it.data.price || "",
+      period: it.data.period,
+      description: it.data.description,
+      features: it.data.features || [],
+      highlighted: it.data.highlighted,
+      badge: it.data.badge,
+      cta: it.data.cta ?? section.cta,
+    }));
+    return <Pattern section={section} tiers={tiers} />;
+  }
 
   const gridCols =
     compact || items.length === 1

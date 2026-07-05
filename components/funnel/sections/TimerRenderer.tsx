@@ -60,6 +60,38 @@ function getOrInitStartTime(timerId: string, scopeKey: string): number {
   return now;
 }
 
+/** 🆕 LOT 5 — Slug du tunnel déduit de l'URL (/tunnel/[slug]/...), MÊME
+ *  convention que PublicFunnelRuntime/FormRenderer pour la clé localStorage. */
+function funnelSlugFromLocation(): string {
+  if (typeof window === "undefined") return "default";
+  const m = window.location.pathname.match(/\/tunnel\/([^/]+)/);
+  return m ? decodeURIComponent(m[1]) : "default";
+}
+
+/**
+ * 🆕 LOT 5 — Récupère le timestamp d'INSCRIPTION du prospect (posé par
+ * FormRenderer à la soumission du formulaire de registration), PARTAGÉ entre
+ * TOUTES les pages du tunnel (clé indexée par slug de tunnel, pas par page).
+ * Repli : si absent (ex. prévisualisation, visite directe sans inscription),
+ * on initialise MAINTENANT pour ne jamais planter le rendu.
+ */
+function getOrInitRegistrationTime(funnelSlug: string): number {
+  if (typeof window === "undefined") return Date.now();
+  const key = `ff_registered_at_${funnelSlug}`;
+  const existing = window.localStorage.getItem(key);
+  if (existing) {
+    const parsed = parseInt(existing, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  const now = Date.now();
+  try {
+    window.localStorage.setItem(key, String(now));
+  } catch {
+    // localStorage indisponible — pas grave, on retourne now()
+  }
+  return now;
+}
+
 export function TimerRenderer({ timer, funnelId = "default", pageId = "default", language = "fr" }: Props) {
   const scopeKey = `${funnelId}_${pageId}`;
   const labels = {
@@ -79,6 +111,15 @@ export function TimerRenderer({ timer, funnelId = "default", pageId = "default",
           ? timer.durationHours
           : 24;
         const start = getOrInitStartTime(timer.id, scopeKey);
+        return start + hours * 60 * 60 * 1000;
+      }
+      // 🆕 LOT 5 — Evergreen : ancre PARTAGÉE sur l'inscription du prospect
+      // (pas sur la première visite de CETTE page comme "countdown-duration").
+      if (timer.mode === "countdown-since-registration") {
+        const hours = (timer.durationHours && timer.durationHours > 0)
+          ? timer.durationHours
+          : 24;
+        const start = getOrInitRegistrationTime(funnelSlugFromLocation());
         return start + hours * 60 * 60 * 1000;
       }
       return 0;

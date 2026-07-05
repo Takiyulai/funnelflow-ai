@@ -13,11 +13,26 @@ import type {
   Language,
   TemplateDefinition,
 } from "@/lib/funnels/types";
+const BRAND_COLORS_MIN = 1;
+const BRAND_COLORS_MAX = 4;
+const BRAND_COLORS_DEFAULT = ["#31845C", "#080E1A"];
+
+type BrandColors = {
+  enabled?: boolean;
+  /** 🆕 1 à 4 couleurs de marque, appliquées dans l'ordre à
+   *  design.primaryColor / secondaryColor / accentColor / accentColor2. */
+  colors?: string[];
+};
+
 type Props = {
   funnelKind?: FunnelKind;
   language: Language;
   selectedTemplateId?: string;
   onSelect: (templateId: string) => void;
+  /** 🆕 Branding optionnel : après génération, le tunnel prend ces couleurs
+   *  au lieu de la palette par défaut du template. */
+  brandColors?: BrandColors;
+  onBrandColorsChange?: (patch: BrandColors) => void;
 };
 
 
@@ -26,6 +41,8 @@ export default function TemplateGalleryStep({
   language,
   selectedTemplateId,
   onSelect,
+  brandColors,
+  onBrandColorsChange,
 }: Props) {
   const { recommended, others } = useMemo(() => {
     const recommendedList = getRecommendedTemplates(funnelKind);
@@ -90,6 +107,77 @@ export default function TemplateGalleryStep({
           />
         ))}
       </div>
+
+      {/* 🆕 Branding optionnel : couleurs de la marque de l'utilisateur */}
+      {onBrandColorsChange && (
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <label className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-bold text-ink">
+                🎨 {labels.brandTitle}
+              </div>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                {labels.brandHint}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={brandColors?.enabled === true}
+              onChange={(e) => onBrandColorsChange({ enabled: e.target.checked })}
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[#31845C]"
+            />
+          </label>
+
+          {brandColors?.enabled && (
+            <div className="mt-3 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(brandColors?.colors?.length ? brandColors.colors : BRAND_COLORS_DEFAULT).map(
+                  (c, i) => {
+                    const list = brandColors?.colors?.length
+                      ? [...brandColors.colors]
+                      : [...BRAND_COLORS_DEFAULT];
+                    return (
+                      <BrandColorField
+                        key={i}
+                        label={labels.brandColorLabel(i)}
+                        value={c}
+                        onChange={(next) => {
+                          const patched = [...list];
+                          patched[i] = next;
+                          onBrandColorsChange({ colors: patched });
+                        }}
+                        onRemove={
+                          list.length > BRAND_COLORS_MIN
+                            ? () => {
+                                const patched = list.filter((_, j) => j !== i);
+                                onBrandColorsChange({ colors: patched });
+                              }
+                            : undefined
+                        }
+                      />
+                    );
+                  },
+                )}
+              </div>
+              {(brandColors?.colors?.length ?? BRAND_COLORS_DEFAULT.length) < BRAND_COLORS_MAX && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const list = brandColors?.colors?.length
+                      ? [...brandColors.colors]
+                      : [...BRAND_COLORS_DEFAULT];
+                    list.push("#31845C");
+                    onBrandColorsChange({ colors: list });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-[#31845C] hover:text-[#31845C]"
+                >
+                  + {labels.brandAddColor}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {pageCount > 1 && (
         <div className="flex items-center justify-between gap-3 pt-1">
@@ -295,6 +383,55 @@ function TemplateCardItem({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Champ couleur de marque (pastille + hex)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BrandColorField({
+  label,
+  value,
+  onChange,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onChange: (c: string) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-muted">{label}</span>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-xs font-semibold text-muted hover:text-red-600"
+            aria-label="Retirer cette couleur"
+          >
+            ✕
+          </button>
+        )}
+      </span>
+      <span className="flex items-center gap-2">
+        <input
+          type="color"
+          value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#31845C"}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-11 shrink-0 cursor-pointer rounded-lg border border-line bg-white p-0.5"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="#31845C"
+          className="focus-ring min-h-9 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink"
+        />
+      </span>
+    </label>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // i18n local
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -308,6 +445,11 @@ const LABELS: Record<
     others: string;
     prev: string;
     next: string;
+    brandTitle: string;
+    brandHint: string;
+    brandAddColor: string;
+    /** 🆕 Libellé par position (0 à 3) — jusqu'à 4 couleurs de marque. */
+    brandColorLabel: (index: number) => string;
   }
 > = {
   fr: {
@@ -319,6 +461,13 @@ const LABELS: Record<
     others: "Autres templates disponibles",
     prev: "Précédent",
     next: "Suivant",
+    brandTitle: "Utiliser les couleurs de ma marque (optionnel)",
+    brandHint:
+      "Après génération, le tunnel prendra tes couleurs au lieu de la palette par défaut du template. Ajoute jusqu'à 4 couleurs. Modifiable ensuite dans Style global.",
+    brandAddColor: "Ajouter une couleur",
+    brandColorLabel: (i) =>
+      ["Couleur principale (boutons & accents)", "Couleur foncée (titres & fonds)", "Couleur secondaire (détails)", "Couleur d'accent (prix, éléments spéciaux)"][i] ??
+      `Couleur ${i + 1}`,
   },
   en: {
     eyebrow: "Premium templates",
@@ -329,6 +478,13 @@ const LABELS: Record<
     others: "Other available templates",
     prev: "Previous",
     next: "Next",
+    brandTitle: "Use my brand colours (optional)",
+    brandHint:
+      "After generation, the funnel will use your colours instead of the template's default palette. Add up to 4 colours. Editable later in Global style.",
+    brandAddColor: "Add a colour",
+    brandColorLabel: (i) =>
+      ["Primary colour (buttons & accents)", "Dark colour (headings & backgrounds)", "Secondary colour (details)", "Accent colour (pricing, special elements)"][i] ??
+      `Colour ${i + 1}`,
   },
   es: {
     eyebrow: "Plantillas premium",
@@ -339,6 +495,13 @@ const LABELS: Record<
     others: "Otras plantillas disponibles",
     prev: "Anterior",
     next: "Siguiente",
+    brandTitle: "Usar los colores de mi marca (opcional)",
+    brandHint:
+      "Tras la generación, el funnel usará tus colores en lugar de la paleta por defecto de la plantilla. Añade hasta 4 colores. Editable luego en Estilo global.",
+    brandAddColor: "Añadir un color",
+    brandColorLabel: (i) =>
+      ["Color principal (botones y acentos)", "Color oscuro (títulos y fondos)", "Color secundario (detalles)", "Color de acento (precios, elementos especiales)"][i] ??
+      `Color ${i + 1}`,
   },
 };
 

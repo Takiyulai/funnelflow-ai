@@ -37,6 +37,7 @@ export function Sidebar({
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [planInfo, setPlanInfo] = useState<{ planName: string | null; status: string } | null>(null);
 
@@ -57,12 +58,20 @@ export function Sidebar({
     const supabase = createSupabaseBrowserClient();
     // getSession() : lecture locale sans appel réseau (évite la contention du
     // verrou navigator.locks qui faisait échouer les écritures Supabase).
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const readUser = (session: { user?: { email?: string | null; user_metadata?: Record<string, unknown> } } | null) => {
       setUserEmail(session?.user?.email ?? null);
-    });
+      const md = (session?.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const name =
+        (typeof md.full_name === "string" && md.full_name.trim()) ||
+        (typeof md.name === "string" && md.name.trim()) ||
+        (typeof md.display_name === "string" && md.display_name.trim()) ||
+        null;
+      setUserName(name || null);
+    };
+    supabase.auth.getSession().then(({ data: { session } }) => readUser(session));
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      setUserEmail(session?.user?.email ?? null);
+      readUser(session);
     });
     return () => {
       sub.subscription.unsubscribe();
@@ -116,10 +125,10 @@ export function Sidebar({
             className="grid h-9 w-9 place-items-center rounded-lg text-xs font-black text-white"
             style={{ background: "linear-gradient(135deg,#31845C,#08498D)" }}
           >
-            FF
+            AF
           </span>
           <span className="text-base font-bold">
-            FunnelFlow <span style={{ color: "#C7A436" }}>AI</span>
+            AutoFunnel <span style={{ color: "#C7A436" }}>AI</span>
           </span>
         </Link>
 
@@ -176,12 +185,12 @@ export function Sidebar({
         {/* Nous contacter / aide — mailto pré-rempli */}
         <a
           href={
-            "mailto:jwdemanou@gmail.com" +
-            "?subject=" +
-            encodeURIComponent("Aide & Contact — FunnelFlow AI") +
+            "https://mail.google.com/mail/?view=cm&fs=1&to=jwdemanou@gmail.com" +
+            "&su=" +
+            encodeURIComponent("Aide & Contact — AutoFunnel AI") +
             "&body=" +
             encodeURIComponent(
-              "Bonjour l'équipe FunnelFlow AI,\n\n" +
+              "Bonjour l'équipe AutoFunnel AI,\n\n" +
                 "J'ai besoin d'aide concernant :\n\n" +
                 "(décrivez votre demande ici)\n\n" +
                 "Mon email de compte : " +
@@ -189,9 +198,11 @@ export function Sidebar({
                 "\n\nMerci d'avance.",
             )
           }
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+          className="mt-4 flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-white/65 transition hover:bg-white/5 hover:text-white"
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          <LifeBuoy size={14} />
+          <LifeBuoy size={15} />
           Nous contacter
         </a>
 
@@ -200,10 +211,10 @@ export function Sidebar({
           <button
             type="button"
             onClick={onToggleTheme}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+            className="mt-1 flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-white/65 transition hover:bg-white/5 hover:text-white"
             aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
           >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             {theme === "dark" ? "Mode clair" : "Mode sombre"}
           </button>
         )}
@@ -252,13 +263,16 @@ export function Sidebar({
                     background: "linear-gradient(135deg,#31845C,#08498D)",
                   }}
                 >
-                  {userEmail.charAt(0).toUpperCase()}
+                  {(userName || userEmail).charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
+                  {/* 🆕 Nom du créateur du compte + email */}
                   <p className="truncate text-xs font-semibold text-white">
-                    {userEmail}
+                    {userName || userEmail}
                   </p>
-                  <p className="text-[10px] text-white/50">Connecté</p>
+                  <p className="truncate text-[10px] text-white/50">
+                    {userName ? userEmail : "Connecté"}
+                  </p>
                 </div>
               </div>
               <button

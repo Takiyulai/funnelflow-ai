@@ -1,5 +1,5 @@
 -- ============================================================
--- FunnelFlow AI - Sprint A : Enrichissement table leads
+-- AutoFunnel AI - Sprint A : Enrichissement table leads
 -- ============================================================
 -- Migration additive : ajoute colonnes de traçabilité +
 -- anti-spam léger + index de performance pour le dashboard.

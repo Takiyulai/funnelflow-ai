@@ -16,7 +16,9 @@ export function CloneFunnelButton({ className = "" }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${className}`}
+        // 🆕 Tokens de thème (surface/ink/line) au lieu de gris codés en dur :
+        // le texte reste net et contrasté en mode sombre comme en clair.
+        className={`inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:bg-canvas focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${className}`}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

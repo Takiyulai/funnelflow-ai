@@ -5,7 +5,6 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Monitor,
   Smartphone,
-  ExternalLink,
   CheckCircle2,
   Mail,
   Download,
@@ -17,6 +16,7 @@ import type {
   Funnel,
   FunnelPage,
   FunnelSection,
+  Language,
   MediaItem,
   PageRole,
   SectionAnimations,
@@ -24,12 +24,12 @@ import type {
   SectionImage,
   TimerItem,
 } from "@/lib/funnels/types";
-import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
 import { getVideoEmbed } from "@/lib/funnels/video";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
 import { getTemplateButtonAnim, getTemplateDefaultIcon } from "@/lib/funnels/templates";
+import { contrastInk } from "@/lib/funnels/color";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
 import FunnelHeader from "@/components/funnel/FunnelHeader";
 import { getIconByName } from "@/components/editor/IconPicker";
@@ -39,13 +39,23 @@ import { TestimonialsRenderer } from "@/components/funnel/sections/TestimonialsR
 import { PricingRenderer } from "@/components/funnel/sections/PricingRenderer";
 import { BonusRenderer } from "@/components/funnel/sections/BonusRenderer";
 import { GuaranteeRenderer } from "@/components/funnel/sections/GuaranteeRenderer";
+import { BenefitsRenderer } from "@/components/funnel/sections/BenefitsRenderer";
+import { CtaFinalRenderer } from "@/components/funnel/sections/CtaFinalRenderer";
+import { StatsRenderer, isStatsPattern } from "@/components/funnel/sections/StatsRenderer";
+import { ProblemRenderer, isProblemPattern } from "@/components/funnel/sections/ProblemRenderer";
+import { ProcessRenderer, isProcessPattern } from "@/components/funnel/sections/ProcessRenderer";
+import { TrustbarRenderer, isTrustbarPattern } from "@/components/funnel/sections/TrustbarRenderer";
 import { FormRenderer } from "@/components/funnel/sections/FormRenderer";
+import { HeroRenderer, isHeroPattern } from "@/components/funnel/sections/HeroRenderer";
 import {
   DecorativeIconsLayer,
   InlineDecorativeIcon,
 } from "@/components/funnel/DecorativeIconsLayer";
 import { TimerRenderer } from "@/components/funnel/sections/TimerRenderer";
-import { PopupForm } from "@/components/funnel/PopupForm";
+import { CtaLink } from "@/components/funnel/CtaLink";
+import { SuccessChannels } from "@/components/funnel/SuccessChannels";
+import { FunnelSectionWrapper } from "@/components/funnel/FunnelSectionWrapper";
+import { getTemplateSkin } from "@/components/funnel/templates/skins";
 import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
 
@@ -278,7 +288,16 @@ function buildBackgroundStyle(
         ? Math.min(100, Math.max(0, bg.overlay * 100))
         : 0;
 
-  const finalUrl = resolvedImageUrl ?? bg?.imageUrl;
+  // 🆕 FIX : le fallback tombait sur bg.imageUrl BRUT même quand c'était une
+  // référence "idb-media://…" pas encore résolue (ou dont la résolution a
+  // échoué) — le navigateur reçoit alors un backgroundImage littéralement
+  // invalide (`url("idb-media://…")`), silencieusement ignoré : l'image
+  // n'apparaît jamais, même si l'upload lui-même a réussi. On n'utilise le
+  // brut en fallback QUE s'il ne s'agit PAS d'une référence IDB — sinon on
+  // attend la résolution async (useResolvedBackgroundUrl) avant d'afficher.
+  const rawUrl = bg?.imageUrl;
+  const rawIsUsable = !!rawUrl && !rawUrl.startsWith(IDB_MEDIA_PREFIX);
+  const finalUrl = resolvedImageUrl ?? (rawIsUsable ? rawUrl : undefined);
   const hasBackgroundImage = !!finalUrl;
 
   const containerStyle: React.CSSProperties = {};
@@ -304,8 +323,47 @@ function buildBackgroundStyle(
 }
 
 function usesSpecializedRenderer(section: FunnelSection): boolean {
-  if (!Array.isArray(section.items) || section.items.length === 0) return false;
   const t = section.type as string;
+  // 🆕 Benefits : rendu spécialisé (patterns) UNIQUEMENT s'il a un pattern ET des
+  // puces. Sans pattern → rendu inline historique (aucune régression).
+  if (t === "benefits") {
+    return (
+      !!section.pattern &&
+      Array.isArray(section.bullets) &&
+      section.bullets.length > 0
+    );
+  }
+  // 🆕 CTA final : spécialisé uniquement s'il a un pattern (sinon rendu inline).
+  if (t === "cta") return !!section.pattern;
+  // 🆕 Stats : une section proof à pattern stats-* rend depuis les puces (pas
+  // d'items) → rendu spécialisé dédié, avant le contrôle "items" ci-dessous.
+  if (
+    t === "proof" &&
+    (isStatsPattern(section.pattern) || isTrustbarPattern(section.pattern)) &&
+    Array.isArray(section.bullets) &&
+    section.bullets.length > 0
+  ) {
+    return true;
+  }
+  // 🆕 Problème/Agitation + Process : rendu spécialisé (patterns) uniquement s'il
+  // y a un pattern connu ET des puces. Sans pattern → rendu inline historique.
+  if (
+    (t === "problem" || t === "agitation") &&
+    isProblemPattern(section.pattern) &&
+    Array.isArray(section.bullets) &&
+    section.bullets.length > 0
+  ) {
+    return true;
+  }
+  if (
+    t === "process" &&
+    isProcessPattern(section.pattern) &&
+    Array.isArray(section.bullets) &&
+    section.bullets.length > 0
+  ) {
+    return true;
+  }
+  if (!Array.isArray(section.items) || section.items.length === 0) return false;
   return (
     t === "faq" ||
     t === "testimonials" ||
@@ -358,6 +416,23 @@ function resolveImageUrl(
 function cleanSlug(s: string | undefined): string {
   if (!s) return "";
   return s.replace(/^\/+/, "").replace(/\/+$/, "").trim();
+}
+
+/**
+ * 🆕 Libellé du CTA "étape suivante" affiché sur les pages de succès, adapté
+ * au rôle de la page qui suit (delivery/access/replay… sinon générique).
+ */
+function nextStepLabel(lang: string | undefined, role: PageRole | undefined): string {
+  const L = lang === "en" ? "en" : lang === "es" ? "es" : "fr";
+  const byRole: Partial<Record<PageRole, Record<"fr" | "en" | "es", string>>> = {
+    delivery: { fr: "Accéder à mon contenu", en: "Access my content", es: "Acceder a mi contenido" },
+    access: { fr: "Accéder à mon contenu", en: "Access my content", es: "Acceder a mi contenido" },
+    replay: { fr: "Voir le replay", en: "Watch the replay", es: "Ver el replay" },
+    checkout: { fr: "Passer au paiement", en: "Go to checkout", es: "Ir al pago" },
+    upsell: { fr: "Voir l'offre suivante", en: "See the next offer", es: "Ver la siguiente oferta" },
+  };
+  const generic = { fr: "Continuer", en: "Continue", es: "Continuar" };
+  return (role && byRole[role]?.[L]) ?? generic[L];
 }
 
 function buildPageLinkMap(funnel: Funnel): Map<string, string> {
@@ -602,17 +677,49 @@ export function FunnelPreview({
     buttonAnim?: "lift" | "glow" | "pulse" | "shine";
     secondaryColor?: string;
     primaryColor?: string;
+    accentColor?: string;
+    accentColor2?: string;
     textScale?: number;
     buttonScale?: number;
     customBg?: string;
     customBgEnabled?: boolean;
+    brandColorsEnabled?: boolean;
   };
   const animationsEnabled = design.animationsEnabled !== false;
   const buttonAnim = design.buttonAnim ?? getTemplateButtonAnim(templateId);
 
+  // 🆕 FIX RÉGRESSION : primaryColor/secondaryColor/accentColor ont TOUJOURS
+  // une valeur (générée par l'IA, ou valeur par défaut du wizard) — ce n'est
+  // PAS un signal fiable que l'utilisateur a personnalisé sa marque. Sans ce
+  // garde, TOUS les templates (y compris ceux avec un fond dégradé signature,
+  // ex. bold-energy/story-sell) se retrouvaient recolorés vers ces valeurs
+  // par défaut/invention IA (souvent un quasi-noir) → perte totale de leur
+  // identité visuelle par défaut. On ne recolore fond/cartes/header-footer
+  // QUE si `brandColorsEnabled` est explicitement true (checkbox « Utiliser
+  // les couleurs de ma marque » cochée par l'utilisateur à l'étape Template).
+  const brandingActive = design.brandColorsEnabled === true;
+
   const overrides = {
-    accent: design.secondaryColor,
-    primary: design.primaryColor,
+    accent: brandingActive ? design.secondaryColor : undefined,
+    primary: brandingActive ? design.primaryColor : undefined,
+    // 🆕 3ᵉ / 4ᵉ couleurs de marque (branding) → --ff-accent2 / --ff-accent3,
+    // consommées par les skins (accent2, priceColor).
+    accent2: brandingActive ? design.accentColor : undefined,
+    accent3: brandingActive ? design.accentColor2 : undefined,
+    // 🆕 BUG CORRIGÉ : design.primaryColor ("couleur sombre/fonds" choisie par
+    // l'utilisateur) n'était mappée que sur --ff-primary, une variable JAMAIS
+    // consommée par le CSS (fonds de section = --ff-bg, resté au défaut du
+    // template). On la pose donc aussi sur --ff-bg pour que le fond du tunnel
+    // reflète réellement la couleur choisie — UNIQUEMENT quand la marque est
+    // active (voir brandingActive ci-dessus).
+    bg: brandingActive ? design.primaryColor : undefined,
+    // 🆕 Contraste automatique : le texte principal (--ff-ink) et le texte des
+    // boutons (--ff-accent-ink → --ff-btn-ink) basculent noir/blanc selon la
+    // luminosité du fond/de l'accent choisis, pour ne jamais rendre un texte
+    // ou un CTA illisible sur sa propre couleur. Sans branding actif, ne
+    // touche pas --ff-ink : le template garde son contraste par défaut.
+    ink: brandingActive ? contrastInk(design.primaryColor) : undefined,
+    accentInk: brandingActive ? contrastInk(design.secondaryColor) : undefined,
     textScale: design.textScale,
     buttonScale: design.buttonScale,
     customBg: design.customBg,
@@ -634,6 +741,7 @@ export function FunnelPreview({
     slugLinks,
     editMode,
   };
+
 
   if (isRaw) {
     return <RawFrame {...frameProps} className={className} />;
@@ -660,7 +768,7 @@ export function FunnelPreview({
         <PreviewToolbar mode={activeMode} onChange={setMode} />
       )}
 
-      <div style={innerStyle}>
+      <div style={innerStyle} className={isEmbed ? "ff-fill-col" : undefined}>
         {isEmbed ? (
           <EmbedFrame {...frameProps} />
         ) : activeMode === "desktop" ? (
@@ -730,6 +838,8 @@ type FrameProps = {
   overrides: {
     accent?: string;
     primary?: string;
+    accent2?: string;
+    accent3?: string;
     textScale?: number;
     buttonScale?: number;
     customBg?: string;
@@ -761,12 +871,13 @@ function RawFrame(props: FrameProps & { className?: string }) {
 function EmbedFrame(props: FrameProps) {
   const containerRef = useScrollReveal<HTMLDivElement>();
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="w-full ff-fill-col">
       <TemplateThemeProvider
         templateId={props.templateId}
         buttonAnim={props.buttonAnim}
         animationsEnabled={props.animationsEnabled}
         overrides={props.overrides}
+        className="ff-fill-col"
       >
         <PreviewBody {...props} compact={false} embed />
       </TemplateThemeProvider>
@@ -866,6 +977,7 @@ function PreviewBody({
   pageLinks,
   slugLinks,
   editMode,
+  templateId,
 }: {
   funnel: Funnel;
   activePage?: FunnelPage;
@@ -878,6 +990,7 @@ function PreviewBody({
   pageLinks: Map<string, string>;
   slugLinks: Map<string, string>;
   editMode?: boolean;
+  templateId?: string;
 }) {
   const mediaLibrary = funnel.media;
 
@@ -904,57 +1017,404 @@ function PreviewBody({
       ? extractWhatsAppLink([heroSection, ...otherSections])
       : null;
 
-  return (
-    <div>
+  // 🆕 Skin de template (rendu bespoke DATA-DRIVEN du zip Claude Design).
+  // Appliqué AUSSI aux pages de succès (merci/confirmation/livraison) pour que
+  // tout le tunnel partage le même design — le skin reçoit isSuccess/pageRole
+  // pour le badge ✓ et le centrage. Jamais sur les tunnels clonés.
+  const skin = !isClonedFunnel ? getTemplateSkin(templateId) : undefined;
+  const SkinHero =
+    skin && heroSection ? skin.sections[heroSection.type] : undefined;
+
+  const body = (
+    <div className={embed ? "ff-fill-col" : undefined}>
       {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
         <FunnelHeader funnel={funnel} logoSrc={logoSrc} />
       )}
 
-      {heroSection && (
-        <HeroBlock
-          section={heroSection}
+      {heroSection &&
+        (SkinHero ? (
+          <SkinHero
+            section={heroSection}
+            funnel={funnel}
+            page={activePage}
+            pageLinks={pageLinks}
+            slugLinks={slugLinks}
+            compact={compact}
+            pageRole={pageRole}
+            isSuccess={isSuccess}
+          />
+        ) : isHeroPattern(heroSection.pattern) && !isSuccess ? (
+          <HeroRenderer section={heroSection} funnel={funnel} mode="public" />
+        ) : (
+          <HeroBlock
+            section={heroSection}
+            padX={padX}
+            padY={successPadY}
+            bodySize={bodySize}
+            compact={compact}
+            sectionInner={sectionInner}
+            mediaLibrary={mediaLibrary}
+            isSuccess={isSuccess}
+            pageRole={pageRole}
+            pageLinks={pageLinks}
+            slugLinks={slugLinks}
+            funnel={funnel}
+            activePage={activePage}
+          />
+        ))}
+
+      {otherSections.map((section) => {
+        const SkinComp = skin ? skin.sections[section.type] : undefined;
+        if (SkinComp) {
+          return (
+            <SkinComp
+              key={section.id}
+              section={section}
+              funnel={funnel}
+              page={activePage}
+              pageLinks={pageLinks}
+              slugLinks={slugLinks}
+              compact={compact}
+              pageRole={pageRole}
+              isSuccess={isSuccess}
+            />
+          );
+        }
+        return (
+          <SectionBlock
+            key={section.id}
+            section={section}
+            padX={padX}
+            padY={padY}
+            bodySize={bodySize}
+            compact={compact}
+            sectionInner={sectionInner}
+            mediaLibrary={mediaLibrary}
+            isSuccess={isSuccess}
+            pageLinks={pageLinks}
+            slugLinks={slugLinks}
+            funnel={funnel}
+            activePage={activePage}
+            editMode={editMode}
+          />
+        );
+      })}
+
+      {/* 🆕 LOT 10 — Order bump : case à cocher pour ajouter un produit
+          complémentaire, affichée UNIQUEMENT sur la page de checkout et
+          seulement si le créateur l'a configuré au wizard. */}
+      {!isClonedFunnel && activePage && activePage.role === "checkout" && activePage.orderBump?.enabled && (
+        <OrderBumpBlock orderBump={activePage.orderBump} padX={padX} sectionInner={sectionInner} />
+      )}
+
+      {/* 🆕 LOT 7 — Calendrier natif (Calendly/Cal.com) sur la page de RDV. */}
+      {!isClonedFunnel && activePage && activePage.role === "booking" && activePage.calendarEmbedUrl && (
+        <CalendarEmbedBlock url={activePage.calendarEmbedUrl} padX={padX} sectionInner={sectionInner} />
+      )}
+
+      {/* 🆕 LOT 5 — Webinaire Evergreen : choix de créneau + lecteur vidéo
+          pré-enregistré sur la page "live" (salle d'attente). */}
+      {!isClonedFunnel && activePage && activePage.role === "live" && activePage.evergreenVideoUrl && (
+        <EvergreenPlayerBlock
+          videoUrl={activePage.evergreenVideoUrl}
+          language={funnel.language}
           padX={padX}
-          padY={successPadY}
-          bodySize={bodySize}
-          compact={compact}
           sectionInner={sectionInner}
-          mediaLibrary={mediaLibrary}
-          isSuccess={isSuccess}
-          pageRole={pageRole}
-          pageLinks={pageLinks}
-          slugLinks={slugLinks}
-          funnel={funnel}
-          activePage={activePage}
         />
       )}
 
-      {otherSections.map((section) => (
-        <SectionBlock
-          key={section.id}
-          section={section}
-          padX={padX}
-          padY={padY}
-          bodySize={bodySize}
-          compact={compact}
-          sectionInner={sectionInner}
-          mediaLibrary={mediaLibrary}
-          isSuccess={isSuccess}
-          pageLinks={pageLinks}
-          slugLinks={slugLinks}
-          funnel={funnel}
-          activePage={activePage}
-          editMode={editMode}
-        />
-      ))}
+      {/* 🆕 Pages de succès : boutons Rejoindre WhatsApp/Telegram + CTA + étape
+          suivante du tunnel (si une page existe réellement après celle-ci —
+          jamais fabriqué si le tunnel s'arrête ici). */}
+      {isSuccess &&
+        (() => {
+          const pages = funnel.pages ?? [];
+          const idx = activePage ? pages.findIndex((p) => p.id === activePage.id) : -1;
+          const nextPage =
+            (activePage?.nextPageId && pages.find((p) => p.id === activePage.nextPageId)) ||
+            (idx >= 0 && idx < pages.length - 1 ? pages[idx + 1] : undefined);
+          const nextHref = nextPage ? pageLinks.get(nextPage.id) : undefined;
+          return (
+            <SuccessChannels
+              funnel={funnel}
+              nextHref={nextHref}
+              nextLabel={nextHref ? nextStepLabel(funnel.language, nextPage?.role) : undefined}
+            />
+          );
+        })()}
 
       {!isClonedFunnel && <FunnelFooter funnel={funnel} />}
 
       {whatsAppLink && <WhatsAppFloat href={whatsAppLink} />}
     </div>
   );
+
+  // Le wrapper applique le runtime d'animations bespoke (reveal/tilt/parallax/
+  // accordéon/countdown) + container-type pour les @container CSS du skin.
+  return skin ? (
+    <FunnelSectionWrapper className={embed ? "ff-fill-col" : undefined}>
+      {body}
+    </FunnelSectionWrapper>
+  ) : (
+    body
+  );
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 🆕 LOT 10 — Order bump : bloc case-à-cocher inséré sur la page de checkout,
+ * en dehors du système de sections classique (config au niveau de la PAGE).
+ * La checkbox porte `data-ff-orderbump-checkbox`, lue par PublicFunnelRuntime
+ * au clic sur le CTA d'achat (#ff-checkout) pour informer /api/checkout.
+ */
+function OrderBumpBlock({
+  orderBump,
+  padX,
+  sectionInner,
+}: {
+  orderBump: { name: string; price: string; description?: string };
+  padX: string;
+  sectionInner: string;
+}) {
+  return (
+    <section className={`${padX} py-4`}>
+      <div className={sectionInner}>
+        <label
+          data-ff-orderbump
+          className="ff-card flex items-start gap-3 rounded-xl border-2 border-dashed p-4 cursor-pointer transition-colors"
+          style={{ borderColor: "var(--ff-accent)" }}
+        >
+          <input
+            type="checkbox"
+            data-ff-orderbump-checkbox
+            className="mt-1 h-5 w-5 shrink-0 accent-[var(--ff-accent)]"
+          />
+          <span className="flex-1">
+            <span
+              className="block text-sm font-bold"
+              style={{ color: "var(--ff-ink)" }}
+            >
+              ✅ Oui, ajoute « {orderBump.name} » à ma commande — {orderBump.price}
+            </span>
+            {orderBump.description && (
+              <span
+                className="mt-1 block text-sm opacity-80"
+                style={{ color: "var(--ff-ink-soft, var(--ff-ink))" }}
+              >
+                {orderBump.description}
+              </span>
+            )}
+          </span>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de prise
+ * de RDV. Rendu en iframe sandboxée ; ne remplace pas le formulaire existant
+ * (repli historique conservé), l'ajoute juste au-dessus dans le flux.
+ */
+function CalendarEmbedBlock({
+  url,
+  padX,
+  sectionInner,
+}: {
+  url: string;
+  padX: string;
+  sectionInner: string;
+}) {
+  return (
+    <section className={`${padX} py-4`}>
+      <div className={sectionInner}>
+        <div
+          className="ff-card overflow-hidden rounded-2xl"
+          style={{ minHeight: 680 }}
+        >
+          <iframe
+            src={url}
+            title="Calendrier de prise de rendez-vous"
+            className="h-[680px] w-full border-0"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** 🆕 LOT 5 — Slug du tunnel déduit de l'URL, même convention que
+ *  TimerRenderer/FormRenderer/PublicFunnelRuntime pour la clé localStorage. */
+function evergreenFunnelSlug(): string {
+  if (typeof window === "undefined") return "default";
+  const m = window.location.pathname.match(/\/tunnel\/([^/]+)/);
+  return m ? decodeURIComponent(m[1]) : "default";
+}
+
+const EVERGREEN_SLOT_OPTIONS = [
+  {
+    key: "15min",
+    offsetMs: 15 * 60 * 1000,
+    label: { fr: "Dans 15 minutes", en: "In 15 minutes", es: "En 15 minutos" },
+  },
+  {
+    key: "1h",
+    offsetMs: 60 * 60 * 1000,
+    label: { fr: "Dans 1 heure", en: "In 1 hour", es: "En 1 hora" },
+  },
+  {
+    key: "24h",
+    offsetMs: 24 * 60 * 60 * 1000,
+    label: { fr: "Demain, à la même heure", en: "Tomorrow, same time", es: "Mañana, a la misma hora" },
+  },
+] as const;
+
+/**
+ * 🆕 LOT 5 — Webinaire Evergreen : le prospect choisit un créneau relatif
+ * ("dans 15 min", "demain à la même heure"...) au lieu d'une date fixe. Une
+ * fois le créneau atteint, la vidéo pré-enregistrée démarre automatiquement.
+ * Le choix est mémorisé en localStorage (par tunnel) pour survivre aux
+ * rechargements/revisites tant que le créneau n'est pas expiré.
+ */
+function EvergreenPlayerBlock({
+  videoUrl,
+  language,
+  padX,
+  sectionInner,
+}: {
+  videoUrl: string;
+  language: Language;
+  padX: string;
+  sectionInner: string;
+}) {
+  const [slug, setSlug] = useState<string>("default");
+  const [slot, setSlot] = useState<number | null | undefined>(undefined); // undefined = pas encore lu
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const s = evergreenFunnelSlug();
+    setSlug(s);
+    try {
+      const raw = window.localStorage.getItem(`ff_evergreen_slot_${s}`);
+      const parsed = raw ? parseInt(raw, 10) : NaN;
+      setSlot(!isNaN(parsed) ? parsed : null);
+    } catch {
+      setSlot(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!slot || slot <= now) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [slot, now]);
+
+  const pickSlot = (offsetMs: number) => {
+    const target = Date.now() + offsetMs;
+    setSlot(target);
+    try {
+      window.localStorage.setItem(`ff_evergreen_slot_${slug}`, String(target));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const resetSlot = () => {
+    setSlot(null);
+    try {
+      window.localStorage.removeItem(`ff_evergreen_slot_${slug}`);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const L = {
+    title: { fr: "Choisis ton créneau", en: "Pick your time slot", es: "Elige tu horario" },
+    waiting: { fr: "Ta session commence dans", en: "Your session starts in", es: "Tu sesión empieza en" },
+    change: { fr: "Changer d'horaire", en: "Change time slot", es: "Cambiar de horario" },
+  };
+  const t = (obj: Record<Language, string>) => obj[language] ?? obj.fr;
+
+  if (slot === undefined) return null; // évite un flash avant lecture du localStorage
+
+  return (
+    <section className={`${padX} py-4`}>
+      <div className={sectionInner}>
+        {slot === null && (
+          <div className="ff-card rounded-2xl p-6 text-center">
+            <p className="mb-4 text-lg font-bold" style={{ color: "var(--ff-ink)" }}>
+              {t(L.title)}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {EVERGREEN_SLOT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => pickSlot(opt.offsetMs)}
+                  className="ff-btn rounded-lg px-5 py-3 text-sm font-bold"
+                >
+                  {t(opt.label)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {slot !== null && slot > now && (
+          <div className="ff-card rounded-2xl p-6 text-center">
+            <TimerRenderer
+              timer={{
+                id: "evergreen-slot-wait",
+                mode: "countdown-date",
+                targetDate: new Date(slot).toISOString(),
+                label: t(L.waiting),
+                style: "cards",
+                size: "lg",
+                onExpire: "keep-zero",
+                showDays: false,
+              }}
+              language={language}
+            />
+            <button
+              type="button"
+              onClick={resetSlot}
+              className="mt-3 text-xs font-medium underline opacity-70 hover:opacity-100"
+            >
+              {t(L.change)}
+            </button>
+          </div>
+        )}
+
+        {slot !== null && slot <= now && (
+          <div className="ff-card overflow-hidden rounded-2xl" style={{ minHeight: 360 }}>
+            {(() => {
+              const embed = getVideoEmbed(videoUrl);
+              if (!embed.embedUrl) return null;
+              const sep = embed.embedUrl.includes("?") ? "&" : "?";
+              const src =
+                embed.provider === "youtube" || embed.provider === "vimeo"
+                  ? `${embed.embedUrl}${sep}autoplay=1&mute=1`
+                  : embed.embedUrl;
+              return (
+                <div className="relative aspect-video w-full bg-black">
+                  <iframe
+                    src={src}
+                    title="Webinaire (replay automatisé)"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 h-full w-full"
+                  />
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function HeroBlock({
   section,
@@ -993,9 +1453,20 @@ function HeroBlock({
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
   const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
-  const layout = isSuccess
+  let layout = isSuccess
     ? "success-centered"
     : effectiveLayoutVariant(section, funnel);
+  // 🆕 RÈGLE ABSOLUE : image/vidéo + texte dans le héros → split automatique
+  // (empilé texte → image → CTA sur mobile via CSS).
+  if (
+    !isSuccess &&
+    (!!resolvedImage || !!section.video?.url) &&
+    !!(section.headline || section.subheadline || section.body) &&
+    layout !== "split-text-image" &&
+    layout !== "split-image-text"
+  ) {
+    layout = "split-text-image";
+  }
 
   const RoleIcon = isSuccess ? getRoleIcon(pageRole) : null;
   const roleIconColors = isSuccess ? getRoleIconColors(pageRole) : null;
@@ -1179,6 +1650,29 @@ function HeroBlock({
           </div>
         )}
 
+        {/* 🆕 Liens/CTA supplémentaires (ex : canaux WhatsApp/Telegram/Instagram
+            sur une page de remerciement composée uniquement d'un hero). */}
+        {Array.isArray(section.ctas) && section.ctas.length > 0 && (
+          <div className="ff-extra-ctas">
+            {section.ctas.map(
+              (extraCta, idx) =>
+                extraCta?.label && (
+                  <CtaLink
+                    key={`${section.id}-extra-${idx}`}
+                    cta={extraCta}
+                    baseClassName="ff-btn-extra"
+                    anim={animOf(section.animations, "cta", "fade-up")}
+                    pageLinks={pageLinks}
+                    slugLinks={slugLinks}
+                    funnel={funnel}
+                    page={activePage}
+                    section={section}
+                  />
+                ),
+            )}
+          </div>
+        )}
+
         {section.type === "form" && (
           <div data-ff-shadow={shadowAttr}>
             <FormRenderer section={section} funnel={funnel} page={activePage} />
@@ -1260,16 +1754,34 @@ function SectionBlock({
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
 
-  const rawLayout = isSuccess
+  let rawLayout = isSuccess
     ? "success-centered"
     : effectiveLayoutVariant(section, funnel);
-  const isSplit =
-    rawLayout === "split-text-image" || rawLayout === "split-image-text";
   const bulletsArr: string[] = Array.isArray(section.bullets)
     ? section.bullets
     : [];
   const hasBullets = bulletsArr.length > 0;
   const hasImg = !!resolvedImage || !!section.video?.url;
+  // 🆕 RÈGLE ABSOLUE : image/vidéo + contenu textuel dans la MÊME section →
+  // layout SPLIT automatique (côte à côte). Sur mobile, le CSS empile
+  // texte → image → CTA. (Les pages de succès restent centrées.)
+  const hasText = !!(
+    section.headline ||
+    section.subheadline ||
+    section.body ||
+    hasBullets
+  );
+  if (
+    !isSuccess &&
+    hasImg &&
+    hasText &&
+    rawLayout !== "split-text-image" &&
+    rawLayout !== "split-image-text"
+  ) {
+    rawLayout = "split-text-image";
+  }
+  const isSplit =
+    rawLayout === "split-text-image" || rawLayout === "split-image-text";
   // Split sans image : si on a des cartes/puces, on les envoie dans la colonne
   // libre (texte d'un côté, cartes de l'autre). Sinon on retombe sur "centered".
   // 🆕 Mais si les cartes débordent largement le texte (déséquilibre), on
@@ -1308,6 +1820,7 @@ function SectionBlock({
       data-ff-section={section.type}
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-pattern={section.pattern || undefined}
       data-ff-split-mode={splitTextOnly ? "text" : undefined}
       data-ff-shadow-scope={shadowAttr}
       data-ff-custom-bg={colors.bg ? "true" : undefined}
@@ -1450,7 +1963,18 @@ function SectionBlock({
           />
         ))}
 
-        {!isForm && section.cta?.label && (
+        {/* 🆕 FIX doublon : les sections "cta" avec un `pattern` passent par
+            SpecializedContent → CtaFinalRenderer, qui rend DÉJÀ son propre
+            bouton (CtaBtn, à partir de ce même `section.cta`). Sans ce garde,
+            ce bloc générique rendait un 2ᵉ bouton identique juste en dessous —
+            exactement le doublon signalé sur la section d'appel final.
+            Scopé STRICTEMENT à "cta" (pas usesSpecializedRenderer en général :
+            les autres types spécialisés — pricing/guarantee/bonus/faq… — ne
+            rendent PAS leur propre CTA, ce bloc générique reste leur SEUL
+            moyen d'afficher un bouton). */}
+        {!isForm &&
+          !(section.type === "cta" && usesSpecializedRenderer(section)) &&
+          section.cta?.label && (
           <div className="ff-cta-wrap inline-flex items-center gap-2">
             <InlineDecorativeIcon icons={decoIcons} position="before-cta" />
             <CtaLink
@@ -1486,6 +2010,29 @@ function SectionBlock({
             );
           })()}
 
+        {/* 🆕 Liens/CTA supplémentaires (ex : canaux WhatsApp/Telegram/Instagram
+            sur une page de remerciement). */}
+        {Array.isArray(section.ctas) && section.ctas.length > 0 && (
+          <div className="ff-extra-ctas">
+            {section.ctas.map(
+              (extraCta, idx) =>
+                extraCta?.label && (
+                  <CtaLink
+                    key={`${section.id}-extra-${idx}`}
+                    cta={extraCta}
+                    baseClassName="ff-btn-extra"
+                    anim={animOf(section.animations, "cta", "fade-up")}
+                    pageLinks={pageLinks}
+                    slugLinks={slugLinks}
+                    funnel={funnel}
+                    page={activePage}
+                    section={section}
+                  />
+                ),
+            )}
+          </div>
+        )}
+
         {isForm && (
           <div data-ff-shadow={shadowAttr}>
             <FormRenderer section={section} funnel={funnel} page={activePage} />
@@ -1508,6 +2055,17 @@ function SpecializedContent({
   const sectionType = section.type as string;
   if (sectionType === "faq")
     return <FaqRenderer section={section} bodySize={bodySize} />;
+  // 🆕 Trustbar : proof + pattern trustbar-* → TrustbarRenderer (avant stats).
+  if (sectionType === "proof" && isTrustbarPattern(section.pattern))
+    return <TrustbarRenderer section={section} bodySize={bodySize} />;
+  // 🆕 Stats : proof + pattern stats-* → StatsRenderer (avant la voie témoignages).
+  if (sectionType === "proof" && isStatsPattern(section.pattern))
+    return <StatsRenderer section={section} bodySize={bodySize} />;
+  // 🆕 Problème/Agitation + Process : patterns dédiés.
+  if ((sectionType === "problem" || sectionType === "agitation") && isProblemPattern(section.pattern))
+    return <ProblemRenderer section={section} bodySize={bodySize} />;
+  if (sectionType === "process" && isProcessPattern(section.pattern))
+    return <ProcessRenderer section={section} bodySize={bodySize} />;
   if (sectionType === "testimonials" || sectionType === "proof")
     return (
       <TestimonialsRenderer
@@ -1534,6 +2092,10 @@ function SpecializedContent({
     );
   if (sectionType === "guarantee")
     return <GuaranteeRenderer section={section} bodySize={bodySize} />;
+  if (sectionType === "benefits")
+    return <BenefitsRenderer section={section} bodySize={bodySize} />;
+  if (sectionType === "cta")
+    return <CtaFinalRenderer section={section} bodySize={bodySize} />;
   return null;
 }
 
@@ -1830,90 +2392,5 @@ function ImageBlock({
   );
 }
 
-function CtaLink({
-  cta,
-  className = "",
-  anim,
-  pageLinks,
-  slugLinks,
-  funnel,
-  page,
-  section,
-}: {
-  cta: NonNullable<FunnelSection["cta"]>;
-  className?: string;
-  anim?: AnimationPreset;
-  pageLinks: Map<string, string>;
-  slugLinks: Map<string, string>;
-  funnel: Funnel;
-  page?: FunnelPage;
-  section: FunnelSection;
-}) {
-  if (cta.mode === "popup") {
-    return (
-      <PopupForm
-        cta={cta}
-        section={section}
-        funnel={funnel}
-        page={page}
-        customFields={cta.popupFields}
-        buttonClassName={`ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg ${className}`}
-        buttonProps={{ "data-ff-anim": anim ?? "fade-up" } as React.ButtonHTMLAttributes<HTMLButtonElement>}
-      />
-    );
-  }
-
-  let href = ctaHref(cta);
-  let target = ctaTarget(cta);
-  let rel = ctaRel(cta);
-  let external = ctaIsExternal(cta);
-
-  const ctaAny = cta as unknown as {
-    mode?: string;
-    pageId?: string;
-    pageSlug?: string;
-    url?: string;
-  };
-
-  if (ctaAny.pageId && pageLinks.has(ctaAny.pageId)) {
-    href = pageLinks.get(ctaAny.pageId) ?? href;
-    target = "_self";
-    rel = "";
-    external = false;
-  } else if (ctaAny.pageSlug) {
-    const cleaned = ctaAny.pageSlug.replace(/^\/+/, "").replace(/\/+$/, "");
-    if (slugLinks.has(cleaned)) {
-      href = slugLinks.get(cleaned) ?? href;
-      target = "_self";
-      rel = "";
-      external = false;
-    }
-  } else if (ctaAny.url && ctaAny.mode === "redirect") {
-    const rawUrl = ctaAny.url.trim();
-    const isAbsolute = /^https?:\/\//i.test(rawUrl) || rawUrl.startsWith("//");
-    const isMailto = rawUrl.startsWith("mailto:") || rawUrl.startsWith("tel:");
-    if (!isAbsolute && !isMailto) {
-      const cleaned = rawUrl.replace(/^\/+/, "").replace(/\/+$/, "");
-      if (slugLinks.has(cleaned)) {
-        href = slugLinks.get(cleaned) ?? href;
-        target = "_self";
-        rel = "";
-        external = false;
-      }
-    }
-  }
-
-  return (
-    <a
-      href={href}
-      target={target}
-      rel={rel}
-      data-ff-anim={anim ?? "fade-up"}
-      data-ff-cta
-      className={`ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg ${className}`}
-    >
-      {cta.label}
-      {external && <ExternalLink size={13} />}
-    </a>
-  );
-}
+// CtaLink : extrait dans components/funnel/CtaLink.tsx (réutilisé par les
+// skins de templates). Comportement identique.

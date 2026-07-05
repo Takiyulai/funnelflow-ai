@@ -1,85 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import type { FunnelSection, SectionItem } from "@/lib/funnels/types";
+// Sélecteur de pattern FAQ : extrait les Q/R de la section puis route vers le
+// bon composant de pattern (accordion / sandwich / hub-grid / grid-intro) selon
+// section.pattern. Défaut : accordéon. Les FAQ sans pattern (anciens tunnels)
+// tombent proprement sur l'accordéon.
+
+import type { FaqItem, FunnelSection, SectionItem } from "@/lib/funnels/types";
+import { FAQ_PATTERNS } from "@/components/funnel/sections/patterns/faq/FaqPatterns";
 
 type Props = {
   section: FunnelSection;
+  /** Conservé pour compat avec l'appelant (SpecializedContent) ; non utilisé. */
   bodySize?: string;
 };
 
-export function FaqRenderer({ section, bodySize = "text-base" }: Props) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
+export function FaqRenderer({ section }: Props) {
+  const faqs: FaqItem[] = (section.items || [])
+    .filter((it): it is SectionItem & { kind: "faq" } => it.kind === "faq")
+    .map((it) => it.data);
 
-  const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "faq" } => it.kind === "faq"
-  );
+  if (faqs.length === 0) return null;
 
-  if (items.length === 0) return null;
+  const Pattern =
+    (section.pattern && FAQ_PATTERNS[section.pattern]) || FAQ_PATTERNS["faq-accordion"];
 
-  return (
-    <div
-      className="ff-faq-list mt-6 mx-auto max-w-2xl"
-      data-ff-anim={section.animations?.bullets ?? "fade-up"}
-      style={{
-        background: "var(--ff-card-bg, #ffffff)",
-        border: "1px solid var(--ff-card-border, var(--ff-border, rgba(0,0,0,0.1)))",
-        borderRadius: "var(--ff-card-radius, 16px)",
-        boxShadow: "var(--ff-card-shadow, 0 1px 2px rgba(0,0,0,0.05), 0 20px 44px -28px rgba(0,0,0,0.2))",
-        padding: "0.25rem 1.5rem",
-      }}
-    >
-      {items.map((item, idx) => {
-        const isOpen = openIdx === idx;
-        return (
-          <div
-            key={idx}
-            className="ff-faq-item"
-            style={{
-              borderTop:
-                idx === 0
-                  ? "1px solid var(--ff-border, rgba(0,0,0,0.1))"
-                  : "none",
-              borderBottom: "1px solid var(--ff-border, rgba(0,0,0,0.1))",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setOpenIdx(isOpen ? null : idx)}
-              className={`flex w-full items-center justify-between gap-4 py-4 text-left ${bodySize} font-semibold transition-colors`}
-              style={{ color: "var(--ff-ink, #0f172a)" }}
-              aria-expanded={isOpen}
-            >
-              <span className="flex-1">{item.data.question || `Question ${idx + 1}`}</span>
-              <ChevronDown
-                className={`h-5 w-5 shrink-0 transition-transform duration-300 ${
-                  isOpen ? "rotate-180" : ""
-                }`}
-                style={{ color: "var(--ff-accent, #31845C)" }}
-                aria-hidden="true"
-              />
-            </button>
-            <div
-              className="grid transition-all duration-300 ease-out"
-              style={{
-                gridTemplateRows: isOpen ? "1fr" : "0fr",
-              }}
-            >
-              <div className="overflow-hidden">
-                <p
-                  className={`pb-4 pr-8 text-left ${bodySize} whitespace-pre-line`}
-                  style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.8 }}
-                >
-                  {item.data.answer || (
-                    <em style={{ opacity: 0.5 }}>Réponse à compléter…</em>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <Pattern section={section} faqs={faqs} />;
 }

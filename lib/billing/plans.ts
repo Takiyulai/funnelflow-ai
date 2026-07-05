@@ -1,10 +1,10 @@
 // lib/billing/plans.ts
 //
-// Source de vérité des plans d'ABONNEMENT à la plateforme FunnelFlow AI.
+// Source de vérité des plans d'ABONNEMENT à la plateforme AutoFunnel AI.
 //
 // ⚠️ Ne PAS confondre avec le paiement "one-time" de lib/billing/orders.ts :
 //    celui-ci concerne le client FINAL qui achète le produit d'un tunnel.
-//    Ici on parle de l'abonnement RÉCURRENT du solopreneur à FunnelFlow.
+//    Ici on parle de l'abonnement RÉCURRENT du solopreneur à AutoFunnel.
 //
 // Ce module est PUR (aucun import du SDK Stripe) → il peut être importé aussi
 // bien côté serveur que côté client (Sidebar, page /abonnement, landing).

@@ -11,13 +11,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 import { enrollContact } from "@/lib/crm/sequences";
-import { getActiveWorkflowsForEvent } from "./repository";
+import { getActiveWorkflowsForEvent, getActiveWorkflowsWaitingOnEvent } from "./repository";
 import type {
   WorkflowActionConfig,
   WorkflowTriggerConfig,
   WorkflowTriggerEvent,
   LeadStatus,
 } from "./types";
+import { waitActionMs } from "./types";
 
 type LeadContext = {
   id: string;
@@ -27,19 +28,24 @@ type LeadContext = {
 
 /** Contexte d'un événement déclencheur. Le `lead` (contact concerné) est commun
  *  à tous les événements ; les autres champs sont le « discriminant » de filtre
- *  propre à chaque type d'événement (funnel/tag/statut). */
+ *  propre à chaque type d'événement (funnel/tag/statut/page/lien).
+ *  🆕 LOT 2 : `funnelId` sert aussi de filtre pour purchase.completed,
+ *  webinar.*, application.submitted, appointment.booked et page.visited. */
 export type WorkflowEventContext = {
   event: WorkflowTriggerEvent;
   lead: LeadContext;
-  /** lead.created : funnel d'origine du lead. */
+  /** lead.created + 🆕 purchase.completed / webinar.* / application.submitted /
+   *  appointment.booked / page.visited : funnel d'origine de l'événement. */
   funnelId?: string | null;
   /** tag.added : tag qui vient d'être ajouté. */
   tagId?: string | null;
   /** status.changed : nouveau statut du lead. */
   status?: LeadStatus | null;
+  /** 🆕 page.visited : slug de la page visitée. */
+  pageSlug?: string | null;
+  /** 🆕 email.link_clicked : URL du lien cliqué. */
+  linkLabel?: string | null;
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Le filtre du trigger correspond-il au contexte de l'événement ?
  *  Un filtre absent (null) = « n'importe lequel » (workflow large). */
@@ -49,13 +55,69 @@ function triggerFilterMatches(
 ): boolean {
   switch (ctx.event) {
     case "lead.created":
+    case "purchase.completed":
+    case "webinar.registered":
+    case "webinar.attended":
+    case "webinar.absent":
+    case "application.submitted":
+    case "appointment.booked":
       return !trigger.funnelId || trigger.funnelId === ctx.funnelId;
     case "tag.added":
       return !trigger.tagId || trigger.tagId === ctx.tagId;
     case "status.changed":
       return !trigger.status || trigger.status === ctx.status;
+    case "page.visited":
+      return (
+        (!trigger.funnelId || trigger.funnelId === ctx.funnelId) &&
+        (!trigger.pageSlug || trigger.pageSlug === ctx.pageSlug)
+      );
+    case "email.link_clicked":
+      return !trigger.linkLabel || trigger.linkLabel === ctx.linkLabel;
+    // 🆕 time.elapsed ne se déclenche JAMAIS directement sur un événement —
+    // voir la planification différée plus bas dans runWorkflowsForEvent.
+    case "time.elapsed":
     default:
       return false;
+  }
+}
+
+/** 🆕 LOT 2 — Planifie (au lieu d'exécuter tout de suite) les workflows dont le
+ *  déclencheur est `time.elapsed` et dont l'événement de référence vient de se
+ *  produire. Insère une ligne dans `workflow_pending_runs`, traitée plus tard
+ *  par le CRON. NON bloquant. */
+async function scheduleTimeElapsedWorkflows(
+  admin: SupabaseClient,
+  userId: string,
+  ctx: WorkflowEventContext,
+): Promise<void> {
+  let waiting: Awaited<ReturnType<typeof getActiveWorkflowsWaitingOnEvent>>;
+  try {
+    waiting = await getActiveWorkflowsWaitingOnEvent(admin, userId, ctx.event);
+  } catch (e) {
+    console.warn("[workflows] chargement time.elapsed échoué (non bloquant):", e);
+    return;
+  }
+  for (const wf of waiting) {
+    if (wf.trigger.funnelId && wf.trigger.funnelId !== ctx.funnelId) continue;
+    const delayMs =
+      ((Number(wf.trigger.delayDays) || 0) * 24 + (Number(wf.trigger.delayHours) || 0)) *
+      60 *
+      60 *
+      1000;
+    if (delayMs <= 0) continue;
+    try {
+      const { error } = await admin.from("workflow_pending_runs").insert({
+        workflow_id: wf.id,
+        user_id: userId,
+        lead_id: ctx.lead.id,
+        lead_email: ctx.lead.email,
+        lead_name: ctx.lead.name ?? null,
+        run_at: new Date(Date.now() + delayMs).toISOString(),
+      });
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      console.warn(`[workflows] planification "${wf.name}" échouée (non bloquant):`, e);
+    }
   }
 }
 
@@ -66,12 +128,12 @@ export async function runWorkflowsForEvent(
   userId: string,
   ctx: WorkflowEventContext,
 ): Promise<void> {
-  let workflows;
+  let workflows: Awaited<ReturnType<typeof getActiveWorkflowsForEvent>> = [];
   try {
     workflows = await getActiveWorkflowsForEvent(admin, userId, ctx.event);
   } catch (e) {
     console.warn("[workflows] chargement échoué (non bloquant):", e);
-    return;
+    workflows = [];
   }
 
   for (const wf of workflows) {
@@ -81,6 +143,32 @@ export async function runWorkflowsForEvent(
     } catch (e) {
       console.warn(`[workflows] exécution "${wf.name}" échouée (non bloquant):`, e);
     }
+  }
+
+  // 🆕 LOT 2 — Greffe des déclencheurs `time.elapsed` référençant CET événement.
+  await scheduleTimeElapsedWorkflows(admin, userId, ctx);
+}
+
+/**
+ * 🆕 LOT 4/7/8 — Résout l'événement workflow SÉMANTIQUE associé au rôle d'une
+ * page de capture (registration → inscription webinaire, booking → RDV,
+ * application → candidature coaching). Ces événements ont été introduits au
+ * LOT 2 (types + filtres + UI) mais jamais émis faute de page dédiée ; les
+ * LOT 4/7/8 ayant depuis construit ces pages, /api/leads peut désormais les
+ * déclencher EN PLUS de `lead.created` (jamais à sa place, pour ne rien
+ * casser des workflows existants basés sur lead.created).
+ * Retourne `null` si le rôle n'a pas d'événement dédié.
+ */
+export function eventForPageRole(role: string | null | undefined): WorkflowTriggerEvent | null {
+  switch (role) {
+    case "registration":
+      return "webinar.registered";
+    case "booking":
+      return "appointment.booked";
+    case "application":
+      return "application.submitted";
+    default:
+      return null;
   }
 }
 
@@ -99,13 +187,17 @@ export async function runLeadCreatedWorkflows(params: {
   });
 }
 
-async function executeActions(
+/** 🆕 LOT 2 — Exportée pour être réutilisée par le CRON qui traite les
+ *  exécutions différées `workflow_pending_runs` (déclencheur `time.elapsed`). */
+export async function executeActions(
   admin: SupabaseClient,
   userId: string,
   lead: LeadContext,
   actions: WorkflowActionConfig[],
 ): Promise<void> {
-  let delayDays = 0;
+  // 🆕 Accumulateur de délai en MILLISECONDES : le "wait" accepte désormais
+  // jours + heures + minutes (rétro-compat : anciennes étapes { days }).
+  let delayMs = 0;
 
   for (const action of actions) {
     // 🆕 Robustesse : chaque action est isolée. Si l'une échoue (ex. enrôlement
@@ -116,7 +208,7 @@ async function executeActions(
     try {
       switch (action.kind) {
         case "wait": {
-          delayDays += action.days;
+          delayMs += waitActionMs(action);
           break;
         }
         case "add_tag": {
@@ -157,7 +249,7 @@ async function executeActions(
               subject:
                 action.subject?.trim() || `Nouveau lead : ${lead.email}`,
               content: renderOwnerNotification(action.message, lead),
-              delayDays,
+              delayMs,
             });
           }
           break;
@@ -180,10 +272,10 @@ async function scheduleEmail(
     recipient: string;
     subject: string;
     content: string;
-    delayDays: number;
+    delayMs: number;
   },
 ): Promise<void> {
-  const scheduledAt = new Date(Date.now() + args.delayDays * DAY_MS).toISOString();
+  const scheduledAt = new Date(Date.now() + args.delayMs).toISOString();
   const { error } = await admin.from("scheduled_emails").insert({
     user_id: args.userId,
     source_type: "workflow",

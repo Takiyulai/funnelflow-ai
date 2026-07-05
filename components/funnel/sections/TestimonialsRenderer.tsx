@@ -6,6 +6,10 @@ import type {
   SectionItem,
   TestimonialMedia,
 } from "@/lib/funnels/types";
+import {
+  TESTIMONIALS_PATTERNS,
+  type TItem,
+} from "./patterns/testimonials/TestimonialsPatterns";
 
 type Props = {
   section: FunnelSection;
@@ -192,6 +196,24 @@ export function TestimonialsRenderer({
   );
 
   if (items.length === 0) return null;
+
+  // 🆕 Dispatch pattern (zip Claude Design) si la section en porte un ; sinon on
+  // garde le rendu par défaut ci-dessous (aucune régression).
+  const Pattern = section.pattern
+    ? TESTIMONIALS_PATTERNS[section.pattern]
+    : undefined;
+  if (Pattern) {
+    const entries: TItem[] = items.map((it) => ({
+      quote: it.data.quote || "",
+      authorName: it.data.authorName,
+      authorRole: it.data.authorRole,
+      avatarUrl: it.data.avatarUrl,
+      rating: it.data.rating,
+      videoUrl: (it.data.medias || []).find((m) => m.kind === "video" && m.url)
+        ?.url,
+    }));
+    return <Pattern section={section} items={entries} />;
+  }
 
   // 🆕 Grille auto-fit avec largeur MINIMALE de carte : les colonnes ne
   // deviennent jamais trop étroites (le bug « cartes compactes » venait de

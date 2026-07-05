@@ -18,8 +18,10 @@ import type {
   MediaItem,
   SectionImage,
   VideoSource,
+  TimerItem,
 } from "@/lib/funnels/types";
-import { makeAnchorCta, normalizeIconName } from "@/lib/funnels/types";
+import { makeAnchorCta, makeRedirectCta, normalizeIconName, makePageId } from "@/lib/funnels/types";
+import { buildWebinarIcsDataUri } from "@/lib/funnels/ics";
 import {
   completeFunnelPrompt,
   mainPagePrompt,
@@ -980,6 +982,7 @@ const funnelSchema = z.object({
       primaryColor: z.string().optional().default("#000000"),
       secondaryColor: z.string().optional().default("#ffffff"),
       accentColor: z.string().optional().default("#3b82f6"),
+      accentColor2: z.string().optional(),
       style: z.string().optional().default("modern"),
     })
     .optional()
@@ -2141,6 +2144,57 @@ function buildFallbackGuaranteeItems(brief: FunnelBrief): SectionItem[] {
   return guarantees.map<SectionItem>((data) => ({ kind: "guarantee", data }));
 }
 
+/**
+ * 🆕 Détecte une section "proof" faite de statistiques ("12K+ | Clients servis")
+ * plutôt que de témoignages. Critère : ≥2 puces "valeur | label" dont la valeur
+ * (partie avant le "|") est courte et contient un chiffre. Sert à préserver les
+ * puces (pas de conversion en témoignages) pour le rendu stats.
+ */
+function looksLikeStatsBullets(bullets: unknown): boolean {
+  if (!Array.isArray(bullets)) return false;
+  const rows = bullets.filter(
+    (b): b is string => typeof b === "string" && b.trim().length > 0,
+  );
+  if (rows.length < 2) return false;
+  const statLike = rows.filter((raw) => {
+    const pipe = raw.indexOf("|");
+    if (pipe < 0) return false;
+    const value = raw.slice(0, pipe).trim();
+    return value.length > 0 && value.length <= 12 && /\d/.test(value);
+  });
+  return statLike.length >= Math.ceil(rows.length / 2);
+}
+
+/**
+ * 🆕 TRUSTBAR presse : puces "Média | courte citation" — gauche = nom court de
+ * média/marque (sans chiffre), droite = phrase de validation courte. Sert à
+ * router une section proof vers une bande de citations presse plutôt que des
+ * témoignages classiques. Volontairement STRICT pour ne pas voler les vrais
+ * témoignages (gauche courte, non chiffrée).
+ */
+function looksLikePressBullets(bullets: unknown): boolean {
+  if (!Array.isArray(bullets)) return false;
+  const rows = bullets.filter(
+    (b): b is string => typeof b === "string" && b.trim().length > 0,
+  );
+  if (rows.length < 2) return false;
+  const pressLike = rows.filter((raw) => {
+    const pipe = raw.indexOf("|");
+    if (pipe < 0) return false;
+    const left = raw.slice(0, pipe).trim();
+    const right = raw.slice(pipe + 1).trim();
+    // gauche = source courte non chiffrée ; droite = citation courte présente.
+    return (
+      left.length > 0 &&
+      left.length <= 24 &&
+      !/\d/.test(left) &&
+      right.length >= 6 &&
+      right.length <= 120
+    );
+  });
+  return pressLike.length >= Math.ceil(rows.length / 2);
+}
+
 function enrichSectionsWithDefaults(
   sections: FunnelSection[],
   brief: FunnelBrief,
@@ -2177,6 +2231,17 @@ function enrichSectionsWithDefaults(
     }
 
     if (type === "testimonials" || type === "proof") {
+      // 🆕 STATS : une section "proof" dont les puces sont chiffrées
+      // ("12K+ | Clients servis") n'est pas une preuve témoignage mais une bande
+      // de statistiques. On PRÉSERVE les puces (aucune conversion en témoignages)
+      // pour que le pattern stats-* puisse s'appliquer (voir StatsRenderer).
+      if (
+        type === "proof" &&
+        existingItems.length === 0 &&
+        (looksLikeStatsBullets(section.bullets) || looksLikePressBullets(section.bullets))
+      ) {
+        return section;
+      }
       const validTestimonials = existingItems.filter(
         (it) => it.kind === "testimonial" && it.data?.quote && it.data?.authorName,
       );
@@ -2657,17 +2722,28 @@ async function callOpenAI(args: {
   // défaut tant qu'AI_PROVIDER n'est pas explicitement basculé.
   const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
   const isZai = provider === "zai" || provider === "z.ai" || provider === "glm";
+  // 🆕 OpenRouter : agrégateur OpenAI-compatible. On réutilise le MÊME client SDK
+  // (clé dans OPENAI_API_KEY = clé OpenRouter), seul l'endpoint + le slug de
+  // modèle changent. Permet d'utiliser GLM (z-ai/glm-4.6) via les crédits OpenRouter.
+  const isOpenRouter =
+    provider === "openrouter" || provider === "open-router" || provider === "or";
 
   // 🆕 Modèle : toujours piloté par OPENAI_MODEL (jamais en dur). Le fallback ne
-  // sert que si la variable est absente ; en Z.AI l'utilisateur fixe lui-même
-  // l'identifiant exact (ex. "glm-5.2"). On NE choisit donc pas le modèle.
-  const model = process.env.OPENAI_MODEL ?? (isZai ? "glm-4.6" : "gpt-4o-mini");
+  // sert que si la variable est absente ; en Z.AI/OpenRouter l'utilisateur fixe
+  // lui-même l'identifiant exact (ex. "glm-5.2", "z-ai/glm-4.6"). On NE choisit pas.
+  const model =
+    process.env.OPENAI_MODEL ??
+    (isZai ? "glm-4.6" : isOpenRouter ? "z-ai/glm-4.6" : "gpt-4o-mini");
 
-  // 🆕 base_url optionnel. Pour Z.AI, défaut documenté = endpoint OpenAI-compat.
-  // Pour OpenAI, on laisse undefined (le SDK utilise son endpoint natif).
+  // 🆕 base_url optionnel. Z.AI et OpenRouter ont un défaut documenté ;
+  // pour OpenAI on laisse undefined (le SDK utilise son endpoint natif).
   const baseURL =
     process.env.OPENAI_BASE_URL?.trim() ||
-    (isZai ? "https://api.z.ai/api/paas/v4/" : undefined);
+    (isZai
+      ? "https://api.z.ai/api/paas/v4/"
+      : isOpenRouter
+        ? "https://openrouter.ai/api/v1"
+        : undefined);
 
   // 🆕 Les modèles de raisonnement OpenAI (GPT-5.x, série o1/o3/o4…) REFUSENT
   // `max_tokens` et un `temperature` personnalisé : ils exigent
@@ -2675,7 +2751,7 @@ async function callOpenAI(args: {
   // `max_tokens`/`temperature:0.7` provoque un 400 immédiat (faussement
   // rapporté comme « timeout »). On adapte donc les paramètres. Ce chemin est
   // réservé à OpenAI : GLM (glm-x.y) accepte `max_tokens` + `temperature`.
-  const isReasoningModel = !isZai && /^(gpt-5|o[1-9])/i.test(model);
+  const isReasoningModel = !isZai && !isOpenRouter && /^(gpt-5|o[1-9])/i.test(model);
 
   // 🆕 Les modèles de raisonnement consomment des tokens en RAISONNEMENT INTERNE
   // AVANT de produire la sortie. Avec un JSON de tunnel volumineux, un budget de
@@ -2693,8 +2769,17 @@ async function callOpenAI(args: {
   // héritée d'OpenAI) : GLM-5.2 supporte jusqu'à 128K en sortie. Surchargeable
   // via OPENAI_MAX_TOKENS. Reste 8000 par défaut pour ne rien changer côté OpenAI.
   const defaultMaxTokens = Number(process.env.OPENAI_MAX_TOKENS ?? "8000");
-  // 🆕 Température par défaut : GLM = 1.0 (défaut Z.AI), OpenAI = 0.7 (inchangé).
-  const defaultTemperature = isZai ? 1.0 : 0.7;
+  // 🆕 GLM/OpenRouter : la sortie JSON d'une page est volumineuse ; un cap bas
+  // (ex. 4000 passé par l'appelant) TRONQUE le JSON ("Unterminated string in
+  // JSON"). On garantit donc un plancher généreux (≥ OPENAI_MAX_TOKENS, défaut
+  // 8000) pour ces fournisseurs, sans changer le comportement OpenAI.
+  const baseMaxTokens = args.maxTokens ?? defaultMaxTokens;
+  const effectiveMaxTokens =
+    isZai || isOpenRouter ? Math.max(baseMaxTokens, defaultMaxTokens) : baseMaxTokens;
+  // 🆕 Température par défaut : GLM = 1.0 (défaut Z.AI, et OpenRouter quand le
+  // modèle est un GLM), OpenAI = 0.7 (inchangé).
+  const defaultTemperature =
+    isZai || (isOpenRouter && /glm/i.test(model)) ? 1.0 : 0.7;
   // 🆕 top_p optionnel (GLM défaut 0.95). N'ajuster QU'UN seul de temperature/top_p
   // à la fois → on n'envoie top_p que s'il est explicitement configuré.
   const topP =
@@ -2707,6 +2792,17 @@ async function callOpenAI(args: {
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
       ...(baseURL ? { baseURL } : {}),
+      // 🆕 OpenRouter recommande (optionnel) ces en-têtes d'attribution. Sans
+      // effet sur la génération ; surchargeables via env. Jamais envoyés ailleurs.
+      ...(isOpenRouter
+        ? {
+            defaultHeaders: {
+              "HTTP-Referer":
+                process.env.OPENROUTER_SITE_URL?.trim() || "https://autofunnel.ai",
+              "X-Title": process.env.OPENROUTER_APP_NAME?.trim() || "AutoFunnel AI",
+            },
+          }
+        : {}),
     });
 
     const createParams = {
@@ -2718,13 +2814,10 @@ async function callOpenAI(args: {
       response_format: { type: "json_object" as const },
       ...(isReasoningModel
         ? {
-            max_completion_tokens: Math.max(
-              args.maxTokens ?? defaultMaxTokens,
-              reasoningMaxTokens,
-            ),
+            max_completion_tokens: Math.max(effectiveMaxTokens, reasoningMaxTokens),
           }
         : {
-            max_tokens: args.maxTokens ?? defaultMaxTokens,
+            max_tokens: effectiveMaxTokens,
             temperature: args.temperature ?? defaultTemperature,
             ...(topP != null && !Number.isNaN(topP) ? { top_p: topP } : {}),
           }),
@@ -2749,6 +2842,37 @@ async function callOpenAI(args: {
       const zaiEffort = process.env.ZAI_REASONING_EFFORT?.trim();
       if (zaiEffort) {
         (createParams as Record<string, unknown>).reasoning_effort = zaiEffort;
+      }
+    }
+
+    // 🆕 OpenRouter : contrôle du "reasoning"/thinking via le param unifié
+    // `reasoning`. Les modèles GLM (z-ai/glm-*) raisonnent par défaut → lent, ce
+    // qui dépasse le timeout sur un gros JSON de tunnel. On DÉSACTIVE donc le
+    // raisonnement par défaut (génération structurée, pas besoin de thinking) ;
+    // surchargeable via OPENROUTER_REASONING = low|medium|high (ou default/model
+    // pour laisser le modèle décider). Sans effet si le modèle ne le supporte pas.
+    if (isOpenRouter) {
+      // Routage : privilégier le provider le plus RAPIDE pour ce modèle (gros
+      // levier quand le provider par défaut est lent/saturé). Surchargeable via
+      // OPENROUTER_PROVIDER_SORT = throughput|latency|price (ou off pour aucun).
+      const sort = process.env.OPENROUTER_PROVIDER_SORT?.trim().toLowerCase();
+      if (sort === "latency" || sort === "throughput" || sort === "price") {
+        (createParams as Record<string, unknown>).provider = { sort };
+      } else if (sort === "off" || sort === "none" || sort === "") {
+        /* aucune préférence de provider */
+      } else {
+        (createParams as Record<string, unknown>).provider = { sort: "throughput" };
+      }
+
+      const r = process.env.OPENROUTER_REASONING?.trim().toLowerCase();
+      if (r === "low" || r === "medium" || r === "high") {
+        (createParams as Record<string, unknown>).reasoning = { effort: r };
+      } else if (r === "default" || r === "model" || r === "auto") {
+        /* on n'envoie rien → comportement par défaut du modèle */
+      } else {
+        // défaut (y compris OPENROUTER_REASONING absent / "disabled" / "off") :
+        // raisonnement désactivé pour la vitesse.
+        (createParams as Record<string, unknown>).reasoning = { enabled: false };
       }
     }
 
@@ -3297,7 +3421,16 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     return generateFunnelWithAI(brief);
   }
 
-  const homeRole = getHomeRoleForKind(normalizedKind);
+  // 🆕 LOT 3 — Pages optionnelles cochées par l'utilisateur (calculé AVANT la
+  // résolution de la home : LOT 8 en a besoin pour placer la VSL en entrée).
+  const selectedOptional = new Set(brief.selectedOptionalPages ?? []);
+
+  let homeRole = getHomeRoleForKind(normalizedKind);
+  // 🆕 LOT 8 — Coaching high ticket : si la VSL optionnelle est cochée, c'est
+  // ELLE la page d'entrée (avant la candidature), pas l'inverse.
+  if (normalizedKind === "coaching-high-ticket" && selectedOptional.has("vsl")) {
+    homeRole = "vsl";
+  }
   const mainBlueprint =
     blueprints.find((b) => b.role === homeRole) ?? blueprints[0];
   let secondaryBlueprints = blueprints.filter((b) => b !== mainBlueprint);
@@ -3317,6 +3450,16 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     if (b.role === "upsell") return hasUpsell;
     if (b.role === "downsell") return hasDownsell;
     return true;
+  });
+
+  // 🆕 LOT 3 — Pages OPTIONNELLES génériques (ex. "oto", "vsl") : générées
+  // UNIQUEMENT si l'utilisateur les a cochées dans l'aperçu "pages générées"
+  // du wizard. Comportement rétrocompatible : `selectedOptionalPages`
+  // absent/vide → aucune page optionnelle générée (aucun changement pour les
+  // appels existants).
+  secondaryBlueprints = secondaryBlueprints.filter((b) => {
+    if (!b.optional) return true;
+    return selectedOptional.has(b.role);
   });
 
   // Express IA : on cale le nombre de pages sur le choix de l'utilisateur
@@ -3343,6 +3486,45 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       ? `\n\nCONTEXTE LIBRE FOURNI PAR L'UTILISATEUR (source de vérité prioritaire pour l'offre, l'audience, le ton, la promesse et le copywriting) :\n"""\n${brief.businessPrompt.trim()}\n"""\n`
       : "";
 
+  // 🆕 Webinaire : date/heure + urgence fixées par l'utilisateur → le copy doit
+  // les refléter (jamais inventer une autre date ; le countdown est injecté
+  // ensuite de façon déterministe, cf. applyWebinarSchedule).
+  let webinarContext = "";
+  if (brief.webinarDate) {
+    const d = new Date(brief.webinarDate);
+    if (!Number.isNaN(d.getTime())) {
+      const locale =
+        brief.language === "en" ? "en-US" : brief.language === "es" ? "es-ES" : "fr-FR";
+      const formatted = d.toLocaleString(locale, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      webinarContext =
+        `\n\nWEBINAIRE — DATE OFFICIELLE FIXÉE PAR L'UTILISATEUR : ${formatted}. ` +
+        `Utilise EXACTEMENT cette date/heure dans le copy (hero, confirmation, emails). N'invente JAMAIS une autre date.` +
+        (brief.webinarUrgency
+          ? ` Urgence/rareté à mettre en avant : "${brief.webinarUrgency}".`
+          : "") +
+        `\n`;
+    }
+  } else if (brief.webinarMode === "evergreen") {
+    // 🆕 LOT 5 — Pas de date fixe : chaque prospect choisit son créneau et
+    // regarde une vidéo pré-enregistrée. Le copy ne doit JAMAIS inventer de
+    // date/heure commune ni promettre un hôte "en direct".
+    webinarContext =
+      `\n\nWEBINAIRE EN MODE AUTOMATISÉ (EVERGREEN) : il n'y a AUCUNE date fixe — ` +
+      `chaque prospect choisit son propre créneau ("dans 15 min", "demain à la même heure"...) ` +
+      `puis regarde une vidéo PRÉ-ENREGISTRÉE. N'invente AUCUNE date/heure précise, ne promets JAMAIS ` +
+      `un hôte "en direct" ; parle de "ta session" au lieu de "le webinaire du [date]".` +
+      (brief.webinarUrgency
+        ? ` Urgence/rareté à mettre en avant : "${brief.webinarUrgency}".`
+        : "") +
+      `\n`;
+  }
+
   const videoMediaItem = videoUrlToMediaItem(brief.videoUrl);
   const briefMediasWithVideo: MediaItem[] = [
     ...(brief.medias ?? []),
@@ -3362,7 +3544,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
         : undefined,
       videoUrl: brief.videoUrl,
       brief,
-    }) + ctaInstruction + businessContext + copyDirectives(brief.language) + copyFramework(normalizedKind, brief.language) + layoutDirectives(normalizedKind, brief.language);
+    }) + ctaInstruction + businessContext + webinarContext + copyDirectives(brief.language) + copyFramework(normalizedKind, brief.language) + layoutDirectives(normalizedKind, brief.language);
 
   const mainPromise = callAI({
     systemMessage: SYSTEM_MESSAGE_FUNNEL,
@@ -3370,8 +3552,20 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     maxTokens: 4000,
   });
 
+  // 🆕 Timeout global configurable + défaut adapté au fournisseur : GLM /
+  // OpenRouter sont plus lents → 180 s par défaut (sinon 75 s). Surchargeable
+  // via AI_TIMEOUT_MS (ms).
+  const aiProviderLc = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  const aiSlowProvider =
+    aiProviderLc.includes("router") ||
+    aiProviderLc === "zai" ||
+    aiProviderLc === "z.ai" ||
+    aiProviderLc === "glm";
+  const aiTimeoutMs = Number(
+    process.env.AI_TIMEOUT_MS ?? (aiSlowProvider ? "180000" : "75000"),
+  );
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Timeout AI")), 75000),
+    setTimeout(() => reject(new Error("Timeout AI")), aiTimeoutMs),
   );
 
   let mainRawText: string;
@@ -3471,6 +3665,18 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       (brief.downsellPrice && brief.downsellPrice.trim()
         ? `- PRIX DOWNSELL IMPOSÉ (utilise EXACTEMENT ce montant pour l'offre de la page downsell, n'invente AUCUN autre prix) : "${brief.downsellPrice.trim()}"\n`
         : "") +
+      // 🆕 Page OTO/tripwire générique (rôle "oto", cochable sur tous les
+      // types de tunnel) : offre imposée par l'utilisateur, sinon l'IA
+      // inventait systématiquement nom/prix/promesse.
+      (brief.otoOfferName && brief.otoOfferName.trim()
+        ? `- OFFRE OTO/TRIPWIRE IMPOSÉE (la page "oto" DOIT présenter EXACTEMENT cette offre, pas une offre générique inventée) : "${brief.otoOfferName.trim()}"\n`
+        : "") +
+      (brief.otoPrice && brief.otoPrice.trim()
+        ? `- PRIX OTO IMPOSÉ (utilise EXACTEMENT ce montant pour l'offre de la page "oto", n'invente AUCUN autre prix) : "${brief.otoPrice.trim()}"\n`
+        : "") +
+      (brief.otoPromise && brief.otoPromise.trim()
+        ? `- PROMESSE OTO IMPOSÉE (reprends cette promesse pour l'offre de la page "oto") : "${brief.otoPromise.trim()}"\n`
+        : "") +
       (heroHeadline ? `- Titre de la home : "${heroHeadline}"\n` : "") +
       (heroSub ? `- Promesse de la home : "${heroSub}"\n` : "") +
       `- CTA PRINCIPAL DU TUNNEL (réutilise EXACTEMENT ce libellé et cette intention sur toutes les pages) : "${primaryCtaLabel}"\n` +
@@ -3491,17 +3697,42 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     // enrichi côté buildPagesFromBlueprints.
     const results = await Promise.allSettled(
       secondaryBlueprints.map(async (bp) => {
+        // 🆕 Webinaire — DOUBLE OFFRE : la page "sales" (post-webinaire) ne
+        // vend PAS le webinaire mais un produit distinct. Si l'utilisateur a
+        // renseigné `postWebinarOfferName`, on substitue offerName/price/promise
+        // UNIQUEMENT pour la génération de CETTE page (offer name affiché à
+        // l'IA + richSectionsBlock/strictSectionRequirements internes à
+        // secondaryPagesPrompt). Aucun changement pour les autres rôles/types.
+        const isWebinarSalesPage =
+          normalizedKind === "webinar" &&
+          bp.role === "sales" &&
+          !!(brief.postWebinarOfferName && brief.postWebinarOfferName.trim());
+        const pageBrief: FunnelBrief = isWebinarSalesPage
+          ? {
+              ...brief,
+              offerName: brief.postWebinarOfferName!.trim(),
+              price: (brief.postWebinarPrice ?? brief.price ?? "").trim() || brief.price,
+              promise: (brief.postWebinarPromise ?? "").trim() || brief.promise,
+            }
+          : brief;
+        const salesOfferOverride = isWebinarSalesPage
+          ? `\n\nOFFRE RÉELLEMENT VENDUE SUR CETTE PAGE (IMPÉRATIF — cette page vend un produit DIFFÉRENT du webinaire, qui a déjà eu lieu) :\n` +
+            `- Nom du produit/offre : "${pageBrief.offerName}"\n` +
+            `- Prix : "${pageBrief.price}"\n` +
+            (pageBrief.promise ? `- Promesse principale : "${pageBrief.promise}"\n` : "") +
+            `Ne parle PAS du webinaire comme de l'offre à vendre (il est déjà terminé) : rédige un copywriting de vente complet (problème, solution, bénéfices, preuve, prix, garantie, urgence) pour CE produit.\n`
+          : "";
         const promptText =
           secondaryPagesPrompt({
             brand: brief.brandName,
-            offer: brief.offerName,
+            offer: pageBrief.offerName,
             funnelKind: normalizedKind,
             language: brief.language,
             pages: [{ role: bp.role, slug: bp.slug, name: bp.name }],
             medias: toMediaInputs(briefMediasWithVideo),
             videoUrl: brief.videoUrl,
-            brief,
-          }) + ctaInstruction + businessContext + copyDirectives(brief.language) + coherenceBlock;
+            brief: pageBrief,
+          }) + ctaInstruction + businessContext + copyDirectives(brief.language) + coherenceBlock + salesOfferOverride;
 
         const rawText = (await Promise.race([
           callAI({
@@ -3509,7 +3740,12 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
             userPrompt: promptText,
             maxTokens: 3000,
           }),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 60000)),
+          new Promise<null>((resolve) =>
+            setTimeout(
+              () => resolve(null),
+              Number(process.env.AI_PAGE_TIMEOUT_MS ?? (aiSlowProvider ? "150000" : "60000")),
+            ),
+          ),
         ])) as string | null;
 
         if (!rawText) {
@@ -3531,7 +3767,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
           parsed.data.pages[0];
         if (!page) return null;
 
-        const sections = parseSectionsArray(page.sections, fallbackCta, brief);
+        const sections = parseSectionsArray(page.sections, fallbackCta, pageBrief);
         if (sections.length === 0) return null;
         return { role: bp.role as PageRole, sections };
       }),
@@ -3781,14 +4017,30 @@ if (shouldInjectPricing) {
   // checkout ne trouve pas de montant payable. Idem upsell/downsell.
   applyMainOfferPrice(finalFunnel, brief);
   applyOtoPrices(finalFunnel, brief);
+  // 🆕 Webinaire — prix de l'offre vendue APRÈS le webinaire (page "sales",
+  // jamais la home pour ce kind → hors de portée d'applyMainOfferPrice).
+  applyWebinarSalesOffer(finalFunnel, brief);
+  // 🆕 LOT 10 — Order bump (produit complémentaire) sur la page de checkout.
+  applyOrderBumpConfig(finalFunnel, brief);
+  // 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de RDV.
+  applyBookingCalendarEmbed(finalFunnel, brief);
+  // 🆕 LOT 9 — Duplique la page "challenge-day" en jours 1..N + rechaîne.
+  applyChallengeMultiDay(finalFunnel, brief);
+
+  // 🆕 Webinaire — l'offre PAYANTE à considérer pour "checkout actif ?" est
+  // celle vendue APRÈS le webinaire (souvent brief.price = "Gratuit" pour le
+  // webinaire lui-même, ce qui sautait à tort Palier 1/checkout interne sur la
+  // page de vente réelle). Aucun effet sur les autres types (fallback brief.price).
+  const effectivePriceForPaidGate =
+    normalizedKind === "webinar" ? (brief.postWebinarPrice ?? brief.price) : brief.price;
 
   // ===== ÉTAPE 12 : 🆕 Lien de paiement (Palier 1) sur les CTA pricing =====
   // Doit passer APRÈS l'harmonisation (sinon elle réécrirait le CTA). Si l'offre
   // est payante et qu'un lien de paiement a été fourni, TOUS les boutons des
   // cartes pricing redirigent vers ce lien (Stripe Payment Link, systeme.io…).
-  if (brief.paymentUrl && brief.paymentUrl.trim() && !isFreeOffer(brief.price)) {
+  if (brief.paymentUrl && brief.paymentUrl.trim() && !isFreeOffer(effectivePriceForPaidGate)) {
     applyPaymentUrlToPricingCtas(finalFunnel, brief.paymentUrl.trim());
-  } else if (!isFreeOffer(brief.price)) {
+  } else if (!isFreeOffer(effectivePriceForPaidGate)) {
     // 🆕 Stripe Connect : pas de lien externe → les boutons d'offre déclenchent
     // le CHECKOUT INTERNE (#ff-checkout → /api/checkout → session sur le compte
     // connecté du créateur). Le bouton « achète » sans config supplémentaire.
@@ -3801,7 +4053,7 @@ if (shouldInjectPricing) {
   applyUpsellDeclineLinks(finalFunnel, brief.language);
 
   // ===== ÉTAPE 12quater : 🆕 Prix sur le CTA FINAL de la page de vente =====
-  if (!isFreeOffer(brief.price)) appendPriceToFinalCta(finalFunnel);
+  if (!isFreeOffer(effectivePriceForPaidGate)) appendPriceToFinalCta(finalFunnel);
 
   // ===== ÉTAPE 12bis : 🆕 Sous-étape B — garantir la section Présentation/Autorité =====
   // Si l'utilisateur a saisi un texte « à propos » mais que la page principale
@@ -3827,6 +4079,12 @@ if (shouldInjectPricing) {
   // lisent déjà section.layoutVariant → aucun changement de rendu nécessaire.
   assignAlternatingSplitLayouts(finalFunnel);
 
+  // ===== ÉTAPE 14bis : 🆕 patterns de sections (variété par famille) =====
+  // Attribue un pattern visuel (problème/agitation, process, stats) par section,
+  // en sélection semi-aléatoire stable (seed = nom du tunnel) + anti-répétition.
+  assignSectionPatterns(finalFunnel);
+  assignFooterVariant(finalFunnel);
+
   // ===== ÉTAPE 15 : 🆕 B2 — variation des cards (icônes distinctes) =====
   assignCardVariation(finalFunnel);
 
@@ -3846,7 +4104,359 @@ if (shouldInjectPricing) {
   // surlignage déjà choisi par l'IA (champ contenant déjà `[[`).
   applyAccentHighlights(finalFunnel);
 
+  // ===== ÉTAPE 20 : 🆕 Webinaire — date/heure + urgence saisies au wizard =====
+  // Injecte un compte à rebours (countdown-date) dans la section urgency de la
+  // page d'inscription (créée si absente) + le message d'urgence utilisateur.
+  // 🆕 LOT 5 — Mode Evergreen : pas de date fixe, logique dédiée.
+  if (brief.webinarMode === "evergreen") {
+    applyEvergreenWebinarSchedule(finalFunnel, brief);
+  } else {
+    applyWebinarSchedule(finalFunnel, brief);
+  }
+
+  // ===== ÉTAPE 21 : 🆕 Couleurs de MARQUE (branding choisi au template) =====
+  // Si l'utilisateur a activé « Utiliser les couleurs de ma marque », le design
+  // du tunnel prend SES couleurs (1 à 4, saisies au choix du template) :
+  // [0] primaryColor (foncé/titres/fonds), [1] secondaryColor (accent/boutons),
+  // [2] accentColor (détails), [3] accentColor2 (prix/éléments spéciaux).
+  // Rétrocompat : à défaut de brief.brandColors, retombe sur mainColor/secondaryColor.
+  if (brief.brandColorsEnabled) {
+    // brandColors (nouveau) respecte l'ordre affiché à l'utilisateur :
+    // [0]=principale/boutons, [1]=foncée, [2]=secondaire, [3]=accent spécial.
+    // À défaut, rétrocompat sur les anciens champs mainColor/secondaryColor
+    // (mainColor=foncé, secondaryColor=principale/boutons).
+    const colors = brief.brandColors?.length
+      ? brief.brandColors
+      : [brief.secondaryColor, brief.mainColor].filter((c): c is string => !!c);
+    finalFunnel.design = {
+      ...finalFunnel.design,
+      ...(colors[0] ? { secondaryColor: colors[0] } : {}),
+      ...(colors[1] ? { primaryColor: colors[1] } : {}),
+      ...(colors[2] ? { accentColor: colors[2] } : {}),
+      ...(colors[3] ? { accentColor2: colors[3] } : {}),
+    };
+    console.log(`[brand-colors] palette de marque appliquée (${colors.join(", ")}).`);
+  }
+  // 🆕 Persiste le flag EXPLICITEMENT (true ET false) — sert de garde pour
+  // FunnelPreview/TemplateThemeProvider : primaryColor/secondaryColor/
+  // accentColor ont TOUJOURS une valeur (IA ou défaut), ce flag seul dit si
+  // elle vient d'un choix de branding réel de l'utilisateur. Sans lui, le
+  // fond/les cartes/le header-footer de TOUS les templates (y compris ceux
+  // sans branding) se retrouvaient recolorés par erreur.
+  finalFunnel.design = {
+    ...finalFunnel.design,
+    brandColorsEnabled: brief.brandColorsEnabled === true,
+  };
+
   return finalFunnel;
+}
+
+/**
+ * 🆕 Webinaire : applique la date/heure (brief.webinarDate) et le message
+ * d'urgence (brief.webinarUrgency) au tunnel généré. La date alimente un
+ * TimerItem `countdown-date` posé sur la section `urgency` de la page
+ * d'accueil (inscription). Si aucune section urgency n'existe, on en crée une
+ * juste après le hero. Idempotent : ne duplique pas un timer existant.
+ */
+function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
+  if (!brief.webinarDate) return;
+  const targetDate = new Date(brief.webinarDate);
+  if (Number.isNaN(targetDate.getTime())) return;
+
+  const lang = brief.language ?? "fr";
+  const labels = {
+    fr: "Le webinaire commence dans",
+    en: "The webinar starts in",
+    es: "El webinar empieza en",
+  } as const;
+
+  // 🆕 FIX : le countdown seul n'affichait JAMAIS la date/heure en clair
+  // (l'IA était censée l'écrire dans le copy via `webinarContext`, mais ce
+  // n'est qu'une INSTRUCTION IA, pas garantie). Le label du timer — posé ici,
+  // 100% déterministe, jamais réécrit par l'IA — inclut désormais la date
+  // formatée : elle s'affiche donc TOUJOURS, quoi qu'écrive le copy autour.
+  const locale = lang === "en" ? "en-US" : lang === "es" ? "es-ES" : "fr-FR";
+  const formattedDate = targetDate.toLocaleString(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dateLabels = {
+    fr: `Le webinaire commence le ${formattedDate} — dans`,
+    en: `The webinar starts on ${formattedDate} — in`,
+    es: `El webinar empieza el ${formattedDate} — en`,
+  } as const;
+
+  const timer: TimerItem = {
+    id: `timer_webinar_${Date.now().toString(36)}`,
+    mode: "countdown-date",
+    targetDate: targetDate.toISOString(),
+    label: dateLabels[lang] ?? dateLabels.fr ?? labels.fr,
+    style: "cards",
+    size: "lg",
+    onExpire: "keep-zero",
+    showDays: true,
+  };
+
+  const applyToPage = (sections: FunnelSection[]): FunnelSection[] => {
+    const urgency = sections.find((s) => s.type === "urgency");
+    if (urgency) {
+      const items = Array.isArray(urgency.items) ? urgency.items : [];
+      const hasTimer = items.some((it) => it.kind === "timer");
+      if (!hasTimer) items.push({ kind: "timer", data: timer });
+      else {
+        // Timer déjà présent (souvent posé par l'IA elle-même, cadre
+        // SCARCITY-URGENCY) → on ne le duplique pas, mais on CALE sa date ET
+        // son label sur les valeurs déterministes ci-dessus. Sans réécrire le
+        // label ici, le timer généré par l'IA gardait son texte d'origine
+        // (générique, sans date) même si la cible du countdown, elle, était
+        // correcte — c'est ce qui faisait dire "la date ne s'affiche nulle
+        // part" alors que le countdown tournait bien.
+        urgency.items = items.map((it) =>
+          it.kind === "timer"
+            ? {
+                kind: "timer" as const,
+                data: {
+                  ...it.data,
+                  mode: "countdown-date" as const,
+                  targetDate: timer.targetDate,
+                  label: timer.label,
+                  showDays: true,
+                },
+              }
+            : it,
+        );
+      }
+      if (!hasTimer) urgency.items = items;
+      if (brief.webinarUrgency && !urgency.subheadline) {
+        urgency.subheadline = brief.webinarUrgency;
+      }
+      return sections;
+    }
+    // Pas de section urgency → on en crée une juste après le hero.
+    const heroIdx = sections.findIndex((s) => s.type === "hero");
+    const created: FunnelSection = {
+      id: `urgency_${Date.now().toString(36)}`,
+      type: "urgency",
+      headline: labels[lang] ?? labels.fr,
+      ...(brief.webinarUrgency ? { subheadline: brief.webinarUrgency } : {}),
+      items: [{ kind: "timer", data: timer }],
+      visible: true,
+    };
+    const out = [...sections];
+    out.splice(heroIdx >= 0 ? heroIdx + 1 : 0, 0, created);
+    return out;
+  };
+
+  const home = funnel.pages?.find((p) => p.isHome) ?? funnel.pages?.[0];
+  if (home) {
+    home.sections = applyToPage(home.sections);
+    funnel.sections = home.sections;
+  } else {
+    funnel.sections = applyToPage(funnel.sections ?? []);
+  }
+  console.log(
+    `[webinar-schedule] countdown appliqué (cible ${timer.targetDate}${brief.webinarUrgency ? " + urgence utilisateur" : ""}).`,
+  );
+
+  // 🆕 Date/heure affichée en clair dans le header sticky (page d'accueil
+  // uniquement — le header ne s'affiche déjà que là par défaut). Distinct du
+  // countdown : ici on montre juste la date/heure lisible, sans compte à
+  // rebours, animée pour attirer l'œil.
+  funnel.header = {
+    ...funnel.header,
+    eventDateTime: targetDate.toISOString(),
+  };
+
+  // 🆕 LOT 4 — Salle d'attente/live : même countdown + CTA vers le lien
+  // externe (Zoom/YouTube/Meet) si renseigné.
+  const livePage = funnel.pages?.find((p) => p.role === "live");
+  if (livePage) {
+    const liveTimer: TimerItem = { ...timer, id: `${timer.id}_live`, onExpire: "keep-zero" };
+    const urgencyIdx = livePage.sections.findIndex((s) => s.type === "urgency");
+    if (urgencyIdx >= 0) {
+      // ⚠️ Annotation explicite : sans elle, TS (5.5+) infère un type prédicat
+      // automatique sur .filter(it => it.kind !== "timer") qui EXCLUT "timer"
+      // du type du tableau résultant → le .push({kind:"timer",...}) suivant
+      // échoue à la compilation alors que c'est justement pour le réinsérer.
+      const items: SectionItem[] = Array.isArray(livePage.sections[urgencyIdx].items)
+        ? livePage.sections[urgencyIdx].items!.filter((it) => it.kind !== "timer")
+        : [];
+      items.push({ kind: "timer", data: liveTimer });
+      livePage.sections[urgencyIdx] = { ...livePage.sections[urgencyIdx], items };
+    }
+    if (brief.webinarExternalLink?.trim()) {
+      const link = brief.webinarExternalLink.trim();
+      const ctaIdx = findLastIndex(livePage.sections, (s) => s.type === "cta");
+      if (ctaIdx >= 0) {
+        const label = livePage.sections[ctaIdx].cta?.label || "Rejoindre le direct";
+        livePage.sections[ctaIdx] = {
+          ...livePage.sections[ctaIdx],
+          cta: makeRedirectCta(label, link, "_blank"),
+        };
+      }
+    }
+  }
+
+  // 🆕 LOT 4 — Replay : timer d'expiration automatique (défaut 72h après le
+  // webinaire). À expiration, le message remplace la vidéo (onExpire: "show-message").
+  const replayPage = funnel.pages?.find((p) => p.role === "replay");
+  if (replayPage) {
+    const hours = Math.max(1, Math.min(720, Number(brief.replayExpiryHours) || 72));
+    const expiryDate = new Date(targetDate.getTime() + hours * 60 * 60 * 1000);
+    const expiryLabels = {
+      fr: "Le replay expire dans",
+      en: "The replay expires in",
+      es: "El replay expira en",
+    } as const;
+    const expiredMessages = {
+      fr: "Ce replay n'est plus disponible.",
+      en: "This replay is no longer available.",
+      es: "Este replay ya no está disponible.",
+    } as const;
+    const expiryTimer: TimerItem = {
+      id: `timer_replay_expiry_${Date.now().toString(36)}`,
+      mode: "countdown-date",
+      targetDate: expiryDate.toISOString(),
+      label: expiryLabels[lang] ?? expiryLabels.fr,
+      expiredMessage: expiredMessages[lang] ?? expiredMessages.fr,
+      style: "cards",
+      size: "md",
+      onExpire: "show-message",
+      showDays: true,
+    };
+    const replayUrgencyIdx = replayPage.sections.findIndex((s) => s.type === "urgency");
+    if (replayUrgencyIdx >= 0) {
+      const items: SectionItem[] = Array.isArray(replayPage.sections[replayUrgencyIdx].items)
+        ? replayPage.sections[replayUrgencyIdx].items!.filter((it) => it.kind !== "timer")
+        : [];
+      items.push({ kind: "timer", data: expiryTimer });
+      replayPage.sections[replayUrgencyIdx] = { ...replayPage.sections[replayUrgencyIdx], items };
+    } else {
+      const heroIdx = replayPage.sections.findIndex((s) => s.type === "hero");
+      const created: FunnelSection = {
+        id: `urgency_replay_${Date.now().toString(36)}`,
+        type: "urgency",
+        headline: expiryLabels[lang] ?? expiryLabels.fr,
+        items: [{ kind: "timer", data: expiryTimer }],
+        visible: true,
+      };
+      replayPage.sections.splice(heroIdx >= 0 ? heroIdx + 1 : 0, 0, created);
+    }
+  }
+
+  // 🆕 LOT 4 — Confirmation : CTA "Ajouter à mon agenda" → fichier .ics en
+  // data URI (fonctionne avec Google/Outlook/Apple Calendar, sans dépendre du
+  // slug publié ni d'une route serveur).
+  const confirmationPage = funnel.pages?.find((p) => p.role === "confirmation");
+  if (confirmationPage) {
+    const icsUri = buildWebinarIcsDataUri({
+      title: brief.offerName || brief.brandName || "Webinaire",
+      description: brief.promise || undefined,
+      startDate: targetDate,
+      durationMinutes: 60,
+      location: brief.webinarExternalLink?.trim() || undefined,
+    });
+    const ctaIdx = findLastIndex(confirmationPage.sections, (s) => s.type === "cta");
+    if (ctaIdx >= 0) {
+      const label = confirmationPage.sections[ctaIdx].cta?.label || "Ajouter à mon calendrier";
+      confirmationPage.sections[ctaIdx] = {
+        ...confirmationPage.sections[ctaIdx],
+        cta: makeRedirectCta(label, icsUri, "_blank"),
+      };
+    }
+  }
+}
+
+/**
+ * 🆕 LOT 5 — Version ÉVERGREEN du webinaire (pas de date fixe) : chaque
+ * prospect choisit son créneau côté client (voir EvergreenPlayerBlock dans
+ * FunnelPreview.tsx) et le compte à rebours d'offre est calculé depuis SON
+ * inscription individuelle (mode "countdown-since-registration"), PAS depuis
+ * une date commune. Remplace applyWebinarSchedule quand
+ * brief.webinarMode === "evergreen".
+ */
+function applyEvergreenWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
+  const lang = brief.language ?? "fr";
+  const offerHours = Math.max(1, Math.min(720, Number(brief.evergreenOfferHours) || 24));
+
+  const offerLabels = {
+    fr: "Offre spéciale valable",
+    en: "Special offer valid for",
+    es: "Oferta especial válida por",
+  } as const;
+  const expiredMessages = {
+    fr: "Cette offre a expiré.",
+    en: "This offer has expired.",
+    es: "Esta oferta ha expirado.",
+  } as const;
+
+  const makeTimer = (idSuffix: string): TimerItem => ({
+    id: `timer_evergreen_${idSuffix}_${Date.now().toString(36)}`,
+    mode: "countdown-since-registration",
+    durationHours: offerHours,
+    label: offerLabels[lang] ?? offerLabels.fr,
+    expiredMessage: expiredMessages[lang] ?? expiredMessages.fr,
+    style: "cards",
+    size: "lg",
+    onExpire: "show-message",
+    showDays: false,
+  });
+
+  const applyToUrgency = (sections: FunnelSection[] | undefined, idSuffix: string): void => {
+    if (!sections) return;
+    const idx = sections.findIndex((s) => s.type === "urgency");
+    if (idx >= 0) {
+      const items: SectionItem[] = Array.isArray(sections[idx].items)
+        ? sections[idx].items!.filter((it) => it.kind !== "timer")
+        : [];
+      items.push({ kind: "timer", data: makeTimer(idSuffix) });
+      sections[idx] = { ...sections[idx], items };
+      if (brief.webinarUrgency && !sections[idx].subheadline) {
+        sections[idx].subheadline = brief.webinarUrgency;
+      }
+    } else {
+      const heroIdx = sections.findIndex((s) => s.type === "hero");
+      const created: FunnelSection = {
+        id: `urgency_evergreen_${idSuffix}_${Date.now().toString(36)}`,
+        type: "urgency",
+        headline: offerLabels[lang] ?? offerLabels.fr,
+        ...(brief.webinarUrgency ? { subheadline: brief.webinarUrgency } : {}),
+        items: [{ kind: "timer", data: makeTimer(idSuffix) }],
+        visible: true,
+      };
+      sections.splice(heroIdx >= 0 ? heroIdx + 1 : 0, 0, created);
+    }
+  };
+
+  // Countdown d'offre (relatif à l'inscription individuelle) sur live/replay/sales.
+  const livePage = funnel.pages?.find((p) => p.role === "live");
+  const replayPage = funnel.pages?.find((p) => p.role === "replay");
+  const salesPage = funnel.pages?.find((p) => p.role === "sales");
+  applyToUrgency(livePage?.sections, "live");
+  applyToUrgency(replayPage?.sections, "replay");
+  applyToUrgency(salesPage?.sections, "sales");
+
+  // Vidéo pré-enregistrée diffusée sur la page "live", qui devient alors le
+  // lecteur evergreen (créneau choisi par le prospect, voir FunnelPreview.tsx).
+  if (livePage && brief.evergreenVideoUrl?.trim()) {
+    livePage.evergreenVideoUrl = brief.evergreenVideoUrl.trim();
+  }
+
+  console.log(
+    `[webinar-evergreen] countdown d'offre (${offerHours}h depuis inscription individuelle) appliqué` +
+      (livePage?.evergreenVideoUrl ? " + lecteur evergreen sur la page live." : "."),
+  );
+}
+
+function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return i;
+  }
+  return -1;
 }
 
 /**
@@ -3863,8 +4473,9 @@ function highlightCaptivatingTokens(text: string | undefined): string | undefine
   if (!text) return text;
   if (text.includes("[[")) return text; // déjà surligné par l'IA → on respecte
   let count = 0;
+  // 🆕 Préférence utilisateur : couleur par défaut SOBRE → 1 seul surlignage max.
   return text.replace(ACCENT_TOKEN_RE, (m) => {
-    if (count >= 2) return m;
+    if (count >= 1) return m;
     count++;
     return `[[${m.trim()}]]`;
   });
@@ -3894,9 +4505,9 @@ function applyAccentHighlights(funnel: Funnel): void {
     if (Array.isArray(s.bullets)) {
       s.bullets = s.bullets.map((b) => stripAiHighlightColors(b) ?? b);
     }
-    // 2) Puis on ajoute l'accent du template sur titre/sous-titre si rien.
+    // 2) Puis on ajoute l'accent du template sur le TITRE uniquement si rien.
+    //    (🆕 sous-titre exclu : la couleur par défaut était jugée sur-appliquée)
     s.headline = highlightCaptivatingTokens(s.headline) ?? s.headline;
-    s.subheadline = highlightCaptivatingTokens(s.subheadline);
   };
   funnel.sections?.forEach(apply);
   funnel.pages?.forEach((p) => p.sections?.forEach(apply));
@@ -4032,6 +4643,9 @@ function tidyHeroSections(funnel: Funnel): void {
     if (!Array.isArray(sections)) return;
     for (const s of sections) {
       if (s.type !== "hero") continue;
+      // 🆕 Hero = Hook (titre) + Promesse (sous-titre) + CTA. Aucun corps de
+      // texte ("blabla") : après la promesse, on enchaîne direct sur le CTA.
+      if (s.body) delete s.body;
       if (
         Array.isArray(s.bullets) &&
         s.bullets.length > 0 &&
@@ -4088,12 +4702,12 @@ function shareAuthorImageHeroAbout(funnel: Funnel): void {
  * L'alternance gauche/droite est STRICTE (split-text-image ↔ split-image-text)
  * sur l'ensemble de la page, conformément à layout-design-tunnel.
  */
+// 🆕 Types éligibles au SPLIT (texte | cartes, alternance gauche/droite).
+// problem / agitation / proof en sont RETIRÉS : ils reçoivent désormais un
+// PATTERN dédié (checklist douleur / bande de stats) via funnel-theme.css.
 const SPLIT_ELIGIBLE_TYPES: ReadonlySet<FunnelSectionType> = new Set<FunnelSectionType>([
   "about",
-  "problem",
-  "agitation",
   "solution",
-  "proof",
   "offer",
   "benefits",
 ]);
@@ -4156,8 +4770,13 @@ function assignAlternatingSplitLayouts(funnel: Funnel): void {
       // et colonne vide). Split éditorial : corps consistant + 2 à 5 puces, sans média.
       void hasText;
       const mediaSplit = hasMedia && (bodyLen >= 40 || bulletCount >= 2);
+      // 🆕 Split éditorial ÉLARGI (sans média) pour casser la monotonie « tout
+      // centré » quand le tunnel n'a pas d'images : dès qu'une section a 2–4
+      // cartes et un minimum de corps, on la passe en split (texte | cartes),
+      // en alternance gauche/droite. Le renderer rééquilibre lui-même (4+ cartes
+      // → grille centrée) donc pas de colonne bancale.
       const editorialSplit =
-        !hasMedia && bodyLen >= 80 && bulletCount >= 2 && bulletCount <= 5;
+        !hasMedia && bulletCount >= 2 && bulletCount <= 4 && bodyLen >= 30;
       if (!mediaSplit && !editorialSplit) continue;
 
       s.layoutVariant = splitIndex % 2 === 0 ? "split-text-image" : "split-image-text";
@@ -4168,6 +4787,217 @@ function assignAlternatingSplitLayouts(funnel: Funnel): void {
   funnel.pages?.forEach((p) => {
     // 🆕 Pages post-achat (merci/confirmation/accès…) : PAS de split → rendu
     // simple et centré (cf. simplifyPostConversionPages).
+    if (POST_CONVERSION_ROLES.has(p.role)) return;
+    apply(p.sections);
+  });
+}
+
+// 🆕 Patterns de sections : chaque famille (problème/agitation, process, stats)
+// reçoit un pattern visuel choisi ALÉATOIREMENT à chaque génération, avec
+// anti-répétition de STYLE entre deux sections qui se suivent (peu importe
+// leur type) : on ne pioche jamais deux fois de suite dans la même « famille »
+// visuelle (centered / split / grid / cards / timeline / …). Le renderer émet
+// data-ff-pattern → funnel-theme.css applique la mise en page correspondante.
+const SECTION_PATTERN_VARIANTS: Partial<Record<FunnelSectionType, readonly string[]>> = {
+  hero: ["hero-centered-nav-glow", "hero-split-stats-search-b2b", "hero-video-centered-funnel"],
+  problem: [
+    "problem-split-pain-checklist",
+    "problem-centered-quote-stat",
+    "problem-cards-before-comparison",
+  ],
+  agitation: [
+    "problem-split-pain-checklist",
+    "problem-centered-quote-stat",
+    "problem-cards-before-comparison",
+  ],
+  benefits: [
+    "benefits-grid-numbered-flat",
+    "benefits-cards-4-shadow-longtext",
+    "benefits-horizontal-steps-arrow",
+    "benefits-cards-6-shadow-classic",
+  ],
+  process: [
+    "process-grid-numbered-rich",
+    "process-timeline-vertical-circles",
+    "process-faq-numbered-hybrid",
+    "process-horizontal-steps-arrow",
+  ],
+  proof: [
+    "stats-cards-4-suffix-badge",
+    "stats-cards-4-percent-icons",
+    "stats-bar-horizontal-no-card",
+  ],
+  testimonials: [
+    "testimonials-3cards-grid",
+    "testimonials-2x2-stars-date",
+    "testimonials-list-quotes",
+    "testimonials-carousel-video",
+  ],
+  pricing: [
+    "pricing-comparison-3tiers",
+    "pricing-single-card-spotlight",
+    "pricing-split-guarantee-emphasis",
+  ],
+  offer: [
+    "pricing-comparison-3tiers",
+    "pricing-single-card-spotlight",
+    "pricing-split-guarantee-emphasis",
+  ],
+  cta: [
+    "cta-final-centered-urgency",
+    "cta-final-split-recap-benefits",
+    "cta-final-glow-countdown",
+  ],
+  faq: [
+    "faq-accordion",
+    "faq-sandwich-double-cta",
+    "faq-hub-grid-links",
+    "faq-grid-intro",
+  ],
+};
+
+// 🆕 Variante de footer choisie de façon seedée (stable par tunnel). N'écrase
+// jamais un choix explicite déjà présent. Rendu par FunnelFooter.tsx.
+const FOOTER_VARIANTS = [
+  "footer-minimal-centered",
+  "footer-grid-sitemap",
+  "footer-cta-newsletter",
+] as const;
+
+function assignFooterVariant(funnel: Funnel): void {
+  const meta = (funnel.meta ?? {}) as { footerVariant?: string };
+  if (meta.footerVariant) return; // respecte un choix explicite
+  const seed = funnel.funnelName || "af";
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  const chosen = FOOTER_VARIANTS[Math.abs(h) % FOOTER_VARIANTS.length];
+  funnel.meta = { ...(funnel.meta ?? {}), footerVariant: chosen };
+}
+
+// 🆕 « Famille » visuelle d'un pattern (déduite de son nom) : sert uniquement
+// à empêcher deux sections consécutives d'avoir le même AIR (deux « centered »
+// ou deux « grid » qui se suivent), même si leurs types diffèrent. Ordre des
+// tests important (du plus spécifique au plus générique).
+function patternFamily(pattern?: string | null): string {
+  if (!pattern) return "none";
+  const p = pattern.toLowerCase();
+  if (p.includes("split")) return "split";
+  if (p.includes("centered")) return "centered";
+  if (p.includes("timeline")) return "timeline";
+  if (p.includes("carousel")) return "carousel";
+  if (p.includes("accordion")) return "accordion";
+  if (p.includes("grid") || p.includes("2x2")) return "grid";
+  if (p.includes("card")) return "cards";
+  if (p.includes("steps")) return "steps";
+  if (p.includes("list")) return "list";
+  if (p.includes("bar")) return "bar";
+  if (p.includes("comparison")) return "comparison";
+  if (p.includes("glow")) return "glow";
+  if (p.includes("video")) return "video";
+  return "other";
+}
+
+// 🆕 Tirage VRAIMENT aléatoire dans un pool, en excluant la famille du style
+// précédent quand c'est possible (anti-répétition entre deux sections qui se
+// suivent). Si l'exclusion viderait le pool, on retombe sur le pool complet.
+function pickPattern(pool: readonly string[], lastFamily: string | null): string {
+  if (pool.length === 0) return "";
+  let candidates: readonly string[] = pool;
+  if (lastFamily && pool.length > 1) {
+    const filtered = pool.filter((p) => patternFamily(p) !== lastFamily);
+    if (filtered.length > 0) candidates = filtered;
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function assignSectionPatterns(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    // Style de la section précédente (toutes familles de sections confondues)
+    // — c'est CE qu'on compare pour éviter deux styles identiques d'affilée.
+    let lastFamily: string | null = null;
+    sections.forEach((s) => {
+      const variants = SECTION_PATTERN_VARIANTS[s.type];
+      if (!variants || variants.length === 0) return;
+      // 🆕 Hero : sélection selon le média disponible (image-aware / video-aware).
+      //  - vidéo → hero-video-centered-funnel (embed réel)
+      //  - image → hero-split-stats-search-b2b (photo à droite)
+      //  - aucun → centré-glow OU split-stats (mock), au tirage aléatoire
+      if (s.type === "hero") {
+        const hasVideo = !!(s.video && s.video.url);
+        const hasImage = !!(
+          s.image && s.image.mode !== "none" && (s.image.url || s.image.mediaRef)
+        );
+        if (hasVideo) s.pattern = "hero-video-centered-funnel";
+        else if (hasImage) s.pattern = "hero-split-stats-search-b2b";
+        else s.pattern = pickPattern(["hero-centered-nav-glow", "hero-split-stats-search-b2b"], lastFamily);
+        lastFamily = patternFamily(s.pattern);
+        return;
+      }
+      // 🆕 Prix/offre : CONTENT-AWARE. single-card/split n'affichent qu'UN palier
+      // → réservés au tarif à 1 palier. ≥2 paliers → comparaison (affiche tout).
+      if (s.type === "pricing" || s.type === "offer") {
+        const tierCount = (s.items || []).filter((it) => it.kind === "pricing").length;
+        if (tierCount === 0) return;
+        s.pattern =
+          tierCount >= 2
+            ? "pricing-comparison-3tiers"
+            : pickPattern(["pricing-single-card-spotlight", "pricing-split-guarantee-emphasis"], lastFamily);
+        lastFamily = patternFamily(s.pattern);
+        return;
+      }
+      // 🆕 CTA final : content-aware. split-recap nécessite ≥2 puces (récap).
+      if (s.type === "cta") {
+        const hasCta = !!s.cta;
+        const hasHeadline = !!(s.headline && s.headline.trim());
+        if (!hasCta && !hasHeadline) return;
+        const hasBullets = Array.isArray(s.bullets) && s.bullets.length >= 2;
+        const pool = hasBullets
+          ? [
+              "cta-final-centered-urgency",
+              "cta-final-split-recap-benefits",
+              "cta-final-glow-countdown",
+            ]
+          : ["cta-final-centered-urgency", "cta-final-glow-countdown"];
+        s.pattern = pickPattern(pool, lastFamily);
+        lastFamily = patternFamily(s.pattern);
+        return;
+      }
+      // 🆕 Preuve sociale (proof) : CONTENT-AWARE.
+      //  - puces "Média | citation" courtes → bande presse (trustbar)
+      //  - puces chiffrées "12K+ | label"   → stats
+      //  - sinon (items témoignages)        → pas de pattern (rendu témoignages)
+      if (s.type === "proof") {
+        const bulletsArr = Array.isArray(s.bullets) ? s.bullets : [];
+        if (looksLikePressBullets(bulletsArr)) {
+          s.pattern = "trustbar-press-quote-strip";
+          lastFamily = patternFamily(s.pattern);
+        } else if (looksLikeStatsBullets(bulletsArr) && bulletsArr.length >= 2) {
+          const statsPool = SECTION_PATTERN_VARIANTS.proof ?? [];
+          if (statsPool.length > 0) {
+            s.pattern = pickPattern(statsPool, lastFamily);
+            lastFamily = patternFamily(s.pattern);
+          }
+        }
+        return;
+      }
+      // FAQ / témoignages : basé sur les items, ≥2. Autres familles : ≥2 puces.
+      if (s.type === "faq") {
+        const faqCount = (s.items || []).filter((it) => it.kind === "faq").length;
+        if (faqCount < 2) return;
+      } else if (s.type === "testimonials") {
+        const tCount = (s.items || []).filter((it) => it.kind === "testimonial").length;
+        if (tCount < 2) return;
+      } else {
+        const bulletCount = Array.isArray(s.bullets) ? s.bullets.length : 0;
+        if (bulletCount < 2) return;
+      }
+      s.pattern = pickPattern(variants, lastFamily);
+      lastFamily = patternFamily(s.pattern);
+    });
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => {
     if (POST_CONVERSION_ROLES.has(p.role)) return;
     apply(p.sections);
   });
@@ -4488,12 +5318,37 @@ function applyMainOfferPrice(funnel: Funnel, brief: FunnelBrief): void {
   // QUE l'accueil ici pour ne pas écraser un prix upsell/downsell.
 }
 
+/**
+ * 🆕 Webinaire — Force le prix de l'offre POST-webinaire (postWebinarPrice,
+ * fallback brief.price) sur les items pricing de la page "sales" (post-live).
+ * Cette page n'est PAS la home (isHome=false pour un funnel webinaire → la
+ * home est "registration"), donc `applyMainOfferPrice` ne la touchait jamais :
+ * son prix restait celui inventé par l'IA. N'agit que pour funnelKind="webinar".
+ */
+function applyWebinarSalesOffer(funnel: Funnel, brief: FunnelBrief): void {
+  if (normalizeFunnelKind(brief.funnelKind) !== "webinar") return;
+  const price = (brief.postWebinarPrice ?? brief.price ?? "").trim();
+  if (!price || isFreeOffer(price)) return;
+  const salesPage = funnel.pages?.find((p) => p.role === "sales");
+  if (!salesPage) return;
+  salesPage.sections?.forEach((sec) => {
+    if (sec.type !== "offer" && sec.type !== "pricing") return;
+    sec.items?.forEach((it) => {
+      if (it.kind === "pricing") it.data.price = price;
+    });
+  });
+}
+
 function applyOtoPrices(funnel: Funnel, brief: FunnelBrief): void {
   const map: Partial<Record<PageRole, string>> = {};
   if (brief.upsellPrice && brief.upsellPrice.trim())
     map.upsell = brief.upsellPrice.trim();
   if (brief.downsellPrice && brief.downsellPrice.trim())
     map.downsell = brief.downsellPrice.trim();
+  // 🆕 Page OTO/tripwire générique (rôle "oto") : même mécanisme — le prix
+  // saisi par l'utilisateur fait foi, sinon l'IA en invente un.
+  if (brief.otoPrice && brief.otoPrice.trim())
+    map.oto = brief.otoPrice.trim();
   if (Object.keys(map).length === 0) return;
   funnel.pages?.forEach((page) => {
     const price = map[page.role];
@@ -4505,6 +5360,102 @@ function applyOtoPrices(funnel: Funnel, brief: FunnelBrief): void {
       });
     });
   });
+}
+
+/**
+ * 🆕 LOT 10 — Applique l'order bump saisi au wizard (nom + prix + description)
+ * sur la page "checkout" du funnel généré. Vide (nom ou prix manquant) → pas
+ * d'order bump (comportement par défaut, rétro-compatible).
+ */
+function applyOrderBumpConfig(funnel: Funnel, brief: FunnelBrief): void {
+  const name = (brief.orderBumpName ?? "").trim();
+  const price = (brief.orderBumpPrice ?? "").trim();
+  if (!name || !price) return;
+  const checkoutPage = funnel.pages?.find((p) => p.role === "checkout");
+  if (!checkoutPage) return;
+  checkoutPage.orderBump = {
+    enabled: true,
+    name,
+    price,
+    description: (brief.orderBumpDescription ?? "").trim() || undefined,
+  };
+}
+
+/**
+ * 🆕 LOT 9 — Duplique la page-template "challenge-day" (générée UNE fois par
+ * l'IA) en autant de pages "jour 1..N" que `brief.challengeDays` l'indique
+ * (défaut 5). Chaque clone reçoit un slug/nom/dayIndex propre et son
+ * eyebrow/titre "Jour 1" est relabellisé "Jour N". Rechaîne la séquence
+ * Jour 1 → Jour 2 → … → Jour N → (page suivante d'origine, ex. le pitch
+ * final). N'ajoute rien si le blueprint n'a pas de page "challenge-day"
+ * (funnels non-challenge, comportement inchangé).
+ */
+function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
+  if (!funnel.pages) return;
+  const dayIdx = funnel.pages.findIndex((p) => p.role === "challenge-day");
+  if (dayIdx === -1) return;
+
+  const totalDays = Math.max(1, Math.min(30, Math.round(brief.challengeDays ?? 5)));
+  const templatePage = funnel.pages[dayIdx];
+
+  const dayNumberPattern = /\b(Jour|Day|Día)\s*1\b/gi;
+  const relabelDay = (text: string | undefined, day: number): string | undefined => {
+    if (!text) return text;
+    dayNumberPattern.lastIndex = 0;
+    if (!dayNumberPattern.test(text)) return text;
+    dayNumberPattern.lastIndex = 0;
+    return text.replace(dayNumberPattern, (_m, word: string) => `${word} ${day}`);
+  };
+
+  templatePage.dayIndex = 1;
+  templatePage.dayTotal = totalDays;
+  templatePage.name = `Jour 1 sur ${totalDays}`;
+
+  if (totalDays <= 1) return;
+
+  const tailNextPageId = templatePage.nextPageId;
+  const newDayPages: FunnelPage[] = [];
+  for (let day = 2; day <= totalDays; day++) {
+    const cloned: FunnelPage = structuredClone(templatePage);
+    cloned.id = makePageId();
+    cloned.slug = `jour-${day}`;
+    cloned.name = `Jour ${day} sur ${totalDays}`;
+    cloned.isHome = false;
+    cloned.dayIndex = day;
+    cloned.dayTotal = totalDays;
+    cloned.nextPageId = undefined;
+    cloned.sections = (cloned.sections ?? []).map((sec) => ({
+      ...sec,
+      id: `section-${makePageId()}`,
+      eyebrow: relabelDay(sec.eyebrow, day),
+      headline: relabelDay(sec.headline, day) ?? sec.headline,
+      subheadline: relabelDay(sec.subheadline, day),
+    }));
+    newDayPages.push(cloned);
+  }
+
+  // Insertion des clones juste après la page "Jour 1" d'origine.
+  funnel.pages.splice(dayIdx + 1, 0, ...newDayPages);
+
+  // Re-chaînage Jour 1 → Jour 2 → … → Jour N → cible d'origine (le pitch final).
+  const allDayPages = [templatePage, ...newDayPages];
+  for (let i = 0; i < allDayPages.length; i++) {
+    allDayPages[i].nextPageId =
+      i < allDayPages.length - 1 ? allDayPages[i + 1].id : tailNextPageId;
+  }
+}
+
+/**
+ * 🆕 LOT 7 — Pose l'URL d'embed calendrier (Calendly/Cal.com) saisie au wizard
+ * sur la page "booking" (prise de RDV). Vide → rien (le formulaire de contact
+ * classique reste le seul mécanisme de prise de RDV, comportement historique).
+ */
+function applyBookingCalendarEmbed(funnel: Funnel, brief: FunnelBrief): void {
+  const url = (brief.calendarEmbedUrl ?? "").trim();
+  if (!url) return;
+  const bookingPage = funnel.pages?.find((p) => p.role === "booking");
+  if (!bookingPage) return;
+  bookingPage.calendarEmbedUrl = url;
 }
 
 /** 🆕 Renvoie le libellé de prix payant de la page d'accueil/sales (item

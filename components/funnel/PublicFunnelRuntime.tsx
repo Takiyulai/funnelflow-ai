@@ -159,10 +159,19 @@ export default function PublicFunnelRuntime() {
       btn.setAttribute("data-ff-loading", "1");
       const label = btn.textContent;
       try {
+        // 🆕 LOT 10 — Order bump : si la case est cochée sur la page, on
+        // informe /api/checkout pour qu'il ajoute son montant à la commande.
+        const bumpCheckbox = document.querySelector<HTMLInputElement>(
+          "[data-ff-orderbump-checkbox]",
+        );
         const res = await fetch("/api/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ funnelSlug: slugFromPath(), pageSlug: pageSlugFromPath() }),
+          body: JSON.stringify({
+            funnelSlug: slugFromPath(),
+            pageSlug: pageSlugFromPath(),
+            orderBump: bumpCheckbox ? bumpCheckbox.checked : false,
+          }),
         });
         const data = (await res.json().catch(() => ({}))) as { url?: string };
         if (data.url) {
@@ -180,7 +189,7 @@ export default function PublicFunnelRuntime() {
     checkoutTriggers.forEach((b) => b.addEventListener("click", onCheckout));
 
     // ─── FAQ accordéon générique (tunnels clonés) ──────────────────────────
-    // Le markup cloné (systeme.io…) n'a pas de data-attr FunnelFlow. On détecte
+    // Le markup cloné (systeme.io…) n'a pas de data-attr AutoFunnel. On détecte
     // les questions (texte court terminé par « ? ») et on replie la réponse
     // (bloc frère plus long) → clic pour ouvrir/fermer.
     const faqCleanups: Array<() => void> = [];

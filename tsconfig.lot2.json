@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "lib/workflows/types.ts",
+    "lib/workflows/repository.ts",
+    "lib/workflows/engine.ts",
+    "lib/workflows/validate.ts",
+    "lib/billing/orders.ts",
+    "lib/crm/emailTracking.ts",
+    "app/api/track/click/route.ts",
+    "app/api/track/page-view/route.ts",
+    "app/api/cron/send-scheduled-emails/route.ts",
+    "components/workflows/WorkflowsClient.tsx",
+    "components/funnel/PageViewBeacon.tsx",
+    "components/funnel/sections/FormRenderer.tsx",
+    "app/tunnel/[slug]/PublishedFunnelView.tsx",
+    "next-env.d.ts"
+  ]
+}

@@ -1,9 +1,9 @@
 -- ============================================================================
--- FunnelFlow AI — Abonnements plateforme (profiles)
+-- AutoFunnel AI — Abonnements plateforme (profiles)
 -- À EXÉCUTER dans l'éditeur SQL de Supabase (Dashboard → SQL Editor).
 --
 -- Une ligne `profiles` par utilisateur. Elle porte le PLAN d'abonnement à
--- FunnelFlow (starter | pro | agency) et son statut. C'est la SOURCE DE VÉRITÉ
+-- AutoFunnel (starter | pro | agency) et son statut. C'est la SOURCE DE VÉRITÉ
 -- de l'accès à la plateforme : seul un `status = 'active'` (ou 'trialing')
 -- débloque la génération de tunnels.
 --

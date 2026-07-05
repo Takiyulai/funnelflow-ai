@@ -1,7 +1,7 @@
 // lib/billing/connect.ts
 //
 // Service interne Stripe Connect (comptes EXPRESS + onboarding hébergé).
-// Le créateur de tunnel ne configure jamais rien chez Stripe : FunnelFlow crée
+// Le créateur de tunnel ne configure jamais rien chez Stripe : AutoFunnel crée
 // le compte connecté, génère le lien d'onboarding hébergé (Account Link) et
 // synchronise le statut. Toutes les clés viennent de l'env (jamais en dur).
 //
@@ -193,7 +193,7 @@ export async function syncConnectStatus(userId: string): Promise<ConnectState> {
 }
 
 /**
- * 🆕 Déconnecte le compte Stripe Connect côté FunnelFlow : on OUBLIE la
+ * 🆕 Déconnecte le compte Stripe Connect côté AutoFunnel : on OUBLIE la
  * référence du compte sur le profil (les paiements sont désactivés jusqu'à une
  * nouvelle connexion). On ne supprime pas le compte chez Stripe (un compte
  * Express ne se révoque pas comme un OAuth) ; une reconnexion recrée/reprend

@@ -1065,6 +1065,96 @@ function getGenericRoleCopy(role: PageRole, lang: Language): SectionTemplate[] {
         { type: "cta", eyebrow: "DECISIÓN", headline: "Sí, aprovecho esta oferta", ctaLabel: "Sí, la tomo" },
       ],
     },
+    // 🆕 LOT 3 — OTO/tripwire GÉNÉRIQUE : réutilisable par tous les types de
+    // tunnels (fallback quand aucun copy spécifique au kind n'existe).
+    oto: {
+      fr: [
+        { type: "hero", eyebrow: "OFFRE SPÉCIALE", headline: "Une offre complémentaire, juste pour vous", subheadline: "Disponible uniquement maintenant, à un tarif réduit.", body: "Profitez de cette offre complémentaire pensée pour aller plus vite et plus loin. Elle ne sera plus proposée après cette page." },
+        { type: "benefits", eyebrow: "CE QUE VOUS OBTENEZ", headline: "Pourquoi cette offre est différente", bullets: ["Un complément parfait à ce que vous venez de choisir", "Un tarif réduit, réservé à cette page", "Une mise en place immédiate, sans effort supplémentaire"] },
+        { type: "offer", eyebrow: "OFFRE LIMITÉE", headline: "Ajoutez-la maintenant", body: "Cette offre disparaît dès que vous quittez cette page." },
+        { type: "guarantee", eyebrow: "SANS RISQUE", headline: "Satisfait ou remboursé", body: "Comme pour le reste, vous êtes couvert par notre garantie." },
+        { type: "cta", eyebrow: "DÉCISION", headline: "Oui, je veux cette offre", ctaLabel: "Oui, je la prends" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "SPECIAL OFFER", headline: "A complementary offer, just for you", subheadline: "Available only right now, at a reduced price.", body: "Take advantage of this complementary offer designed to help you go faster and further. It won't be offered again after this page." },
+        { type: "benefits", eyebrow: "WHAT YOU GET", headline: "Why this offer is different", bullets: ["A perfect complement to what you just chose", "A reduced price, only on this page", "Immediate setup, no extra effort"] },
+        { type: "offer", eyebrow: "LIMITED OFFER", headline: "Add it now", body: "This offer disappears as soon as you leave this page." },
+        { type: "guarantee", eyebrow: "RISK-FREE", headline: "Money-back guarantee", body: "Just like the rest, you're covered by our guarantee." },
+        { type: "cta", eyebrow: "DECISION", headline: "Yes, I want this offer", ctaLabel: "Yes, add it" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "OFERTA ESPECIAL", headline: "Una oferta complementaria, solo para ti", subheadline: "Disponible solo ahora, a un precio reducido.", body: "Aprovecha esta oferta complementaria pensada para ir más rápido y más lejos. No se ofrecerá de nuevo después de esta página." },
+        { type: "benefits", eyebrow: "LO QUE OBTIENES", headline: "Por qué esta oferta es diferente", bullets: ["Un complemento perfecto a lo que acabas de elegir", "Un precio reducido, solo en esta página", "Puesta en marcha inmediata, sin esfuerzo extra"] },
+        { type: "offer", eyebrow: "OFERTA LIMITADA", headline: "Añádela ahora", body: "Esta oferta desaparece en cuanto salgas de esta página." },
+        { type: "guarantee", eyebrow: "SIN RIESGO", headline: "Garantía de devolución", body: "Al igual que el resto, estás cubierto por nuestra garantía." },
+        { type: "cta", eyebrow: "DECISIÓN", headline: "Sí, quiero esta oferta", ctaLabel: "Sí, la quiero" },
+      ],
+    },
+    // 🆕 LOT 8 — VSL GÉNÉRIQUE (coaching high ticket + réutilisable ailleurs).
+    vsl: {
+      fr: [
+        { type: "hero", eyebrow: "REGARDEZ CETTE VIDÉO", headline: "Avant de candidater, regardez ceci", subheadline: "Quelques minutes pour comprendre exactement comment nous travaillons ensemble.", body: "Cette vidéo répond aux questions que vous vous posez avant de nous confier votre projet." },
+        { type: "benefits", eyebrow: "CE QUE VOUS ALLEZ COMPRENDRE", headline: "Ce que cette vidéo vous apporte", bullets: ["Comment fonctionne exactement l'accompagnement", "Pour qui c'est fait (et pour qui ce n'est pas fait)", "Ce à quoi vous attendre après votre candidature"] },
+        { type: "guarantee", eyebrow: "EN TOUTE TRANSPARENCE", headline: "Aucune obligation à ce stade", body: "Regarder cette vidéo ne vous engage à rien. Vous déciderez ensuite si vous souhaitez candidater." },
+        { type: "cta", eyebrow: "ÉTAPE SUIVANTE", headline: "Prêt à candidater ?", ctaLabel: "Je candidate maintenant" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "WATCH THIS VIDEO", headline: "Before you apply, watch this", subheadline: "A few minutes to understand exactly how we work together.", body: "This video answers the questions you have before trusting us with your project." },
+        { type: "benefits", eyebrow: "WHAT YOU'LL UNDERSTAND", headline: "What this video gives you", bullets: ["Exactly how the coaching works", "Who it's for (and who it isn't for)", "What to expect after you apply"] },
+        { type: "guarantee", eyebrow: "FULL TRANSPARENCY", headline: "No obligation at this stage", body: "Watching this video doesn't commit you to anything. You'll decide afterward whether to apply." },
+        { type: "cta", eyebrow: "NEXT STEP", headline: "Ready to apply?", ctaLabel: "Apply now" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "MIRA ESTE VÍDEO", headline: "Antes de postular, mira esto", subheadline: "Unos minutos para entender exactamente cómo trabajamos juntos.", body: "Este vídeo responde a las preguntas que tienes antes de confiarnos tu proyecto." },
+        { type: "benefits", eyebrow: "LO QUE VAS A ENTENDER", headline: "Lo que te aporta este vídeo", bullets: ["Cómo funciona exactamente el acompañamiento", "Para quién es (y para quién no)", "Qué esperar después de postular"] },
+        { type: "guarantee", eyebrow: "CON TRANSPARENCIA", headline: "Ninguna obligación en esta etapa", body: "Ver este vídeo no te compromete a nada. Decidirás después si quieres postular." },
+        { type: "cta", eyebrow: "SIGUIENTE PASO", headline: "¿Listo para postular?", ctaLabel: "Postular ahora" },
+      ],
+    },
+    // 🆕 LOT 4 — Salle d'attente / live GÉNÉRIQUE (webinar + réutilisable
+    // ailleurs). Countdown injecté séparément par applyWebinarSchedule.
+    live: {
+      fr: [
+        { type: "hero", eyebrow: "C'EST BIENTÔT L'HEURE", headline: "La session démarre très bientôt", subheadline: "Restez sur cette page, la connexion se lancera automatiquement.", body: "Installez-vous au calme, vérifiez votre connexion et gardez cette page ouverte : le lien de connexion apparaît juste en dessous." },
+        { type: "process", eyebrow: "EN ATTENDANT", headline: "Pendant que vous patientez", bullets: ["Coupez les notifications pour rester concentré", "Ayez de quoi prendre des notes à portée de main", "Préparez vos questions pour la session de questions/réponses"] },
+        { type: "cta", eyebrow: "REJOINDRE", headline: "Cliquez ici pour rejoindre la session", ctaLabel: "Rejoindre le direct" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "ALMOST TIME", headline: "The session starts very soon", subheadline: "Stay on this page, the connection will launch automatically.", body: "Get settled, check your connection, and keep this page open: the join link appears just below." },
+        { type: "process", eyebrow: "WHILE YOU WAIT", headline: "While you wait", bullets: ["Turn off notifications to stay focused", "Keep something to take notes with nearby", "Prepare your questions for the live Q&A"] },
+        { type: "cta", eyebrow: "JOIN", headline: "Click here to join the session", ctaLabel: "Join the live session" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "YA CASI ES LA HORA", headline: "La sesión empieza muy pronto", subheadline: "Quédate en esta página, la conexión se lanzará automáticamente.", body: "Ponte cómodo, revisa tu conexión y mantén esta página abierta: el enlace aparece justo debajo." },
+        { type: "process", eyebrow: "MIENTRAS TANTO", headline: "Mientras esperas", bullets: ["Desactiva las notificaciones para concentrarte", "Ten a mano algo para tomar notas", "Prepara tus preguntas para la sesión de preguntas"] },
+        { type: "cta", eyebrow: "UNIRSE", headline: "Haz clic aquí para unirte", ctaLabel: "Unirme al directo" },
+      ],
+    },
+    // 🆕 LOT 4 — Page de vente GÉNÉRIQUE (fallback si l'IA ne renvoie rien ;
+    // en pratique l'IA génère un contenu riche pour ce rôle).
+    sales: {
+      fr: [
+        { type: "hero", eyebrow: "OFFRE", headline: "Passez à l'étape suivante", subheadline: "Tout ce dont vous avez besoin pour aller plus loin.", body: "Découvrez comment cette offre vous aide à obtenir des résultats concrets, rapidement." },
+        { type: "benefits", eyebrow: "CE QUE VOUS OBTENEZ", headline: "Tout ce qui est inclus", bullets: ["Un accès immédiat à l'intégralité du contenu", "Un accompagnement pas à pas", "Un support dédié pour vous aider"] },
+        { type: "offer", eyebrow: "L'OFFRE", headline: "Découvrez le détail de l'offre", body: "Un investissement pensé pour être rentabilisé rapidement." },
+        { type: "guarantee", eyebrow: "SANS RISQUE", headline: "Satisfait ou remboursé", body: "Vous êtes couvert par notre garantie." },
+        { type: "cta", eyebrow: "C'EST PARTI", headline: "Rejoignez le programme maintenant", ctaLabel: "Je veux le programme" },
+      ],
+      en: [
+        { type: "hero", eyebrow: "OFFER", headline: "Take the next step", subheadline: "Everything you need to go further.", body: "See how this offer helps you get concrete results, fast." },
+        { type: "benefits", eyebrow: "WHAT YOU GET", headline: "Everything included", bullets: ["Immediate access to all content", "Step-by-step guidance", "Dedicated support to help you"] },
+        { type: "offer", eyebrow: "THE OFFER", headline: "See the offer details", body: "An investment designed to pay off quickly." },
+        { type: "guarantee", eyebrow: "RISK-FREE", headline: "Money-back guarantee", body: "You're covered by our guarantee." },
+        { type: "cta", eyebrow: "LET'S GO", headline: "Join the program now", ctaLabel: "I want the program" },
+      ],
+      es: [
+        { type: "hero", eyebrow: "OFERTA", headline: "Da el siguiente paso", subheadline: "Todo lo que necesitas para ir más lejos.", body: "Descubre cómo esta oferta te ayuda a obtener resultados concretos, rápido." },
+        { type: "benefits", eyebrow: "LO QUE OBTIENES", headline: "Todo lo incluido", bullets: ["Acceso inmediato a todo el contenido", "Acompañamiento paso a paso", "Soporte dedicado para ayudarte"] },
+        { type: "offer", eyebrow: "LA OFERTA", headline: "Descubre el detalle de la oferta", body: "Una inversión pensada para amortizarse rápido." },
+        { type: "guarantee", eyebrow: "SIN RIESGO", headline: "Garantía de devolución", body: "Estás cubierto por nuestra garantía." },
+        { type: "cta", eyebrow: "EMPEZAMOS", headline: "Únete al programa ahora", ctaLabel: "Quiero el programa" },
+      ],
+    },
     thankyou: {
       fr: [
         {
@@ -1614,6 +1704,8 @@ function getNextLabelForPage(page: FunnelPage): string {
     access: "Accéder maintenant",
     upsell: "Découvrir l'option premium",
     downsell: "Voir une alternative",
+    oto: "Voir l'offre spéciale",
+    vsl: "Candidater maintenant",
     live: "Rejoindre la session live",
     qualification: "Continuer la candidature",
     "challenge-landing": "Rejoindre le challenge",

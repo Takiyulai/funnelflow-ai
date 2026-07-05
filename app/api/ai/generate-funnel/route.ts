@@ -78,6 +78,38 @@ const briefSchema = z.object({
   downsellPrice: z.string().max(40).optional(),
   upsellOffer: z.string().max(300).optional(),
   downsellOffer: z.string().max(300).optional(),
+  // 🆕 LOT 10 — Order bump (produit complémentaire, page de checkout).
+  orderBumpName: z.string().max(200).optional(),
+  orderBumpPrice: z.string().max(40).optional(),
+  orderBumpDescription: z.string().max(300).optional(),
+  // 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de RDV.
+  calendarEmbedUrl: z.string().max(500).optional(),
+  // 🆕 LOT 9 — Nombre de jours du challenge (génère jour-1..jour-N).
+  challengeDays: z.number().int().min(1).max(30).optional(),
+  // 🆕 Offre de la page OTO/tripwire générique ("oto"), cochable sur tous les
+  // types de tunnel. Voir commentaire FunnelBrief (lib/funnels/types.ts).
+  otoOfferName: z.string().max(200).optional(),
+  otoPrice: z.string().max(40).optional(),
+  otoPromise: z.string().max(300).optional(),
+  // 🆕 LOT 4/5 — Webinaire : date+heure, urgence, lien externe, expiration
+  // replay, mode Live/Evergreen. ⚠️ Absents du schéma jusqu'ici → zod les
+  // retirait SILENCIEUSEMENT du brief avant qu'il n'atteigne
+  // generateMultiPageFunnelWithAI (même piège que brandColors, cf. commentaire
+  // plus bas) : le countdown webinaire n'était donc JAMAIS appliqué en
+  // pratique. Corrigé ici.
+  webinarDate: z.string().max(60).optional(),
+  webinarUrgency: z.string().max(300).optional(),
+  webinarExternalLink: z.string().max(500).optional(),
+  replayExpiryHours: z.number().int().min(1).max(720).optional(),
+  webinarMode: z.enum(["live", "evergreen"]).optional(),
+  evergreenVideoUrl: z.string().max(500).optional(),
+  evergreenOfferHours: z.number().int().min(1).max(720).optional(),
+  // 🆕 Webinaire — offre vendue APRÈS le webinaire (distincte de offerName/
+  // price/promise, qui désignent le webinaire lui-même pour ce kind). Voir
+  // commentaire FunnelBrief (lib/funnels/types.ts).
+  postWebinarOfferName: z.string().max(200).optional(),
+  postWebinarPrice: z.string().max(40).optional(),
+  postWebinarPromise: z.string().max(300).optional(),
   targetAudience: z.string().min(1),
   mainPain: z.string().min(1),
   promise: z.string().min(1),
@@ -114,6 +146,11 @@ const briefSchema = z.object({
     .optional(),
   mainColor: z.string().optional(),
   secondaryColor: z.string().optional(),
+  // 🆕 Branding : couleurs de marque (1 à 4) + interrupteur. Sans ces deux
+  // champs dans le schéma, zod les aurait silencieusement retirés du brief
+  // avant qu'il n'atteigne generateMultiPageFunnelWithAI (étape 21).
+  brandColorsEnabled: z.boolean().optional(),
+  brandColors: z.array(z.string()).max(4).optional(),
   logoUrl: z.string().optional(),
   videoUrl: z.string().optional(),
   aboutText: z.string().optional(),
@@ -122,6 +159,20 @@ const briefSchema = z.object({
 
   medias: z.array(mediaItemSchema).optional(),
   copywritingPrefs: copywritingPrefsSchema.optional(),
+  // 🆕 LOT 3 — Rôles des pages OPTIONNELLES cochées dans l'aperçu du wizard.
+  selectedOptionalPages: z
+    .array(
+      z.enum([
+        "optin", "thankyou", "delivery",
+        "sales", "checkout", "upsell", "downsell", "access",
+        "registration", "confirmation", "replay", "live",
+        "landing", "qualification", "booking", "case-studies", "application",
+        "challenge-landing", "challenge-day",
+        "oto", "vsl", "custom",
+      ]),
+    )
+    .max(10)
+    .optional(),
 });
 
 function statusForReason(reason: string): number {

@@ -5,6 +5,7 @@
 // (checkout depuis un tunnel public, webhook Stripe).
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { runWorkflowsForEvent } from "@/lib/workflows/engine";
 
 export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
 
@@ -145,6 +146,40 @@ export function extractFunnelPrice(
     ...parsed,
     productName: chosen.name || funnel.offerName || "Offre",
   };
+}
+
+/**
+ * 🆕 LOT 10 — Extrait l'order bump (produit complémentaire à cocher) de la
+ * page de checkout ciblée. Ne renvoie un résultat QUE si `enabled: true` et
+ * un prix parsable (repli silencieux sinon → pas d'order bump ajouté, jamais
+ * bloquant pour le paiement principal).
+ */
+export function extractOrderBump(
+  publishedContent: unknown,
+  pageSlug?: string | null,
+): { amount: number; currency: string; productName: string } | null {
+  const funnel = publishedContent as
+    | {
+        pages?: Array<{
+          slug?: string;
+          orderBump?: { enabled?: boolean; name?: string; price?: string };
+        }>;
+      }
+    | null;
+  if (!funnel || !Array.isArray(funnel.pages)) return null;
+
+  const target = pageSlug ? cleanSlug(pageSlug) : null;
+  const page = target
+    ? funnel.pages.find((p) => typeof p?.slug === "string" && cleanSlug(p.slug) === target)
+    : funnel.pages.find((p) => p?.orderBump?.enabled);
+
+  const bump = page?.orderBump;
+  if (!bump?.enabled) return null;
+
+  const parsed = parsePriceToAmount(bump.price);
+  if (!parsed) return null;
+
+  return { ...parsed, productName: bump.name || "Option complémentaire" };
 }
 
 export async function createPendingOrder(input: CreateOrderInput): Promise<string | null> {
@@ -298,6 +333,29 @@ export async function markOrderFailedByPaymentIntent(
 /** 🆕 Promeut (ou crée) un contact en « client » payant. Partagé entre le
  * webhook Stripe et la page success (laquelle sert de filet quand le webhook
  * local n'est pas branché). Idempotent côté statut. */
+/** 🆕 LOT 2 — Déclencheur workflow "purchase.completed". Best-effort (erreur
+ *  avalée) : ne doit jamais faire échouer la promotion du contact en client.
+ *  Point de passage UNIQUE des 3 chemins de paiement (webhook Stripe, page
+ *  success, notify CinetPay), qui appellent tous `promoteContactToClient`. */
+async function firePurchaseCompletedWorkflows(params: {
+  userId: string;
+  funnelId: string | null;
+  leadId: string;
+  email: string;
+  name?: string | null;
+}): Promise<void> {
+  try {
+    const admin = getSupabaseAdmin();
+    await runWorkflowsForEvent(admin, params.userId, {
+      event: "purchase.completed",
+      lead: { id: params.leadId, email: params.email, name: params.name ?? null },
+      funnelId: params.funnelId,
+    });
+  } catch (e) {
+    console.warn("[workflows] hook purchase.completed échoué (non bloquant):", e);
+  }
+}
+
 export async function promoteContactToClient(params: {
   userId: string;
   funnelId: string | null;
@@ -311,7 +369,7 @@ export async function promoteContactToClient(params: {
 
   const { data: existing } = await admin
     .from("leads")
-    .select("id, metadata")
+    .select("id, name, metadata")
     .eq("user_id", params.userId)
     .eq("email", email)
     .maybeSingle();
@@ -328,6 +386,13 @@ export async function promoteContactToClient(params: {
       .from("leads")
       .update({ status: "client", metadata: { ...meta, ...purchase } })
       .eq("id", existing.id);
+    await firePurchaseCompletedWorkflows({
+      userId: params.userId,
+      funnelId: params.funnelId,
+      leadId: existing.id as string,
+      email,
+      name: existing.name as string | null,
+    });
     return existing.id as string;
   }
 
@@ -343,7 +408,16 @@ export async function promoteContactToClient(params: {
     })
     .select("id")
     .maybeSingle();
-  return (inserted?.id as string | undefined) ?? null;
+  const leadId = (inserted?.id as string | undefined) ?? null;
+  if (leadId) {
+    await firePurchaseCompletedWorkflows({
+      userId: params.userId,
+      funnelId: params.funnelId,
+      leadId,
+      email,
+    });
+  }
+  return leadId;
 }
 
 export type FunnelPaymentStats = {

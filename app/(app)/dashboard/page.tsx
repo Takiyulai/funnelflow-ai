@@ -21,6 +21,7 @@ import {
   type StoredFunnel,
 } from "@/lib/store/funnelStore";
 import { CloneFunnelButton } from "@/components/dashboard/CloneFunnelButton";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -32,6 +33,34 @@ export default function DashboardPage() {
   // 🆕 Total de leads réel (CRM) + compteur d'exports.
   const [leadsCount, setLeadsCount] = useState<number | null>(null);
   const [exportsCount, setExportsCount] = useState(0);
+
+  // 🆕 Nom + email du créateur du compte (affichés dans l'en-tête).
+  const [account, setAccount] = useState<{ name: string | null; email: string | null }>({
+    name: null,
+    email: null,
+  });
+
+  useEffect(() => {
+    let active = true;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!active) return;
+        const md = (session?.user?.user_metadata ?? {}) as Record<string, unknown>;
+        const name =
+          (typeof md.full_name === "string" && md.full_name.trim()) ||
+          (typeof md.name === "string" && md.name.trim()) ||
+          (typeof md.display_name === "string" && md.display_name.trim()) ||
+          null;
+        setAccount({ name: name || null, email: session?.user?.email ?? null });
+      });
+    } catch {
+      /* Supabase indisponible : en-tête générique */
+    }
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // 🆕 Stats de paiement (commandes payées).
   const [payStats, setPayStats] = useState<{
@@ -138,8 +167,16 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-2xl font-black text-ink sm:text-3xl">Tableau de bord</h1>
+          <h1 className="text-2xl font-black text-ink sm:text-3xl">
+            {account.name ? `Bonjour, ${account.name}` : "Tableau de bord"}
+          </h1>
           <p className="mt-1.5 text-sm text-muted">
+            {account.email ? (
+              <>
+                <span className="font-medium text-ink/70">{account.email}</span>
+                {" · "}
+              </>
+            ) : null}
             Vue claire de vos tunnels, exports et leads
           </p>
         </div>

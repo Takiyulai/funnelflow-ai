@@ -110,6 +110,18 @@ function TimerCard({
           <ModeBtn active={timer.mode === "seats-counter"} onClick={() => onChange({ mode: "seats-counter" })}>
             Places restantes
           </ModeBtn>
+          {/* 🆕 Webinaire Evergreen : countdown calculé PAR PROSPECT depuis SON
+              inscription (localStorage), pas une date commune à tous. Sans ce
+              bouton, un timer déjà posé en mode "countdown-since-registration"
+              (par applyEvergreenWebinarSchedule) n'apparaissait sélectionné
+              dans AUCUN mode et son champ Durée restait invisible → le
+              countdown Evergreen n'était pas éditable dans l'éditeur. */}
+          <ModeBtn
+            active={timer.mode === "countdown-since-registration"}
+            onClick={() => onChange({ mode: "countdown-since-registration" })}
+          >
+            Depuis l'inscription (Evergreen)
+          </ModeBtn>
         </div>
       </Field>
 
@@ -126,6 +138,22 @@ function TimerCard({
           />
           <p className="mt-1 text-[10px] text-white/40">
             Chaque visiteur démarre son propre compte à rebours dès son arrivée.
+          </p>
+        </Field>
+      )}
+
+      {timer.mode === "countdown-since-registration" && (
+        <Field label="Durée de l'offre (heures)">
+          <input
+            type="number"
+            min={1}
+            max={720}
+            value={timer.durationHours ?? 24}
+            onChange={(e) => onChange({ durationHours: Number(e.target.value) })}
+            className={inputClass}
+          />
+          <p className="mt-1 text-[10px] text-white/40">
+            Chaque prospect démarre son propre compte à rebours dès SON inscription au webinaire (pas une date commune) — utilisé sur les tunnels Webinaire en mode Evergreen.
           </p>
         </Field>
       )}

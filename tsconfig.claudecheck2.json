@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "lib/funnels/color.ts",
+    "components/funnel/FunnelPreview.tsx",
+    "components/funnel/TemplateThemeProvider.tsx",
+    "lib/export/html.ts",
+    "next-env.d.ts"
+  ]
+}

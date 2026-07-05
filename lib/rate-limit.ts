@@ -41,14 +41,20 @@ export async function rateLimit(
   limit: number,
   windowSec: number,
 ): Promise<RateLimitResult> {
+  // 🆕 En développement (next dev), jamais de rate-limit : on teste la génération
+  // sans se faire bloquer. Surchargeable via RATE_LIMIT_DISABLED=1 n'importe où.
+  if (process.env.NODE_ENV !== "production" || process.env.RATE_LIMIT_DISABLED === "1") {
+    return { ok: true, remaining: limit, limit };
+  }
   if (!configured()) return { ok: true, remaining: limit, limit };
   try {
     const k = `rl:${key}`;
     const count = Number(await redis(["INCR", k]));
-    if (count === 1) {
-      // Première requête de la fenêtre → on pose l'expiration.
-      await redis(["EXPIRE", k, windowSec]);
-    }
+    // 🆕 On garantit TOUJOURS un TTL via le flag NX (= pose l'expiration seulement
+    // si la clé n'en a pas encore). Auto-répare une clé restée SANS expiration
+    // (EXPIRE raté à la 1re requête sur réseau lent) → sinon le compteur ne se
+    // réinitialise jamais et bloque en 429 perpétuel.
+    await redis(["EXPIRE", k, windowSec, "NX"]);
     return { ok: count <= limit, remaining: Math.max(0, limit - count), limit };
   } catch (e) {
     console.error("[rate-limit] erreur (fail-open)", e);

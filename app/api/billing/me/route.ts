@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/billing/subscription";
+import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PLANS } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +21,27 @@ export async function GET() {
   // de getAccess (qui retombe sur Agency quand le gating est désactivé) — sinon
   // la Sidebar afficherait « Plan Agency » à tout le monde.
   const profile = await getProfile(user.id);
-  const planId = profile?.plan ?? null;
-  const status = profile?.status ?? "inactive";
-  const active = status === "active" || status === "trialing";
+  let planId = profile?.plan ?? null;
+  let status = profile?.status ?? "inactive";
+  let active = status === "active" || status === "trialing";
+
+  // 🆕 Pas d'abonnement Stripe/CinetPay actif → vérifier une licence Chariow
+  // active (même fallback que lib/billing/subscription.ts::getAccess()).
+  // Sans ça, la Sidebar affichait "Aucun abonnement actif" alors qu'une
+  // licence Chariow active débloquait pourtant bien la plateforme.
+  if (!active) {
+    try {
+      const license = await getActiveChariowLicense(user.id);
+      if (license) {
+        planId = license.plan;
+        status = "active";
+        active = true;
+      }
+    } catch (e) {
+      console.error("[billing/me] chariow license check failed", e);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     planId,

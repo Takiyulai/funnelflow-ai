@@ -131,6 +131,10 @@ export type CtaConfig = {
   spacing?: CtaSpacing;
    /** Message de réassurance affiché sous le formulaire popup (RGPD, sécurité, etc.). */
   popupReassurance?: string;
+  /** 🆕 Chariow Niveau 2 : true si l'URL de redirection est un LIEN PRODUIT
+   *  Chariow (paiement + livraison gérés par Chariow). Conséquence : AutoFunnel
+   *  n'envoie PAS d'email de livraison produit pour ce tunnel. */
+  chariow?: boolean;
   /** 🆕 Champs personnalisés du popup interne. Si absent → fallback nom+email. */
   popupFields?: FormFieldItem[];
   /** 🆕 Code HTML d'un formulaire externe (si popupProvider="embed"). Rendu en iframe sandboxée. */
@@ -397,6 +401,19 @@ export type FormFieldType =
   | "text" | "email" | "tel" | "number"
   | "textarea" | "select" | "checkbox";
 
+/**
+ * 🆕 LOT 10 — Order bump : produit complémentaire proposé par case à cocher
+ * au moment du paiement (page de commande / checkout d'un produit digital).
+ * Stocké au niveau de la PAGE (et non d'une section) car il s'applique à
+ * TOUTE la page de checkout, indépendamment de ses sections pricing/offer.
+ */
+export type OrderBumpConfig = {
+  enabled: boolean;
+  name: string;
+  price: string;
+  description?: string;
+};
+
 export type FormFieldItem = {
   name: string;
   label?: string;
@@ -515,6 +532,11 @@ export type FunnelSection = {
   /** 🆕 CTA secondaire rendu en lien discret sous le CTA principal. Sert
    *  notamment au « Non merci, continuer » des pages OTO (upsell/downsell). */
   secondaryCta?: CtaConfig;
+  /** 🆕 Liens/CTA supplémentaires (ex : rejoindre WhatsApp, Telegram, Instagram…
+   *  sur la page de remerciement). Rendus en rangée de boutons secondaires,
+   *  sous le CTA principal. Chaque entrée réutilise CtaConfig (généralement
+   *  mode "redirect" + url externe) mais est indépendante de `cta`. */
+  ctas?: CtaConfig[];
   image?: SectionImage;
   video?: VideoSource;
   bulletIcons?: IconName[];
@@ -524,6 +546,10 @@ export type FunnelSection = {
   visible?: boolean;
   style?: SectionStyle;
   layoutVariant?: SectionLayoutVariant;
+  /** 🆕 Pattern visuel de la section (ex. "problem-checklist", "process-timeline",
+   *  "stats-cards"). Choisi par le générateur (sélection semi-aléatoire par
+   *  famille). Lu par le renderer → attribut data-ff-pattern → CSS funnel-theme. */
+  pattern?: string;
   animations?: SectionAnimations;
   visualDirection?: string;
   items?: SectionItem[];
@@ -560,6 +586,10 @@ export type FunnelHeader = {
   /** 🆕 Si true, le header est aussi affiché sur les pages secondaires.
    *  Par défaut false : header visible uniquement sur la page d'accueil. */
   showOnSecondaryPages?: boolean;
+  /** 🆕 Date/heure ISO du webinaire (mode Live uniquement — jamais en
+   *  Evergreen, pas de date commune). Posée par applyWebinarSchedule.
+   *  Affichée en clair et animée au centre du header sticky. */
+  eventDateTime?: string;
 };
 
 
@@ -608,9 +638,17 @@ export type PageRole =
   | "booking"
   | "case-studies"
   | "application"
+  // 🆕 LOT 8 — VSL (Video Sales Letter) optionnelle, avant la candidature
+  // (coaching high ticket). Réutilisable ailleurs si besoin.
+  | "vsl"
   // Challenge
   | "challenge-landing"
   | "challenge-day"
+  // 🆕 LOT 3 — Page OTO/tripwire GÉNÉRIQUE, réutilisable par TOUS les types de
+  // tunnels (optionnelle, cochable dans le wizard). Distincte de upsell/downsell
+  // (spécifiques au parcours "digital-product" post-achat) : "oto" peut
+  // s'insérer n'importe où (ex. juste après l'optin d'un lead magnet).
+  | "oto"
   // Générique
   | "custom";
 
@@ -636,6 +674,22 @@ export type FunnelPage = {
   };
   /** 🆕 Lot B2 : id de la page suivante dans la chaîne du tunnel */
   nextPageId?: string;
+  /** 🆕 LOT 10 — Order bump affiché sur cette page (checkout uniquement en
+   *  pratique, mais réutilisable ailleurs si besoin). */
+  orderBump?: OrderBumpConfig;
+  /** 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de
+   *  prise de RDV (rôle "booking"). */
+  calendarEmbedUrl?: string;
+  /** 🆕 LOT 9 — Position de cette page dans la séquence multi-jours d'un
+   *  challenge (1-based) + nombre total de jours. Uniquement sur les pages de
+   *  rôle "challenge-day". Sert à l'onglet Emails pour générer la séquence
+   *  quotidienne (email "Jour N" par page). */
+  dayIndex?: number;
+  dayTotal?: number;
+  /** 🆕 LOT 5 — URL de la vidéo pré-enregistrée du webinaire Evergreen (posée
+   *  sur la page de rôle "live", qui devient alors un lecteur evergreen avec
+   *  choix de créneau au lieu de la salle d'attente classique). */
+  evergreenVideoUrl?: string;
 };
 
 /**
@@ -685,6 +739,8 @@ export type Funnel = {
     primaryColor: string;
     secondaryColor: string;
     accentColor: string;
+    /** 🆕 4ᵉ couleur de marque optionnelle (prix, éléments spéciaux). */
+    accentColor2?: string;
     style: string;
     textScale?: number;
     buttonScale?: number;
@@ -692,6 +748,14 @@ export type Funnel = {
     customBg?: string;
     animationsEnabled?: boolean;
     buttonAnim?: "lift" | "glow" | "pulse" | "shine";
+    /** 🆕 true UNIQUEMENT si l'utilisateur a explicitement activé « Utiliser
+     *  les couleurs de ma marque » (brief.brandColorsEnabled) — distinct du
+     *  fait que primaryColor/secondaryColor/accentColor aient une valeur (ils
+     *  en ont TOUJOURS une, invention IA ou défaut du wizard). Sert de garde :
+     *  FunnelPreview/TemplateThemeProvider ne recolorent le fond/les cartes/le
+     *  header-footer QUE si ce flag est true — sinon le template garde son
+     *  identité visuelle par défaut intacte (fonds dégradés, accents propres). */
+    brandColorsEnabled?: boolean;
   };
 
   defaultCta?: CtaConfig;
@@ -748,6 +812,23 @@ export type Funnel = {
     };
     /** 🆕 Version du schéma de données (pour migrations futures) */
     schemaVersion?: number;
+    /**
+     * 🆕 Variante de pied de page : "footer-minimal-centered" (défaut),
+     * "footer-grid-sitemap" ou "footer-cta-newsletter". Choisie de façon seedée
+     * par le générateur, rendue par components/funnel/FunnelFooter.tsx.
+     */
+    footerVariant?: string;
+    /**
+     * 🆕 Canaux communautaires affichés sur les pages de SUCCÈS
+     * (merci/confirmation/livraison) : boutons « Rejoindre WhatsApp /
+     * Telegram » + CTA optionnel vers une autre destination.
+     */
+    socialChannels?: {
+      whatsapp?: string;
+      telegram?: string;
+      ctaLabel?: string;
+      ctaUrl?: string;
+    };
   };
 };
 
@@ -852,6 +933,25 @@ export type FunnelBrief = {
   downsellPrice?: string;
   upsellOffer?: string;
   downsellOffer?: string;
+  /** 🆕 LOT 10 — Order bump (optionnel) : produit complémentaire proposé par
+   *  case à cocher sur la page de commande (checkout). Vide → pas d'order bump. */
+  orderBumpName?: string;
+  orderBumpPrice?: string;
+  orderBumpDescription?: string;
+  /** 🆕 LOT 7 — URL d'embed calendrier natif (Calendly/Cal.com) affiché
+   *  directement sur la page de prise de RDV. Vide → repli sur le formulaire
+   *  de contact classique (comportement historique, rétro-compatible). */
+  calendarEmbedUrl?: string;
+  /** 🆕 LOT 9 — Nombre de jours du challenge (génère autant de pages
+   *  "jour-1"..."jour-N"). Défaut : 5 si non renseigné. */
+  challengeDays?: number;
+  /** 🆕 Offre de la page OTO/tripwire GÉNÉRIQUE ("oto", cochable dans l'aperçu
+   *  du wizard sur TOUS les types de tunnel). Si vide, l'IA invente le nom, le
+   *  prix ET la promesse de cette offre — comportement à éviter : renseigner
+   *  ces 3 champs quand la page "oto" est cochée dans `selectedOptionalPages`. */
+  otoOfferName?: string;
+  otoPrice?: string;
+  otoPromise?: string;
   targetAudience: string;
   mainPain: string;
   promise: string;
@@ -865,12 +965,58 @@ export type FunnelBrief = {
   creationMode?: CreationMode;
   /** Express IA : description complète de l'activité saisie par l'utilisateur. */
   businessPrompt?: string;
-  /** Express IA : nombre de pages souhaité dans le tunnel généré. */
+  /**
+   * @deprecated Le nombre de pages est désormais EXPLICITE dans le type de
+   * tunnel choisi (blueprint complet). Conservé en lecture pour rétrocompat.
+   */
   pageCount?: number;
+  /** 🆕 Webinaire : date + heure de la session (ISO, ex "2026-07-16T19:00").
+   *  Alimente le compte à rebours de la section urgency + le copywriting. */
+  webinarDate?: string;
+  /** 🆕 Webinaire : message d'urgence/rareté saisi par l'utilisateur
+   *  (ex "Places limitées à 200 participants"). */
+  webinarUrgency?: string;
+  /** 🆕 LOT 4 — Lien externe du webinaire (Zoom/YouTube/Meet), affiché sur la
+   *  salle d'attente/live le jour J et exposé au contexte des emails
+   *  (rappels + rappel de connexion). */
+  webinarExternalLink?: string;
+  /** 🆕 LOT 4 — Durée (en heures) pendant laquelle le replay reste accessible
+   *  après le webinaire, avant expiration automatique. Défaut : 72h. */
+  replayExpiryHours?: number;
+  /** 🆕 LOT 5 — Mode du webinaire : "live" (date unique, défaut) ou
+   *  "evergreen" (créneaux automatisés, vidéo pré-enregistrée). */
+  webinarMode?: "live" | "evergreen";
+  /** 🆕 LOT 5 — Evergreen UNIQUEMENT : URL de la vidéo pré-enregistrée
+   *  (YouTube/Vimeo/mp4) diffusée sur la page "live" après le créneau choisi
+   *  par le prospect. */
+  evergreenVideoUrl?: string;
+  /** 🆕 LOT 5 — Evergreen UNIQUEMENT : durée (en heures) de l'offre spéciale
+   *  APRÈS l'inscription de CHAQUE prospect (pas une date fixe). Défaut 24h. */
+  evergreenOfferHours?: number;
+  /** 🆕 Webinaire — DOUBLE OFFRE : pour `funnelKind === "webinar"`,
+   *  `offerName`/`price`/`promise` (champs génériques ci-dessus) désignent
+   *  désormais LE WEBINAIRE LUI-MÊME (titre/prix — généralement "Gratuit" —
+   *  /promesse affichés sur la page d'inscription). L'offre vendue APRÈS le
+   *  webinaire (page de vente/checkout) utilise ces champs dédiés. Si vides,
+   *  l'IA se rabat sur `offerName`/`price`/`promise` (rétrocompat / anciens
+   *  tunnels générés avant ce correctif). Pour TOUS les autres types de
+   *  tunnel, ces champs post-webinaire sont ignorés (comportement inchangé). */
+  postWebinarOfferName?: string;
+  postWebinarPrice?: string;
+  postWebinarPromise?: string;
   templateId?: string;
   moodId?: MoodId;
   mainColor?: string;
   secondaryColor?: string;
+  /** 🆕 Branding : si true, le tunnel généré prend les couleurs de
+   *  `brandColors` (au choix du template) au lieu de la palette par défaut
+   *  du template. */
+  brandColorsEnabled?: boolean;
+  /** 🆕 Couleurs de marque saisies par l'utilisateur (1 à 4 hex), appliquées
+   *  dans l'ordre à design.primaryColor / secondaryColor / accentColor /
+   *  accentColor2. Distinct de mainColor/secondaryColor (qui alimentent
+   *  l'étape "Ambiance"/Mood, non liée au branding). */
+  brandColors?: string[];
   logoUrl?: string;
   videoUrl?: string;
   aboutText?: string;
@@ -883,6 +1029,11 @@ export type FunnelBrief = {
   paymentUrl?: string;
   medias?: MediaItem[];
   copywritingPrefs?: CopywritingPrefs;
+  /** 🆕 LOT 3 — Rôles des pages OPTIONNELLES cochées par l'utilisateur dans
+   *  l'aperçu "pages générées" du wizard (ex. "oto"). Une page optionnelle du
+   *  blueprint n'est générée QUE si son rôle figure dans cette liste. Absent/
+   *  vide = aucune page optionnelle générée (comportement rétrocompatible). */
+  selectedOptionalPages?: PageRole[];
 };
 
 export type FunnelTemplate = {
@@ -1002,9 +1153,14 @@ export function makeAnchorCta(label: string, anchorId: string): CtaConfig {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type TimerMode =
-  | "countdown-duration"   // Durée fixe par visiteur (ex: 24h dès l'arrivée)
+  | "countdown-duration"   // Durée fixe par visiteur (ex: 24h dès l'arrivée sur CETTE page)
   | "countdown-date"       // Compte à rebours vers une date précise
-  | "seats-counter";       // Compteur de places restantes (statique)
+  | "seats-counter"        // Compteur de places restantes (statique)
+  // 🆕 LOT 5 — Webinaire Evergreen : durée fixe (durationHours) mais calculée
+  // depuis l'INSCRIPTION du prospect (localStorage posé par FormRenderer à la
+  // soumission), PARTAGÉE entre toutes les pages du tunnel (contrairement à
+  // "countdown-duration" qui est scopé par page). Ne dépend d'AUCUNE date fixe.
+  | "countdown-since-registration";
 
 export type TimerStyle = "digital" | "cards" | "inline";
 

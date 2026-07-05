@@ -73,10 +73,17 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
         return;
       }
 
+      // 🆕 Le lien du mail atterrit sur /reset-password (page dédiée qui
+      // permet de SAISIR le nouveau mot de passe — avant il renvoyait vers
+      // /login et l'utilisateur était coincé).
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
-      setMessage(error ? friendlyAuthMessage(error.message) : "Lien envoyé si l'adresse existe.");
+      setMessage(
+        error
+          ? friendlyAuthMessage(error.message)
+          : "✉️ Lien envoyé ! Vérifiez votre boîte mail (et les spams). Le lien ouvre une page où définir votre nouveau mot de passe.",
+      );
     } catch (e) {
       setMessage(friendlyAuthMessage(e instanceof Error ? e.message : String(e)));
     } finally {

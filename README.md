@@ -1,6 +1,6 @@
-# FunnelFlow AI
+# AutoFunnel AI
 
-FunnelFlow AI est une plateforme SaaS IA pour créer des tunnels de vente premium en français ou en anglais, orientés produits digitaux, ebooks, coaching, formations et services. La V1 inclut landing page, auth Supabase, dashboard, génération IA, templates, aperçu, publication publique, CRM simple, export HTML/CSS, export Systeme.io, import d’inspiration et workflows simples.
+AutoFunnel AI est une plateforme SaaS IA pour créer des tunnels de vente premium en français ou en anglais, orientés produits digitaux, ebooks, coaching, formations et services. La V1 inclut landing page, auth Supabase, dashboard, génération IA, templates, aperçu, publication publique, CRM simple, export HTML/CSS, export Systeme.io, import d’inspiration et workflows simples.
 
 ## Stack
 

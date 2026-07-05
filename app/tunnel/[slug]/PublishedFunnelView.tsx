@@ -15,6 +15,7 @@
 
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import PublicFunnelRuntime from "@/components/funnel/PublicFunnelRuntime";
+import { PageViewBeacon } from "@/components/funnel/PageViewBeacon";
 import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 
 export default function PublishedFunnelView({
@@ -25,15 +26,29 @@ export default function PublishedFunnelView({
   activePage?: FunnelPage;
 }) {
   return (
-    <div style={{ minHeight: "100vh" }}>
+    // 🆕 Fin de l'espace vide sous le footer : shell en flex column, la chaîne
+    // .ff-fill-col (FunnelPreview → .ff-page → body) pousse le footer en bas
+    // sur les pages courtes (margin-top:auto, cf. funnel-theme.css).
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        // 🆕 Filet : tout reliquat d'espace sous le footer prend une teinte
+        // sombre proche des footers (au lieu d'une bande blanche).
+        background: "#0B0F14",
+      }}
+    >
       <FunnelPreview
         funnel={funnel}
         activePage={activePage}
         showToolbar={false}
         viewportHeight="auto"
         pageRole={activePage?.role}
+        className="ff-fill-col"
       />
       <PublicFunnelRuntime />
+      <PageViewBeacon />
     </div>
   );
 }

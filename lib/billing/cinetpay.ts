@@ -14,7 +14,7 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 const API_BASE = "https://api-checkout.cinetpay.com/v2";
-const UA = "FunnelFlow/1.0";
+const UA = "AutoFunnel/1.0";
 
 export const CINETPAY_CURRENCIES = ["XOF", "XAF", "CDF", "GNF", "USD"] as const;
 export type CinetpayCurrency = (typeof CINETPAY_CURRENCIES)[number];

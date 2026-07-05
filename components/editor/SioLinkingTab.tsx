@@ -134,7 +134,7 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
             </h3>
             <p className="mb-3 text-xs text-gray-600">
               Une fois chaque étape publiée dans Systeme.io, reporte ici son
-              URL. FunnelFlow pourra résoudre automatiquement les liens entre
+              URL. AutoFunnel pourra résoudre automatiquement les liens entre
               pages lors du prochain export.
             </p>
             {pages.length === 0 ? (

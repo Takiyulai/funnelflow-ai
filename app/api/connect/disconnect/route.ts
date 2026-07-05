@@ -1,7 +1,7 @@
 // app/api/connect/disconnect/route.ts
 //
 // Déconnecte le compte Stripe Connect du créateur (oublie la référence côté
-// FunnelFlow). Les paiements sont désactivés jusqu'à une nouvelle connexion.
+// AutoFunnel). Les paiements sont désactivés jusqu'à une nouvelle connexion.
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";

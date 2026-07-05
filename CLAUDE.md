@@ -1,7 +1,7 @@
-# FunnelFlow AI — Contexte projet
+# AutoFunnel AI — Contexte projet
 
 ## Description
-FunnelFlow AI est une plateforme tout-en-un de création de tunnels de vente
+AutoFunnel AI est une plateforme tout-en-un de création de tunnels de vente
 assistée par IA. La PRIORITÉ est de permettre à l'utilisateur de TOUT faire
 dans l'application elle-même : générer, cloner, éditer, publier ses tunnels,
 capturer ses leads et les gérer via un CRM intégré — sans avoir à sortir de
@@ -10,7 +10,7 @@ l'outil.
 L'export vers systeme.io est une fonctionnalité BONUS / de sortie, destinée
 uniquement aux utilisateurs qui souhaitent migrer ou prolonger leur tunnel sur
 systeme.io. Ce n'est pas le cœur du produit : l'écosystème complet doit vivre
-dans FunnelFlow AI.
+dans AutoFunnel AI.
 
 Cible : solopreneurs / freelances francophones.
 Concurrent direct de référence : FunnelForge (à étudier pour s'en inspirer et

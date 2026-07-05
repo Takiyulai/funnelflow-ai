@@ -1,5 +1,5 @@
 -- ============================================================================
--- FunnelFlow AI — CRM (étape 1 : modèle de données)
+-- AutoFunnel AI — CRM (étape 1 : modèle de données)
 -- À EXÉCUTER dans l'éditeur SQL de Supabase (Dashboard → SQL Editor).
 --
 -- Choix validés :

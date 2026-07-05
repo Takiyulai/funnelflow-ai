@@ -113,6 +113,9 @@ export function PopupForm({
     return (
       <EmbedPopup
         cta={cta}
+        section={section}
+        funnel={funnel}
+        page={page}
         buttonClassName={buttonClassName}
         buttonProps={buttonProps}
       />
@@ -482,22 +485,44 @@ function InternalPopup({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 EmbedPopup — affiche un code de formulaire externe dans une iframe sandboxée.
-// FunnelFlow ne capture PAS ces leads : ils partent directement vers l'outil tiers.
+// AutoFunnel ne capture PAS ces leads : ils partent directement vers l'outil tiers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EmbedPopup({
   cta,
+  section,
+  funnel,
+  page,
   buttonClassName,
   buttonProps,
 }: {
   cta: CtaConfig;
+  section: FunnelSection;
+  funnel?: Funnel;
+  page?: FunnelPage;
   buttonClassName?: string;
   buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
 }) {
   const [open, setOpen] = useState(false);
+  // 🆕 Nombre de chargements de l'iframe : le 1er = affichage initial ; un 2e
+  // chargement = le formulaire a été soumis (navigation vers la page de
+  // confirmation du fournisseur) → on redirige vers la page suivante du tunnel.
+  const loadCountRef = useRef(0);
+  const [submitted, setSubmitted] = useState(false);
+  const pathname = usePathname();
+
+  // 🆕 Page suivante du tunnel : même résolution que le popup interne
+  // (formConfig → CTA → nextPageId → page suivante). Null hors page publiée.
+  const nextHref = useMemo(() => {
+    const { funnelSlug } = extractSlugsFromPath(pathname);
+    if (!funnelSlug) return null;
+    return resolveNextDestination({ section, funnel, page, funnelSlug });
+  }, [pathname, section, funnel, page]);
 
   useEffect(() => {
     if (!open) return;
+    loadCountRef.current = 0;
+    setSubmitted(false);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
@@ -510,10 +535,85 @@ function EmbedPopup({
     };
   }, [open]);
 
+  // 🆕 DÉTECTION DE SOUMISSION : les formulaires tiers soumettent souvent en
+  // AJAX (aucune navigation → l'iframe ne se recharge pas). Un script injecté
+  // dans l'iframe écoute l'événement `submit` (+ clic sur bouton submit d'un
+  // <form>) et prévient FunnelFlow via postMessage → on peut alors rediriger
+  // le prospect vers la page suivante du tunnel.
+  useEffect(() => {
+    if (!open) return;
+    const onMessage = (ev: MessageEvent) => {
+      const d = ev?.data as { type?: string } | undefined;
+      if (d?.type !== "ff-embed-submitted") return;
+      setSubmitted(true);
+      if (nextHref) {
+        window.setTimeout(() => {
+          window.location.href = nextHref;
+        }, 1600);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [open, nextHref]);
+
+  // 🆕 CSS de base soigné DANS l'iframe : les codes embed bruts (form nu sans
+  // la feuille de style du fournisseur) restent présentables — champs, labels
+  // et bouton stylés proprement au lieu du rendu « cassé » par défaut.
   const srcDoc = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,sans-serif}</style>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;padding:18px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#111827;font-size:15px;line-height:1.5}
+  img,iframe{max-width:100%}
+  form{display:flex;flex-direction:column;gap:12px}
+  label{font-size:13px;font-weight:600;color:#374151}
+  input:not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]),select,textarea{
+    width:100%;padding:11px 13px;border:1px solid #D1D5DB;border-radius:10px;
+    font:inherit;background:#fff;outline:none;transition:border-color .15s, box-shadow .15s}
+  input:focus,select:focus,textarea:focus{border-color:#2563EB;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+  button,input[type=submit],input[type=button]{
+    width:100%;padding:12px 16px;border:none;border-radius:10px;background:#111827;color:#fff;
+    font:inherit;font-weight:700;cursor:pointer;transition:opacity .15s}
+  button:hover,input[type=submit]:hover{opacity:.9}
+  p{margin:.35em 0}
+</style>
+<script>
+(function () {
+  var notified = false;
+  function notify(delay) {
+    if (notified) return;
+    notified = true;
+    setTimeout(function () {
+      try { parent.postMessage({ type: "ff-embed-submitted" }, "*"); } catch (e) {}
+    }, delay);
+  }
+  // 1) Soumission native (capture : fonctionne même si le vendor preventDefault + AJAX)
+  document.addEventListener("submit", function () { notify(1400); }, true);
+  // 2) Filet : clic sur un bouton submit DANS un <form> (certains widgets
+  //    n'émettent pas d'événement submit standard)
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    if (!el || !el.closest) return;
+    var btn = el.closest('button[type="submit"],input[type="submit"],form button:not([type="button"])');
+    if (btn && btn.closest("form")) notify(2200);
+  }, true);
+})();
+</script>
 </head><body>${cta.popupEmbedHtml ?? ""}</body></html>`;
+
+  const handleIframeLoad = () => {
+    loadCountRef.current += 1;
+    if (loadCountRef.current >= 2) {
+      // Le formulaire a navigué (soumission) → petite pause pour laisser voir
+      // la confirmation du fournisseur, puis on poursuit le tunnel.
+      setSubmitted(true);
+      if (nextHref) {
+        window.setTimeout(() => {
+          window.location.href = nextHref;
+        }, 1600);
+      }
+    }
+  };
 
   return (
     <>
@@ -553,8 +653,29 @@ function EmbedPopup({
               title={cta.popupTitle || "Formulaire"}
               srcDoc={srcDoc}
               sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
-              className="h-[70vh] w-full rounded-xl border-0"
+              className="w-full rounded-xl border-0"
+              style={{ height: nextHref || submitted ? "62vh" : "70vh" }}
+              onLoad={handleIframeLoad}
             />
+            {/* 🆕 Poursuite du tunnel : bouton toujours disponible + message
+                après soumission détectée (redirection automatique). */}
+            {(nextHref || submitted) && (
+              <div className="px-2 pb-2 pt-1.5 text-center">
+                {submitted && (
+                  <p className="mb-1.5 text-xs font-semibold text-emerald-600">
+                    ✓ Formulaire envoyé{nextHref ? " — redirection…" : ""}
+                  </p>
+                )}
+                {nextHref && (
+                  <a
+                    href={nextHref}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
+                  >
+                    Continuer →
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

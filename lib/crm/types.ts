@@ -109,14 +109,27 @@ export type ContactWithTags = Contact & { tags: Tag[] };
 // mémoire ; pas encore de persistance — c'est l'étape suivante).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Type de séquence (oriente la structure et le ton générés par l'IA). */
+/** Type/rôle d'un mail de séquence (oriente la structure et le ton générés par l'IA). */
 export type SequenceType =
   | "bienvenue"
   | "nurturing"
   | "relance"
+  | "offre"
+  | "temoignage"
   | "lancement"
   | "reengagement"
   | "autre";
+
+/**
+ * 🆕 LOT 1 — Un « rôle » ajouté par l'utilisateur dans le constructeur de
+ * séquence : chaque rôle ajouté = un mail généré. L'ORDRE de la liste = l'ordre
+ * des mails. `label` est le libellé affiché ; obligatoire quand `id === "autre"`
+ * (type personnalisé en saisie libre), sinon dérivé de `id`.
+ */
+export type SequenceRole = {
+  id: SequenceType;
+  label?: string;
+};
 
 /** Un email d'une séquence générée (éditable côté UI). */
 export type SequenceEmailDraft = {
@@ -150,15 +163,37 @@ export type TunnelContext = {
   heroSubheadline: string | null;
   /** URL publique du tunnel (si publié), sinon null. */
   url: string | null;
+  /** 🆕 LOT 4 — Date/heure ISO du webinaire (tunnels de type "webinar"). */
+  webinarDate?: string | null;
+  /** 🆕 LOT 4 — Lien externe du webinaire (Zoom/YouTube/Meet). */
+  webinarExternalLink?: string | null;
+  /** 🆕 LOT 5 — Mode du webinaire : "evergreen" → les emails générés doivent
+   *  parler de manière RELATIVE à l'inscription du destinataire (jamais de
+   *  date fixe). Absent/"live" → comportement inchangé (date fixe). */
+  webinarMode?: "live" | "evergreen" | null;
+  /** 🆕 LOT 9 — Nombre de jours du challenge (tunnels de type "challenge").
+   *  Permet à l'onglet Emails de générer une séquence quotidienne (1 email
+   *  par jour, Jour 1 à Jour N) au lieu d'une séquence générique. */
+  challengeTotalDays?: number | null;
+  /** 🆕 Webinaire — offre VENDUE APRÈS le webinaire, distincte de offerName/
+   *  price/promise (qui désignent le webinaire lui-même pour ce kind). Permet
+   *  à l'onglet Emails de générer l'email de vente post-webinaire avec le bon
+   *  produit/prix/promesse au lieu de réutiliser ceux du webinaire. */
+  postWebinarOfferName?: string | null;
+  postWebinarPrice?: string | null;
+  postWebinarPromise?: string | null;
 };
 
-/** Entrée requise pour générer une séquence. */
+/**
+ * Entrée requise pour générer une séquence.
+ * 🆕 LOT 1 : remplace `type` + `emailCount` par `roles` (liste ORDONNÉE de
+ * rôles) — un mail est généré PAR rôle, dans l'ordre, le nombre de mails est
+ * donc déduit de `roles.length` (plus de champ "nombre de mails" séparé).
+ */
 export type SequenceGenerationInput = {
-  type: SequenceType;
+  roles: SequenceRole[];
   /** Contexte libre saisi par l'utilisateur (offre, cible, ton, etc.). */
   context: string;
-  /** Nombre d'emails souhaité (borné 1..10). */
-  emailCount: number;
   language: Language;
   /** Contexte du tunnel rattaché (null si saisie manuelle sans tunnel). */
   tunnel: TunnelContext | null;
@@ -175,7 +210,11 @@ export type Sequence = {
   id: string;
   user_id: string;
   name: string;
+  /** Rétrocompat : rôle du 1er mail (ou "autre" si mixte). Préférer `roles`. */
   type: SequenceType;
+  /** 🆕 LOT 1 : liste ordonnée des rôles (1 par mail). Absent sur les
+   *  séquences créées avant le Lot 1 → on retombe alors sur `[{ id: type }]`. */
+  roles?: SequenceRole[] | null;
   context: string | null;
   language: Language;
   funnel_id: string | null;
@@ -203,6 +242,8 @@ export type SequenceWithEmails = Sequence & { emails: SequenceEmail[] };
 export type SequenceInput = {
   name: string;
   type: SequenceType;
+  /** 🆕 LOT 1 : liste ordonnée des rôles (1 par mail). */
+  roles?: SequenceRole[] | null;
   context?: string | null;
   language: Language;
   funnel_id?: string | null;

@@ -120,7 +120,7 @@ Pour que votre **popup natif systeme.io** prenne automatiquement les couleurs de
 
 1. Dans **systeme.io**, créez votre **popup** (texte, champ/formulaire, CTA) et configurez son **déclencheur natif** (délai, exit-intent, au clic, etc.).
 2. **Cliquez sur le bloc/la rangée** du popup : son **id** s'affiche (ex. \`row-c66ce9c8\`). ⚠️ N'utilisez **pas** l'id du script de formulaire (\`form-script-tag-…\`), ce n'est pas un élément visible.
-3. Dans **FunnelFlow** → menu **Export systeme.io** → **« Styliser un popup systeme.io »** → collez cet **id** (ou le bloc HTML). Optionnel : l'**id du bouton CTA** (ex. \`button-…\`, pour un **dégradé animé**) et les **ids des champs de saisie** (ex. \`form-input-…\`). Puis **Générer & copier le CSS**.
+3. Dans **AutoFunnel** → menu **Export systeme.io** → **« Styliser un popup systeme.io »** → collez cet **id** (ou le bloc HTML). Optionnel : l'**id du bouton CTA** (ex. \`button-…\`, pour un **dégradé animé**) et les **ids des champs de saisie** (ex. \`form-input-…\`). Puis **Générer & copier le CSS**.
 4. Dans le popup systeme.io, glissez un bloc **Code HTML** et **collez-y** ce CSS.
 
 Le popup garde son **formulaire, son CTA et son ouverture/fermeture** (gérés par systeme.io) ; seules les **couleurs** (fond, texte, bouton) sont adaptées à votre branding. CSS pur, aucun script.

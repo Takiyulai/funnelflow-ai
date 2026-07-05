@@ -9,10 +9,10 @@
 // si une section a un body commençant par RAW_HTML_BODY_MARKER, on émet
 // directement son HTML cloné avec les patches appliqués (sans annotation
 // d'édition). Pour un funnel 100 % cloné, on désactive aussi le header
-// et le footer FunnelFlow (la page clonée a déjà les siens).
+// et le footer AutoFunnel (la page clonée a déjà les siens).
 //
 // 🆕 CLONED HEAD : pour un funnel 100 % cloné, on n'émet pas le theme-css
-// FunnelFlow (qui parasite le rendu) et on injecte à la place le clonedHead
+// AutoFunnel (qui parasite le rendu) et on injecte à la place le clonedHead
 // original (styles + links CSS) stocké dans funnel.meta.clonedHead.
 //
 // 🆕 FAQ RUNTIME : pour les FAQ clonées (data-ff-faq-grid), on injecte un
@@ -61,6 +61,7 @@ import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import { applyRawHtmlPatchesServer as applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches.server";
 import { FAQ_RUNTIME_SCRIPT } from "./faq-script";
+import { contrastInk } from "@/lib/funnels/color";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 Contexte de navigation publique (liens inter-pages /p/[slug]/[pageSlug])
@@ -555,7 +556,7 @@ function ctaAttrs(cta: CtaConfig, nav?: PublicNavContext): string {
     const id = String(cta.systemePopupId).trim();
     if (id) classExtra = ` class="systeme-show-popup-${escapeAttr(id)}"`;
   } else if (cta.mode === "popup") {
-    // Popup interne FunnelFlow → ouvert par le runtime (FF_FORM_SCRIPT).
+    // Popup interne AutoFunnel → ouvert par le runtime (FF_FORM_SCRIPT).
     popupAttr = ` data-ff-popup-open="1"`;
   }
 
@@ -622,6 +623,32 @@ function renderCtaButton(
     finalAttrs = `${baseAttrs} class="${cls}"`;
   }
   return `<a${finalAttrs}${styleAttr}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
+}
+
+// 🆕 Liens/CTA supplémentaires (canaux WhatsApp/Telegram/Instagram…). Rendus
+// en rangée de boutons secondaires sous le CTA principal — parité avec le rendu
+// runtime (CtaLink baseClassName="ff-btn-extra"). Chaque ancre porte UNIQUEMENT
+// la classe `ff-btn-extra` (pas `ff-btn ff-cta`) pour hériter du style discret
+// défini dans le thème (.ff-extra-ctas .ff-btn-extra).
+function renderExtraCtas(
+  ctas: CtaConfig[] | undefined,
+  nav?: PublicNavContext,
+): string {
+  if (!Array.isArray(ctas) || ctas.length === 0) return "";
+  const items = ctas
+    .filter((c) => c?.label)
+    .map((c) => {
+      const iconHtml = renderCtaIcon(c.icon);
+      const baseAttrs = ctaAttrs(c, nav);
+      const hasClass = / class="/.test(baseAttrs);
+      const finalAttrs = hasClass
+        ? baseAttrs.replace(/ class="([^"]*)"/, ` class="ff-btn-extra $1"`)
+        : `${baseAttrs} class="ff-btn-extra"`;
+      return `<a${finalAttrs}>${escapeHtml(c.label || "")}${iconHtml}</a>`;
+    })
+    .join("");
+  if (!items) return "";
+  return `<div class="ff-extra-ctas">${items}</div>`;
 }
 
 function renderBrandCtaButton(cta: CtaConfig, nav?: PublicNavContext): string {
@@ -1969,7 +1996,10 @@ function renderSectionInnerContent(
     ? `<div class="ff-decline-wrap"><a href="${escapeAttr(ctaHref(section.secondaryCta, ctx.nav))}" class="ff-decline-link" data-ff-decline="true">${escapeHtml(section.secondaryCta.label)}</a></div>`
     : "";
 
-  return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}${decline}`;
+  // 🆕 Liens/CTA supplémentaires (canaux : WhatsApp, Telegram, Instagram…).
+  const extraCtas = renderExtraCtas(section.ctas, ctx.nav);
+
+  return `${heroIcon}${eyebrow}${headline}${subheadline}${body}${bullets}${specialized}${video}${image}${formHtml}${timersHtml}${cta}${decline}${extraCtas}`;
 }
 
 function renderFormFields(
@@ -2197,7 +2227,7 @@ function renderFooter(funnel: Funnel): string {
   const contactEmail = meta?.contactEmail?.trim();
   const year = new Date().getFullYear();
   const displayName =
-    businessName || extractBrandName(funnel.funnelName) || "FunnelFlow";
+    businessName || extractBrandName(funnel.funnelName) || "AutoFunnel";
 
   return `<footer class="ff-footer">
   <div class="ff-footer-inner">
@@ -2910,6 +2940,7 @@ function renderDesignOverrideCss(funnel: Funnel): string {
   const primary = typeof design.primaryColor === "string" ? design.primaryColor : null;
   const secondary = typeof design.secondaryColor === "string" ? design.secondaryColor : null;
   const accent = typeof design.accentColor === "string" ? design.accentColor : null;
+  const accent2 = typeof design.accentColor2 === "string" ? design.accentColor2 : null;
 
   const isHex = (c: string) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
 
@@ -2917,13 +2948,40 @@ function renderDesignOverrideCss(funnel: Funnel): string {
   if (primary && isHex(primary)) {
     overrides.push(`--ff-brand-surface: ${primary};`);
     overrides.push(`--ff-bg: ${primary};`);
+    // 🆕 Contraste automatique : texte principal lisible sur le fond choisi.
+    const ink = contrastInk(primary);
+    if (ink) overrides.push(`--ff-ink: ${ink};`);
+    // 🆕 Redérive toute la palette dépendante (surface/cartes/bandes) pour que
+    // les templates qui figent ces valeurs en dur ne gardent pas un rendu
+    // calibré pour un fond différent de celui choisi par l'utilisateur.
+    overrides.push(`--ff-surface: color-mix(in srgb, var(--ff-ink) 4%, var(--ff-bg));`);
+    overrides.push(`--ff-ink-soft: color-mix(in srgb, var(--ff-ink) 78%, transparent);`);
+    overrides.push(`--ff-muted: color-mix(in srgb, var(--ff-ink) 55%, transparent);`);
+    overrides.push(`--ff-border: color-mix(in srgb, var(--ff-ink) 10%, transparent);`);
   }
   if (secondary && isHex(secondary)) {
     overrides.push(`--ff-accent: ${secondary};`);
     overrides.push(`--ff-brand: ${secondary};`);
+    overrides.push(`--ff-btn-bg: var(--ff-accent);`);
+    // 🆕 Texte de bouton lisible sur la couleur d'accent choisie (évite un
+    // CTA "incolore" quand le texte se confond avec son propre fond).
+    const accentInk = contrastInk(secondary);
+    if (accentInk) {
+      overrides.push(`--ff-accent-ink: ${accentInk};`);
+      overrides.push(`--ff-btn-ink: var(--ff-accent-ink);`);
+    }
+    overrides.push(`--ff-card-bg: color-mix(in srgb, var(--ff-accent) 6%, var(--ff-surface));`);
+    overrides.push(`--ff-card-border: color-mix(in srgb, var(--ff-accent) 16%, transparent);`);
+    overrides.push(`--ff-section-alt-1: color-mix(in srgb, var(--ff-accent) 4%, var(--ff-bg));`);
+    overrides.push(`--ff-section-alt-2: color-mix(in srgb, var(--ff-accent) 7%, var(--ff-bg));`);
+    overrides.push(`--ff-section-alt-border: color-mix(in srgb, var(--ff-accent) 12%, transparent);`);
   }
   if (accent && isHex(accent)) {
     overrides.push(`--ff-link: ${accent};`);
+    overrides.push(`--ff-accent2: ${accent};`);
+  }
+  if (accent2 && isHex(accent2)) {
+    overrides.push(`--ff-accent3: ${accent2};`);
   }
 
   if (overrides.length === 0) return "";

@@ -1,14 +1,17 @@
 "use client";
 
-import { useRef } from "react";
-import { Image as ImageIcon, X, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Image as ImageIcon, X, RotateCcw, AlertCircle, Loader2 } from "lucide-react";
 import type { FunnelSection, SectionBackground } from "@/lib/funnels/types";
-import { externalizeMediasSync } from "@/lib/store/mediaStore";
+import { compressImage, formatBytes } from "@/lib/images/compress";
+import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 
 type Props = {
   section: FunnelSection;
   onChange: (patch: Partial<FunnelSection>) => void;
 };
+
+const MAX_BG_INPUT_SIZE = 8 * 1024 * 1024;
 
 const POSITION_OPTIONS: { value: NonNullable<SectionBackground["position"]>; label: string }[] = [
   { value: "center", label: "Centre" },
@@ -27,6 +30,38 @@ const SIZE_OPTIONS: { value: NonNullable<SectionBackground["size"]>; label: stri
 export function BackgroundTab({ section, onChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bg: SectionBackground = section.background ?? {};
+  const [bgError, setBgError] = useState<string | null>(null);
+  const [bgUploading, setBgUploading] = useState(false);
+
+  // 🆕 Rétrocompat : des sections déjà sauvegardées AVANT ce fix peuvent avoir
+  // bg.imageUrl = "idb-media://…" (posé par l'ancien code). On la résout pour
+  // que l'aperçu ci-dessous s'affiche aussi pour ces anciennes sections.
+  const [resolvedPreview, setResolvedPreview] = useState<string | undefined>(
+    bg.imageUrl && !bg.imageUrl.startsWith(IDB_MEDIA_PREFIX) ? bg.imageUrl : undefined,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const url = bg.imageUrl;
+    if (!url) {
+      setResolvedPreview(undefined);
+      return;
+    }
+    if (!url.startsWith(IDB_MEDIA_PREFIX)) {
+      setResolvedPreview(url);
+      return;
+    }
+    getMedia(url.slice(IDB_MEDIA_PREFIX.length))
+      .then((data) => {
+        if (!cancelled) setResolvedPreview(data ?? undefined);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedPreview(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bg.imageUrl]);
 
   const update = (patch: Partial<SectionBackground>) => {
     const next: SectionBackground = { ...bg, ...patch };
@@ -35,21 +70,54 @@ export function BackgroundTab({ section, onChange }: Props) {
 
   const reset = () => {
     onChange({ background: undefined });
+    setBgError(null);
   };
 
+  // 🆕 FIX RÉGRESSION (upload OK, image jamais affichée) : cette fonction
+  // appelait `externalizeMediasSync` IMMÉDIATEMENT après l'upload, remplaçant
+  // `imageUrl` par une référence "idb-media://…" AVANT même le premier rendu.
+  // Or l'aperçu ci-dessous (<img src={bg.imageUrl}>) et FunnelPreview.tsx
+  // affichent cette valeur TELLE QUELLE tant qu'elle n'est pas résolue —
+  // "idb-media://…" n'est PAS un schéma d'URL que le navigateur sait charger,
+  // donc l'image restait invisible en permanence (l'upload/la compression
+  // réussissaient bien, seul l'AFFICHAGE était cassé). MediaTab.tsx (image
+  // principale de section) ne fait PAS ça : il garde la data-URL brute en
+  // mémoire pendant toute la session d'édition, et laisse `saveFunnel()`
+  // (funnelStore.ts) externaliser vers IndexedDB en arrière-plan au moment de
+  // la sauvegarde seulement — c'est CE pipeline qu'on réplique ici. On profite
+  // aussi de l'occasion pour aligner sur MediaTab.tsx : compression avant
+  // stockage (au lieu d'un FileReader brut sans limite de taille).
   const handleFile = async (file: File) => {
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") return;
-      // On stocke la data-URL dans un wrapper et on l'externalise immédiatement
-      // vers IndexedDB via le système existant, qui remplace en place par idb-media://.
-      const wrapper = { imageUrl: result };
-      externalizeMediasSync(wrapper);
-      update({ imageUrl: wrapper.imageUrl });
-    };
-    reader.readAsDataURL(file);
+    setBgError(null);
+    if (!file || !file.type.startsWith("image/")) {
+      setBgError("Le fichier doit être une image");
+      return;
+    }
+    if (file.size > MAX_BG_INPUT_SIZE) {
+      setBgError(`Image trop lourde (${formatBytes(file.size)}). Limite : 8 Mo.`);
+      return;
+    }
+    setBgUploading(true);
+    try {
+      const result = await compressImage(file, {
+        maxWidth: 1920,
+        maxHeight: 1280,
+        quality: 0.82,
+        mimeType: "preserve",
+      });
+      // Data-URL directe en mémoire (comme MediaTab.tsx) — l'externalisation
+      // vers IndexedDB se fait automatiquement, plus tard, à la sauvegarde.
+      update({ imageUrl: result.dataUrl });
+    } catch (e) {
+      console.error("[BackgroundTab] handleFile error:", e);
+      const msg = e instanceof Error ? e.message : "Erreur inconnue";
+      setBgError(
+        `Ce fichier ne peut pas être lu par le navigateur. Ouvre-le dans Paint ` +
+          `ou Photos et ré-enregistre-le en JPEG, puis réessaie. (Détail : ${msg})`,
+      );
+    } finally {
+      setBgUploading(false);
+    }
   };
 
   const removeImage = () => {
@@ -74,11 +142,18 @@ export function BackgroundTab({ section, onChange }: Props) {
 
         {bg.imageUrl ? (
           <div className="relative overflow-hidden rounded-lg border border-white/15 bg-zinc-950">
-            <img
-              src={bg.imageUrl}
-              alt="Aperçu arrière-plan"
-              className="h-32 w-full object-cover"
-            />
+            {resolvedPreview ? (
+              <img
+                src={resolvedPreview}
+                alt="Aperçu arrière-plan"
+                className="h-32 w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-32 w-full items-center justify-center gap-2 text-xs text-white/40">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Chargement de l&apos;aperçu…
+              </div>
+            )}
             <button
               type="button"
               onClick={removeImage}
@@ -92,11 +167,28 @@ export function BackgroundTab({ section, onChange }: Props) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-white/20 bg-zinc-950/40 px-4 py-6 text-sm text-white/70 hover:border-amber-300/60 hover:bg-zinc-950 hover:text-white"
+            disabled={bgUploading}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-white/20 bg-zinc-950/40 px-4 py-6 text-sm text-white/70 hover:border-amber-300/60 hover:bg-zinc-950 hover:text-white disabled:opacity-50"
           >
-            <ImageIcon className="h-4 w-4" />
-            Choisir une image
+            {bgUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Compression…
+              </>
+            ) : (
+              <>
+                <ImageIcon className="h-4 w-4" />
+                Choisir une image (max 8 Mo)
+              </>
+            )}
           </button>
+        )}
+
+        {bgError && (
+          <p className="mt-2 flex items-start gap-1 text-[11px] text-rose-300">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            {bgError}
+          </p>
         )}
 
         <input
@@ -106,7 +198,7 @@ export function BackgroundTab({ section, onChange }: Props) {
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) handleFile(file);
+            if (file) void handleFile(file);
             e.target.value = "";
           }}
         />

@@ -3,7 +3,7 @@
 // 🆕 ÉTAPE 3 — Résolution de l'expéditeur des emails MARKETING d'un utilisateur
 // (newsletters + séquences), stratégie hybride (Option C) :
 //   • Domaine perso VÉRIFIÉ (premium, UI plus tard) → on envoie depuis SON adresse.
-//   • Sinon (défaut) → domaine FunnelFlow partagé, nom « <Nom> via FunnelFlow »,
+//   • Sinon (défaut) → domaine AutoFunnel partagé, nom « <Nom> via AutoFunnel »,
 //     reply-to = email réel du créateur.
 //
 // Fonction UNIQUE utilisée partout où on envoie un email marketing (campagnes,
@@ -57,10 +57,54 @@ export async function getUserMarketingSender(userId: string): Promise<Sender> {
     };
   }
 
-  // Cas par DÉFAUT (Option C) : domaine FunnelFlow partagé.
-  const displayName = senderName ? `${senderName} via FunnelFlow` : defaultFromName();
+  // Cas par DÉFAUT : domaine AutoFunnel partagé, nom du créateur SEUL.
+  // 🆕 Suffixe « via AutoFunnel » retiré (décision produit) : le lead voit le
+  // nom du business/créateur, pas la plateforme.
+  const displayName = senderName || defaultFromName();
   return {
     from: composeFrom(displayName, defaultFromEmail()),
     ...(accountEmail ? { replyTo: accountEmail } : {}),
   };
+}
+
+/**
+ * 🆕 Expéditeur marketing lié à UN TUNNEL : priorité au nom du business du
+ * tunnel (`published_content.meta.businessName`, figé à la publication).
+ * FROM = "<Business> <noreply@autofunnelai.cloud>" (sans « via AutoFunnel »),
+ * reply-to = email du créateur. Fallback complet sur getUserMarketingSender
+ * (nom marketing du profil / domaine perso vérifié) si le tunnel n'a pas de
+ * businessName ou n'est pas trouvé.
+ */
+export async function getFunnelMarketingSender(
+  userId: string,
+  funnelId?: string | null,
+): Promise<Sender> {
+  const base = await getUserMarketingSender(userId);
+
+  // Domaine perso vérifié → la préférence premium du profil reste prioritaire.
+  if (!funnelId) return base;
+
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: funnelRow } = await admin
+      .from("funnels")
+      .select("published_content")
+      .eq("id", funnelId)
+      .maybeSingle();
+
+    const meta = (funnelRow?.published_content as { meta?: { businessName?: string } } | null)
+      ?.meta;
+    const businessName = meta?.businessName?.trim();
+    if (!businessName) return base;
+
+    // Si l'utilisateur a un domaine perso vérifié, on garde SON adresse mais
+    // avec le nom du business du tunnel.
+    const emailPart = base.from.match(/<\s*([^>]+)\s*>/)?.[1] ?? defaultFromEmail();
+    return {
+      from: composeFrom(businessName, emailPart),
+      ...(base.replyTo ? { replyTo: base.replyTo } : {}),
+    };
+  } catch {
+    return base;
+  }
 }

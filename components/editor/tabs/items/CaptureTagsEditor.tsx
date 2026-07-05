@@ -25,7 +25,7 @@ export function CaptureTagsEditor({ section, onChange }: Props) {
         // On préserve la config existante (redirection, submitLabel, etc.)
         ...(section.formConfig ?? {}),
         // provider est obligatoire sur FormSectionConfig : on garde l'existant
-        // ou on retombe sur "internal" (formulaire FunnelFlow → Supabase).
+        // ou on retombe sur "internal" (formulaire AutoFunnel → Supabase).
         provider: section.formConfig?.provider ?? "internal",
         captureTags: next,
       },

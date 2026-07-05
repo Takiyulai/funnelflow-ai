@@ -158,6 +158,36 @@ export function CtaTab({ section, onChange }: Props) {
 
   const spacing = cta?.spacing ?? DEFAULT_SPACING;
 
+  // ─── 🆕 Liens/CTA supplémentaires (canaux : WhatsApp, Telegram, Instagram…)
+  // Indépendant du CTA principal ci-dessus — utile notamment sur une page de
+  // remerciement pour rediriger vers plusieurs canaux à la fois.
+  const extraCtas: CtaConfig[] = section.ctas ?? [];
+
+  const setExtraCtas = (next: CtaConfig[]) => {
+    onChange({ ctas: next });
+  };
+
+  const addExtraCta = () => {
+    setExtraCtas([
+      ...extraCtas,
+      {
+        mode: "redirect",
+        label: "Rejoindre le groupe",
+        url: "",
+        target: "_blank",
+        icon: "external",
+      },
+    ]);
+  };
+
+  const updateExtraCta = (idx: number, patch: Partial<CtaConfig>) => {
+    setExtraCtas(extraCtas.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  };
+
+  const removeExtraCta = (idx: number) => {
+    setExtraCtas(extraCtas.filter((_, i) => i !== idx));
+  };
+
   return (
     <div className="space-y-4">
       {/* Toggle */}
@@ -224,7 +254,7 @@ export function CtaTab({ section, onChange }: Props) {
               <Field
                 label="URL de destination"
                 required
-                hint="Page de paiement systeme.io, Calendly, Stripe Checkout, etc."
+                hint="Lien produit Chariow, page de paiement systeme.io, Calendly, Stripe Checkout, etc."
               >
                 <input
                   type="url"
@@ -234,6 +264,26 @@ export function CtaTab({ section, onChange }: Props) {
                   placeholder="https://exemple.com/checkout"
                 />
               </Field>
+
+              {/* 🆕 Chariow Niveau 2 : lien produit Chariow */}
+              <label className="flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+                <div>
+                  <div className="text-xs font-medium text-white">
+                    💳 Lien produit Chariow
+                  </div>
+                  <div className="mt-0.5 text-[10px] leading-relaxed text-white/50">
+                    Cochez si l'URL ci-dessus est votre page produit Chariow.
+                    Chariow encaisse ET livre le produit : AutoFunnel n'enverra
+                    donc pas d'email de livraison en double.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={cta.chariow === true}
+                  onChange={(e) => updateCta({ chariow: e.target.checked || undefined })}
+                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
+                />
+              </label>
               <Field label="Ouverture">
                 <div className="flex gap-1.5">
                   <ModeBtn
@@ -262,7 +312,7 @@ export function CtaTab({ section, onChange }: Props) {
                     active={(cta.popupProvider ?? "internal") === "internal"}
                     onClick={() => setPopupProvider("internal")}
                   >
-                    🧩 FunnelFlow (intégré)
+                    🧩 AutoFunnel (intégré)
                   </ModeBtn>
                   <ModeBtn
                     active={cta.popupProvider === "systeme"}
@@ -279,11 +329,11 @@ export function CtaTab({ section, onChange }: Props) {
                 </div>
               </Field>
 
-              {/* === Popup FunnelFlow interne === */}
+              {/* === Popup AutoFunnel interne === */}
               {(cta.popupProvider ?? "internal") === "internal" && (
                 <>
                   <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/5 px-3 py-2 text-[11px] text-emerald-200/80">
-                    ✓ Ce popup s'affiche directement sur votre tunnel FunnelFlow.
+                    ✓ Ce popup s'affiche directement sur votre tunnel AutoFunnel.
                     Aucune configuration externe nécessaire.
                   </div>
 
@@ -472,7 +522,7 @@ export function CtaTab({ section, onChange }: Props) {
                 <Field
                   label="Code du formulaire externe"
                   required
-                  hint="Collez le code HTML/embed fourni par votre outil (Brevo, MailerLite, Systeme.io…). Il s'affichera dans une fenêtre sécurisée. FunnelFlow ne capture pas ces leads."
+                  hint="Collez le code HTML/embed fourni par votre outil (Brevo, MailerLite, Systeme.io…). Il s'affichera dans une fenêtre sécurisée. AutoFunnel ne capture pas ces leads."
                 >
                   <textarea
                     value={cta.popupEmbedHtml ?? ""}
@@ -553,6 +603,78 @@ export function CtaTab({ section, onChange }: Props) {
           </div>
         </>
       )}
+
+      {/* === 🆕 Liens/CTA supplémentaires (canaux) === */}
+      <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-white/60">
+              Liens supplémentaires
+            </div>
+            <div className="mt-0.5 text-[10px] text-white/40">
+              Ex : rejoindre WhatsApp, Telegram, Instagram — utile sur une page
+              de remerciement. Indépendant du CTA principal ci-dessus.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={addExtraCta}
+            className="shrink-0 rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[10px] font-medium text-white/60 hover:border-amber-300/40 hover:text-amber-300"
+          >
+            + Ajouter
+          </button>
+        </div>
+
+        {extraCtas.length === 0 && (
+          <p className="text-[11px] text-white/40">Aucun lien supplémentaire.</p>
+        )}
+
+        {extraCtas.map((c, idx) => (
+          <div
+            key={idx}
+            className="space-y-2 rounded-md border border-white/10 bg-black/30 p-2.5"
+          >
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={c.label ?? ""}
+                onChange={(e) => updateExtraCta(idx, { label: e.target.value })}
+                className={`${inputClass} flex-1`}
+                placeholder="Ex : Rejoindre le groupe WhatsApp"
+              />
+              <button
+                type="button"
+                onClick={() => removeExtraCta(idx)}
+                className="shrink-0 rounded border border-white/10 px-2 py-2 text-[11px] text-white/50 hover:border-red-300/40 hover:text-red-300"
+                aria-label="Supprimer ce lien"
+              >
+                ✕
+              </button>
+            </div>
+            <input
+              type="url"
+              value={c.url ?? ""}
+              onChange={(e) => updateExtraCta(idx, { url: e.target.value, mode: "redirect" })}
+              className={inputClass}
+              placeholder="https://chat.whatsapp.com/..."
+            />
+            <div className="flex items-center gap-1.5">
+              <ModeBtn
+                active={(c.target ?? "_blank") === "_blank"}
+                onClick={() => updateExtraCta(idx, { target: "_blank" })}
+              >
+                Nouvel onglet
+              </ModeBtn>
+              <ModeBtn
+                active={c.target === "_self"}
+                onClick={() => updateExtraCta(idx, { target: "_self" })}
+              >
+                Même onglet
+              </ModeBtn>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { LoaderIA } from "@/components/ui/LoaderIA";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { LogoUploader } from "@/components/funnel/LogoUploader";
-import { FunnelKindStep } from "@/components/funnel/wizard/FunnelKindStep";
+import { FunnelKindStep, WebinarDetailsFields } from "@/components/funnel/wizard/FunnelKindStep";
 import { MoodStep } from "@/components/funnel/wizard/MoodStep";
 import { VideoStep } from "@/components/funnel/wizard/VideoStep";
 import TemplateGalleryStep from "@/components/funnel/TemplateGalleryStep";
@@ -23,9 +23,10 @@ import {
   DEFAULT_PREMIUM_TEMPLATE_ID,
   getPremiumTemplate,
 } from "@/lib/funnels/templates";
-import { getFunnelKind } from "@/lib/funnels/kinds";
+import { getFunnelKind, FUNNEL_KINDS } from "@/lib/funnels/kinds";
+import { getRequiredPageBlueprints, getOptionalPageBlueprints } from "@/lib/funnels/pageCatalogs";
 import type {
-  Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs,
+  Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs, PageRole,
 } from "@/lib/funnels/types";
 import { makeAnchorCta, makeRedirectCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
@@ -101,7 +102,6 @@ export function CreateFunnelWizard() {
   // Écran de choix initial : "choice" (défaut) → "express" ou "wizard" (parcours classique).
   const [entryMode, setEntryMode] = useState<"choice" | "express" | "wizard">("choice");
   const [expressPrompt, setExpressPrompt] = useState("");
-  const [expressPages, setExpressPages] = useState(4);
   const router = useRouter();
 
   const steps = useMemo<StepLabel[]>(() => {
@@ -172,6 +172,17 @@ export function CreateFunnelWizard() {
     }));
   }
 
+  // 🆕 LOT 3 — Coche/décoche une page optionnelle dans l'aperçu "pages générées".
+  function toggleOptionalPage(role: PageRole) {
+    setBrief((current) => {
+      const selected = current.selectedOptionalPages ?? [];
+      const next = selected.includes(role)
+        ? selected.filter((r) => r !== role)
+        : [...selected, role];
+      return { ...current, selectedOptionalPages: next };
+    });
+  }
+
   function selectKind(kind: FunnelKind) {
     const k = getFunnelKind(kind);
     updateMany({
@@ -180,6 +191,12 @@ export function CreateFunnelWizard() {
         funnelTemplates.find((t) => t.id === k?.suggestedTemplateId)?.name ??
         brief.funnelType,
     });
+    // 🆕 BUG CORRIGÉ : l'avance automatique au step suivant masquait
+    // instantanément le bloc date/heure + urgence du webinaire (affiché sur ce
+    // MÊME step, juste sous les cartes de type) — l'utilisateur n'avait donc
+    // jamais l'occasion de le voir ni de le remplir. Pour "webinar", on laisse
+    // l'utilisateur cliquer lui-même sur "Suivant" une fois les champs remplis.
+    if (kind === "webinar") return;
     setStep((v) => Math.min(v + 1, steps.length - 1));
   }
 
@@ -253,12 +270,27 @@ export function CreateFunnelWizard() {
         return;
       }
 
+      // 🆕 FIX RÉGRESSION : `brief.mainColor` a une valeur PAR DÉFAUT
+      // ("#080E1A", posée dès l'ouverture du wizard, cf. état initial du
+      // brief) — donc TOUJOURS présente, même si l'utilisateur n'a jamais
+      // touché l'étape « Ambiance » ni activé le branding. L'ancien code
+      // écrasait `design.primaryColor` avec cette valeur pour TOUS les
+      // tunnels, quel que soit le template choisi → tous les templates
+      // convergeaient vers ce quasi-noir. On ne recolore désormais QUE si
+      // l'utilisateur a explicitement activé « Utiliser les couleurs de ma
+      // marque » (étape Template) — sinon le design retourné par l'IA (donc
+      // l'identité par défaut du template) est conservé tel quel.
       const enrichedFunnel = {
         ...data.funnel,
         design: {
           ...data.funnel.design,
-          primaryColor: brief.mainColor ?? data.funnel.design.primaryColor,
-          secondaryColor: brief.secondaryColor ?? data.funnel.design.secondaryColor,
+          ...(brief.brandColorsEnabled
+            ? {
+                primaryColor: brief.mainColor ?? data.funnel.design.primaryColor,
+                secondaryColor: brief.secondaryColor ?? data.funnel.design.secondaryColor,
+              }
+            : {}),
+          brandColorsEnabled: brief.brandColorsEnabled === true,
           style: brief.designStyle,
         },
       };
@@ -419,7 +451,7 @@ export function CreateFunnelWizard() {
               Express IA
               <span className="rounded-full bg-[#C7A436] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#080E1A]">Rapide</span>
             </h3>
-            <p className="mt-1.5 text-sm text-muted">Décris ton activité en quelques phrases et choisis le nombre de pages. L'IA pré-remplit tout le tunnel, puis tu ajustes thème, visuels et médias.</p>
+            <p className="mt-1.5 text-sm text-muted">Décris ton activité en quelques phrases et choisis le type de tunnel (les pages générées sont indiquées). L'IA pré-remplit tout, puis tu ajustes thème, visuels et médias.</p>
           </button>
           <button
             type="button"
@@ -460,36 +492,37 @@ export function CreateFunnelWizard() {
             placeholder="Ex : Je suis coach en nutrition pour femmes actives. Je vends un programme de 8 semaines à 297€ qui aide à retrouver de l'énergie sans régime restrictif. Mon audience : femmes 30-45 ans débordées qui ont déjà essayé plusieurs régimes…"
           />
         </Field>
-        <Field label="Type de tunnel souhaité">
+        <Field label="Type de tunnel (les pages générées sont indiquées)">
           <Select
-            value={brief.funnelKind ?? ""}
-            onChange={(e) => update("funnelKind", (e.target.value || undefined) as FunnelKind | undefined)}
+            value={brief.funnelKind ?? "lead-magnet"}
+            onChange={(e) => update("funnelKind", e.target.value as FunnelKind)}
           >
-            <option value="">Laisser l'IA décider</option>
-            <option value="lead-magnet">Aimant à leads — ebook / guide gratuit</option>
-            <option value="digital-product">Produit digital — page de vente</option>
-            <option value="coaching-high-ticket">Coaching / accompagnement haut de gamme</option>
-            <option value="booking">Prise de rendez-vous / appel</option>
-            <option value="webinar">Webinaire — inscription + replay</option>
-            <option value="challenge">Challenge / défi</option>
+            {FUNNEL_KINDS.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label[brief.language]} — {k.pages[brief.language]}
+              </option>
+            ))}
           </Select>
         </Field>
-        <Field label="Nombre de pages du tunnel généré">
-          <Select value={String(expressPages)} onChange={(e) => setExpressPages(Number(e.target.value))}>
-            <option value="1">1 page — capture simple</option>
-            <option value="2">2 pages — capture + merci</option>
-            <option value="3">3 pages — vente courte</option>
-            <option value="4">4 pages — tunnel complet</option>
-            <option value="5">5 pages — tunnel étendu</option>
-            <option value="6">6 pages et plus</option>
-          </Select>
-        </Field>
+        {(brief.funnelKind ?? "lead-magnet") === "webinar" && (
+          <WebinarDetailsFields
+            language={brief.language}
+            webinarDate={brief.webinarDate}
+            webinarUrgency={brief.webinarUrgency}
+            onChange={(patch) => updateMany(patch)}
+          />
+        )}
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-muted">{canGo ? "Tu pourras générer tout de suite — thème et visuels restent ajustables via les onglets." : "Ajoute encore quelques détails (20 caractères min.)."}</span>
           <Button
             disabled={!canGo}
             onClick={() => {
-              updateMany({ creationMode: "express", businessPrompt: expressPrompt.trim(), pageCount: expressPages });
+              updateMany({
+                creationMode: "express",
+                businessPrompt: expressPrompt.trim(),
+                // 🆕 Type explicite obligatoire (plus de « laisser l'IA décider »)
+                funnelKind: brief.funnelKind ?? "lead-magnet",
+              });
               setEntryMode("wizard");
               // Parcours express réduit → on démarre sur sa 1re étape (Template).
               setStep(0);
@@ -609,6 +642,18 @@ export function CreateFunnelWizard() {
                 language={brief.language}
                 value={brief.funnelKind}
                 onSelect={selectKind}
+                webinarDate={brief.webinarDate}
+                webinarUrgency={brief.webinarUrgency}
+                webinarExternalLink={brief.webinarExternalLink}
+                replayExpiryHours={brief.replayExpiryHours}
+                webinarMode={brief.webinarMode}
+                evergreenVideoUrl={brief.evergreenVideoUrl}
+                evergreenOfferHours={brief.evergreenOfferHours}
+                onWebinarChange={(patch) => updateMany(patch)}
+                calendarEmbedUrl={brief.calendarEmbedUrl}
+                onBookingChange={(patch) => updateMany(patch)}
+                challengeDays={brief.challengeDays}
+                onChallengeChange={(patch) => updateMany(patch)}
               />
             )}
             {stepLabel === "Template" && (
@@ -617,6 +662,22 @@ export function CreateFunnelWizard() {
                 language={brief.language}
                 selectedTemplateId={brief.templateId}
                 onSelect={selectTemplate}
+                brandColors={{
+                  enabled: brief.brandColorsEnabled,
+                  colors:
+                    brief.brandColors ??
+                    (brief.secondaryColor || brief.mainColor
+                      ? [brief.secondaryColor ?? "#31845C", brief.mainColor ?? "#080E1A"]
+                      : undefined),
+                }}
+                onBrandColorsChange={(patch) =>
+                  updateMany({
+                    ...(patch.enabled !== undefined
+                      ? { brandColorsEnabled: patch.enabled }
+                      : {}),
+                    ...(patch.colors !== undefined ? { brandColors: patch.colors } : {}),
+                  })
+                }
               />
 
             )}
@@ -685,6 +746,17 @@ export function CreateFunnelWizard() {
                 successMessage={successMessage}
                 errorMessage={errorMessage}
                 errorReason={errorReason}
+                funnelKind={brief.funnelKind}
+                language={brief.language}
+                selectedOptionalPages={brief.selectedOptionalPages ?? []}
+                onToggleOptionalPage={toggleOptionalPage}
+                webinarMode={brief.webinarMode}
+                webinarDate={brief.webinarDate}
+                evergreenVideoUrl={brief.evergreenVideoUrl}
+                otoOfferName={brief.otoOfferName}
+                otoPrice={brief.otoPrice}
+                otoPromise={brief.otoPromise}
+                onOtoOfferChange={(patch) => updateMany(patch)}
               />
             )}
           </div>
@@ -828,7 +900,8 @@ function OfferStep({
         </Field>
       </section>
 
-      {/* ── Bloc 2 : Offre ── */}
+      {/* ── Bloc 2 : Offre (générique, tous types SAUF webinaire) ── */}
+      {brief.funnelKind !== "webinar" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
@@ -873,6 +946,25 @@ function OfferStep({
           </div>
         </div>
 
+        <div className="rounded-xl border border-line/60 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+            Order bump (optionnel) — case à cocher sur la page de commande
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+            <Field label="Produit complémentaire" hint="Laisse vide pour ne PAS afficher d'order bump.">
+              <Input value={brief.orderBumpName ?? ""} onChange={(e) => update("orderBumpName", e.target.value)} placeholder="Guide PDF bonus..." />
+            </Field>
+            <Field label="Prix">
+              <Input value={brief.orderBumpPrice ?? ""} onChange={(e) => update("orderBumpPrice", e.target.value)} placeholder="9€..." />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Field label="Description courte (optionnel)">
+              <Input value={brief.orderBumpDescription ?? ""} onChange={(e) => update("orderBumpDescription", e.target.value)} placeholder="Ajoute ce bonus à ta commande en un clic" />
+            </Field>
+          </div>
+        </div>
+
         <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
           <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
         </Field>
@@ -886,6 +978,125 @@ function OfferStep({
           />
         </Field>
       </section>
+      )}
+
+      {/* ── Bloc 2bis : Webinaire — DEUX offres distinctes ──
+          (a) le webinaire lui-même (offerName/price/promise réutilisés :
+              titre + promesse + prix, généralement "Gratuit") → page
+              d'inscription ; (b) l'offre vendue APRÈS le webinaire
+              (postWebinarOfferName/Price/Promise) → page de vente. */}
+      {brief.funnelKind === "webinar" && (
+        <>
+          <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
+                <Package size={14} />
+              </span>
+              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Ton webinaire</h3>
+            </div>
+            <p className="-mt-1 text-xs text-muted">
+              Ce que voit le prospect sur la page d'inscription : le sujet et la promesse du webinaire (pas l'offre finale).
+            </p>
+
+            <Field label="Titre / sujet du webinaire">
+              <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} placeholder="Ex. Comment doubler tes ventes en 30 jours" />
+            </Field>
+
+            <Field label="Prix du webinaire" hint="Laisse « Gratuit » si c'est l'appât — le prix ci-dessous concerne l'offre vendue après.">
+              <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="Gratuit" />
+            </Field>
+
+            <Field label="Promesse du webinaire">
+              <Textarea
+                value={brief.promise}
+                onChange={(e) => update("promise", e.target.value)}
+                placeholder="Ce que le prospect va apprendre/obtenir en assistant au webinaire"
+                rows={3}
+              />
+            </Field>
+          </section>
+
+          <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
+                <Package size={14} />
+              </span>
+              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Offre vendue après le webinaire</h3>
+            </div>
+            <p className="-mt-1 text-xs text-muted">
+              Ce qui alimente la page de vente affichée après le live/replay. Distinct du webinaire ci-dessus.
+            </p>
+
+            <Field label="Nom du produit ou service">
+              <Input value={brief.postWebinarOfferName ?? ""} onChange={(e) => update("postWebinarOfferName", e.target.value)} placeholder="Ex. Programme d'accompagnement 90 jours" />
+            </Field>
+
+            <Field label="Prix">
+              <Input value={brief.postWebinarPrice ?? ""} onChange={(e) => update("postWebinarPrice", e.target.value)} placeholder="497€..." />
+            </Field>
+
+            <Field label="Promesse de l'offre">
+              <Textarea
+                value={brief.postWebinarPromise ?? ""}
+                onChange={(e) => update("postWebinarPromise", e.target.value)}
+                placeholder="Le bénéfice n°1 que le client obtient en achetant cette offre"
+                rows={3}
+              />
+            </Field>
+
+            <div className="rounded-xl border border-line/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+                Upsell (optionnel) — proposé après l'achat
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+                <Field label="Offre upsell" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
+                  <Input value={brief.upsellOffer ?? ""} onChange={(e) => update("upsellOffer", e.target.value)} placeholder="Pack modèles + coaching de groupe..." />
+                </Field>
+                <Field label="Prix upsell">
+                  <Input value={brief.upsellPrice ?? ""} onChange={(e) => update("upsellPrice", e.target.value)} placeholder="27€..." />
+                </Field>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-line/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+                Downsell (optionnel) — repli si l'upsell est refusé
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+                <Field label="Offre downsell" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
+                  <Input value={brief.downsellOffer ?? ""} onChange={(e) => update("downsellOffer", e.target.value)} placeholder="Les modèles seuls, sans le coaching..." />
+                </Field>
+                <Field label="Prix downsell">
+                  <Input value={brief.downsellPrice ?? ""} onChange={(e) => update("downsellPrice", e.target.value)} placeholder="17€..." />
+                </Field>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-line/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
+                Order bump (optionnel) — case à cocher sur la page de commande
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+                <Field label="Produit complémentaire" hint="Laisse vide pour ne PAS afficher d'order bump.">
+                  <Input value={brief.orderBumpName ?? ""} onChange={(e) => update("orderBumpName", e.target.value)} placeholder="Guide PDF bonus..." />
+                </Field>
+                <Field label="Prix">
+                  <Input value={brief.orderBumpPrice ?? ""} onChange={(e) => update("orderBumpPrice", e.target.value)} placeholder="9€..." />
+                </Field>
+              </div>
+              <div className="mt-3">
+                <Field label="Description courte (optionnel)">
+                  <Input value={brief.orderBumpDescription ?? ""} onChange={(e) => update("orderBumpDescription", e.target.value)} placeholder="Ajoute ce bonus à ta commande en un clic" />
+                </Field>
+              </div>
+            </div>
+
+            <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
+              <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
+            </Field>
+          </section>
+        </>
+      )}
 
       {/* ── Bloc 3 : À propos ── */}
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
@@ -1063,6 +1274,9 @@ function GenerationStep({
   isGenerating, onGenerate,
   onCheckHealth, checkingHealth, health,
   successMessage, errorMessage, errorReason,
+  funnelKind, language, selectedOptionalPages, onToggleOptionalPage,
+  webinarMode, webinarDate, evergreenVideoUrl,
+  otoOfferName, otoPrice, otoPromise, onOtoOfferChange,
 }: {
   templateName: string; templateObjective: string;
   isGenerating: boolean; onGenerate: () => void;
@@ -1072,16 +1286,48 @@ function GenerationStep({
   successMessage: string;
   errorMessage: string;
   errorReason: string;
+  funnelKind?: FunnelKind;
+  language: Language;
+  selectedOptionalPages: PageRole[];
+  onToggleOptionalPage: (role: PageRole) => void;
+  /** 🆕 Webinaire Live : la date/heure est obligatoire avant de lancer la génération. */
+  webinarMode?: "live" | "evergreen";
+  webinarDate?: string;
+  /** 🆕 Webinaire Evergreen : la vidéo pré-enregistrée est le cœur de l'expérience. */
+  evergreenVideoUrl?: string;
+  /** 🆕 Offre de la page OTO/tripwire générique (si cochée dans l'aperçu). */
+  otoOfferName?: string;
+  otoPrice?: string;
+  otoPromise?: string;
+  onOtoOfferChange?: (patch: Partial<FunnelBrief>) => void;
 }) {
   useEffect(() => {
     if (!health && !checkingHealth) onCheckHealth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🆕 Webinaire Live : sans date réelle, applyWebinarSchedule ne fait RIEN
+  // (no-op silencieux) → countdown/copywriting invente une date. En mode
+  // Evergreen la date n'a pas de sens (créneaux par prospect) → pas de check.
+  const webinarDateMissing =
+    funnelKind === "webinar" &&
+    webinarMode !== "evergreen" &&
+    !(webinarDate && webinarDate.trim());
+
+  // 🆕 Webinaire Evergreen : la vidéo pré-enregistrée EST le webinaire (pas de
+  // session Zoom) — sans elle, EvergreenPlayerBlock n'a rien à lire. En mode
+  // Live elle reste optionnelle (le live se déroule sur Zoom/Meet).
+  const evergreenVideoMissing =
+    funnelKind === "webinar" &&
+    webinarMode === "evergreen" &&
+    !(evergreenVideoUrl && evergreenVideoUrl.trim());
+
   const blocked =
     health?.reason === "missing-key" ||
     health?.reason === "invalid-key" ||
-    health?.reason === "header-error";
+    health?.reason === "header-error" ||
+    webinarDateMissing ||
+    evergreenVideoMissing;
 
   // ✅ FIX : titre et icône adaptés au type d'erreur
   const isStorageIssue = errorReason === "storage-full" || errorReason === "storage-error";
@@ -1093,6 +1339,43 @@ function GenerationStep({
         <p className="font-bold text-[#08498D]">{templateName}</p>
         <p className="mt-1 text-xs leading-5 text-muted">{templateObjective}</p>
       </div>
+
+      {funnelKind && (
+        <PagesPreviewChecklist
+          funnelKind={funnelKind}
+          language={language}
+          selectedOptionalPages={selectedOptionalPages}
+          onToggle={onToggleOptionalPage}
+          otoOfferName={otoOfferName}
+          otoPrice={otoPrice}
+          otoPromise={otoPromise}
+          onOtoOfferChange={onOtoOfferChange}
+        />
+      )}
+
+      {webinarDateMissing && (
+        <div className="flex items-start gap-2 rounded-lg border border-red/30 bg-red/5 p-3 text-xs text-red">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Date du webinaire manquante</p>
+            <p className="mt-0.5 leading-relaxed">
+              Retourne à l'étape « Format » pour renseigner la date et l'heure du webinaire (obligatoire en mode Live) — sinon le compte à rebours et le copywriting ne seront pas fiables.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {evergreenVideoMissing && (
+        <div className="flex items-start gap-2 rounded-lg border border-red/30 bg-red/5 p-3 text-xs text-red">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Vidéo du webinaire manquante</p>
+            <p className="mt-0.5 leading-relaxed">
+              Retourne à l'étape « Format » pour renseigner l'URL de la vidéo pré-enregistrée (obligatoire en mode Evergreen — c'est elle que regardera chaque prospect après avoir choisi son créneau).
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${health?.ok ? "border-[#31845C]/30 bg-[#31845C]/5 text-[#080E1A]" :
           blocked ? "border-red/30 bg-red/5 text-red" :
@@ -1120,7 +1403,7 @@ function GenerationStep({
 
       {isGenerating ? <LoaderIA /> : (
         <Button onClick={onGenerate} type="button" disabled={blocked}>
-          <Sparkles size={16} /> {errorMessage ? "Réessayer la génération" : "Générer le tunnel"}
+          <Sparkles size={16} /> {errorMessage ? "Relancer mes agents IA" : "Lancer mes agents IA"}
         </Button>
       )}
 
@@ -1153,6 +1436,114 @@ function GenerationStep({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// 🆕 LOT 3 — Aperçu cochable des pages qui seront générées : pages requises
+// (verrouillées, toujours incluses) + pages optionnelles (OTO/tripwire, VSL,
+// live…) à cocher explicitement avant de lancer la génération.
+function PagesPreviewChecklist({
+  funnelKind,
+  language,
+  selectedOptionalPages,
+  onToggle,
+  otoOfferName,
+  otoPrice,
+  otoPromise,
+  onOtoOfferChange,
+}: {
+  funnelKind: FunnelKind;
+  language: Language;
+  selectedOptionalPages: PageRole[];
+  onToggle: (role: PageRole) => void;
+  /** 🆕 Offre de la page OTO/tripwire générique (si cochée ci-dessous). */
+  otoOfferName?: string;
+  otoPrice?: string;
+  otoPromise?: string;
+  onOtoOfferChange?: (patch: Partial<FunnelBrief>) => void;
+}) {
+  const required = getRequiredPageBlueprints(funnelKind);
+  const optional = getOptionalPageBlueprints(funnelKind);
+
+  if (required.length === 0 && optional.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-muted">
+        Pages qui seront générées
+      </p>
+      <div className="mt-2.5 grid gap-1.5">
+        {required.map((bp) => (
+          <div
+            key={bp.role}
+            className="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-2 text-sm text-ink"
+          >
+            <CheckCircle2 size={15} className="shrink-0 text-[#31845C]" />
+            <span className="min-w-0 flex-1 truncate">{bp.name}</span>
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted">
+              Incluse
+            </span>
+          </div>
+        ))}
+        {optional.map((bp) => {
+          const checked = selectedOptionalPages.includes(bp.role);
+          const label = bp.toggleLabel?.[language] ?? bp.toggleLabel?.fr ?? bp.name;
+          return (
+            <div key={bp.role}>
+              <label
+                className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-sm transition ${
+                  checked
+                    ? "border-[#08498D]/40 bg-[#08498D]/5 text-ink"
+                    : "border-line bg-white text-ink hover:border-[#08498D]/30"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(bp.role)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#08498D]"
+                />
+                <span className="min-w-0 flex-1 leading-snug">{label}</span>
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#C7A436]">
+                  Optionnelle
+                </span>
+              </label>
+
+              {/* 🆕 Page OTO/tripwire cochée : demande l'offre au lieu de la
+                  laisser inventer par l'IA (nom/prix obligatoires pour que le
+                  checkout affiche un montant réel ; promesse optionnelle). */}
+              {checked && bp.role === "oto" && onOtoOfferChange && (
+                <div className="mt-1.5 ml-6 grid gap-2 rounded-md border border-[#C7A436]/30 bg-[#C7A436]/5 p-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px]">
+                    <Field label="Offre OTO" hint="Décris CE QUE c'est. Laisse vide et l'IA inventera une offre générique.">
+                      <Input
+                        value={otoOfferName ?? ""}
+                        onChange={(e) => onOtoOfferChange({ otoOfferName: e.target.value })}
+                        placeholder="Ex. Pack de templates additionnels"
+                      />
+                    </Field>
+                    <Field label="Prix">
+                      <Input
+                        value={otoPrice ?? ""}
+                        onChange={(e) => onOtoOfferChange({ otoPrice: e.target.value })}
+                        placeholder="17€..."
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Promesse (optionnel)">
+                    <Input
+                      value={otoPromise ?? ""}
+                      onChange={(e) => onOtoOfferChange({ otoPromise: e.target.value })}
+                      placeholder="Le bénéfice n°1 de cette offre complémentaire"
+                    />
+                  </Field>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

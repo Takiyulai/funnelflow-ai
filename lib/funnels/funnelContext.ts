@@ -24,6 +24,16 @@ type BriefLike = {
   tone?: string;
   price?: string;
   language?: string;
+  /** 🆕 LOT 4 */
+  webinarDate?: string;
+  webinarExternalLink?: string;
+  /** 🆕 LOT 5 */
+  webinarMode?: "live" | "evergreen";
+  /** 🆕 Webinaire — offre vendue APRÈS le webinaire (distincte du webinaire
+   *  lui-même, qui utilise offerName/promise/price ci-dessus). */
+  postWebinarOfferName?: string;
+  postWebinarPrice?: string;
+  postWebinarPromise?: string;
 };
 
 /** Aplati toutes les sections du tunnel (pages multiples + legacy). */
@@ -122,5 +132,21 @@ export async function getPublishedFunnelContext(
     heroHeadline: hero?.headline ?? null,
     heroSubheadline: hero?.subheadline ?? null,
     url: buildPublicUrl(data.published_slug || data.slug || null),
+    // 🆕 LOT 4 — Contexte webinaire (absent/undefined pour les autres kinds).
+    webinarDate: brief.webinarDate?.trim() || null,
+    webinarExternalLink: brief.webinarExternalLink?.trim() || null,
+    // 🆕 LOT 5 — Mode Evergreen : indique à l'onglet Emails de rédiger de
+    // façon relative à l'inscription (pas de date commune à tous).
+    webinarMode: brief.webinarMode === "evergreen" ? "evergreen" : "live",
+    // 🆕 LOT 9 — Nombre RÉEL de pages "jour" générées (compté sur le tunnel
+    // publié, pas sur le brief — reflète les jours effectivement présents,
+    // même si édités manuellement après génération).
+    challengeTotalDays:
+      (funnel.pages ?? []).filter((p) => p.role === "challenge-day").length || null,
+    // 🆕 Webinaire — offre de vente post-webinaire (absente/null si non
+    // renseignée → l'onglet Emails retombe sur offerName/price/promise).
+    postWebinarOfferName: brief.postWebinarOfferName?.trim() || null,
+    postWebinarPrice: brief.postWebinarPrice?.trim() || null,
+    postWebinarPromise: brief.postWebinarPromise?.trim() || null,
   };
 }

@@ -1,7 +1,7 @@
 // app/api/subscribe/route.ts
 //
 // Crée une session Stripe Checkout en mode ABONNEMENT (récurrent) pour que
-// l'utilisateur connecté souscrive à un plan FunnelFlow (starter|pro|agency).
+// l'utilisateur connecté souscrive à un plan AutoFunnel (starter|pro|agency).
 //
 // ⚠️ Distinct de /api/checkout (paiement one-time du client FINAL d'un tunnel).
 // Ici c'est l'utilisateur de la plateforme qui paie son abonnement mensuel.

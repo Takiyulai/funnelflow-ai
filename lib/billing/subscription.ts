@@ -13,6 +13,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { PLANS, isPlanId, type PlanId, type PlanLimits } from "@/lib/billing/plans";
+import { getActiveChariowLicense } from "@/lib/billing/chariow";
 
 export type SubscriptionStatus =
   | "inactive"
@@ -145,6 +146,25 @@ export async function getAccess(userId: string): Promise<Access> {
       status,
       limits: PLANS.starter.limits,
     };
+  }
+
+  // 🆕 Chariow Niveau 1 : pas d'abonnement Stripe/CinetPay actif → une licence
+  // Chariow ACTIVE débloque la plateforme (plan mappé par la licence).
+  // Abstraction À CÔTÉ de l'existant : ne modifie rien quand il n'y a pas de
+  // licence, et l'abonnement classique reste prioritaire ci-dessus.
+  try {
+    const license = await getActiveChariowLicense(userId);
+    if (license) {
+      return {
+        enforced: true,
+        hasAccess: true,
+        planId: license.plan,
+        status: "active",
+        limits: PLANS[license.plan].limits,
+      };
+    }
+  } catch (e) {
+    console.error("[subscription] chariow license check failed", e);
   }
 
   return {

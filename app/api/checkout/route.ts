@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createStripeClient } from "@/lib/billing/stripe";
-import { extractFunnelPrice, createPendingOrder } from "@/lib/billing/orders";
+import { extractFunnelPrice, extractOrderBump, createPendingOrder } from "@/lib/billing/orders";
 import { normalizeFunnel } from "@/lib/store/normalizeFunnel";
 import { resolvePostPurchaseUrl } from "@/lib/funnels/postPurchase";
 import { getCinetpayCredentials, initCinetpayPayment } from "@/lib/billing/cinetpay";
@@ -26,6 +26,8 @@ const bodySchema = z.object({
   // Page d'où vient le clic d'achat → sert à calculer l'étape suivante.
   pageSlug: z.string().max(200).nullable().optional(),
   email: z.string().email().max(255).optional(),
+  // 🆕 LOT 10 — Order bump coché par le client sur la page de checkout.
+  orderBump: z.boolean().optional(),
 });
 
 function baseUrl(req: Request): string {
@@ -89,6 +91,13 @@ export async function POST(req: Request) {
       { status: 422 },
     );
   }
+
+  // 🆕 LOT 10 — Order bump : coché côté client + effectivement activé sur la
+  // page de checkout → on ajoute son montant à la commande. Best-effort : si
+  // absent/mal configuré, on ignore silencieusement (jamais bloquant).
+  const bumpInfo = payload.orderBump
+    ? extractOrderBump(funnel.published_content, pageSlug)
+    : null;
 
   const base = baseUrl(req);
   const slug = funnel.published_slug || funnel.slug;
@@ -157,7 +166,11 @@ export async function POST(req: Request) {
     }
     // Montant en devise LOCALE CinetPay : on prend la valeur entière du prix
     // (priceInfo.amount est en centimes) et la devise du compte CinetPay.
-    const cpAmount = Math.round(priceInfo.amount / 100);
+    // 🆕 LOT 10 — Order bump ajouté au montant total si coché + activé.
+    const cpAmount = Math.round((priceInfo.amount + (bumpInfo?.amount ?? 0)) / 100);
+    const cpDescription = bumpInfo
+      ? `${priceInfo.productName} + ${bumpInfo.productName}`
+      : priceInfo.productName;
     const transactionId = `ff${Date.now()}${Math.random().toString(36).slice(2, 8)}`.replace(
       /[^a-zA-Z0-9]/g,
       "",
@@ -168,7 +181,7 @@ export async function POST(req: Request) {
       currency: creds.currency,
       transactionId,
       amount: cpAmount,
-      description: priceInfo.productName,
+      description: cpDescription,
       notifyUrl: `${base}/api/cinetpay/notify`,
       returnUrl: `${base}/tunnel/${slug}/success?cpm_trans_id=${transactionId}`,
       customer: payload.email ? { email: payload.email } : undefined,
@@ -185,32 +198,49 @@ export async function POST(req: Request) {
       funnelId: funnel.id,
       amount: cpAmount,
       currency: creds.currency.toLowerCase(),
-      productName: priceInfo.productName,
+      productName: cpDescription,
       customerEmail: payload.email ?? null,
       pageSlug,
       nextUrl,
       redirectUrl: nextUrl,
       provider: "cinetpay",
       cinetpayTransactionId: transactionId,
+      metadata: bumpInfo ? { orderBumpAccepted: true, orderBumpAmount: bumpInfo.amount } : undefined,
     });
     return NextResponse.json({ ok: true, url: init.paymentUrl, nextUrl }, { status: 200 });
   }
 
   try {
     const stripe = createStripeClient();
+    // 🆕 LOT 10 — Order bump : ajouté comme second line_item (même devise que
+    // l'offre principale) si coché côté client et activé sur la page.
+    const lineItems: Array<{
+      quantity: number;
+      price_data: { currency: string; unit_amount: number; product_data: { name: string } };
+    }> = [
+      {
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: priceInfo.amount,
+          product_data: { name: priceInfo.productName },
+        },
+      },
+    ];
+    if (bumpInfo) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: bumpInfo.amount,
+          product_data: { name: bumpInfo.productName },
+        },
+      });
+    }
     const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency,
-              unit_amount: priceInfo.amount,
-              product_data: { name: priceInfo.productName },
-            },
-          },
-        ],
+        line_items: lineItems,
         customer_email: payload.email,
         success_url: `${base}/tunnel/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${base}/tunnel/${slug}/cancel`,
@@ -225,6 +255,7 @@ export async function POST(req: Request) {
           pageSlug: pageSlug ?? "",
           nextUrl,
           connectAccountId: connectAccountId ?? "",
+          orderBumpAccepted: bumpInfo ? "true" : "false",
         },
         payment_intent_data: {
           metadata: {
@@ -243,15 +274,16 @@ export async function POST(req: Request) {
     await createPendingOrder({
       userId: funnel.user_id,
       funnelId: funnel.id,
-      amount: priceInfo.amount,
+      amount: priceInfo.amount + (bumpInfo?.amount ?? 0),
       currency,
-      productName: priceInfo.productName,
+      productName: bumpInfo ? `${priceInfo.productName} + ${bumpInfo.productName}` : priceInfo.productName,
       customerEmail: payload.email ?? null,
       stripeSessionId: session.id,
       pageSlug,
       nextUrl,
       stripeConnectAccountId: connectAccountId,
       redirectUrl: nextUrl,
+      metadata: bumpInfo ? { orderBumpAccepted: true, orderBumpAmount: bumpInfo.amount } : undefined,
     });
 
     return NextResponse.json({ ok: true, url: session.url, nextUrl }, { status: 200 });

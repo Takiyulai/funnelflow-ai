@@ -1,5 +1,5 @@
 -- ============================================================================
--- FunnelFlow AI — Paiement Palier 2 : commandes (orders)
+-- AutoFunnel AI — Paiement Palier 2 : commandes (orders)
 -- À EXÉCUTER dans l'éditeur SQL de Supabase (Dashboard → SQL Editor).
 --
 -- Une "order" = une tentative/transaction de paiement déclenchée depuis un

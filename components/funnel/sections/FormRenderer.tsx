@@ -178,6 +178,23 @@ export function FormRenderer({
 
       const data = await res.json().catch(() => ({}));
 
+      // 🆕 LOT 2 — Mémorise l'id du contact pour ce tunnel (déclencheur
+      // Workflow `page.visited` sur les revisites). Best-effort, jamais
+      // bloquant (navigation privée stricte, etc.).
+      if (data?.ok && typeof data.leadId === "string" && funnelSlug) {
+        try {
+          window.localStorage.setItem(`ff_contact_${funnelSlug}`, data.leadId);
+          // 🆕 LOT 5 — Ancre pour les timers "countdown-since-registration"
+          // (webinaire Evergreen) : moment EXACT de l'inscription, partagé
+          // entre toutes les pages du tunnel (live/replay/sales).
+          if (!window.localStorage.getItem(`ff_registered_at_${funnelSlug}`)) {
+            window.localStorage.setItem(`ff_registered_at_${funnelSlug}`, String(Date.now()));
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
       if (!res.ok || !data?.ok) {
         const code = data?.error || "unknown";
         const message =

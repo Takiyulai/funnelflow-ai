@@ -48,6 +48,13 @@ export interface PageBlueprint {
   minSections?: number;
   /** La page est-elle indexable / publiquement liée ? */
   publiclyLinked?: boolean;
+  /** 🆕 LOT 3 — Page OPTIONNELLE : n'est générée que si l'utilisateur l'a
+   *  cochée dans l'aperçu "pages générées" du wizard (FunnelBrief.selectedOptionalPages).
+   *  Absent/false = page toujours générée (comportement historique). */
+  optional?: boolean;
+  /** 🆕 LOT 3 — Libellé affiché dans la checklist du wizard pour une page
+   *  optionnelle (sinon on retombe sur `name`). */
+  toggleLabel?: { fr: string; en: string; es: string };
 }
 
 export interface FunnelBlueprint {
@@ -147,19 +154,60 @@ const WEBINAR: FunnelBlueprint = {
       publiclyLinked: false,
     },
     {
+      // 🆕 LOT 4 — Salle d'attente / page live : accessible entre la
+      // confirmation et le début réel du webinaire. Countdown vers l'heure de
+      // démarrage + zone d'accueil pour le lien Zoom/YouTube/Meet du jour J
+      // (injecté par applyWebinarSchedule à partir de brief.webinarExternalLink).
+      role: "live",
+      slug: "en-direct",
+      name: "Salle d'attente / Live",
+      defaultSectionTypes: ["hero", "urgency", "process", "cta"],
+      allowedSectionTypes: [
+        "hero", "urgency", "process", "cta",
+        "about", "video", "faq",
+      ],
+      copywritingFramework: "REASSURANCE",
+      secondaryFrameworks: ["SCARCITY-URGENCY"],
+      heroMediaPolicy: "single-only",
+      minSections: 3,
+      publiclyLinked: false,
+    },
+    {
       role: "replay",
       slug: "replay",
       name: "Page de replay",
       defaultSectionTypes: ["hero", "video", "benefits", "cta", "faq"],
       allowedSectionTypes: [
         "hero", "video", "benefits", "cta", "faq",
-        "about", "testimonials", "guarantee", "proof", "offer",
+        "about", "testimonials", "guarantee", "proof", "offer", "urgency",
       ],
       copywritingFramework: "PAS-FOMO",
       secondaryFrameworks: ["SCARCITY-URGENCY", "4P"],
       // ⚠️ Sur le replay d'un webinaire, la VIDÉO prime sur tout
       heroMediaPolicy: "prefer-video",
       minSections: 4,
+      publiclyLinked: false,
+    },
+    {
+      // 🆕 LOT 4 — Page de vente post-webinaire : réutilise le squelette
+      // direct-response complet du produit digital (voir DIGITAL_PRODUCT.sales).
+      role: "sales",
+      slug: "offre",
+      name: "Page de vente (post-webinaire)",
+      defaultSectionTypes: [
+        "hero", "problem", "agitation", "solution", "benefits",
+        "about", "testimonials", "pricing", "bonus", "guarantee",
+        "faq", "urgency", "cta",
+      ],
+      allowedSectionTypes: [
+        "hero", "benefits", "video", "testimonials", "pricing",
+        "bonus", "guarantee", "faq", "cta", "about", "proof", "process",
+        "offer", "problem", "agitation", "solution", "urgency",
+      ],
+      copywritingFramework: "PAS",
+      secondaryFrameworks: ["4P", "FAB", "SCARCITY-URGENCY"],
+      heroMediaPolicy: "prefer-video",
+      minSections: 8,
       publiclyLinked: false,
     },
   ],
@@ -299,9 +347,35 @@ const BOOKING: FunnelBlueprint = {
       publiclyLinked: true,
     },
     {
+      // 🆕 LOT 7 — Qualification OPTIONNELLE avant le calendrier : filtre les
+      // prospects (budget, besoin, disponibilité) avant qu'ils ne réservent un
+      // créneau. Cochable dans l'aperçu « pages générées » du wizard (LOT 3).
+      role: "qualification",
+      slug: "qualification",
+      name: "Formulaire de qualification",
+      defaultSectionTypes: ["hero", "form", "cta"],
+      allowedSectionTypes: [
+        "hero", "form", "cta",
+        "about", "testimonials", "guarantee",
+      ],
+      copywritingFramework: "REASSURANCE",
+      heroMediaPolicy: "single-only",
+      minSections: 2,
+      publiclyLinked: false,
+      optional: true,
+      toggleLabel: {
+        fr: "Page de qualification — filtre les prospects avant le calendrier",
+        en: "Qualification page — screens prospects before the calendar",
+        es: "Página de calificación — filtra prospectos antes del calendario",
+      },
+    },
+    {
       role: "booking",
       slug: "reservation",
       name: "Page de prise de rendez-vous",
+      // 🆕 LOT 7 — "form" reste le repli historique (champs de contact) ; si un
+      // lien Calendly/Cal.com est fourni, le calendrier natif s'affiche EN PLUS
+      // (voir applyBookingCalendarEmbed dans lib/ai/generate.ts).
       defaultSectionTypes: ["hero", "form", "guarantee", "cta"],
       allowedSectionTypes: [
         "hero", "form", "guarantee", "cta",
@@ -333,6 +407,31 @@ const BOOKING: FunnelBlueprint = {
 const COACHING_HIGH_TICKET: FunnelBlueprint = {
   kind: "coaching-high-ticket",
   pages: [
+    {
+      // 🆕 LOT 8 — VSL (Video Sales Letter) OPTIONNELLE : si cochée dans le
+      // wizard, devient la page d'entrée (avant la candidature) — voir le
+      // basculement de homeRole dans generateMultiPageFunnelWithAI.
+      role: "vsl",
+      slug: "presentation",
+      name: "VSL (vidéo de présentation)",
+      defaultSectionTypes: ["hero", "video", "benefits", "guarantee", "cta"],
+      allowedSectionTypes: [
+        "hero", "video", "benefits", "guarantee", "cta",
+        "about", "testimonials", "proof", "faq",
+      ],
+      copywritingFramework: "BAB",
+      secondaryFrameworks: ["PAS"],
+      // ⚠️ La VSL EST la vidéo : elle doit primer sur tout dans le hero.
+      heroMediaPolicy: "prefer-video",
+      minSections: 4,
+      publiclyLinked: true,
+      optional: true,
+      toggleLabel: {
+        fr: "VSL (vidéo de présentation) — page d'entrée avant la candidature",
+        en: "VSL (video sales letter) — entry page before the application",
+        es: "VSL (vídeo de presentación) — página de entrada antes de la candidatura",
+      },
+    },
     {
       role: "application",
       slug: "candidature",
@@ -437,9 +536,13 @@ const CHALLENGE: FunnelBlueprint = {
       publiclyLinked: false,
     },
     {
+      // 🆕 LOT 9 — Page-TEMPLATE d'une journée de challenge : générée une fois
+      // par l'IA, puis dupliquée en pages "jour 1..N" par applyChallengeMultiDay
+      // (lib/ai/generate.ts) selon brief.challengeDays. Chaque page dupliquée
+      // porte le même rôle "challenge-day" (dayIndex/dayTotal la distinguent).
       role: "challenge-day",
-      slug: "jour",
-      name: "Page d'une journée de challenge",
+      slug: "jour-1",
+      name: "Jour 1 du challenge",
       defaultSectionTypes: ["hero", "video", "benefits", "cta", "faq"],
       allowedSectionTypes: [
         "hero", "video", "benefits", "cta", "faq",
@@ -449,6 +552,29 @@ const CHALLENGE: FunnelBlueprint = {
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "prefer-video",
       minSections: 4,
+      publiclyLinked: false,
+    },
+    {
+      // 🆕 LOT 9 — Pitch final : offre proposée à la clôture du challenge.
+      // Réutilise le squelette direct-response complet du produit digital
+      // (voir DIGITAL_PRODUCT.sales), comme la page de vente post-webinaire.
+      role: "sales",
+      slug: "offre",
+      name: "Pitch final (offre de fin de challenge)",
+      defaultSectionTypes: [
+        "hero", "problem", "agitation", "solution", "benefits",
+        "about", "testimonials", "pricing", "bonus", "guarantee",
+        "faq", "urgency", "cta",
+      ],
+      allowedSectionTypes: [
+        "hero", "benefits", "video", "testimonials", "pricing",
+        "bonus", "guarantee", "faq", "cta", "about", "proof", "process",
+        "offer", "problem", "agitation", "solution", "urgency",
+      ],
+      copywritingFramework: "PAS",
+      secondaryFrameworks: ["4P", "FAB", "SCARCITY-URGENCY"],
+      heroMediaPolicy: "prefer-video",
+      minSections: 8,
       publiclyLinked: false,
     },
   ],
@@ -503,10 +629,43 @@ const THANK_YOU_LEGACY: FunnelBlueprint = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  🆕 LOT 3 — Page OTO/tripwire générique (réutilisable par TOUS les kinds) */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Page OPTIONNELLE, ajoutée automatiquement au blueprint de chaque type de
+ * tunnel. N'est générée que si l'utilisateur la coche dans l'aperçu "pages
+ * générées" du wizard (voir FunnelBrief.selectedOptionalPages). Générique par
+ * conception : petite offre complémentaire à prix réduit (tripwire) OU offre
+ * unique à durée limitée (OTO), le copy s'adapte au contexte via l'IA/fallback.
+ */
+const GENERIC_OTO_BLUEPRINT: PageBlueprint = {
+  role: "oto",
+  slug: "offre-speciale",
+  name: "Offre spéciale (OTO / tripwire)",
+  defaultSectionTypes: ["hero", "benefits", "offer", "guarantee", "urgency", "cta"],
+  allowedSectionTypes: [
+    "hero", "benefits", "offer", "guarantee", "urgency", "cta",
+    "about", "testimonials", "video", "pricing", "faq",
+  ],
+  copywritingFramework: "4P",
+  secondaryFrameworks: ["SCARCITY-URGENCY", "FAB"],
+  heroMediaPolicy: "single-only",
+  minSections: 3,
+  publiclyLinked: false,
+  optional: true,
+  toggleLabel: {
+    fr: "Offre spéciale (OTO / tripwire) — petite offre complémentaire à prix réduit",
+    en: "Special offer (OTO / tripwire) — small complementary offer at a reduced price",
+    es: "Oferta especial (OTO / tripwire) — pequeña oferta complementaria a precio reducido",
+  },
+};
+
+/* ------------------------------------------------------------------ */
 /*  Registre principal                                                 */
 /* ------------------------------------------------------------------ */
 
-export const FUNNEL_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = {
+const RAW_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = {
   "lead-magnet": LEAD_MAGNET,
   "webinar": WEBINAR,
   "digital-product": DIGITAL_PRODUCT,
@@ -520,6 +679,39 @@ export const FUNNEL_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = {
   "saas": SAAS_LEGACY,
   "thank-you": THANK_YOU_LEGACY,
 };
+
+// 🆕 LOT 6 — Sur le lead magnet, le tripwire (= page "oto") se positionne
+// ENTRE la page de remerciement et la page de livraison (petite offre 7-27€
+// proposée juste après l'inscription, avant de donner accès à la ressource
+// gratuite) — pas en toute fin de tunnel comme pour les autres kinds.
+const LEAD_MAGNET_TRIPWIRE_BLUEPRINT: PageBlueprint = {
+  ...GENERIC_OTO_BLUEPRINT,
+  name: "Tripwire (petite offre 7-27€)",
+  toggleLabel: {
+    fr: "Tripwire (petite offre à 7-27€) — proposée juste après l'inscription, avant la livraison",
+    en: "Tripwire (small $7-27 offer) — shown right after opt-in, before delivery",
+    es: "Tripwire (pequeña oferta de 7-27€) — mostrada justo después de la inscripción, antes de la entrega",
+  },
+};
+
+// 🆕 LOT 3 — La page OTO générique est ajoutée à TOUS les blueprints ici, en un
+// seul endroit, plutôt que dupliquée dans chaque catalogue ci-dessus.
+export const FUNNEL_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = Object.fromEntries(
+  (Object.entries(RAW_BLUEPRINTS) as [FunnelKind, FunnelBlueprint][]).map(([kind, bp]) => {
+    if (kind === "lead-magnet") {
+      // Insertion ENTRE "thankyou" et "delivery" plutôt qu'en fin de liste.
+      const deliveryIdx = bp.pages.findIndex((p) => p.role === "delivery");
+      const pages = [...bp.pages];
+      pages.splice(
+        deliveryIdx >= 0 ? deliveryIdx : pages.length,
+        0,
+        LEAD_MAGNET_TRIPWIRE_BLUEPRINT,
+      );
+      return [kind, { ...bp, pages }];
+    }
+    return [kind, { ...bp, pages: [...bp.pages, GENERIC_OTO_BLUEPRINT] }];
+  }),
+) as Record<FunnelKind, FunnelBlueprint>;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers publics                                                    */
@@ -560,6 +752,16 @@ export function getCopywritingFrameworks(
   if (bp.copywritingFramework) list.push(bp.copywritingFramework);
   if (bp.secondaryFrameworks) list.push(...bp.secondaryFrameworks);
   return list.length > 0 ? list : ["AIDA"];
+}
+
+/** 🆕 LOT 3 — Pages TOUJOURS générées pour ce type de tunnel (non cochables). */
+export function getRequiredPageBlueprints(kind: FunnelKind): PageBlueprint[] {
+  return getFunnelBlueprint(kind).pages.filter((p) => !p.optional);
+}
+
+/** 🆕 LOT 3 — Pages OPTIONNELLES proposées en aperçu cochable dans le wizard. */
+export function getOptionalPageBlueprints(kind: FunnelKind): PageBlueprint[] {
+  return getFunnelBlueprint(kind).pages.filter((p) => p.optional === true);
 }
 /* ------------------------------------------------------------------ */
 /*  🆕 Capacités déclaratives des sections (universel, auto-extensible) */

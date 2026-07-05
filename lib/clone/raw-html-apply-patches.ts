@@ -236,7 +236,7 @@ function buildMediaElement(
   const sizeStyle = (el: HTMLElement, withAspect: boolean) => {
     if (cls) el.setAttribute("class", cls);
     if (id) el.setAttribute("id", id);
-    // 🆕 Marqueur : média RECONSTRUIT par FunnelFlow. Permet au CSS de rendu
+    // 🆕 Marqueur : média RECONSTRUIT par AutoFunnel. Permet au CSS de rendu
     // (#ff-media-fix) de NE PAS écraser ses dimensions (sinon le conteneur
     // s'effondre à 0px car width/height:auto + parent de hauteur nulle).
     el.setAttribute("data-ff-converted", type);

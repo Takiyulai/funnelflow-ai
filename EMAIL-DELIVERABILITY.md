@@ -1,4 +1,4 @@
-# Délivrabilité Email — FunnelFlow AI (Resend)
+# Délivrabilité Email — AutoFunnel AI (Resend)
 
 Ce document explique comment passer du **mode test** à un **domaine vérifié** dans
 Resend, pour que les emails (système + marketing) partent sans tomber en spam.
@@ -88,13 +88,13 @@ Une fois le domaine **Verified** dans Resend, configure les variables d'env
 ```dotenv
 RESEND_API_KEY=re_...                         # clé Resend
 RESEND_FROM_EMAIL=noreply@tondomaine.com      # adresse @ domaine vérifié
-RESEND_FROM_NAME=FunnelFlow AI                 # nom affiché
+RESEND_FROM_NAME=AutoFunnel AI                 # nom affiché
 ```
 
 - Les **emails système** (confirmation d'achat, notifications) partent **toujours**
-  depuis cette adresse FunnelFlow (`getSystemSender()`).
+  depuis cette adresse AutoFunnel (`getSystemSender()`).
 - Les **emails marketing** des utilisateurs partent depuis ce **même domaine
-  partagé**, avec un nom `« <Nom du créateur> via FunnelFlow »` et un **reply-to**
+  partagé**, avec un nom `« <Nom du créateur> via AutoFunnel »` et un **reply-to**
   vers l'email réel du créateur (résolu par `getUserMarketingSender()`).
 - L'ancienne variable combinée `RESEND_FROM="Nom <email>"` reste lue en repli
   (compatibilité) ; tu peux la retirer une fois les deux ci-dessus en place.
@@ -108,7 +108,7 @@ Le schéma le supporte déjà (`profiles.custom_email_from`, `custom_email_domai
 - chaque utilisateur ajoutera **son propre domaine** dans Resend (mêmes
   enregistrements SPF/DKIM/MX/DMARC sur SON domaine) ;
 - une fois `custom_email_status = 'verified'`, `getUserMarketingSender()` enverra
-  automatiquement depuis **son** adresse au lieu du domaine FunnelFlow partagé.
+  automatiquement depuis **son** adresse au lieu du domaine AutoFunnel partagé.
 
 L'UI de configuration + le flux de vérification (via l'API Domains de Resend)
 restent à construire ; l'architecture d'envoi n'aura **pas** à être refaite.

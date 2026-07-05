@@ -20,9 +20,18 @@ const emailSchema = z.object({
   content: z.string().default(""),
 });
 
+const sequenceTypeEnum = z.enum([
+  "bienvenue", "nurturing", "relance", "offre", "temoignage", "lancement", "reengagement", "autre",
+]);
+const roleSchema = z.object({
+  id: sequenceTypeEnum,
+  label: z.string().max(80).optional(),
+});
+
 const inputSchema = z.object({
   name: z.string().min(1).max(160),
-  type: z.enum(["bienvenue", "nurturing", "relance", "lancement", "reengagement", "autre"]),
+  type: sequenceTypeEnum,
+  roles: z.array(roleSchema).min(1).max(10).optional(),
   context: z.string().max(4000).nullish(),
   language: z.enum(["fr", "en", "es"]),
   funnel_id: z.string().uuid().nullish(),

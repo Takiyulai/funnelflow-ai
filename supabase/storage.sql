@@ -1,5 +1,5 @@
 -- ============================================================
--- FunnelFlow AI - Storage buckets et policies
+-- AutoFunnel AI - Storage buckets et policies
 -- ============================================================
 
 -- Bucket pour les logos et assets de marque

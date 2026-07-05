@@ -39,6 +39,12 @@ type Draft = {
   funnelId: string | null;
   tagId: string | null;
   triggerStatus: LeadStatus | null;
+  // 🆕 LOT 2
+  pageSlug: string;
+  linkLabel: string;
+  afterEvent: WorkflowTriggerEvent;
+  delayDays: number;
+  delayHours: number;
   actions: WorkflowActionConfig[];
 };
 
@@ -46,12 +52,48 @@ const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
   "lead.created": "Nouveau lead capturé",
   "tag.added": "Tag ajouté à un contact",
   "status.changed": "Statut CRM modifié",
+  "purchase.completed": "Achat / paiement réussi",
+  "webinar.registered": "Inscription à un webinaire",
+  "webinar.attended": "Présence au webinaire",
+  "webinar.absent": "Absence au webinaire",
+  "application.submitted": "Candidature soumise",
+  "appointment.booked": "RDV réservé",
+  "time.elapsed": "Délai écoulé après un autre événement",
+  "email.link_clicked": "Lien cliqué dans un email",
+  "page.visited": "Page visitée",
 };
 
 const TRIGGER_EVENTS: WorkflowTriggerEvent[] = [
   "lead.created",
   "tag.added",
   "status.changed",
+  "purchase.completed",
+  "webinar.registered",
+  "webinar.attended",
+  "webinar.absent",
+  "application.submitted",
+  "appointment.booked",
+  "email.link_clicked",
+  "page.visited",
+  "time.elapsed",
+];
+
+// 🆕 LOT 2 — Événements utilisables comme référence pour `time.elapsed`
+// (tous SAUF time.elapsed lui-même, qui ne peut pas se référencer).
+const TIME_ELAPSED_BASE_EVENTS: WorkflowTriggerEvent[] = TRIGGER_EVENTS.filter(
+  (e) => e !== "time.elapsed",
+);
+
+// Événements dont le filtre principal est "s'applique à ce tunnel".
+const FUNNEL_FILTER_EVENTS: WorkflowTriggerEvent[] = [
+  "lead.created",
+  "purchase.completed",
+  "webinar.registered",
+  "webinar.attended",
+  "webinar.absent",
+  "application.submitted",
+  "appointment.booked",
+  "page.visited",
 ];
 
 const ACTION_META: Record<
@@ -87,8 +129,49 @@ function emptyDraft(): Draft {
     funnelId: null,
     tagId: null,
     triggerStatus: null,
+    pageSlug: "",
+    linkLabel: "",
+    afterEvent: "lead.created",
+    delayDays: 1,
+    delayHours: 0,
     actions: [],
   };
+}
+
+// 🆕 LOT 2 — Description humaine du déclencheur choisi, réutilisée à la fois
+// dans le bandeau de réglages et dans le nœud "Déclencheur" de la timeline.
+function describeTrigger(draft: Draft): string {
+  switch (draft.triggerEvent) {
+    case "tag.added":
+      return `Un tag${draft.tagId ? " précis" : ""} est ajouté à un contact.`;
+    case "status.changed":
+      return `Le statut CRM d’un lead ${draft.triggerStatus ? "passe à la valeur choisie" : "change"}.`;
+    case "page.visited":
+      return `Un contact identifié visite ${draft.pageSlug.trim() ? `la page « ${draft.pageSlug.trim()} »` : "une page"} sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "email.link_clicked":
+      return `Un contact clique sur ${draft.linkLabel.trim() ? "ce lien précis" : "un lien"} dans un email envoyé.`;
+    case "time.elapsed": {
+      const delay = [draft.delayDays ? `${draft.delayDays}j` : null, draft.delayHours ? `${draft.delayHours}h` : null]
+        .filter(Boolean)
+        .join(" ") || "0h";
+      return `${delay} après « ${TRIGGER_LABELS[draft.afterEvent]} ».`;
+    }
+    case "purchase.completed":
+      return `Un paiement est confirmé sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "webinar.registered":
+      return `Un contact s’inscrit à un webinaire sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "webinar.attended":
+      return `Un contact assiste au webinaire sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "webinar.absent":
+      return `Un contact ne s’est pas présenté au webinaire sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "application.submitted":
+      return `Une candidature est soumise sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "appointment.booked":
+      return `Un RDV est réservé sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+    case "lead.created":
+    default:
+      return `Un nouveau lead est capturé sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
+  }
 }
 
 function defaultActionConfig(kind: WorkflowActionKind): WorkflowActionConfig {
@@ -127,6 +210,11 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
       funnelId: wf.trigger.funnelId ?? null,
       tagId: wf.trigger.tagId ?? null,
       triggerStatus: wf.trigger.status ?? null,
+      pageSlug: wf.trigger.pageSlug ?? "",
+      linkLabel: wf.trigger.linkLabel ?? "",
+      afterEvent: wf.trigger.afterEvent ?? "lead.created",
+      delayDays: wf.trigger.delayDays ?? 1,
+      delayHours: wf.trigger.delayHours ?? 0,
       actions: wf.actions.map((a) => a.config),
     });
     setEditingId(wf.id);
@@ -153,9 +241,15 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
       trigger: {
         event: draft.triggerEvent,
         // On n'envoie que le filtre pertinent pour l'événement choisi.
-        funnelId: draft.triggerEvent === "lead.created" ? draft.funnelId : null,
+        funnelId: FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) ? draft.funnelId : null,
         tagId: draft.triggerEvent === "tag.added" ? draft.tagId : null,
         status: draft.triggerEvent === "status.changed" ? draft.triggerStatus : null,
+        pageSlug: draft.triggerEvent === "page.visited" ? draft.pageSlug.trim() || null : null,
+        linkLabel:
+          draft.triggerEvent === "email.link_clicked" ? draft.linkLabel.trim() || null : null,
+        afterEvent: draft.triggerEvent === "time.elapsed" ? draft.afterEvent : null,
+        delayDays: draft.triggerEvent === "time.elapsed" ? draft.delayDays : undefined,
+        delayHours: draft.triggerEvent === "time.elapsed" ? draft.delayHours : undefined,
       },
       actions: draft.actions,
     };
@@ -308,7 +402,20 @@ function WorkflowList({
     if (wf.trigger.event === "tag.added") return `${label} · ${tagName(wf.trigger.tagId)}`;
     if (wf.trigger.event === "status.changed")
       return `${label} · ${wf.trigger.status ? STATUS_LABELS[wf.trigger.status] : "tout statut"}`;
-    return `${label} · ${funnelName(wf.trigger.funnelId)}`;
+    if (wf.trigger.event === "page.visited")
+      return `${label} · ${wf.trigger.pageSlug || "toute page"} · ${funnelName(wf.trigger.funnelId)}`;
+    if (wf.trigger.event === "email.link_clicked")
+      return `${label} · ${wf.trigger.linkLabel || "tout lien"}`;
+    if (wf.trigger.event === "time.elapsed") {
+      const d = wf.trigger.delayDays ?? 0;
+      const h = wf.trigger.delayHours ?? 0;
+      const delay = [d ? `${d}j` : null, h ? `${h}h` : null].filter(Boolean).join(" ") || "0h";
+      const ref = wf.trigger.afterEvent ? TRIGGER_LABELS[wf.trigger.afterEvent] : "un événement";
+      return `${label} · ${delay} après « ${ref} »`;
+    }
+    if (FUNNEL_FILTER_EVENTS.includes(wf.trigger.event))
+      return `${label} · ${funnelName(wf.trigger.funnelId)}`;
+    return label;
   };
 
   return (
@@ -474,7 +581,7 @@ function WorkflowEditor({
         </div>
 
         {/* Filtre conditionnel selon l'événement choisi */}
-        {draft.triggerEvent === "lead.created" && (
+        {FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) && (
           <label className="block">
             <span className="text-xs font-bold uppercase text-muted">
               S’applique au tunnel
@@ -494,6 +601,89 @@ function WorkflowEditor({
               ))}
             </select>
           </label>
+        )}
+
+        {draft.triggerEvent === "page.visited" && (
+          <label className="block">
+            <span className="text-xs font-bold uppercase text-muted">Page précise (optionnel)</span>
+            <input
+              value={draft.pageSlug}
+              onChange={(e) => setDraft((d) => ({ ...d, pageSlug: e.target.value }))}
+              placeholder="Ex. tarifs — laisser vide pour n’importe quelle page"
+              className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            />
+          </label>
+        )}
+
+        {draft.triggerEvent === "email.link_clicked" && (
+          <label className="block">
+            <span className="text-xs font-bold uppercase text-muted">Lien précis (optionnel)</span>
+            <input
+              value={draft.linkLabel}
+              onChange={(e) => setDraft((d) => ({ ...d, linkLabel: e.target.value }))}
+              placeholder="URL exacte du lien — laisser vide pour n’importe quel lien"
+              className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            />
+          </label>
+        )}
+
+        {draft.triggerEvent === "time.elapsed" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">Après l’événement</span>
+              <select
+                value={draft.afterEvent}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, afterEvent: e.target.value as WorkflowTriggerEvent }))
+                }
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+              >
+                {TIME_ELAPSED_BASE_EVENTS.map((ev) => (
+                  <option key={ev} value={ev}>
+                    {TRIGGER_LABELS[ev]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">Délai</span>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={draft.delayDays}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      delayDays: Math.min(365, Math.max(0, Number(e.target.value) || 0)),
+                    }))
+                  }
+                  className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                  aria-label="Jours"
+                />
+                j
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={draft.delayHours}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      delayHours: Math.min(23, Math.max(0, Number(e.target.value) || 0)),
+                    }))
+                  }
+                  className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                  aria-label="Heures"
+                />
+                h
+              </div>
+              {draft.delayDays + draft.delayHours <= 0 && (
+                <p className="mt-1 text-xs text-red-500">Le délai doit être d’au moins 1 heure.</p>
+              )}
+            </label>
+          </div>
         )}
 
         {draft.triggerEvent === "tag.added" && (
@@ -549,53 +739,90 @@ function WorkflowEditor({
         )}
 
         <div className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
-          <Zap size={14} className="text-gold" />{" "}
-          {draft.triggerEvent === "tag.added"
-            ? `Déclencheur : un tag${draft.tagId ? " précis" : ""} est ajouté à un contact.`
-            : draft.triggerEvent === "status.changed"
-              ? `Déclencheur : le statut CRM d’un lead ${draft.triggerStatus ? "passe à la valeur choisie" : "change"}.`
-              : `Déclencheur : un nouveau lead est capturé sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`}
+          <Zap size={14} className="text-gold" /> Déclencheur : {describeTrigger(draft)}
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="mt-5">
-        <h3 className="text-sm font-black text-ink">Actions (dans l’ordre)</h3>
-        <div className="mt-3 grid gap-3">
-          {draft.actions.map((action, i) => (
-            <ActionRow
-              key={i}
-              index={i}
-              total={draft.actions.length}
-              action={action}
-              sequences={sequences}
-              onChange={(next) => onUpdateAction(i, next)}
-              onRemove={() => onRemoveAction(i)}
-              onMove={(dir) => onMoveAction(i, dir)}
-            />
-          ))}
-          {draft.actions.length === 0 && (
-            <p className="rounded-lg border border-dashed border-line bg-surface px-3 py-4 text-center text-sm text-muted">
-              Ajoutez au moins une action ci-dessous.
-            </p>
-          )}
-        </div>
+      {/* Flux d'automatisation — timeline à nœuds reliés */}
+      <div className="mt-6">
+        <h3 className="text-sm font-black text-ink">Flux d’automatisation</h3>
+        <p className="mt-1 text-xs text-muted">
+          Le déclencheur lance la suite. Les actions s’exécutent de haut en bas.
+        </p>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {actionKinds.map((kind) => {
-            const Meta = ACTION_META[kind];
+        <div className="mt-4">
+          {/* Nœud déclencheur (configuré dans les réglages ci-dessus) */}
+          <TimelineNode
+            tone="gold"
+            badge={<Zap size={15} />}
+            title="Déclencheur"
+            subtitle={describeTrigger(draft)}
+            hasNext
+          />
+
+          {/* Nœuds actions */}
+          {draft.actions.map((action, i) => {
+            const Meta = ACTION_META[action.kind];
             const Icon = Meta.icon;
             return (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => onAddAction(kind)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-bold text-ink hover:border-navy/40 hover:bg-canvas"
+              <TimelineNode
+                key={i}
+                tone="navy"
+                badge={<span className="text-xs font-bold">{i + 1}</span>}
+                title={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon size={14} /> {Meta.label}
+                  </span>
+                }
+                hasNext
+                onMoveUp={i > 0 ? () => onMoveAction(i, -1) : undefined}
+                onMoveDown={
+                  i < draft.actions.length - 1 ? () => onMoveAction(i, 1) : undefined
+                }
+                onRemove={() => onRemoveAction(i)}
               >
-                <Plus size={13} /> <Icon size={13} /> {Meta.label}
-              </button>
+                <ActionConfigFields
+                  action={action}
+                  sequences={sequences}
+                  onChange={(next) => onUpdateAction(i, next)}
+                />
+              </TimelineNode>
             );
           })}
+
+          {draft.actions.length === 0 && (
+            <div className="mb-4 ml-[3.25rem] rounded-lg border border-dashed border-line bg-surface px-3 py-3 text-center text-xs text-muted">
+              Aucune action — ajoutez la première étape ci-dessous.
+            </div>
+          )}
+
+          {/* Nœud d'ajout d'action */}
+          <div className="flex gap-4">
+            <div className="flex flex-col items-center">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-dashed border-line text-muted">
+                <Plus size={16} />
+              </div>
+            </div>
+            <div className="flex-1 pb-1">
+              <p className="mb-2 text-xs font-bold text-muted">Ajouter une action</p>
+              <div className="flex flex-wrap gap-2">
+                {actionKinds.map((kind) => {
+                  const Meta = ACTION_META[kind];
+                  const Icon = Meta.icon;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => onAddAction(kind)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-bold text-ink hover:border-navy/40 hover:bg-canvas"
+                    >
+                      <Plus size={13} /> <Icon size={13} /> {Meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -618,69 +845,106 @@ function WorkflowEditor({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ligne d'action (config selon le type)
+// Nœud de timeline (rail + connecteur + carte)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ActionRow({
-  index,
-  total,
+function TimelineNode({
+  tone,
+  badge,
+  title,
+  subtitle,
+  hasNext,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
+  children,
+}: {
+  tone: "gold" | "navy";
+  badge: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: string;
+  hasNext?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onRemove?: () => void;
+  children?: React.ReactNode;
+}) {
+  const badgeCls = tone === "gold" ? "bg-gold text-[#08111F]" : "bg-navy text-white";
+  return (
+    <div className="flex gap-4">
+      {/* Rail : pastille + ligne de connexion vers le nœud suivant */}
+      <div className="flex flex-col items-center">
+        <div
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-full shadow-sm ${badgeCls}`}
+        >
+          {badge}
+        </div>
+        {hasNext && <div className="w-px flex-1 bg-line" style={{ minHeight: 16 }} />}
+      </div>
+
+      {/* Carte du nœud */}
+      <div className={`flex-1 ${hasNext ? "pb-5" : "pb-2"}`}>
+        <div className="rounded-lg border border-line bg-surface p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-ink">{title}</div>
+              {subtitle && (
+                <div className="mt-0.5 text-[11px] text-muted">{subtitle}</div>
+              )}
+            </div>
+            {onRemove && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={onMoveUp}
+                  disabled={!onMoveUp}
+                  className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted hover:text-ink disabled:opacity-30"
+                  aria-label="Monter"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={onMoveDown}
+                  disabled={!onMoveDown}
+                  className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted hover:text-ink disabled:opacity-30"
+                  aria-label="Descendre"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted hover:text-red"
+                  aria-label="Retirer"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Champs de configuration d'une action (selon le type)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ActionConfigFields({
   action,
   sequences,
   onChange,
-  onRemove,
-  onMove,
 }: {
-  index: number;
-  total: number;
   action: WorkflowActionConfig;
   sequences: SequenceOption[];
   onChange: (next: WorkflowActionConfig) => void;
-  onRemove: () => void;
-  onMove: (dir: -1 | 1) => void;
 }) {
-  const Meta = ACTION_META[action.kind];
-  const Icon = Meta.icon;
-
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
-      <div className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-2 text-sm font-bold text-ink">
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-canvas text-xs text-navy">
-            {index + 1}
-          </span>
-          <Icon size={15} /> {Meta.label}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onMove(-1)}
-            disabled={index === 0}
-            className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted disabled:opacity-30"
-            aria-label="Monter"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove(1)}
-            disabled={index === total - 1}
-            className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted disabled:opacity-30"
-            aria-label="Descendre"
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="grid h-7 w-7 place-items-center rounded-md border border-line text-muted hover:text-red"
-            aria-label="Retirer"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-3">
+    <div className="mt-3">
         {action.kind === "add_tag" && (
           <input
             value={action.tags.join(", ")}
@@ -760,22 +1024,63 @@ function ActionRow({
         )}
 
         {action.kind === "wait" && (
-          <label className="flex items-center gap-2 text-sm text-ink">
-            Attendre
-            <input
-              type="number"
-              min={1}
-              max={365}
-              value={action.days}
-              onChange={(e) =>
-                onChange({ kind: "wait", days: Math.max(1, Number(e.target.value) || 1) })
-              }
-              className="w-20 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
-            />
-            jour(s) avant l’action suivante.
-          </label>
+          <div className="text-sm text-ink">
+            {/* 🆕 Attente en jours + heures + minutes */}
+            <div className="flex flex-wrap items-center gap-2">
+              Attendre
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={action.days ?? 0}
+                onChange={(e) =>
+                  onChange({
+                    ...action,
+                    days: Math.min(365, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+                className="w-16 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                aria-label="Jours"
+              />
+              j
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={action.hours ?? 0}
+                onChange={(e) =>
+                  onChange({
+                    ...action,
+                    hours: Math.min(23, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+                className="w-16 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                aria-label="Heures"
+              />
+              h
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={action.minutes ?? 0}
+                onChange={(e) =>
+                  onChange({
+                    ...action,
+                    minutes: Math.min(59, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+                className="w-16 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                aria-label="Minutes"
+              />
+              min avant l'action suivante.
+            </div>
+            {(action.days ?? 0) + (action.hours ?? 0) + (action.minutes ?? 0) <= 0 && (
+              <p className="mt-1 text-xs text-red-500">
+                L'attente doit être d'au moins 1 minute.
+              </p>
+            )}
+          </div>
         )}
       </div>
-    </div>
   );
 }

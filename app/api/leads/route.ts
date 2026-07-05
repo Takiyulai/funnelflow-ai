@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
-import { runLeadCreatedWorkflows } from "@/lib/workflows/engine";
+import { runLeadCreatedWorkflows, runWorkflowsForEvent, eventForPageRole } from "@/lib/workflows/engine";
 import {
   readDeliveryEmailConfig,
   renderDeliveryEmail,
@@ -57,6 +57,26 @@ function pruneRateMap() {
 function hashIp(ip: string): string {
   const salt = process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 16) ?? "ff-salt";
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32);
+}
+
+/**
+ * 🆕 LOT 4/7/8 — Résout le RÔLE de la page d'où vient la soumission (pour
+ * savoir si un événement workflow SÉMANTIQUE (webinar.registered,
+ * appointment.booked, application.submitted) doit être déclenché EN PLUS de
+ * lead.created). Best-effort : retourne null si non trouvé (jamais bloquant).
+ */
+function resolvePageRole(publishedContent: unknown, pageSlug?: string | null): string | null {
+  if (!pageSlug) return null;
+  const content = publishedContent as
+    | { pages?: Array<{ slug?: string; role?: string }> }
+    | null;
+  if (!content || !Array.isArray(content.pages)) return null;
+  const clean = (s: string) => s.replace(/^\/+/, "").replace(/\/+$/, "");
+  const target = clean(pageSlug);
+  const page = content.pages.find(
+    (p) => typeof p?.slug === "string" && clean(p.slug) === target,
+  );
+  return page?.role ?? null;
 }
 
 function getClientIp(req: Request): string {
@@ -197,6 +217,27 @@ export async function POST(request: Request) {
     });
   } catch (wfErr) {
     console.warn("[api/leads] workflows échoués (non bloquant):", wfErr);
+  }
+
+  // 6bis. 🆕 LOT 4/7/8 — Événement SÉMANTIQUE en plus de lead.created, selon le
+  //       rôle de la page (inscription webinaire, RDV, candidature coaching).
+  //       Best-effort, jamais bloquant pour la capture du lead.
+  try {
+    const role = resolvePageRole(funnel.published_content, payload.pageSlug);
+    const semanticEvent = eventForPageRole(role);
+    if (semanticEvent) {
+      await runWorkflowsForEvent(admin, funnel.user_id, {
+        event: semanticEvent,
+        lead: {
+          id: lead.id,
+          email: payload.email.toLowerCase().trim(),
+          name: payload.name?.trim() || null,
+        },
+        funnelId: funnel.id,
+      });
+    }
+  } catch (wfErr) {
+    console.warn("[api/leads] événement sémantique échoué (non bloquant):", wfErr);
   }
 
   // 7. 🆕 Email de livraison conditionnel : UNIQUEMENT si le propriétaire l'a

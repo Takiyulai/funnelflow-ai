@@ -1,5 +1,5 @@
 -- ============================================================================
--- FunnelFlow AI — CRM correctifs
+-- AutoFunnel AI — CRM correctifs
 -- À EXÉCUTER dans l'éditeur SQL Supabase (après db/crm-schema.sql).
 -- ============================================================================
 

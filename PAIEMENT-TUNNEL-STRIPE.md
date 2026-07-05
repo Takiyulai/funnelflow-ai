@@ -1,4 +1,4 @@
-# Flux de paiement Stripe des tunnels — FunnelFlow AI
+# Flux de paiement Stripe des tunnels — AutoFunnel AI
 
 Paiement **unique** (one-time) déclenché depuis la page de vente d'un tunnel
 publié. Distinct de l'abonnement plateforme (voir `ABONNEMENTS-STRIPE.md`).

@@ -1,5 +1,5 @@
 -- ============================================================
--- FunnelFlow AI - Schéma principal
+-- AutoFunnel AI - Schéma principal
 -- ============================================================
 
 create extension if not exists "pgcrypto";

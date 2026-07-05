@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "lib/crm/types.ts",
+    "lib/crm/sequences.ts",
+    "app/api/crm/sequences/route.ts",
+    "app/api/crm/sequences/[id]/route.ts",
+    "app/api/crm/sequences/generate/route.ts",
+    "lib/ai/prompts.ts",
+    "lib/ai/generate.ts",
+    "components/crm/SequencesClient.tsx",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ]
+}

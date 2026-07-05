@@ -1,0 +1,50 @@
+/* Système d'animations partagé des templates bespoke (handoff Claude Design). */
+@keyframes af-shine {
+  0% { transform: translateX(-160%) skewX(-18deg); }
+  55%, 100% { transform: translateX(360%) skewX(-18deg); }
+}
+@keyframes hp-cta {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes hp-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .45); }
+  70% { box-shadow: 0 0 0 22px rgba(var(--accent-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+}
+@keyframes hp-float-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(18px, -26px, 0); }
+}
+@keyframes hp-float-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-22px, 20px, 0); }
+}
+@keyframes hp-badge-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes af-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity .7s cubic-bezier(.2,.7,.2,1),
+              transform .7s cubic-bezier(.2,.7,.2,1);
+}
+[data-reveal].is-in { opacity: 1; transform: none; }
+[data-acc-panel] { max-height: 0; overflow: hidden; transition: max-height .4s ease; }
+[data-tilt-inner] { transition: transform .18s ease; }
+.af-cta { position: relative; overflow: hidden; isolation: isolate; will-change: transform; cursor: pointer; }
+.af-cta::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 34%; height: 100%;
+  z-index: 1;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: af-shine 2.8s ease-in-out infinite;
+  pointer-events: none;
+}

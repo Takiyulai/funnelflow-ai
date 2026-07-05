@@ -30,6 +30,8 @@ function resolveProviderConfig(): ProviderConfig {
   const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
   const isAnthropic = provider === "anthropic" || provider === "claude";
   const isZai = provider === "zai" || provider === "z.ai" || provider === "glm";
+  const isOpenRouter =
+    provider === "openrouter" || provider === "open-router" || provider === "or";
 
   if (isAnthropic) {
     return {
@@ -47,11 +49,15 @@ function resolveProviderConfig(): ProviderConfig {
   // base_url change. base_url normalisé sans slash final → on suffixe "/models".
   const rawBase =
     process.env.OPENAI_BASE_URL?.trim() ||
-    (isZai ? "https://api.z.ai/api/paas/v4" : "https://api.openai.com/v1");
+    (isZai
+      ? "https://api.z.ai/api/paas/v4"
+      : isOpenRouter
+        ? "https://openrouter.ai/api/v1"
+        : "https://api.openai.com/v1");
   const base = rawBase.replace(/\/+$/, "");
 
   return {
-    label: isZai ? "Z.AI / GLM" : "OpenAI",
+    label: isZai ? "Z.AI / GLM" : isOpenRouter ? "OpenRouter" : "OpenAI",
     key: process.env.OPENAI_API_KEY,
     modelsUrl: `${base}/models`,
     authHeaders: (k) => ({ Authorization: `Bearer ${k}` }),

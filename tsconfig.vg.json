@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true, "incremental": false, "skipLibCheck": true }, "include": [ "lib/ai/generate.ts" ] }

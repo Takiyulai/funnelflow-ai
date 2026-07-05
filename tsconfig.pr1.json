@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "components/funnel/sections/patterns/pricing/PricingPatterns.tsx"
+  ]
+}

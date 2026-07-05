@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true, "incremental": false, "skipLibCheck": true }, "include": [ "lib/funnels/templates.ts", "lib/funnels/applyTemplate.ts", "components/funnel/TemplateGalleryStep.tsx", "components/funnel/TemplateThemeProvider.tsx", "components/funnel/TemplateCard.tsx" ] }

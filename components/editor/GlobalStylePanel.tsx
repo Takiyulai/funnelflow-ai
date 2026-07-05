@@ -135,6 +135,13 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
             />
           </Field>
 
+          <Field label="Couleur d'accent 2 (prix, éléments spéciaux)">
+            <ColorRow
+              value={design.accentColor2 ?? "#f59e0b"}
+              onChange={(c) => updateDesign({ accentColor2: c })}
+            />
+          </Field>
+
           <Field label="Style visuel">
             <select
               value={design.style ?? "premium"}
@@ -316,6 +323,92 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
                   payment: {
                     ...(funnel.payment ?? {}),
                     postPurchaseUrl: e.target.value || undefined,
+                  },
+                })
+              }
+            />
+          </Field>
+        </div>
+
+        {/* 🆕 Pages de remerciement — canaux communautaires + CTA */}
+        <div className="mt-6 grid gap-3">
+          <SectionTitle>Pages de remerciement</SectionTitle>
+          <p className="text-[11px] leading-relaxed text-white/40">
+            Affichés sur les pages merci/confirmation : boutons «&nbsp;Rejoindre
+            WhatsApp / Telegram&nbsp;» + un bouton optionnel vers une autre
+            destination. Laissez vide pour ne rien afficher.
+          </p>
+          <Field label="Lien canal WhatsApp" hint="Ex : https://chat.whatsapp.com/…">
+            <input
+              type="url"
+              className={inputClass}
+              placeholder="https://chat.whatsapp.com/…"
+              value={funnel.meta?.socialChannels?.whatsapp ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    socialChannels: {
+                      ...(funnel.meta?.socialChannels ?? {}),
+                      whatsapp: e.target.value || undefined,
+                    },
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Lien canal Telegram" hint="Ex : https://t.me/…">
+            <input
+              type="url"
+              className={inputClass}
+              placeholder="https://t.me/…"
+              value={funnel.meta?.socialChannels?.telegram ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    socialChannels: {
+                      ...(funnel.meta?.socialChannels ?? {}),
+                      telegram: e.target.value || undefined,
+                    },
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Bouton supplémentaire — texte" hint="Ex : Découvrir nos formations">
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="Texte du bouton"
+              value={funnel.meta?.socialChannels?.ctaLabel ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    socialChannels: {
+                      ...(funnel.meta?.socialChannels ?? {}),
+                      ctaLabel: e.target.value || undefined,
+                    },
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Bouton supplémentaire — URL">
+            <input
+              type="url"
+              className={inputClass}
+              placeholder="https://…"
+              value={funnel.meta?.socialChannels?.ctaUrl ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    socialChannels: {
+                      ...(funnel.meta?.socialChannels ?? {}),
+                      ctaUrl: e.target.value || undefined,
+                    },
                   },
                 })
               }

@@ -10,7 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // ─── Palette FunnelFlow AI (source de vérité) ─────────────────────
+        // ─── Palette AutoFunnel AI (source de vérité) ─────────────────────
         // Couleurs marketing utilisées dans la landing
         brand: {
           ink: "#080E1A",        // fond profond landing

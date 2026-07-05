@@ -21,16 +21,16 @@ export default function SignupPage() {
               className="flex h-7 w-7 items-center justify-center rounded-lg"
               style={{ background: "linear-gradient(135deg,#31845C,#08498D)" }}
             >
-              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>FF</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>AF</span>
             </div>
-            FunnelFlow<span style={{ color: "#C7A436" }}> AI</span>
+            AutoFunnel<span style={{ color: "#C7A436" }}> AI</span>
           </a>
         </div>
         
         {/* Titre centré */}
         <h1 className="mt-6 text-center text-3xl font-black tracking-tight" style={{ color: "#fff" }}>Créer un compte</h1>
         <p className="mt-1.5 text-center text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-          Rejoignez l'aventure FunnelFlow AI
+          Rejoignez l'aventure AutoFunnel AI
         </p>
         
         <div className="mt-5">

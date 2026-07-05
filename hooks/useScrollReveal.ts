@@ -163,21 +163,19 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
         .catch(() => {});
     }
 
-    // Re-scan si l'éditeur modifie le DOM (changement de section, etc.)
-    // 🆕 Les éléments AJOUTÉS après le 1er rendu (ex. nouvelle section ajoutée
-    // dans l'éditeur, ou contenu saisi) sont révélés IMMÉDIATEMENT — sinon ils
-    // restent invisibles (opacity:0, animation en attente) jusqu'à un changement
-    // de viewport qui force un re-scan. WYSIWYG dans l'éditeur.
-    const mo = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        m.addedNodes.forEach((node) => {
-          if (!(node instanceof HTMLElement)) return;
-          if (node.matches("[data-ff-anim]")) activate(node);
-          node
-            .querySelectorAll<HTMLElement>("[data-ff-anim]")
-            .forEach((el) => activate(el));
-        });
-      }
+    // Re-scan si l'éditeur modifie le DOM (changement de section, changement
+    // de page, ajout de contenu…).
+    // 🆕 FIX : les nœuds ajoutés étaient auparavant révélés INSTANTANÉMENT
+    // (activate() direct), ce qui désactivait complètement l'animation au
+    // scroll pour tout contenu qui apparaît APRÈS le montage initial — hors
+    // du 1er chargement à froid, c'est le cas le plus fréquent (changement de
+    // page dans l'éditeur/l'aperçu, ajout d'une section). `scan()` route
+    // maintenant ces nouveaux nœuds par `prep()` : ceux déjà visibles à
+    // l'écran s'affichent immédiatement (comportement WYSIWYG conservé),
+    // ceux sous la ligne de flottaison sont mis en file et animés normalement
+    // au scroll — le filet de sécurité à 1.2s reste en place si jamais
+    // l'IntersectionObserver ne se déclenchait pas.
+    const mo = new MutationObserver(() => {
       scan();
     });
     mo.observe(container, { childList: true, subtree: true });

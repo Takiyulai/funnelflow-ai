@@ -31,7 +31,12 @@ export default function FunnelHeader({ funnel, logoSrc }: Props) {
   const cta = header.cta;
   const hasCta = Boolean(cta?.label);
 
-  if (!showLogo && !showName && !hasCta) return null;
+  // 🆕 Date/heure du webinaire (mode Live), affichée en clair au centre du
+  // header sticky — distinct du countdown de la section urgence. N'existe
+  // jamais en mode Evergreen (pas de date commune).
+  const eventLabel = formatEventBadge(header.eventDateTime, funnel.language);
+
+  if (!showLogo && !showName && !hasCta && !eventLabel) return null;
 
   const sticky = header.sticky === true;
   const transparent = header.transparent === true;
@@ -50,6 +55,13 @@ export default function FunnelHeader({ funnel, logoSrc }: Props) {
           {showName && <span className="ff-brand-bar-name">{brandName}</span>}
         </div>
 
+        {eventLabel && (
+          <div className="ff-header-event">
+            <span className="ff-header-event-dot" aria-hidden="true" />
+            <span>{eventLabel}</span>
+          </div>
+        )}
+
         {hasCta && cta && (
           <a
             href={ctaHref(cta)}
@@ -65,6 +77,22 @@ export default function FunnelHeader({ funnel, logoSrc }: Props) {
       </div>
     </header>
   );
+}
+
+/** Formate la date/heure du webinaire pour le badge du header (ex :
+ *  "En direct le jeudi 9 juillet — 21:00"). Retourne null si absente/invalide. */
+function formatEventBadge(iso: string | undefined, language?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "fr-FR";
+  const datePart = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+  const timePart = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const prefix =
+    language === "en" ? "Live on" : language === "es" ? "En vivo el" : "En direct le";
+
+  return `${prefix} ${datePart} — ${timePart}`;
 }
 
 function extractBrandName(fullName: string): string {

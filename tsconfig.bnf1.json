@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "components/funnel/sections/patterns/benefits/BenefitsPatterns.tsx",
+    "components/funnel/sections/BenefitsRenderer.tsx"
+  ]
+}

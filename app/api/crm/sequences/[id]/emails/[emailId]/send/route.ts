@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSequenceEmail } from "@/lib/crm/sequences";
 import { sendEmail } from "@/lib/crm/email";
 import { renderSequenceEmailHtml } from "@/lib/crm/emailRender";
-import { getUserMarketingSender } from "@/lib/email/userSender";
+import { getFunnelMarketingSender } from "@/lib/email/userSender";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +35,18 @@ export async function POST(
     if (!email) return NextResponse.json({ ok: false, error: "email_not_found" }, { status: 404 });
 
     const html = renderSequenceEmailHtml(email.content, { email: parsed.data.to });
-    // 🆕 Expéditeur MARKETING de l'utilisateur (Option C).
-    const sender = await getUserMarketingSender(user.id);
+    // 🆕 Expéditeur MARKETING : businessName du TUNNEL lié à la séquence
+    // (sans « via AutoFunnel »), fallback profil si séquence sans tunnel.
+    const { data: seq } = await sb
+      .from("crm_sequences")
+      .select("funnel_id")
+      .eq("user_id", user.id)
+      .eq("id", id)
+      .maybeSingle();
+    const sender = await getFunnelMarketingSender(
+      user.id,
+      (seq?.funnel_id as string | null) ?? null,
+    );
     const result = await sendEmail({
       to: parsed.data.to,
       subject: email.subject || "(sans objet)",

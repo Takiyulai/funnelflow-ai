@@ -7,6 +7,9 @@ export type FunnelKindOption = {
   hint: { fr: string; en: string; es: string };
   /** Émotion dominante affichée dans le wizard (Lot B1+) */
   emotion?: { fr: string; en: string; es: string };
+  /** 🆕 Pages générées, affichées EXPLICITEMENT dans le sélecteur de type
+   *  (le champ « nombre de pages » a été retiré du wizard). */
+  pages: { fr: string; en: string; es: string };
   // Si true, l'étape Vidéo est proposée dans le wizard
   needsVideo: boolean;
   // Suggestion de template par défaut (id de funnelTemplates)
@@ -28,6 +31,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Capturar emails con un recurso gratuito (ebook, checklist, plantilla)",
     },
     emotion: { fr: "Confiance, clarté", en: "Trust, clarity", es: "Confianza, claridad" },
+    pages: {
+      fr: "3 pages : Capture → Merci → Livraison",
+      en: "3 pages: Opt-in → Thank you → Delivery",
+      es: "3 páginas: Captura → Gracias → Entrega",
+    },
     needsVideo: false,
     suggestedTemplateId: "ebook-lead-magnet",
   },
@@ -40,6 +48,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Vender ebook, formación, plantilla, recurso premium",
     },
     emotion: { fr: "Valeur, transformation", en: "Value, transformation", es: "Valor, transformación" },
+    pages: {
+      fr: "4 pages : Vente → Paiement → Merci → Accès (+ upsell/downsell si renseignés)",
+      en: "4 pages: Sales → Checkout → Thank you → Access (+ upsell/downsell if provided)",
+      es: "4 páginas: Venta → Pago → Gracias → Acceso (+ upsell/downsell si se indican)",
+    },
     needsVideo: true,
     suggestedTemplateId: "premium-ebook",
   },
@@ -52,6 +65,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Inscripciones a una sesión en vivo o automatizada",
     },
     emotion: { fr: "Crédibilité, anticipation", en: "Credibility, anticipation", es: "Credibilidad, anticipación" },
+    pages: {
+      fr: "5 pages : Inscription → Confirmation → Live → Replay → Vente",
+      en: "5 pages: Registration → Confirmation → Live → Replay → Sales",
+      es: "5 páginas: Inscripción → Confirmación → Live → Replay → Venta",
+    },
     needsVideo: true,
     suggestedTemplateId: "webinar",
   },
@@ -64,6 +82,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Reservar una llamada o consulta (agencias, freelancers, consultores)",
     },
     emotion: { fr: "Autorité, simplicité", en: "Authority, simplicity", es: "Autoridad, simplicidad" },
+    pages: {
+      fr: "3 pages : Présentation → Réservation → Confirmation",
+      en: "3 pages: Landing → Booking → Confirmation",
+      es: "3 páginas: Presentación → Reserva → Confirmación",
+    },
     needsVideo: false,
     suggestedTemplateId: "free-consultation",
   },
@@ -76,6 +99,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Vender acompañamiento premium con calificación (estatus, exclusividad)",
     },
     emotion: { fr: "Statut, exclusivité", en: "Status, exclusivity", es: "Estatus, exclusividad" },
+    pages: {
+      fr: "4 pages : Candidature → Qualification → Confirmation → Études de cas",
+      en: "4 pages: Application → Qualification → Confirmation → Case studies",
+      es: "4 páginas: Candidatura → Calificación → Confirmación → Casos de éxito",
+    },
     needsVideo: false,
     suggestedTemplateId: "coaching-premium",
   },
@@ -88,6 +116,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
       es: "Lanzar un reto de varios días (fitness, negocio, productividad)",
     },
     emotion: { fr: "Énergie, urgence, momentum", en: "Energy, urgency, momentum", es: "Energía, urgencia, momento" },
+    pages: {
+      fr: "Inscription → Confirmation → Jours 1 à N → Pitch final",
+      en: "Sign-up → Confirmation → Days 1 to N → Final pitch",
+      es: "Inscripción → Confirmación → Días 1 a N → Pitch final",
+    },
     needsVideo: true,
     suggestedTemplateId: "ebook-lead-magnet",
   },

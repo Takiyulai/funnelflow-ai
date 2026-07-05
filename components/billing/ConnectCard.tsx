@@ -105,7 +105,7 @@ export function ConnectCard() {
           <h2 className="text-lg font-black text-ink">Encaisser les ventes de vos tunnels</h2>
           <p className="mt-1 text-sm text-muted">
             Connectez votre compte Stripe pour recevoir directement l&apos;argent de vos
-            offres. FunnelFlow gère toute la configuration : vous n&apos;avez rien à
+            offres. AutoFunnel gère toute la configuration : vous n&apos;avez rien à
             paramétrer chez Stripe.
           </p>
         </div>
@@ -176,7 +176,7 @@ export function ConnectCard() {
       </div>
 
       <p className="mt-5 text-xs text-muted">
-        Propulsé par Stripe. Les fonds vont directement sur votre compte ; FunnelFlow ne
+        Propulsé par Stripe. Les fonds vont directement sur votre compte ; AutoFunnel ne
         stocke jamais vos coordonnées bancaires.
       </p>
     </Card>

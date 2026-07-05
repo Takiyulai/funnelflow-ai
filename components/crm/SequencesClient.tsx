@@ -12,7 +12,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
-import type { SequenceType, Sequence } from "@/lib/crm/types";
+import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
 
 type PublishedFunnel = { id: string; name: string };
 type Lang = "fr" | "en" | "es";
@@ -20,14 +20,23 @@ type ContactLite = { id: string; email: string; name: string | null };
 /** Email édité : porte l'id quand la séquence est enregistrée (pour l'envoi test). */
 type EditableEmail = { id?: string; position: number; delayDays: number; subject: string; body: string };
 
-const TYPE_OPTIONS: { value: SequenceType; label: string }[] = [
+// 🆕 LOT 1 : rôles proposés dans le constructeur de séquence (+ "autre" en
+// saisie libre). Remplace l'ancien champ "type" unique + "nombre de mails".
+const ROLE_OPTIONS: { value: SequenceType; label: string }[] = [
   { value: "bienvenue", label: "Bienvenue" },
-  { value: "nurturing", label: "Nurturing" },
+  { value: "nurturing", label: "Nurturing / valeur" },
   { value: "relance", label: "Relance" },
-  { value: "lancement", label: "Lancement produit" },
-  { value: "reengagement", label: "Réengagement" },
-  { value: "autre", label: "Autre (sur-mesure)" },
+  { value: "offre", label: "Offre / conversion" },
+  { value: "temoignage", label: "Témoignage / preuve sociale" },
+  { value: "reengagement", label: "Réactivation" },
+  { value: "autre", label: "Personnalisé…" },
 ];
+const TYPE_OPTIONS = ROLE_OPTIONS; // rétrocompat (affichage de l'ancien champ `type`)
+
+function roleLabel(role: SequenceRole): string {
+  if (role.id === "autre" && role.label?.trim()) return role.label.trim();
+  return ROLE_OPTIONS.find((o) => o.value === role.id)?.label ?? role.id;
+}
 
 const LANG_OPTIONS: { value: Lang; label: string }[] = [
   { value: "fr", label: "Français" },
@@ -44,11 +53,14 @@ function textToHtml(text: string): string {
 }
 
 export function SequencesClient({ publishedFunnels }: { publishedFunnels: PublishedFunnel[] }) {
-  const [type, setType] = useState<SequenceType>("bienvenue");
+  // 🆕 LOT 1 : liste ORDONNÉE de rôles (remplace "type" unique + "nombre de
+  // mails" — 1 rôle ajouté = 1 mail généré, dans l'ordre de la liste).
+  const [roles, setRoles] = useState<SequenceRole[]>([{ id: "bienvenue" }]);
+  const [pendingRoleType, setPendingRoleType] = useState<SequenceType>("bienvenue");
+  const [pendingCustomLabel, setPendingCustomLabel] = useState("");
   const [funnelId, setFunnelId] = useState<string>(publishedFunnels[0]?.id ?? "");
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
-  const [emailCount, setEmailCount] = useState(3);
   const [language, setLanguage] = useState<Lang>("fr");
 
   const [loading, setLoading] = useState(false);
@@ -65,6 +77,27 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
   const hasFunnels = publishedFunnels.length > 0;
   const reindex = (list: EditableEmail[]) => list.map((e, i) => ({ ...e, position: i }));
+
+  // 🆕 LOT 1 : gestion de la liste ordonnée de rôles.
+  function addRole() {
+    if (roles.length >= 10) return;
+    const label = pendingCustomLabel.trim();
+    if (pendingRoleType === "autre" && !label) return; // libellé requis pour un type personnalisé
+    setRoles((cur) => [...cur, pendingRoleType === "autre" ? { id: "autre", label } : { id: pendingRoleType }]);
+    setPendingCustomLabel("");
+  }
+  function removeRole(i: number) {
+    setRoles((cur) => (cur.length > 1 ? cur.filter((_, idx) => idx !== i) : cur));
+  }
+  function moveRole(i: number, dir: -1 | 1) {
+    setRoles((cur) => {
+      const j = i + dir;
+      if (j < 0 || j >= cur.length) return cur;
+      const next = [...cur];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
 
   async function refreshList() {
     try {
@@ -87,23 +120,24 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
   function resetForm() {
     setEditingId(null); setEmails(null); setName(""); setContext("");
-    setError(null); setNotice(null); setEnrollId("");
+    setError(null); setNotice(null); setEnrollId(""); setRoles([{ id: "bienvenue" }]);
   }
 
   async function generate() {
     if (loading) return;
+    if (roles.length === 0) { setError("Ajoute au moins un type de mail à la séquence."); return; }
     setLoading(true); setError(null); setNotice(null);
     try {
       const res = await fetch("/api/crm/sequences/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, context, emailCount, language, funnelId: funnelId || undefined }),
+        body: JSON.stringify({ roles, context, language, funnelId: funnelId || undefined }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) { setError(json.message || json.error || "Génération impossible."); return; }
       setEmails((json.emails as Array<{ position: number; delayDays: number; subject: string; body: string }>)
         .map((e, i) => ({ position: i, delayDays: e.delayDays, subject: e.subject, body: e.body })));
       if (!name.trim()) {
-        const label = TYPE_OPTIONS.find((t) => t.value === type)?.label ?? "Séquence";
+        const label = roleLabel(roles[0]) || "Séquence";
         const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
         setName(fn ? `${label} — ${fn}` : label);
       }
@@ -116,7 +150,11 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     if (!name.trim()) { setError("Donne un nom à la séquence avant d'enregistrer."); return; }
     setSaving(true); setError(null); setNotice(null);
     const payload = {
-      name: name.trim(), type, context: context || null, language, funnel_id: funnelId || null,
+      name: name.trim(),
+      // Rétrocompat : `type` = rôle du 1er mail. La source de vérité devient `roles`.
+      type: roles[0]?.id ?? "autre",
+      roles,
+      context: context || null, language, funnel_id: funnelId || null,
       emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, subject: e.subject, content: e.body })),
     };
     try {
@@ -145,7 +183,11 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) { setError("Chargement impossible."); return; }
       const s = json.sequence;
-      setEditingId(s.id); setName(s.name); setType(s.type); setContext(s.context ?? "");
+      setEditingId(s.id); setName(s.name);
+      // Rétrocompat : séquences créées avant le Lot 1 → `roles` absent, on
+      // retombe sur un rôle unique dérivé de l'ancien champ `type`.
+      setRoles(Array.isArray(s.roles) && s.roles.length > 0 ? s.roles : [{ id: s.type }]);
+      setContext(s.context ?? "");
       setLanguage(s.language as Lang); setFunnelId(s.funnel_id ?? "");
       setEmails((s.emails as Array<{ id: string; delay_days: number; subject: string; content: string }>)
         .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, subject: e.subject, body: e.content })));
@@ -261,12 +303,6 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">Type</span>
-            <select className={inputCls} value={type} onChange={(e) => setType(e.target.value as SequenceType)}>
-              {TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-            </select>
-          </label>
-          <label className="grid gap-1.5">
             <span className="text-xs font-bold uppercase tracking-wider text-muted">Tunnel rattaché {hasFunnels ? "(recommandé)" : ""}</span>
             <select className={inputCls} value={funnelId} onChange={(e) => setFunnelId(e.target.value)} disabled={!hasFunnels}>
               <option value="">{hasFunnels ? "Aucun (saisie manuelle)" : "Aucun tunnel publié"}</option>
@@ -274,16 +310,58 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
             </select>
           </label>
           <label className="grid gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">Nombre d&apos;emails</span>
-            <input type="number" min={1} max={10} className={inputCls} value={emailCount}
-              onChange={(e) => setEmailCount(Math.max(1, Math.min(10, Number(e.target.value) || 1)))} />
-          </label>
-          <label className="grid gap-1.5">
             <span className="text-xs font-bold uppercase tracking-wider text-muted">Langue {funnelId ? "(reprise du tunnel)" : ""}</span>
             <select className={inputCls} value={language} onChange={(e) => setLanguage(e.target.value as Lang)} disabled={!!funnelId}>
               {LANG_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
             </select>
           </label>
+        </div>
+
+        {/* 🆕 LOT 1 — Constructeur de séquence : chaque type ajouté = un mail.
+            Le nombre de mails est déduit du nombre de types ajoutés, dans l'ordre. */}
+        <div className="mt-4">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted">
+            Composition de la séquence ({roles.length} mail{roles.length > 1 ? "s" : ""})
+          </span>
+          <p className="mt-0.5 text-[11px] text-muted">
+            Ajoute les types de mails dans l&apos;ordre où ils doivent être envoyés. Un type ajouté = un mail.
+          </p>
+
+          <div className="mt-2 grid gap-2">
+            {roles.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-[#F8F9FB] p-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink/10 text-[11px] font-bold text-ink">{i + 1}</span>
+                  <span className="truncate text-sm font-semibold text-ink">{roleLabel(r)}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => moveRole(i, -1)} disabled={i === 0}
+                    className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronUp size={14} /></button>
+                  <button type="button" onClick={() => moveRole(i, 1)} disabled={i === roles.length - 1}
+                    className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronDown size={14} /></button>
+                  <button type="button" onClick={() => removeRole(i)} disabled={roles.length <= 1}
+                    className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-30"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <select className={`${inputCls} max-w-[220px]`} value={pendingRoleType}
+              onChange={(e) => setPendingRoleType(e.target.value as SequenceType)}>
+              {ROLE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </select>
+            {pendingRoleType === "autre" && (
+              <input className={`${inputCls} max-w-[220px]`} value={pendingCustomLabel}
+                onChange={(e) => setPendingCustomLabel(e.target.value)}
+                placeholder="Nom du type personnalisé" />
+            )}
+            <button type="button" onClick={addRole}
+              disabled={roles.length >= 10 || (pendingRoleType === "autre" && !pendingCustomLabel.trim())}
+              className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-black/5 disabled:opacity-40">
+              <Plus size={14} /> Ajouter un type
+            </button>
+          </div>
         </div>
 
         <label className="mt-4 grid gap-1.5">

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "app/api/billing/me/route.ts",
+    "components/dashboard/Sidebar.tsx",
+    "lib/ai/generate.ts",
+    "lib/export/theme-css.ts",
+    "next-env.d.ts"
+  ]
+}

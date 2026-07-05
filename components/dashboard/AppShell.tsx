@@ -73,10 +73,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
         <a href="/" className="flex items-center gap-2">
           <span className="grid h-7 w-7 place-items-center rounded-md text-xs font-black text-white" style={{ background: "linear-gradient(135deg,#31845C,#08498D)" }}>
-            FF
+            AF
           </span>
           <span className="text-sm font-bold text-ink">
-            FunnelFlow <span className="text-gold">AI</span>
+            AutoFunnel <span className="text-gold">AI</span>
           </span>
         </a>
         <div className="flex items-center gap-2">

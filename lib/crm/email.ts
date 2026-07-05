@@ -26,7 +26,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   if (!key) return { ok: false, error: "missing_resend_key" };
 
   // Expéditeur : celui fourni par l'appelant (ex. expéditeur résolu d'un
-  // utilisateur pour le marketing), sinon l'expéditeur SYSTÈME FunnelFlow
+  // utilisateur pour le marketing), sinon l'expéditeur SYSTÈME AutoFunnel
   // (domaine + nom lus depuis l'env via getSystemSender — AUCUN en dur ici).
   const from = input.from || getSystemSender().from;
 

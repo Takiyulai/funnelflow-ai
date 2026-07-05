@@ -13,7 +13,7 @@ import type {
 import { renderSequenceEmailHtml } from "./emailRender";
 
 const SEQ_COLS =
-  "id, user_id, name, type, context, language, funnel_id, status, created_at, updated_at";
+  "id, user_id, name, type, roles, context, language, funnel_id, status, created_at, updated_at";
 const SEQ_EMAIL_COLS =
   "id, sequence_id, user_id, position, delay_days, subject, content, created_at, updated_at";
 
@@ -92,6 +92,7 @@ export async function createSequence(
       user_id: userId,
       name: input.name.trim() || "Séquence sans nom",
       type: input.type,
+      roles: input.roles ?? null,
       context: input.context ?? null,
       language: input.language,
       funnel_id: input.funnel_id ?? null,
@@ -119,6 +120,7 @@ export async function updateSequence(
     .update({
       name: input.name.trim() || "Séquence sans nom",
       type: input.type,
+      roles: input.roles ?? null,
       context: input.context ?? null,
       language: input.language,
       funnel_id: input.funnel_id ?? null,

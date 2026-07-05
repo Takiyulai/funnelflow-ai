@@ -557,6 +557,40 @@ export default function EditorPage() {
     [funnel, pushHistory, selectedPageId],
   );
 
+  // ───────────────────────────────────────────────────────────────────────
+  // 🆕 Click-to-edit : un clic sur N'IMPORTE QUEL élément de la preview
+  // (titre, texte, bouton, timer, carte…) sélectionne sa section et ouvre le
+  // panneau d'édition. Les liens/boutons du tunnel ne naviguent PAS en mode
+  // édition. La sélection de texte (toolbar couleur) reste prioritaire.
+  // ───────────────────────────────────────────────────────────────────────
+  const handlePreviewClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const sectionEl = target.closest<HTMLElement>("[data-ff-section-id]");
+      if (!sectionEl) return; // clic hors section (toolbar preview, etc.)
+      const sectionId = sectionEl.getAttribute("data-ff-section-id");
+      if (!sectionId || !activeSections.some((s) => s.id === sectionId)) return;
+
+      // Sélection de texte en cours → laisser la toolbar couleur opérer.
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return;
+
+      // Les sections raw-html (iframe) gèrent déjà leur propre click-to-edit.
+      if (sectionEl.getAttribute("data-ff-section") === "raw-html") return;
+
+      // En édition, un lien/bouton du tunnel ouvre l'éditeur au lieu d'agir.
+      if (target.closest("a,button")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      setSelectedSectionId(sectionId);
+      setDrawerOpen(true);
+    },
+    [activeSections],
+  );
+
   const scrollToSection = useCallback((sectionId: string) => {
     setSelectedSectionId(sectionId);
     setDrawerOpen(true);
@@ -858,6 +892,7 @@ export default function EditorPage() {
         <div
           className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
           ref={previewWrapperRef}
+          onClickCapture={handlePreviewClick}
         >
           <FunnelPreview
             key={activePage?.id ?? "default"}

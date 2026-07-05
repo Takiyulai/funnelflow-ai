@@ -7,7 +7,7 @@ import type {
   FunnelKind,
   PageRole,
 } from "@/lib/funnels/types";
-import type { SequenceType, TunnelContext } from "@/lib/crm/types";
+import type { SequenceType, SequenceRole, TunnelContext } from "@/lib/crm/types";
 import type { PageBlueprint } from "@/lib/funnels/pageCatalogs";
 import {
   getPageBlueprint,
@@ -935,6 +935,31 @@ export function heroSingleMediaBlock(
   ].join("\n");
 }
 
+/**
+ * 🆕 LOT 6 — Guidage prix pour la page "oto" en contexte lead-magnet
+ * (tripwire) : le prix doit rester dans la fourchette 7-27€, cohérent avec un
+ * achat impulsif juste après une inscription gratuite (pas le prix de l'offre
+ * principale). Vide pour tout autre kind/role.
+ */
+function otoPricingGuidanceBlock(
+  funnelKind: FunnelKind,
+  role: PageRole,
+  lang: Language,
+): string {
+  if (role !== "oto" || funnelKind !== "lead-magnet") return "";
+  return (
+    "\n\n" +
+    tr(
+      {
+        fr: "⚠️ TRIPWIRE : cette page propose une PETITE offre complémentaire à prix réduit (entre 7€ et 27€), pensée pour un achat impulsif juste après l'inscription gratuite — ce n'est PAS l'offre principale. N'invente jamais un prix hors de cette fourchette.",
+        en: "⚠️ TRIPWIRE: this page offers a SMALL complementary offer at a low price (between $7 and $27), designed for an impulse buy right after the free opt-in — this is NOT the main offer. Never invent a price outside this range.",
+        es: "⚠️ TRIPWIRE: esta página ofrece una PEQUEÑA oferta complementaria a precio reducido (entre 7€ y 27€), pensada para una compra impulsiva justo después de la inscripción gratuita — NO es la oferta principal. Nunca inventes un precio fuera de este rango.",
+      },
+      lang,
+    )
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Bloc : TON & VOCABULAIRE par type de tunnel
 // Le framework fixe la STRUCTURE ; ce bloc fixe le REGISTRE, les verbes d'action
@@ -1223,6 +1248,16 @@ const SEQUENCE_TYPE_GUIDANCE: Record<SequenceType, Record<Language, string>> = {
     en: "FOLLOW-UP sequence: reactivate interest, handle objections, create urgency, push a clear CTA to the sales page.",
     es: "Secuencia de SEGUIMIENTO: reactivar interés, superar objeciones, crear urgencia, CTA claro a la página de venta.",
   },
+  offre: {
+    fr: "Mail d'OFFRE/CONVERSION : présente l'offre clairement (quoi, pour qui, prix), lève une objection majeure, CTA direct et unique vers l'achat.",
+    en: "OFFER/CONVERSION email: present the offer clearly (what, for whom, price), handle one major objection, single direct CTA to purchase.",
+    es: "Email de OFERTA/CONVERSIÓN: presenta la oferta claramente (qué, para quién, precio), supera una objeción clave, CTA directo a la compra.",
+  },
+  temoignage: {
+    fr: "Mail de TÉMOIGNAGE/PREUVE SOCIALE : met en avant un ou plusieurs résultats/retours concrets (uniquement ceux fournis dans le contexte, jamais inventés) pour renforcer la crédibilité avant le CTA.",
+    en: "TESTIMONIAL/SOCIAL PROOF email: highlight one or more concrete results/reviews (only those provided in context, never invented) to build credibility before the CTA.",
+    es: "Email de TESTIMONIO/PRUEBA SOCIAL: destaca resultados/reseñas concretos (solo los proporcionados, nunca inventados) para reforzar la credibilidad antes del CTA.",
+  },
   lancement: {
     fr: "Séquence de LANCEMENT produit : teasing, ouverture des inscriptions, preuves, rareté/échéance, fermeture.",
     en: "Product LAUNCH sequence: teasing, cart open, proof, scarcity/deadline, cart close.",
@@ -1259,6 +1294,66 @@ function tunnelContextBlock(tunnel: TunnelContext, lang: Language): string {
     tunnel.benefits.length ? `- Bénéfices / Benefits: ${tunnel.benefits.join(" · ")}` : "",
     tunnel.bonuses.length ? `- Bonus: ${tunnel.bonuses.join(" · ")}` : "",
     tunnel.guarantee ? `- Garantie / Guarantee: ${tunnel.guarantee}` : "",
+    // 🆕 LOT 4 — Contexte webinaire : permet aux emails générés (rappels,
+    // relance post-webinaire) de citer la bonne date et le bon lien.
+    tunnel.webinarDate
+      ? tr(
+          {
+            fr: `- Date du webinaire : ${tunnel.webinarDate} → utilise-la pour les rappels ("dans 24h", "demain à 19h"...).`,
+            en: `- Webinar date: ${tunnel.webinarDate} → use it for reminders ("in 24h", "tomorrow at 7pm"...).`,
+            es: `- Fecha del webinar: ${tunnel.webinarDate} → úsala para los recordatorios.`,
+          },
+          lang,
+        )
+      : "",
+    tunnel.webinarExternalLink
+      ? tr(
+          {
+            fr: `- Lien de connexion au webinaire : ${tunnel.webinarExternalLink} → insère-le dans l'email de rappel juste avant le direct.`,
+            en: `- Webinar connection link: ${tunnel.webinarExternalLink} → include it in the reminder email right before the live session.`,
+            es: `- Enlace de conexión al webinar: ${tunnel.webinarExternalLink} → inclúyelo en el recordatorio justo antes del directo.`,
+          },
+          lang,
+        )
+      : "",
+    // 🆕 LOT 5 — Webinaire Evergreen : pas de date commune, chaque email doit
+    // parler de manière RELATIVE à l'inscription du destinataire.
+    tunnel.webinarMode === "evergreen"
+      ? tr(
+          {
+            fr: `- Ce webinaire est en mode AUTOMATISÉ (Evergreen) : chaque prospect choisit son propre créneau et vit sa propre session. N'invente et ne cite JAMAIS de date fixe. Parle de manière RELATIVE à SON inscription ("juste après ton inscription", "ta session débute bientôt", "ton accès expire dans quelques heures"...).`,
+            en: `- This webinar is AUTOMATED (Evergreen): each prospect picks their own time slot and gets their own session. NEVER invent or mention a fixed date. Speak RELATIVE to THEIR registration ("right after you signed up", "your session starts soon", "your access expires in a few hours"...).`,
+            es: `- Este webinar es AUTOMATIZADO (Evergreen): cada prospecto elige su propio horario y vive su propia sesión. NUNCA inventes ni menciones una fecha fija. Habla de forma RELATIVA a SU inscripción ("justo después de tu inscripción", "tu sesión empieza pronto", "tu acceso expira en unas horas"...).`,
+          },
+          lang,
+        )
+      : "",
+    // 🆕 Webinaire — offre vendue APRÈS le webinaire, distincte de l'offre
+    // ci-dessus (qui décrit le webinaire lui-même). Permet à l'email de
+    // relance/vente post-webinaire de parler du BON produit/prix/promesse.
+    tunnel.postWebinarOfferName
+      ? tr(
+          {
+            fr: `- Offre vendue APRÈS le webinaire (DIFFÉRENTE du webinaire ci-dessus, qui est terminé) : "${tunnel.postWebinarOfferName}"${tunnel.postWebinarPrice ? ` — Prix : ${tunnel.postWebinarPrice}` : ""}${tunnel.postWebinarPromise ? ` — Promesse : ${tunnel.postWebinarPromise}` : ""}. Pour l'email de vente/relance post-webinaire, parle de CETTE offre, jamais du webinaire comme s'il restait à vendre.`,
+            en: `- Offer sold AFTER the webinar (DIFFERENT from the webinar above, which is over): "${tunnel.postWebinarOfferName}"${tunnel.postWebinarPrice ? ` — Price: ${tunnel.postWebinarPrice}` : ""}${tunnel.postWebinarPromise ? ` — Promise: ${tunnel.postWebinarPromise}` : ""}. For the post-webinar sales/follow-up email, talk about THIS offer, never the webinar as if it were still for sale.`,
+            es: `- Oferta vendida DESPUÉS del webinar (DISTINTA del webinar anterior, que ya terminó): "${tunnel.postWebinarOfferName}"${tunnel.postWebinarPrice ? ` — Precio: ${tunnel.postWebinarPrice}` : ""}${tunnel.postWebinarPromise ? ` — Promesa: ${tunnel.postWebinarPromise}` : ""}. Para el email de venta/seguimiento post-webinar, habla de ESTA oferta, nunca del webinar como si aún estuviera en venta.`,
+          },
+          lang,
+        )
+      : "",
+    // 🆕 LOT 9 — Contexte challenge multi-jours : demande explicitement UNE
+    // séquence quotidienne (1 email par jour, Jour 1 à Jour N), plutôt qu'une
+    // séquence générique, quand le tunnel a plusieurs pages "jour".
+    tunnel.challengeTotalDays && tunnel.challengeTotalDays > 1
+      ? tr(
+          {
+            fr: `- Ce challenge dure ${tunnel.challengeTotalDays} jours (pages "jour-1" à "jour-${tunnel.challengeTotalDays}"). Génère UNE séquence quotidienne : un email par jour (Jour 1, Jour 2, ..., Jour ${tunnel.challengeTotalDays}), qui annonce/rappelle le contenu du jour correspondant, PUIS un dernier email vers le pitch final (offre de clôture).`,
+            en: `- This challenge lasts ${tunnel.challengeTotalDays} days (pages "jour-1" to "jour-${tunnel.challengeTotalDays}"). Generate ONE daily sequence: one email per day (Day 1, Day 2, ..., Day ${tunnel.challengeTotalDays}) announcing/recapping that day's content, THEN a final email toward the closing pitch offer.`,
+            es: `- Este reto dura ${tunnel.challengeTotalDays} días (páginas "jour-1" a "jour-${tunnel.challengeTotalDays}"). Genera UNA secuencia diaria: un email por día (Día 1, Día 2, ..., Día ${tunnel.challengeTotalDays}) que anuncie/recuerde el contenido de ese día, y LUEGO un último email hacia el pitch final (oferta de cierre).`,
+          },
+          lang,
+        )
+      : "",
     tunnel.url
       ? tr(
           {
@@ -1281,26 +1376,52 @@ function tunnelContextBlock(tunnel: TunnelContext, lang: Language): string {
 }
 
 export function sequenceGenerationPrompt(args: {
-  type: SequenceType;
+  roles: SequenceRole[];
   context: string;
-  emailCount: number;
   language: Language;
   tunnel: TunnelContext | null;
 }): string {
-  const { type, context, emailCount, language: lang, tunnel } = args;
-  const n = Math.max(1, Math.min(10, Math.round(emailCount) || 3));
+  const { roles, context, language: lang, tunnel } = args;
+  // 🆕 LOT 1 : 1 rôle ajouté par l'utilisateur = 1 mail, DANS L'ORDRE donné.
+  // Plus de champ "nombre de mails" séparé : n = roles.length.
+  const list = roles.length > 0 ? roles : [{ id: "autre" as SequenceType }];
+  const n = Math.max(1, Math.min(10, list.length));
+
+  const roleLine = (r: SequenceRole, i: number): string => {
+    const guidance =
+      r.id === "autre" && r.label?.trim()
+        ? tr(
+            {
+              fr: `Type personnalisé "${r.label.trim()}" : suis fidèlement cette intention, en cohérence avec le reste de la séquence.`,
+              en: `Custom type "${r.label.trim()}": follow this intent faithfully, consistent with the rest of the sequence.`,
+              es: `Tipo personalizado "${r.label.trim()}": sigue fielmente esta intención, coherente con el resto de la secuencia.`,
+            },
+            lang,
+          )
+        : SEQUENCE_TYPE_GUIDANCE[r.id][lang];
+    return `${i + 1}. ${guidance}`;
+  };
 
   return [
     tr(
       {
-        fr: `Tu es un expert en email marketing direct-response. Génère une séquence de ${n} email(s) en ${langName(lang)}.`,
-        en: `You are a direct-response email marketing expert. Generate a sequence of ${n} email(s) in ${langName(lang)}.`,
-        es: `Eres un experto en email marketing de respuesta directa. Genera una secuencia de ${n} email(s) en ${langName(lang)}.`,
+        fr: `Tu es un expert en email marketing direct-response. Génère une séquence de ${n} email(s) en ${langName(lang)}, COMPOSÉE des rôles suivants, DANS CET ORDRE EXACT (chaque rôle = un email) :`,
+        en: `You are a direct-response email marketing expert. Generate a sequence of ${n} email(s) in ${langName(lang)}, MADE of the following roles, IN THIS EXACT ORDER (each role = one email):`,
+        es: `Eres un experto en email marketing de respuesta directa. Genera una secuencia de ${n} email(s) en ${langName(lang)}, COMPUESTA por los siguientes roles, EN ESTE ORDEN EXACTO (cada rol = un email):`,
       },
       lang,
     ),
     "",
-    SEQUENCE_TYPE_GUIDANCE[type][lang],
+    list.map(roleLine).join("\n"),
+    "",
+    tr(
+      {
+        fr: "Les emails doivent former une PROGRESSION LOGIQUE et cohérente de la relation avec le prospect (chaque email s'appuie sur le précédent, pas de répétition), en respectant STRICTEMENT l'ordre des rôles ci-dessus.",
+        en: "The emails must form a LOGICAL, coherent progression of the relationship with the prospect (each email builds on the previous one, no repetition), STRICTLY following the role order above.",
+        es: "Los emails deben formar una PROGRESIÓN LÓGICA y coherente de la relación con el prospecto (cada email se apoya en el anterior, sin repetición), respetando ESTRICTAMENTE el orden de roles anterior.",
+      },
+      lang,
+    ),
     "",
     tr(
       {
@@ -1497,7 +1618,8 @@ export function secondaryPagesPrompt(args: {
     .map((p) => {
       const block = copywritingFrameworkBlock(args.funnelKind, p.role, lang);
       const heroRule = heroSingleMediaBlock(args.funnelKind, p.role, lang);
-      return `\n---\n### Instructions pour la page \`${p.role}\`\n\n${block}\n\n${heroRule}`;
+      const otoHint = otoPricingGuidanceBlock(args.funnelKind, p.role, lang);
+      return `\n---\n### Instructions pour la page \`${p.role}\`\n\n${block}\n\n${heroRule}${otoHint}`;
     })
     .join("\n");
 

@@ -3,7 +3,7 @@ import { createDemoFunnel } from "@/lib/ai/generate";
 import { makeAnchorCta } from "@/lib/funnels/types";
 
 export const demoFunnel = createDemoFunnel({
-  brandName: "FunnelFlow AI",
+  brandName: "AutoFunnel AI",
   offerName: "Ebook premium conversion",
   price: "49€",
   targetAudience: "entrepreneurs, coaches et freelances",

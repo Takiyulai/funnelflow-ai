@@ -15,10 +15,24 @@ import type { TunnelContext } from "@/lib/crm/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const sequenceTypeEnum = z.enum([
+  "bienvenue", "nurturing", "relance", "offre", "temoignage", "lancement", "reengagement", "autre",
+]);
+
+// 🆕 LOT 1 : remplace type + emailCount par une liste ORDONNÉE de rôles —
+// 1 rôle ajouté = 1 mail généré, dans l'ordre. Le nombre de mails est déduit
+// de roles.length (plus de champ "nombre de mails" séparé).
 const bodySchema = z.object({
-  type: z.enum(["bienvenue", "nurturing", "relance", "lancement", "reengagement", "autre"]),
+  roles: z
+    .array(
+      z.object({
+        id: sequenceTypeEnum,
+        label: z.string().max(80).optional(),
+      }),
+    )
+    .min(1)
+    .max(10),
   context: z.string().max(4000).optional().default(""),
-  emailCount: z.coerce.number().int().min(1).max(10).default(3),
   language: z.enum(["fr", "en", "es"]).default("fr"),
   /** Tunnel publié à rattacher (optionnel : saisie manuelle possible sans). */
   funnelId: z.string().uuid().optional(),
@@ -93,7 +107,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const { type, context, emailCount, language, funnelId } = parsed.data;
+  const { roles, context, language, funnelId } = parsed.data;
 
   // Contexte tunnel (publié uniquement). Si un funnelId est fourni mais le
   // tunnel n'est pas publié/introuvable → on le signale clairement.
@@ -115,9 +129,8 @@ export async function POST(request: Request) {
 
   try {
     const emails = await generateEmailSequenceWithAI({
-      type,
+      roles,
       context,
-      emailCount,
       // La langue du tunnel prime si un tunnel est rattaché.
       language: tunnel?.language ?? language,
       tunnel,

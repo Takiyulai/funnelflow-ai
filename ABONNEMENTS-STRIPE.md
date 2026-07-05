@@ -1,4 +1,4 @@
-# Abonnements FunnelFlow AI — configuration Stripe (test) + gating
+# Abonnements AutoFunnel AI — configuration Stripe (test) + gating
 
 Ce guide couvre l'abonnement **à la plateforme** (le solopreneur qui paie son
 plan Starter / Pro / Agency pour pouvoir générer des tunnels). Il est **distinct**
@@ -12,7 +12,7 @@ tunnel à acheter le produit du solopreneur. Les deux cohabitent.
 | | Abonnement plateforme (NOUVEAU) | Paiement produit (existant) |
 |---|---|---|
 | Qui paie | Le solopreneur (ton client) | Le client final du tunnel |
-| Quoi | Accès à FunnelFlow | Le produit vendu dans le tunnel |
+| Quoi | Accès à AutoFunnel | Le produit vendu dans le tunnel |
 | Mode Stripe | `subscription` (récurrent) | `payment` (one-time) |
 | Route | `/api/subscribe` | `/api/checkout` |
 | Table | `profiles` | `orders` |
@@ -52,9 +52,9 @@ Active le **Test mode** (bouton en haut à droite du dashboard Stripe).
 
 | Produit | Prix | Récurrence |
 |---|---|---|
-| FunnelFlow Starter | 29 € | Mensuel |
-| FunnelFlow Pro | 59 € | Mensuel |
-| FunnelFlow Agency | 97 € | Mensuel |
+| AutoFunnel Starter | 29 € | Mensuel |
+| AutoFunnel Pro | 59 € | Mensuel |
+| AutoFunnel Agency | 97 € | Mensuel |
 
 Chaque prix génère un `price_id` (`price_…`) → reporte-les dans
 `STRIPE_PRICE_STARTER / PRO / AGENCY`.

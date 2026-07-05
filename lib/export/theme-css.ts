@@ -616,6 +616,9 @@ const BASE_CSS = `
   line-height: var(--ff-heading-leading);
   font-size: var(--ff-headline-scale);
   margin: 0 0 14px;
+  /* 🆕 SEUL le titre est centré par défaut (le reste du texte est justifié
+     ci-dessous) ; les layouts split repassent tout à gauche plus bas. */
+  text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
   max-width: 100%;
@@ -629,6 +632,8 @@ const BASE_CSS = `
   opacity: 0.85;
   margin: 0 0 14px;
   max-width: 720px;
+  /* 🆕 Reste du texte (hors titre) justifié par défaut, gauche en split. */
+  text-align: justify;
   overflow-wrap: anywhere;
   width: 100%;
 }
@@ -645,6 +650,8 @@ const BASE_CSS = `
   opacity: 0.9;
   margin: 0 0 14px;
   max-width: 720px;
+  /* 🆕 Reste du texte (hors titre) justifié par défaut, gauche en split. */
+  text-align: justify;
   white-space: pre-line;
   overflow-wrap: anywhere;
   width: 100%;
@@ -731,6 +738,38 @@ const BASE_CSS = `
 }
 .ff-decline-link:hover {
   color: var(--ff-ink);
+}
+
+/* 🆕 Rangée de liens/CTA supplémentaires (canaux : WhatsApp, Telegram,
+   Instagram…). Style bouton secondaire (contour), distinct du CTA principal
+   plein — parité avec l'app (app/funnel-theme.css). */
+.ff-extra-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+.ff-extra-ctas .ff-btn-extra {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--ff-btn-radius, 999px);
+  border: 1.5px solid color-mix(in srgb, var(--ff-accent, #c7a436) 55%, transparent);
+  color: var(--ff-ink);
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+.ff-extra-ctas .ff-btn-extra:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--ff-accent, #c7a436) 12%, transparent);
+  border-color: var(--ff-accent, #c7a436);
 }
 
 /* 🆕 Bullets « Titre | Description » : titre en gras, description en dessous. */
@@ -2201,7 +2240,7 @@ textarea.ff-input {
 }
 
 /* Cas 2 : section raw-html individuelle → on retire le padding latéral
-   et toute contrainte de largeur du wrapper FunnelFlow.
+   et toute contrainte de largeur du wrapper AutoFunnel.
    Le HTML cloné gère LUI-MÊME son centrage interne. */
 .ff-page .ff-section.ff-raw-html,
 .ff-page .ff-section[data-ff-raw-html="true"] {
@@ -2246,7 +2285,7 @@ textarea.ff-input {
 }
 
 /* Annule la bordure-séparateur entre sections quand elles sont clonées
-   (le séparateur est conçu pour les sections FunnelFlow natives) */
+   (le séparateur est conçu pour les sections AutoFunnel natives) */
 .ff-page .ff-section.ff-raw-html::after,
 .ff-page .ff-section[data-ff-raw-html="true"]::after {
   display: none !important;

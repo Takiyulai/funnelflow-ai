@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/billing/subscription";
+import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PlanPicker } from "@/components/billing/PlanPicker";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 
@@ -25,7 +26,10 @@ export default async function AbonnementPage({
   if (!user) redirect("/login");
 
   const profile = await getProfile(user.id);
-  const isActive = profile?.status === "active" || profile?.status === "trialing";
+  // 🆕 Une licence Chariow active donne aussi accès (abonnement via Chariow).
+  const license = await getActiveChariowLicense(user.id);
+  const isActive =
+    profile?.status === "active" || profile?.status === "trialing" || !!license;
   const sp = await searchParams;
   const rawPlan = Array.isArray(sp.plan) ? sp.plan[0] : sp.plan;
   const initialPlan: PlanId | null = isPlanId(rawPlan) ? rawPlan : null;
@@ -37,7 +41,7 @@ export default async function AbonnementPage({
     canceled: "Abonnement annulé",
     inactive: "Aucun abonnement actif",
   };
-  const status = profile?.status ?? "inactive";
+  const status = license ? "active" : (profile?.status ?? "inactive");
 
   return (
     <AppShell>
