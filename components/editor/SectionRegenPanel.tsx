@@ -14,6 +14,7 @@
 import { useState } from "react";
 import { Sparkles, Loader2, Check, X } from "lucide-react";
 import type { FunnelSection, Language, Funnel } from "@/lib/funnels/types";
+import { handlePlanGate } from "@/lib/billing/planGate";
 
 type ProposedSection = Pick<
   FunnelSection,
@@ -90,6 +91,8 @@ export function SectionRegenPanel({
         }),
       });
       const json = await res.json().catch(() => ({}));
+      // 🆕 Invite d'abonnement uniforme (+ redirection vers les forfaits).
+      if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!res.ok) {
         const map: Record<string, string> = {
           subscription_required: "Un abonnement actif est requis.",

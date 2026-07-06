@@ -1324,13 +1324,17 @@
   }
   [data-ff-template] .ff-section .ff-headline,
   [data-ff-template] .ff-section .ff-subheadline,
-  [data-ff-template] .ff-section .ff-eyebrow,
-  [data-ff-template] .ff-section .ff-body {
+  [data-ff-template] .ff-section .ff-eyebrow {
     text-align: center !important;
   }
-  [data-ff-template] .ff-section .ff-body {
-    margin-left: auto !important;
-    margin-right: auto !important;
+  /* 🆕 Corps / paragraphes : JUSTIFIÉ sur mobile (bords taillés), jamais centré.
+     Les titres/eyebrows/sous-titres restent centrés ci-dessus. Le hero garde son
+     alignement propre (texte inline, pas de classe .ff-body). */
+  [data-ff-template] .ff-section:not([data-ff-section="hero"]) .ff-body {
+    text-align: justify !important;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
   }
   [data-ff-template] .ff-section .ff-cta-wrap {
     text-align: center !important;
@@ -1443,17 +1447,29 @@
   [data-ff-template] .ff-section .ff-eyebrow,
   [data-ff-template] .ff-section .ff-headline,
   [data-ff-template] .ff-section .ff-headline-scaled,
-  [data-ff-template] .ff-section .ff-subheadline,
-  [data-ff-template] .ff-section .ff-body {
+  [data-ff-template] .ff-section .ff-subheadline {
     text-align: center !important;
+  }
+  /* 🆕 Corps/paragraphes : justifié (bords taillés), pas centré. */
+  [data-ff-template] .ff-section:not([data-ff-section="hero"]) .ff-body {
+    text-align: justify !important;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
   }
 }
 [data-ff-mobile-frame] [data-ff-template] .ff-section .ff-eyebrow,
 [data-ff-mobile-frame] [data-ff-template] .ff-section .ff-headline,
 [data-ff-mobile-frame] [data-ff-template] .ff-section .ff-headline-scaled,
-[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-subheadline,
-[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-body {
+[data-ff-mobile-frame] [data-ff-template] .ff-section .ff-subheadline {
   text-align: center !important;
+}
+/* 🆕 Aperçu éditeur mobile : corps justifié (comme le vrai mobile). */
+[data-ff-mobile-frame] [data-ff-template] .ff-section:not([data-ff-section="hero"]) .ff-body {
+  text-align: justify !important;
+  text-justify: inter-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
 }
 
 /* ───────── 14. Highlight section ciblée ───────── */

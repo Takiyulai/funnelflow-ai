@@ -10,6 +10,7 @@ import {
   Save, FilePlus2, UserPlus, SendHorizonal,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
+import { handlePlanGate } from "@/lib/billing/planGate";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
 import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
@@ -133,6 +134,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         body: JSON.stringify({ roles, context, language, funnelId: funnelId || undefined }),
       });
       const json = await res.json().catch(() => ({}));
+      // 🆕 Invite d'abonnement uniforme (aucun forfait actif / quota atteint).
+      if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!res.ok || !json.ok) { setError(json.message || json.error || "Génération impossible."); return; }
       setEmails((json.emails as Array<{ position: number; delayDays: number; subject: string; body: string }>)
         .map((e, i) => ({ position: i, delayDays: e.delayDays, subject: e.subject, body: e.body })));

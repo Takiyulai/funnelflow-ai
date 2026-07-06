@@ -1,5 +1,5 @@
 const ts=require("typescript"),fs=require("fs");
-const files=[["lib/ai/generate.ts",ts.ScriptKind.TS],["app/api/billing/me/route.ts",ts.ScriptKind.TS],["app/(app)/editor/[id]/page.tsx",ts.ScriptKind.TSX]];
+const files=[["lib/store/funnelStore.ts",ts.ScriptKind.TS],["app/(app)/editor/[id]/page.tsx",ts.ScriptKind.TSX]];
 for(const [f,kind] of files){
   const src=fs.readFileSync(f,"utf8");const total=src.split("\n").length;
   const sf=ts.createSourceFile(f,src,ts.ScriptTarget.Latest,true,kind);

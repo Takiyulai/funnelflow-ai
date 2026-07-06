@@ -207,7 +207,7 @@ const translations = {
           period: "/mois",
           desc: "Pour lancer tes premiers tunnels et capturer tes leads",
           features: [
-            "3 tunnels générés par mois",
+            "5 tunnels générés par mois",
             "Éditeur visuel et régénération par section",
             "Publication en ligne en un clic",
             "Capture des leads et CRM intégré",
@@ -430,7 +430,7 @@ const translations = {
           period: "/mo",
           desc: "To launch your first funnels on systeme.io.",
           features: [
-            "Up to 3 funnels per month",
+            "Up to 5 funnels per month",
             "systeme.io export",
             "HTML / CSS export",
             "Core templates",

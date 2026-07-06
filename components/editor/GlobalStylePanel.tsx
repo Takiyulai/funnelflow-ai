@@ -422,25 +422,25 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
                 Bouton « étape suivante » automatique
               </div>
               <div className="mt-0.5 text-[10px] leading-relaxed text-white/50">
-                Bouton ajouté en bas des pages de succès qui mène à la page
-                suivante du tunnel. Décochez pour le retirer.
+                Masqué par défaut. Cochez pour ajouter, en bas des pages de succès,
+                un bouton qui mène à la page suivante du tunnel.
               </div>
             </div>
             <input
               type="checkbox"
-              checked={funnel.meta?.hideNextStepCta !== true}
+              checked={funnel.meta?.hideNextStepCta === false}
               onChange={(e) =>
                 onChange({
                   meta: {
                     ...(funnel.meta ?? {}),
-                    hideNextStepCta: e.target.checked ? undefined : true,
+                    hideNextStepCta: e.target.checked ? false : true,
                   },
                 })
               }
               className="h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
             />
           </label>
-          {funnel.meta?.hideNextStepCta !== true && (
+          {funnel.meta?.hideNextStepCta === false && (
             <Field
               label="Texte du bouton « étape suivante »"
               hint="Vide = libellé automatique selon la page (« Continuer », « Voir le replay »…)."

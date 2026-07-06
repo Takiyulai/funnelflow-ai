@@ -7,6 +7,7 @@ import { AlertCircle, Link as LinkIcon, Loader2, Copy } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createFunnelFromAi } from "@/lib/store/funnelStore";
+import { handlePlanGate } from "@/lib/billing/planGate";
 import type { Funnel, FunnelBrief, Language } from "@/lib/funnels/types";
 
 /** Brief synthétique minimal exigé par createFunnelFromAi pour un clone. */
@@ -77,6 +78,11 @@ export default function ImportPage() {
       clearTimeout(t2);
 
       const data = await res.json();
+      // 🆕 Invite d'abonnement uniforme (import/clonage non inclus / pas de forfait).
+      if (handlePlanGate(res.status, data, (m) => setError(`${m.title}. ${m.description}`))) {
+        setLoading(false);
+        return;
+      }
       if (!res.ok || !data.success) {
         setError(data?.error || `Erreur ${res.status} : impossible d'importer ce tunnel.`);
         setLoading(false);

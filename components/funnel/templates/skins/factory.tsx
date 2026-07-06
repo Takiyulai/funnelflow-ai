@@ -549,7 +549,20 @@ function cardText(t: SkinTokens, b: string) {
   const split = splitTitleDesc(b);
   return split ? (
     <>
-      <h3 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: t.ink, fontFamily: t.headFont }}>
+      {/* 🆕 Titre de carte : on suit le POIDS réel de la police du template
+          (t.headWeight) et son interlettrage (t.headTracking). Sur bold-energy,
+          la police Bebas Neue n'existe qu'en 400 → un fontWeight:600 provoquait
+          un faux-gras qui « chevauchait » les lettres. */}
+      <h3
+        style={{
+          fontSize: 18,
+          fontWeight: t.headWeight ?? 600,
+          letterSpacing: t.headTracking ?? undefined,
+          margin: "0 0 8px",
+          color: t.ink,
+          fontFamily: t.headFont,
+        }}
+      >
         <RichText as="span" text={split.title} />
       </h3>
       <p style={{ fontSize: 14.5, lineHeight: 1.6, color: t.body, margin: 0, textAlign: "justify" }}>

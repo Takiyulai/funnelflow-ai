@@ -83,6 +83,10 @@ export default function EditorPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // 🆕 Échec de synchronisation distante (Supabase) : l'auto-save LOCAL réussit
+  // toujours, mais si le push serveur échoue durablement, ce drapeau prévient
+  // l'utilisateur (sinon « Enregistré ✓ » ment → 404 à la publication).
+  const [syncError, setSyncError] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
@@ -174,6 +178,30 @@ export default function EditorPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [funnel]);
+
+  // 🆕 Écoute le résultat de la synchro distante émise par funnelStore
+  // (scheduleRemoteSave → event `ff:remote-save`). On prévient UNE fois quand le
+  // serveur devient injoignable, et on efface l'alerte dès qu'un push réussit.
+  useEffect(() => {
+    const onRemoteSave = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string; ok: boolean }>).detail;
+      if (!detail || (stored && detail.id !== stored.id)) return;
+      setSyncError((prev) => {
+        if (detail.ok) return false;
+        if (!prev) {
+          toast.show({
+            title: "Non synchronisé au serveur",
+            description:
+              "Tes changements sont enregistrés localement mais PAS sur le serveur (session expirée ou connexion ?). Recharge la page ou reconnecte-toi, sinon la publication échouera.",
+            variant: "error",
+          });
+        }
+        return true;
+      });
+    };
+    window.addEventListener("ff:remote-save", onRemoteSave);
+    return () => window.removeEventListener("ff:remote-save", onRemoteSave);
+  }, [stored, toast]);
 
   const pushHistory = useCallback((next: Funnel) => {
     setHistory((h) => {
@@ -446,6 +474,31 @@ export default function EditorPage() {
 
   const handlePublish = useCallback(async () => {
     if (!funnel || !stored) return;
+
+    // 🆕 Gating : publier est une action importante qui, contrairement à la
+    // génération, écrit en direct dans Supabase (hors route API gardée). On
+    // vérifie donc l'accès EFFECTIF (respecte BILLING_ENFORCED) avant de publier :
+    // sans forfait actif → on notifie et on redirige vers les forfaits. En cas
+    // d'échec de la vérif, on ne bloque pas (dégradation gracieuse).
+    try {
+      const meRes = await fetch("/api/billing/me", { cache: "no-store" });
+      const me = await meRes.json().catch(() => ({}));
+      if (meRes.ok && me?.hasAccess === false) {
+        toast.show({
+          title: "Aucun forfait actif",
+          description:
+            "Passe à un forfait pour publier ton tunnel. Redirection vers les forfaits…",
+          variant: "error",
+        });
+        setTimeout(() => {
+          window.location.href = "/abonnement";
+        }, 1300);
+        return;
+      }
+    } catch {
+      /* vérif indisponible → on laisse passer (le gating serveur reste la référence) */
+    }
+
     const updated: StoredFunnel = {
       ...stored,
       funnel,
@@ -737,7 +790,7 @@ export default function EditorPage() {
           </div>
 
           <div className="ml-2 hidden lg:flex items-center justify-center shrink-0">
-            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} syncError={syncError} />
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
@@ -821,7 +874,7 @@ export default function EditorPage() {
             </button>
           </div>
           <div className="flex items-center justify-center">
-            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+            <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} syncError={syncError} />
           </div>
         </div>
       </div>
@@ -987,15 +1040,29 @@ export default function EditorPage() {
 function SaveIndicator({
   state,
   lastSavedAt,
+  syncError,
 }: {
   state: "idle" | "saving" | "saved";
   lastSavedAt: number | null;
+  syncError?: boolean;
 }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const i = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(i);
   }, []);
+
+  // 🆕 Priorité : échec de synchro serveur (enregistré en local mais pas poussé).
+  if (syncError) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-400 ring-1 ring-amber-500/30"
+        title="Enregistré localement mais pas sur le serveur — recharge la page ou reconnecte-toi"
+      >
+        ⚠ Non synchronisé
+      </span>
+    );
+  }
 
   if (state === "saving") {
     return (

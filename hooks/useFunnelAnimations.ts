@@ -122,10 +122,16 @@ export function useFunnelAnimations(ref: RefObject<HTMLElement | null>): void {
 
       // ── Accordéon FAQ ───────────────────────────────────────────────────
       root.querySelectorAll<HTMLElement>("[data-faq-item]").forEach((item) => {
+        // 🆕 Anti-double-câblage : le runtime se ré-exécute (MutationObserver de
+        // re-câblage). Sans ce garde, on rattachait un 2e (3e…) listener de clic
+        // au MÊME item → chaque clic basculait l'accordéon plusieurs fois, et il
+        // fallait cliquer plusieurs fois pour qu'il finisse par s'ouvrir.
+        if (item.dataset.accWired === "1") return;
         const t = item.querySelector<HTMLElement>("[data-acc-toggle]");
         const pnl = item.querySelector<HTMLElement>("[data-acc-panel]");
         const c = item.querySelector<HTMLElement>("[data-acc-chev]");
         if (!t || !pnl) return;
+        item.dataset.accWired = "1";
         const onClick = () => {
           const open = item.getAttribute("data-open") === "1";
           if (open) {
@@ -139,7 +145,10 @@ export function useFunnelAnimations(ref: RefObject<HTMLElement | null>): void {
           }
         };
         t.addEventListener("click", onClick);
-        cleanups.push(() => t.removeEventListener("click", onClick));
+        cleanups.push(() => {
+          t.removeEventListener("click", onClick);
+          delete item.dataset.accWired;
+        });
       });
 
       // ── Countdown ───────────────────────────────────────────────────────

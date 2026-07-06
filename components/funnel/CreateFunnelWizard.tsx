@@ -79,6 +79,8 @@ const FUNNEL_GOALS = [
 type ApiError = {
   reason?: string;
   message?: string;
+  /** Code d'erreur applicatif (ex : "subscription_required", "funnel_quota_reached"). */
+  error?: string;
 };
 
 function capitalize(str: string): string {
@@ -254,10 +256,22 @@ export function CreateFunnelWizard() {
 
       if (!response.ok) {
         const apiErr = data as ApiError;
-        setErrorReason(apiErr.reason ?? "unknown");
+        // 🆕 Gating abonnement : notifier clairement (pas de forfait actif /
+        // limite du forfait) avec une invite à s'abonner, plutôt qu'une erreur
+        // technique générique.
+        const gate =
+          response.status === 402 || apiErr.error === "subscription_required"
+            ? "subscription-required"
+            : apiErr.error === "funnel_quota_reached" ||
+                apiErr.error === "quota_exceeded"
+              ? "plan-limit"
+              : undefined;
+        setErrorReason(gate ?? apiErr.reason ?? "unknown");
         setErrorMessage(
           apiErr.message ??
-          "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI"
+            (gate === "subscription-required"
+              ? "Aucun forfait actif. Choisis un forfait pour générer ton tunnel."
+              : "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI")
         );
         setFunnel(null);
         return;
@@ -1334,6 +1348,8 @@ function GenerationStep({
   // 🆕 429 anti-burst : titre dédié « Trop de requêtes » (au lieu du générique
   // « La génération a échoué »).
   const isRateLimit = errorReason === "rate-limit";
+  // 🆕 Gating abonnement : bloc dédié « Aucun forfait actif » + invite à s'abonner.
+  const isPaywall = errorReason === "subscription-required" || errorReason === "plan-limit";
 
   return (
     <div className="grid gap-4">
@@ -1417,14 +1433,22 @@ function GenerationStep({
       )}
 
       {errorMessage && (
-        <div className={`rounded-lg border p-3 ${isStorageIssue ? "border-amber-400/40 bg-amber-50" : "border-red/30 bg-red/5"}`}>
-          <p className={`flex items-start gap-2 text-xs font-bold ${isStorageIssue ? "text-amber-700" : "text-red"}`}>
-            {isStorageIssue ? <Database size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+        <div className={`rounded-lg border p-3 ${isStorageIssue || isPaywall ? "border-amber-400/40 bg-amber-50" : "border-red/30 bg-red/5"}`}>
+          <p className={`flex items-start gap-2 text-xs font-bold ${isStorageIssue || isPaywall ? "text-amber-700" : "text-red"}`}>
+            {isStorageIssue ? <Database size={14} className="mt-0.5 shrink-0" /> : isPaywall ? <Sparkles size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
             <span>
-              {isStorageIssue ? "Stockage du navigateur saturé" : isRateLimit ? "Trop de requêtes" : "La génération a échoué"}
+              {isStorageIssue
+                ? "Stockage du navigateur saturé"
+                : isPaywall
+                  ? errorReason === "plan-limit"
+                    ? "Limite de ton forfait atteinte"
+                    : "Aucun forfait actif"
+                  : isRateLimit
+                    ? "Trop de requêtes"
+                    : "La génération a échoué"}
             </span>
           </p>
-          <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue ? "text-amber-800" : "text-red/90"}`}>
+          <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue || isPaywall ? "text-amber-800" : "text-red/90"}`}>
             {errorMessage}
           </p>
           {isStorageIssue && (
@@ -1432,7 +1456,15 @@ function GenerationStep({
               👉 Allez dans <a href="/dashboard" className="underline font-bold">le tableau de bord</a> pour supprimer d'anciens tunnels, puis revenez sur cette page et cliquez sur <strong>Réessayer la génération</strong>.
             </p>
           )}
-          {errorReason && (
+          {isPaywall && (
+            <a
+              href="/abonnement"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-300"
+            >
+              <Sparkles size={13} /> Voir les forfaits
+            </a>
+          )}
+          {errorReason && !isPaywall && (
             <p className={`mt-2 text-[10px] uppercase tracking-wider font-bold ${isStorageIssue ? "text-amber-700/80" : "text-red/70"}`}>
               Code: {errorReason}
             </p>

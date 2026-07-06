@@ -3452,6 +3452,18 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     return true;
   });
 
+  // 🆕 WEBINAIRE — page de VENTE post-webinaire CONDITIONNELLE : on ne la génère
+  // QUE si l'utilisateur a renseigné l'« Offre vendue après le webinaire »
+  // (postWebinarOfferName). Sinon on la retire complètement — sans offre réelle,
+  // l'IA fabriquait une page de vente factice (infos inventées) qui ne
+  // ressemblait même pas à une page de vente. Pas d'offre → pas de page de vente.
+  const hasPostWebinarOffer = !!(
+    brief.postWebinarOfferName && brief.postWebinarOfferName.trim()
+  );
+  if (normalizedKind === "webinar" && !hasPostWebinarOffer) {
+    secondaryBlueprints = secondaryBlueprints.filter((b) => b.role !== "sales");
+  }
+
   // 🆕 LOT 3 — Pages OPTIONNELLES génériques (ex. "oto", "vsl") : générées
   // UNIQUEMENT si l'utilisateur les a cochées dans l'aperçu "pages générées"
   // du wizard. Comportement rétrocompatible : `selectedOptionalPages`

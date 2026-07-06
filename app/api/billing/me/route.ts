@@ -3,7 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/billing/subscription";
+import { getProfile, getAccess } from "@/lib/billing/subscription";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PLANS } from "@/lib/billing/plans";
 
@@ -42,11 +42,18 @@ export async function GET() {
     }
   }
 
+  // 🆕 `hasAccess` = droit EFFECTIF d'agir (respecte BILLING_ENFORCED : quand le
+  // gating est désactivé, vaut true pour tous ; quand il est activé, exige un
+  // abonnement/licence actif). Sert à gater côté client les actions importantes
+  // (ex : publication) qui ne passent pas par une route API gardée.
+  const access = await getAccess(user.id);
+
   return NextResponse.json({
     ok: true,
     planId,
     planName: planId ? PLANS[planId].name : null,
     status,
     active,
+    hasAccess: access.hasAccess,
   });
 }

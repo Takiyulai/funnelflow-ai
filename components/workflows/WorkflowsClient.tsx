@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { handlePlanGate } from "@/lib/billing/planGate";
 import {
   Bell,
   Clock,
@@ -262,6 +263,8 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
         body: JSON.stringify(payload),
       });
       const json = await res.json();
+      // 🆕 Invite d'abonnement uniforme (workflows non inclus dans le forfait).
+      if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!json.ok) {
         setError(
           json.error === "validation"

@@ -205,9 +205,30 @@ const SLUG_STOPWORDS = new Set([
   "the","a","an","of","for","to","in","on","with","your","my","and","or",
   // ES
   "el","los","las","una","unos","unas","y","o","para","por","con","tu","tus","su","sus",
-  // jargon tunnel \u00e0 \u00e9viter dans l'URL publique
-  "tunnel","funnel","webinaire","webinar","page","landing","capture","optin","opt","inscription","vente","sales","offre","offer","checkout","commande","paiement","gratuit","free",
+  // jargon tunnel \u00e0 \u00e9viter dans l'URL publique. NB : \u00ab webinaire \u00bb/\u00ab inscription \u00bb
+  // sont VOLONTAIREMENT gard\u00e9s (mots d'entr\u00e9e utiles, orient\u00e9s prospect) ; on
+  // bannit en revanche \u00ab vente \u00bb, \u00ab remerciement/merci \u00bb et \u00ab page \u00bb.
+  "tunnel","funnel","page","landing","capture","vente","sales","remerciement","merci","offre","offer","checkout","commande","paiement","gratuit","free",
 ]);
+
+/** \ud83c\udd95 Mot-cl\u00e9 d'entr\u00e9e selon le TYPE de tunnel, pr\u00e9fix\u00e9 au slug pour qu'il soit
+ *  complet et parlant (ex : webinaire \u2192 \u00ab webinaire-\u2026 \u00bb, lead-magnet \u2192
+ *  \u00ab inscription-\u2026 \u00bb). Vide si le type ne s'y pr\u00eate pas. */
+function kindSlugKeyword(kind?: string): string {
+  switch (kind) {
+    case "webinar":
+      return "webinaire";
+    case "lead-magnet":
+      return "inscription";
+    case "booking":
+    case "coaching-high-ticket":
+      return "reservation";
+    case "challenge":
+      return "challenge";
+    default:
+      return "";
+  }
+}
 
 /**
  * \ud83c\udd95 Slug public CONCIS et orient\u00e9 b\u00e9n\u00e9fice (1 \u00e0 3 mots). On part de la promesse
@@ -398,20 +419,44 @@ function scheduleRemoteSave(stored: StoredFunnel): void {
   if (existing) clearTimeout(existing);
   const timer = setTimeout(() => {
     remoteSaveTimers.delete(stored.id);
-    saveRemote(stored)
-      .then((saved) => {
-        // 🆕 Si le distant a dû corriger le slug (collision résolue), on
-        // synchronise le cache local pour éviter une re-collision au prochain save.
-        if (saved?.slug && saved.slug !== stored.slug) {
-          reconcileLocalSlug(stored.id, saved.slug);
+    // 🆕 Sauvegarde distante FIABILISÉE : 3 tentatives (backoff court). En cas
+    // d'échec PERSISTANT, on PRÉVIENT l'éditeur via un événement `ff:remote-save`
+    // {ok:false}. Auparavant l'échec était SILENCIEUX (console.warn) : l'éditeur
+    // affichait quand même « Enregistré ✓ » alors que le tunnel restait LOCAL
+    // (jamais dans Supabase) → 404 à la publication / à l'ouverture du slug.
+    void (async () => {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const saved = await saveRemote(stored);
+          if (saved?.slug && saved.slug !== stored.slug) {
+            reconcileLocalSlug(stored.id, saved.slug);
+          }
+          window.dispatchEvent(
+            new CustomEvent("ff:remote-save", {
+              detail: { id: stored.id, ok: true },
+            }),
+          );
+          return;
+        } catch (e) {
+          lastErr = e;
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
         }
-      })
-      .catch((e) =>
-        console.warn(
-          "[funnelStore] saveRemote échoué (cache local conservé):",
-          e,
-        ),
+      }
+      console.warn(
+        "[funnelStore] saveRemote échoué après 3 tentatives (cache local conservé):",
+        lastErr,
       );
+      window.dispatchEvent(
+        new CustomEvent("ff:remote-save", {
+          detail: {
+            id: stored.id,
+            ok: false,
+            error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+          },
+        }),
+      );
+    })();
   }, REMOTE_DEBOUNCE_MS);
   remoteSaveTimers.set(stored.id, timer);
 }
@@ -759,10 +804,22 @@ export function createFunnelFromAi(
       ? crypto.randomUUID()
       : `ff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // 🆕 Slug public court + orienté bénéfice (1-3 mots) dérivé de la promesse /
-  // de l'offre. Repli sur l'ancien slugify (nom du tunnel) si rien d'exploitable.
+  // 🆕 Slug public COMPLET et orienté prospect : préfixe de TYPE (webinaire/
+  // inscription/réservation…) + 2-3 mots de sujet tirés de l'offre/promesse.
+  // Ex : webinaire « générer des revenus en ligne » →
+  // « webinaire-generer-revenus-ligne ». Repli sur l'ancien slugify si rien.
+  const kindWord = kindSlugKeyword(brief.funnelKind);
+  const topic = conciseSlug(brief.offerName, brief.promise, brief.brandName);
   const baseSlug =
-    conciseSlug(brief.promise, brief.offerName, brief.brandName) ||
+    [kindWord, topic]
+      .filter(Boolean)
+      .join("-")
+      .split("-")
+      .filter((w, i, arr) => w.length > 0 && arr.indexOf(w) === i)
+      .slice(0, 4)
+      .join("-")
+      .slice(0, 42)
+      .replace(/-+$/g, "") ||
     slugify(funnel.funnelName || `${brief.brandName}-${brief.offerName}`).slice(0, 32);
   const existingSlugs = new Set(listFunnels().map((f) => f.slug));
   const slug = uniqueSlug(baseSlug || "tunnel", existingSlugs);

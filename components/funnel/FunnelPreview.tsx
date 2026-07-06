@@ -1144,9 +1144,11 @@ function PreviewBody({
             (activePage?.nextPageId && pages.find((p) => p.id === activePage.nextPageId)) ||
             (idx >= 0 && idx < pages.length - 1 ? pages[idx + 1] : undefined);
           const nextHref = nextPage ? pageLinks.get(nextPage.id) : undefined;
-          // 🆕 Le bouton « étape suivante » (ex : « Continuer ») est masquable
-          // et son libellé éditable depuis Style global → Pages de remerciement.
-          const hideNext = funnel.meta?.hideNextStepCta === true;
+          // 🆕 Bouton « étape suivante » (ex : « Continuer »/« Voir le replay ») :
+          // MASQUÉ PAR DÉFAUT (source de confusion, non éditable comme un CTA de
+          // section). On ne l'affiche QUE si l'utilisateur l'active explicitement
+          // via Style global → Pages de remerciement (hideNextStepCta === false).
+          const hideNext = funnel.meta?.hideNextStepCta !== false;
           const nextLbl =
             !hideNext && nextHref
               ? (funnel.meta?.nextStepLabel?.trim() ||
