@@ -1155,16 +1155,39 @@
 @media (prefers-reduced-motion: reduce) {
   .ff-header-event, .ff-header-event-dot { animation: none !important; }
 }
-@media (max-width: 640px) {
+/* 🆕 Header responsive — TABLETTE (≤860px) : le badge événement passe sur sa
+   propre ligne (marque | CTA en rangée 1, badge centré en rangée 2). Évite les
+   3 éléments serrés/tronqués sur une seule ligne. */
+@media (max-width: 860px) {
   .ff-brand-bar-inner:has(.ff-header-event) {
-    grid-template-columns: 1fr; row-gap: 0.5rem;
+    grid-template-columns: 1fr auto;
+    row-gap: 0.5rem;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left {
+    grid-column: 1; grid-row: 1; justify-self: start; min-width: 0;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-cta {
+    grid-column: 2; grid-row: 1; justify-self: end;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event {
+    grid-column: 1 / -1; grid-row: 2; justify-self: center;
+  }
+}
+/* 🆕 Header responsive — MOBILE (≤560px) : tout empilé et centré. */
+@media (max-width: 560px) {
+  .ff-brand-bar { padding: 0.625rem 1rem; }
+  .ff-brand-bar-inner:has(.ff-header-event) {
+    grid-template-columns: 1fr;
   }
   .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left,
-  .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event,
-  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-cta {
-    justify-self: center;
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-cta,
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event {
+    grid-column: 1 / -1; grid-row: auto; justify-self: center;
   }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left { justify-content: center; }
   .ff-header-event { font-size: 0.75rem; padding: 0.35rem 0.7rem; }
+  /* Header SANS badge : autoriser le retour à la ligne du CTA si la marque est longue. */
+  .ff-brand-bar-inner { flex-wrap: wrap; row-gap: 0.4rem; }
 }
 
 @media (max-width: 480px) {
@@ -3495,34 +3518,23 @@
 .t1-cta:hover .sk-cta-arrow,
 .sk-cta:hover .sk-cta-arrow { transform: translateX(4px); }
 
-/* ═══ 🆕 MOBILE — corps de texte justifié (bords taillés) ═══
-   Sur petit écran, les paragraphes/sous-titres passent en justifié pour un
-   rendu propre à bords nets ; les TITRES et eyebrows restent centrés (jamais
-   justifiés). Couvre le rendu standard (.ff-*) ET les classes de skins
-   (.sk-*, .t1-*). Le texte inline-justifié des skins n'est pas affecté. */
-@media (max-width: 640px) {
-  [data-ff-template] .ff-body,
-  [data-ff-template] .ff-subheadline,
-  [data-ff-template] .sk-sub,
-  [data-ff-template] .t1-sub,
-  [data-ff-template] .t1-body,
-  [data-ff-template] .t1-hero-sub,
-  [data-ff-template] .t1-hero-body,
-  [data-ff-template] .t1-card-desc,
-  [data-ff-template] .ff-section p:not(.ff-eyebrow):not(.ff-headline):not(.ff-subheadline):not(.ff-cta-wrap) {
-    text-align: justify;
-    text-justify: inter-word;
-    hyphens: auto;
-    -webkit-hyphens: auto;
-  }
-  /* Garde-fou : les titres/eyebrows ne sont JAMAIS justifiés. */
-  [data-ff-template] .ff-headline,
-  [data-ff-template] .ff-eyebrow,
-  [data-ff-template] .sk-h1,
-  [data-ff-template] .sk-h2,
-  [data-ff-template] .t1-h1,
-  [data-ff-template] .t1-h2,
-  [data-ff-template] .t1-eyebrow { text-align: center; }
+/* ═══ 🆕 Corps de texte JUSTIFIÉ par défaut (bords gauche+droite taillés) ═══
+   S'applique à TOUS les écrans, uniquement au corps / sous-titres / descriptions
+   de cartes (jamais aux titres ni eyebrows → l'alignement des templates à titres
+   alignés à gauche reste intact). Le HERO gère son alignement à part (gauche en
+   split via style inline, centré sinon). Le rendu standard (.ff-*) comme les
+   skins (.sk-*, .t1-*) sont couverts. */
+[data-ff-template] .ff-body,
+[data-ff-template] .sk-sub,
+[data-ff-template] .t1-sub,
+[data-ff-template] .t1-body,
+[data-ff-template] .t1-card-desc,
+[data-ff-template] .ff-section:not([data-ff-section="hero"]) .ff-subheadline,
+[data-ff-template] .ff-section:not([data-ff-section="hero"]) p:not(.ff-eyebrow):not(.ff-headline):not(.ff-subheadline):not(.ff-cta-wrap) {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
 }
 
 /* ═══ 🆕 POLISH VISUEL — templates restants (non skinnés) ═══

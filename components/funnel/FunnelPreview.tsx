@@ -1144,11 +1144,19 @@ function PreviewBody({
             (activePage?.nextPageId && pages.find((p) => p.id === activePage.nextPageId)) ||
             (idx >= 0 && idx < pages.length - 1 ? pages[idx + 1] : undefined);
           const nextHref = nextPage ? pageLinks.get(nextPage.id) : undefined;
+          // 🆕 Le bouton « étape suivante » (ex : « Continuer ») est masquable
+          // et son libellé éditable depuis Style global → Pages de remerciement.
+          const hideNext = funnel.meta?.hideNextStepCta === true;
+          const nextLbl =
+            !hideNext && nextHref
+              ? (funnel.meta?.nextStepLabel?.trim() ||
+                 nextStepLabel(funnel.language, nextPage?.role))
+              : undefined;
           return (
             <SuccessChannels
               funnel={funnel}
-              nextHref={nextHref}
-              nextLabel={nextHref ? nextStepLabel(funnel.language, nextPage?.role) : undefined}
+              nextHref={hideNext ? undefined : nextHref}
+              nextLabel={nextLbl}
             />
           );
         })()}

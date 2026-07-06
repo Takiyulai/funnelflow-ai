@@ -305,9 +305,11 @@ function makeHero(t: SkinTokens) {
     ) : null;
 
     const textBlock = (
-      // 🆕 Règle typographique : titres/sous-titres/eyebrow centrés partout
-      // (même en split) ; le corps reste justifié via son style inline.
-      <div style={{ textAlign: "center" }}>
+      // 🆕 Règle typographique : en SPLIT (image présente) le contenu s'aligne
+      // à GAUCHE (titre, eyebrow, sous-titre) — le corps reste justifié via son
+      // style inline, et le CTA est déjà en flex-start. Sans image (hero
+      // centré), tout reste centré.
+      <div style={{ textAlign: isSplitLayout ? "left" : "center" }}>
         {/* 🆕 Badge ✓ des pages de succès (merci/confirmation/livraison) */}
         {props.isSuccess && (
           <div data-reveal style={{ marginBottom: 18 }}>

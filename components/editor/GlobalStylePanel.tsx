@@ -414,6 +414,53 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
               }
             />
           </Field>
+
+          {/* 🆕 Bouton « étape suivante » auto (ex : « Continuer ») */}
+          <label className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+            <div>
+              <div className="text-xs font-medium text-white">
+                Bouton « étape suivante » automatique
+              </div>
+              <div className="mt-0.5 text-[10px] leading-relaxed text-white/50">
+                Bouton ajouté en bas des pages de succès qui mène à la page
+                suivante du tunnel. Décochez pour le retirer.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={funnel.meta?.hideNextStepCta !== true}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    hideNextStepCta: e.target.checked ? undefined : true,
+                  },
+                })
+              }
+              className="h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
+            />
+          </label>
+          {funnel.meta?.hideNextStepCta !== true && (
+            <Field
+              label="Texte du bouton « étape suivante »"
+              hint="Vide = libellé automatique selon la page (« Continuer », « Voir le replay »…)."
+            >
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Ex : Continuer vers le direct"
+                value={funnel.meta?.nextStepLabel ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    meta: {
+                      ...(funnel.meta ?? {}),
+                      nextStepLabel: e.target.value || undefined,
+                    },
+                  })
+                }
+              />
+            </Field>
+          )}
         </div>
 
         {/* 🆕 Pied de page — personnalisable (nom affiché, contact, mentions,

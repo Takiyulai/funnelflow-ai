@@ -829,6 +829,14 @@ export type Funnel = {
       ctaLabel?: string;
       ctaUrl?: string;
     };
+    /**
+     * 🆕 Bouton « étape suivante » auto-généré sur les pages de succès
+     * (confirmation/merci/livraison) qui pointe vers la page suivante du tunnel.
+     * `hideNextStepCta` le masque (l'utilisateur ne pouvait ni l'éditer ni le
+     * supprimer depuis l'éditeur) ; `nextStepLabel` remplace son libellé.
+     */
+    hideNextStepCta?: boolean;
+    nextStepLabel?: string;
   };
 };
 
