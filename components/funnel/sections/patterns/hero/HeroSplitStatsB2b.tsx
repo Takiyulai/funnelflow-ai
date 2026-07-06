@@ -150,10 +150,21 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
           display: "grid",
           gridTemplateColumns: "1.05fr .95fr",
           gap: 60,
-          alignItems: "center",
+          // 🆕 Colonnes étirées à la même hauteur : la colonne texte occupe
+          // toute la hauteur de l'image et répartit son contenu (titre en haut,
+          // CTA/preuves en bas) → proportion équilibrée texte/image (au lieu
+          // d'un bloc court flottant, centré, avec du vide au-dessus/dessous).
+          alignItems: "stretch",
         }}
       >
-        <div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            gap: "clamp(16px, 3.2vw, 34px)",
+          }}
+        >
           {section.eyebrow && (
             <RichText as="span" className="ff-eyebrow" text={section.eyebrow} dataAnim="fade-up" />
           )}

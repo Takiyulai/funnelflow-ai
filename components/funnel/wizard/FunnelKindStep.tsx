@@ -253,8 +253,12 @@ export function WebinarDetailsFields({
       ) : (
         <>
           <Field label={L.date} hint={L.dateHint}>
+            {/* 🆕 lang = langue du tunnel → le sélecteur natif date/heure
+                s'affiche dans la bonne langue (français par défaut) au lieu de
+                l'anglais du navigateur. */}
             <Input
               type="datetime-local"
+              lang={language}
               value={webinarDate ?? ""}
               onChange={(e) => onChange({ webinarDate: e.target.value || undefined })}
             />

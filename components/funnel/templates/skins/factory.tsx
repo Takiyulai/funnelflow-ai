@@ -522,96 +522,177 @@ function withSectionImage(
   );
 }
 
-/* ─── Grille de cartes (qualification / benefits / solution) ───────────── */
+/* ─── Cartes (qualification / benefits / solution) — 3 variantes anti-monotonie ─
+   V0 = grille (icône) · V1 = liste en rangées · V2 = grille numérotée.
+   La variante est choisie par FunnelPreview (déterministe, seedée, sans deux
+   sections cartes voisines identiques) et passée via props.variant. */
+
+function cardText(t: SkinTokens, b: string) {
+  const split = splitTitleDesc(b);
+  return split ? (
+    <>
+      <h3 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: t.ink, fontFamily: t.headFont }}>
+        <RichText as="span" text={split.title} />
+      </h3>
+      <p style={{ fontSize: 14.5, lineHeight: 1.6, color: t.body, margin: 0, textAlign: "justify" }}>
+        <RichText as="span" text={split.description} />
+      </p>
+    </>
+  ) : (
+    <p style={{ fontSize: 15, lineHeight: 1.6, color: t.body, margin: 0 }}>
+      <RichText as="span" text={b} />
+    </p>
+  );
+}
+
+function cardMarker(
+  t: SkinTokens,
+  i: number,
+  mode: "check" | "icon" | "number",
+  iconName: string,
+) {
+  const edge = i % 2 === 0 ? t.accent : t.accent2;
+  if (mode === "number") {
+    return (
+      <div
+        aria-hidden
+        style={{
+          flex: "none",
+          width: 46,
+          height: 46,
+          borderRadius: t.numberVariant === "circle" ? "50%" : 12,
+          background: t.grad,
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 19,
+          fontWeight: 700,
+          fontFamily: t.headFont,
+        }}
+      >
+        {i + 1}
+      </div>
+    );
+  }
+  if (mode === "check") {
+    return (
+      <span
+        aria-hidden
+        style={{
+          display: "flex",
+          flex: "none",
+          width: 26,
+          height: 26,
+          borderRadius: "50%",
+          background: `color-mix(in srgb, ${t.accent} 16%, transparent)`,
+          color: t.accent,
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 14,
+        }}
+      >
+        ✓
+      </span>
+    );
+  }
+  const Icon = getIconByName(iconName);
+  return <Icon aria-hidden style={{ width: 26, height: 26, color: edge, flexShrink: 0 }} />;
+}
+
+function renderCardsVariant(
+  t: SkinTokens,
+  opts: { check?: boolean } | undefined,
+  section: SkinSectionProps["section"],
+  bullets: string[],
+  variant: number,
+  hasImage: boolean,
+): React.ReactNode {
+  const markerMode: "check" | "icon" | "number" =
+    variant === 2 ? "number" : opts?.check ? "check" : "icon";
+  const iconName = (i: number) =>
+    (section.bulletIcons?.[i] as string) || section.iconName || "sparkles";
+
+  // V1 — LISTE : rangées pleine largeur (marqueur à gauche, texte à droite).
+  if (variant === 1 && !hasImage) {
+    return (
+      <div style={{ maxWidth: 780, margin: "0 auto", display: "flex", flexDirection: "column" }}>
+        {bullets.map((b, i) => (
+          <div
+            key={i}
+            data-reveal
+            data-delay={String((i % 4) * 70)}
+            style={{
+              display: "flex",
+              gap: 18,
+              alignItems: "flex-start",
+              padding: "22px 0",
+              borderTop: i > 0 ? `1px solid ${t.cardBorder}` : "none",
+            }}
+          >
+            {cardMarker(t, i, markerMode, iconName(i))}
+            <div style={{ minWidth: 0 }}>{cardText(t, b)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // V0 (grille) & V2 (grille numérotée).
+  const cols = hasImage
+    ? 1
+    : Math.min(bullets.length >= 4 ? 4 : 3, Math.max(2, bullets.length));
+  return (
+    <div className="t1-grid" data-t1-cols={String(cols)}>
+      {bullets.map((b, i) => {
+        const edge = i % 2 === 0 ? t.accent : t.accent2;
+        const card = (
+          <div
+            {...(t.cardTilt ? { "data-tilt-inner": "" } : {})}
+            style={{
+              height: "100%",
+              background: t.cardBg,
+              border: `${t.cardBorderWidth ?? 1}px solid ${t.cardBorder}`,
+              ...(t.cardEdgeLeft && variant !== 2 ? { borderLeft: `3px solid ${edge}` } : {}),
+              borderRadius: t.cardRadius,
+              padding: 26,
+              boxShadow: t.cardShadow,
+              ...(t.cardGlass ? { backdropFilter: "blur(10px)" } : {}),
+            }}
+          >
+            <div style={{ marginBottom: 14 }}>{cardMarker(t, i, markerMode, iconName(i))}</div>
+            {cardText(t, b)}
+          </div>
+        );
+        return t.cardTilt ? (
+          <div key={i} data-reveal data-delay={String((i % 4) * 80)} data-tilt style={{ perspective: 900 }}>
+            {card}
+          </div>
+        ) : (
+          <div key={i} data-reveal data-delay={String((i % 4) * 80)}>
+            {card}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function makeCards(t: SkinTokens, opts?: { check?: boolean }) {
   return function SkinCards(props: SkinSectionProps) {
     const { section } = props;
     const bullets = Array.isArray(section.bullets) ? section.bullets : [];
     const hasImage = !!(section.image && section.image.mode !== "none" && section.image.url);
+    // Une image force la grille simple (variante 0) pour rester lisible en split.
+    const variant = hasImage ? 0 : props.variant ?? 0;
+    const content =
+      bullets.length > 0
+        ? renderCardsVariant(t, opts, section, bullets, variant, hasImage)
+        : null;
     return (
       <SkinSection section={section} style={ctaStyleVars(t)}>
         <Head t={t} section={section} />
-        {withSectionImage(
-          t,
-          section,
-          bullets.length > 0 ? (
-          <div
-            className="t1-grid"
-            data-t1-cols={String(
-              hasImage ? 1 : Math.min(bullets.length >= 4 ? 4 : 3, Math.max(2, bullets.length)),
-            )}
-          >
-            {bullets.map((b, i) => {
-              const split = splitTitleDesc(b);
-              const Icon = getIconByName(
-                (section.bulletIcons?.[i] as string) || section.iconName || "sparkles",
-              );
-              const edge = i % 2 === 0 ? t.accent : t.accent2;
-              const card = (
-                <div
-                  {...(t.cardTilt ? { "data-tilt-inner": "" } : {})}
-                  style={{
-                    height: "100%",
-                    background: t.cardBg,
-                    border: `${t.cardBorderWidth ?? 1}px solid ${t.cardBorder}`,
-                    ...(t.cardEdgeLeft ? { borderLeft: `3px solid ${edge}` } : {}),
-                    borderRadius: t.cardRadius,
-                    padding: 26,
-                    boxShadow: t.cardShadow,
-                    ...(t.cardGlass ? { backdropFilter: "blur(10px)" } : {}),
-                  }}
-                >
-                  {opts?.check ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        display: "flex",
-                        width: 26,
-                        height: 26,
-                        borderRadius: "50%",
-                        background: `color-mix(in srgb, ${t.accent} 16%, transparent)`,
-                        color: t.accent,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 14,
-                        marginBottom: 14,
-                      }}
-                    >
-                      ✓
-                    </span>
-                  ) : (
-                    <Icon aria-hidden style={{ width: 26, height: 26, marginBottom: 14, color: edge }} />
-                  )}
-                  {split ? (
-                    <>
-                      <h3 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: t.ink, fontFamily: t.headFont }}>
-                        <RichText as="span" text={split.title} />
-                      </h3>
-                      <p style={{ fontSize: 14.5, lineHeight: 1.6, color: t.body, margin: 0, textAlign: "justify" }}>
-                        <RichText as="span" text={split.description} />
-                      </p>
-                    </>
-                  ) : (
-                    <p style={{ fontSize: 15, lineHeight: 1.6, color: t.body, margin: 0 }}>
-                      <RichText as="span" text={b} />
-                    </p>
-                  )}
-                </div>
-              );
-              return t.cardTilt ? (
-                <div key={i} data-reveal data-delay={String((i % 4) * 80)} data-tilt style={{ perspective: 900 }}>
-                  {card}
-                </div>
-              ) : (
-                <div key={i} data-reveal data-delay={String((i % 4) * 80)}>
-                  {card}
-                </div>
-              );
-            })}
-          </div>
-          ) : null,
-        )}
+        {withSectionImage(t, section, content)}
         {section.cta?.label && (
           <div style={{ textAlign: "center", marginTop: 40 }}>
             <Cta t={t} props={props} />

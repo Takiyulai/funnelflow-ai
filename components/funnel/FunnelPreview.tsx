@@ -30,6 +30,7 @@ import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider
 import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
 import { getTemplateButtonAnim, getTemplateDefaultIcon } from "@/lib/funnels/templates";
 import { contrastInk } from "@/lib/funnels/color";
+import { assignCardVariants } from "@/lib/funnels/sectionVariants";
 import FunnelFooter from "@/components/funnel/FunnelFooter";
 import FunnelHeader from "@/components/funnel/FunnelHeader";
 import { getIconByName } from "@/components/editor/IconPicker";
@@ -1025,6 +1026,14 @@ function PreviewBody({
   const SkinHero =
     skin && heroSection ? skin.sections[heroSection.type] : undefined;
 
+  // 🆕 Anti-monotonie : variante de disposition par section « cartes », attribuée
+  // de façon déterministe (seedée par le tunnel/page) et ordonnée (jamais deux
+  // sections cartes voisines identiques). Passée aux skins via `variant`.
+  const cardVariants = assignCardVariants(
+    otherSections.map((s) => ({ id: s.id, type: s.type as string })),
+    `${funnel.funnelName ?? "tunnel"}:${activePage?.id ?? "home"}`,
+  );
+
   const body = (
     <div className={embed ? "ff-fill-col" : undefined}>
       {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
@@ -1077,6 +1086,7 @@ function PreviewBody({
               compact={compact}
               pageRole={pageRole}
               isSuccess={isSuccess}
+              variant={cardVariants.get(section.id) ?? 0}
             />
           );
         }

@@ -25,6 +25,12 @@ export type SkinSectionProps = {
   pageRole?: PageRole;
   /** 🆕 true si la page est une page de succès (merci/confirmation/livraison). */
   isSuccess?: boolean;
+  /** 🆕 Variante de disposition (anti-monotonie). Index 0..N-1 attribué de façon
+   *  DÉTERMINISTE et ordonnée par FunnelPreview (seedé par le tunnel, jamais deux
+   *  sections « cartes » voisines identiques). Les composants de skin qui gèrent
+   *  plusieurs dispositions (cartes, process…) l'utilisent ; les autres l'ignorent.
+   *  Absent → variante 0 (rendu historique). */
+  variant?: number;
 };
 
 export type TemplateSkin = {
