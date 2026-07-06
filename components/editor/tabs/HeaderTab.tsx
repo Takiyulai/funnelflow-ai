@@ -117,6 +117,43 @@ export function HeaderTab({ funnel, onChange }: Props) {
             />
           </Section>
 
+          {/* 🆕 Badge événement (date/heure du webinaire, affiché au centre du header) */}
+          <Section title="Badge événement (date/heure)">
+            <Field label="Date & heure de l'événement">
+              <input
+                type="datetime-local"
+                value={isoToLocalInput(header.eventDateTime)}
+                onChange={(e) =>
+                  update({
+                    eventDateTime: e.target.value
+                      ? new Date(e.target.value).toISOString()
+                      : undefined,
+                  })
+                }
+                className="ff-input"
+              />
+            </Field>
+            {header.eventDateTime ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-white/50">
+                  Aperçu : «&nbsp;{previewEventBadge(header.eventDateTime, funnel.language)}&nbsp;»
+                </p>
+                <button
+                  type="button"
+                  onClick={() => update({ eventDateTime: undefined })}
+                  className="shrink-0 text-xs text-rose-300/80 underline hover:text-rose-300"
+                >
+                  Retirer le badge
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-white/40">
+                Vide = aucun badge dans le header. Renseignez une date pour afficher
+                «&nbsp;En direct le… — 21:00&nbsp;».
+              </p>
+            )}
+          </Section>
+
           {/* CTA */}
           <Section title="Bouton CTA (optionnel)">
             <Field label="Texte du bouton">
@@ -207,6 +244,26 @@ export function HeaderTab({ funnel, onChange }: Props) {
       `}</style>
     </div>
   );
+}
+
+// 🆕 ISO (stocké) → valeur d'un <input type="datetime-local"> (heure locale).
+function isoToLocalInput(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// 🆕 Aperçu du badge tel que rendu par FunnelHeader.formatEventBadge().
+function previewEventBadge(iso: string, language?: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "fr-FR";
+  const datePart = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+  const timePart = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const prefix = language === "en" ? "Live on" : language === "es" ? "En vivo el" : "En direct le";
+  return `${prefix} ${datePart} — ${timePart}`;
 }
 
 function Section({

@@ -3495,6 +3495,36 @@
 .t1-cta:hover .sk-cta-arrow,
 .sk-cta:hover .sk-cta-arrow { transform: translateX(4px); }
 
+/* ═══ 🆕 MOBILE — corps de texte justifié (bords taillés) ═══
+   Sur petit écran, les paragraphes/sous-titres passent en justifié pour un
+   rendu propre à bords nets ; les TITRES et eyebrows restent centrés (jamais
+   justifiés). Couvre le rendu standard (.ff-*) ET les classes de skins
+   (.sk-*, .t1-*). Le texte inline-justifié des skins n'est pas affecté. */
+@media (max-width: 640px) {
+  [data-ff-template] .ff-body,
+  [data-ff-template] .ff-subheadline,
+  [data-ff-template] .sk-sub,
+  [data-ff-template] .t1-sub,
+  [data-ff-template] .t1-body,
+  [data-ff-template] .t1-hero-sub,
+  [data-ff-template] .t1-hero-body,
+  [data-ff-template] .t1-card-desc,
+  [data-ff-template] .ff-section p:not(.ff-eyebrow):not(.ff-headline):not(.ff-subheadline):not(.ff-cta-wrap) {
+    text-align: justify;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+  /* Garde-fou : les titres/eyebrows ne sont JAMAIS justifiés. */
+  [data-ff-template] .ff-headline,
+  [data-ff-template] .ff-eyebrow,
+  [data-ff-template] .sk-h1,
+  [data-ff-template] .sk-h2,
+  [data-ff-template] .t1-h1,
+  [data-ff-template] .t1-h2,
+  [data-ff-template] .t1-eyebrow { text-align: center; }
+}
+
 /* ═══ 🆕 POLISH VISUEL — templates restants (non skinnés) ═══
    Boutons en dégradé + ombres colorées + accents raffinés, pour hisser la
    qualité perçue au niveau des 7 templates du zip. Surchargeable par

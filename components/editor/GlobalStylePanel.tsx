@@ -416,6 +416,95 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
           </Field>
         </div>
 
+        {/* 🆕 Pied de page — personnalisable (nom affiché, contact, mentions,
+            variante de mise en page). Rendu par components/funnel/FunnelFooter.tsx. */}
+        <div className="mt-6 grid gap-3">
+          <SectionTitle>Pied de page</SectionTitle>
+          <p className="text-[11px] leading-relaxed text-white/40">
+            Nom de marque, email de contact et mentions affichés en bas de toutes
+            les pages du tunnel. Laissez vide pour utiliser les valeurs par défaut.
+          </p>
+
+          <Field label="Nom affiché (marque)" hint="Par défaut : la marque du tunnel.">
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="Ex : Africa Builderall Academy"
+              value={funnel.meta?.businessName ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    businessName: e.target.value || undefined,
+                  },
+                })
+              }
+            />
+          </Field>
+
+          <Field label="Email de contact" hint="Affiché en lien mailto dans le footer.">
+            <input
+              type="email"
+              className={inputClass}
+              placeholder="contact@exemple.com"
+              value={funnel.meta?.contactEmail ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    contactEmail: e.target.value || undefined,
+                  },
+                })
+              }
+            />
+          </Field>
+
+          <Field
+            label="Mentions légales / disclaimer"
+            hint="Vide = texte légal par défaut (non-affiliation, résultats non garantis…)."
+          >
+            <textarea
+              rows={4}
+              className={`${inputClass} resize-y`}
+              placeholder="Vos mentions légales, conditions, non-affiliation…"
+              value={funnel.meta?.legalNotice ?? ""}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    legalNotice: e.target.value || undefined,
+                  },
+                })
+              }
+            />
+          </Field>
+
+          <Field label="Mise en page du footer">
+            <select
+              className={inputClass}
+              value={funnel.meta?.footerVariant ?? "footer-minimal-centered"}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    footerVariant: e.target.value,
+                  },
+                })
+              }
+            >
+              <option value="footer-minimal-centered" className="bg-zinc-900">
+                Minimal centré
+              </option>
+              <option value="footer-grid-sitemap" className="bg-zinc-900">
+                Grille + plan du site
+              </option>
+              <option value="footer-cta-newsletter" className="bg-zinc-900">
+                Bloc newsletter (capture email)
+              </option>
+            </select>
+          </Field>
+        </div>
+
         <div className="mt-5 flex justify-end">
           <button
             type="button"
