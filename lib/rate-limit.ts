@@ -71,8 +71,16 @@ export function clientIp(req: Request): string {
 
 /** Réponse 429 standard. */
 export function tooManyRequests(retryAfterSec = 60): Response {
+  // 🆕 `reason: "rate-limit"` pour que le client affiche un message explicite
+  // (au lieu de « Code: unknown ») + `retryAfter` pour indiquer le délai.
   return new Response(
-    JSON.stringify({ ok: false, error: "rate_limited", message: "Trop de requêtes. Réessayez dans un instant." }),
+    JSON.stringify({
+      ok: false,
+      error: "rate_limited",
+      reason: "rate-limit",
+      retryAfter: retryAfterSec,
+      message: `Trop de requêtes en peu de temps. Patiente environ ${retryAfterSec} secondes avant de relancer une génération.`,
+    }),
     {
       status: 429,
       headers: { "Content-Type": "application/json", "Retry-After": String(retryAfterSec) },

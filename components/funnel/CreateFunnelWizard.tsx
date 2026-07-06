@@ -1331,6 +1331,9 @@ function GenerationStep({
 
   // ✅ FIX : titre et icône adaptés au type d'erreur
   const isStorageIssue = errorReason === "storage-full" || errorReason === "storage-error";
+  // 🆕 429 anti-burst : titre dédié « Trop de requêtes » (au lieu du générique
+  // « La génération a échoué »).
+  const isRateLimit = errorReason === "rate-limit";
 
   return (
     <div className="grid gap-4">
@@ -1418,7 +1421,7 @@ function GenerationStep({
           <p className={`flex items-start gap-2 text-xs font-bold ${isStorageIssue ? "text-amber-700" : "text-red"}`}>
             {isStorageIssue ? <Database size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
             <span>
-              {isStorageIssue ? "Stockage du navigateur saturé" : "La génération a échoué"}
+              {isStorageIssue ? "Stockage du navigateur saturé" : isRateLimit ? "Trop de requêtes" : "La génération a échoué"}
             </span>
           </p>
           <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue ? "text-amber-800" : "text-red/90"}`}>

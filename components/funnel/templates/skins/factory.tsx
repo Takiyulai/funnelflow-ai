@@ -205,7 +205,11 @@ function makeHero(t: SkinTokens) {
     const imageUrl =
       section.image && section.image.mode !== "none" ? section.image.url : undefined;
     const hasMedia = !!embed?.embedUrl || !!imageUrl || t.heroMedia === "book";
-    const split = t.heroVariant === "split";
+    // 🆕 Une IMAGE réelle uploadée dans le hero force le layout split (texte |
+    // image côte à côte), même sur un template « centered » — comportement
+    // attendu (comme la section about). Les médias « book »/vidéo gardent le
+    // layout par défaut du template (mieux centrés).
+    const split = t.heroVariant === "split" || !!imageUrl;
     // 🆕 Le layout "split" (texte | média côte à côte) ne s'applique
     // réellement que si un média est affiché. Sans média (ou sur les pages
     // de succès), on retombe sur une colonne unique → le CTA doit alors être
@@ -1218,7 +1222,29 @@ function makeUrgency(t: SkinTokens) {
 
 /* ─── Assemblage ───────────────────────────────────────────────────────── */
 
-export function makeSkin(t: SkinTokens): TemplateSkin {
+// 🆕 Rend les tokens « conscients de la marque » : le texte (ink/body/muted) et
+// les surfaces de cartes (cardBg/cardBorder/faqBg/faqBorder) consomment des
+// variables `--ff-brand-*` posées UNIQUEMENT quand une couleur de marque est
+// active (TemplateThemeProvider), avec le défaut du template en repli. Sans
+// marque → valeurs identiques à l'origine (aucune régression) ; avec marque →
+// contraste correct (plus de texte foncé illisible sur fond de marque sombre).
+function brandAware(t: SkinTokens): SkinTokens {
+  const isHex = (v: string) => /^#([0-9a-f]{3,8})$/i.test(v.trim());
+  const wrap = (v: string, name: string) => (isHex(v) ? `var(${name}, ${v})` : v);
+  return {
+    ...t,
+    ink: `var(--ff-brand-ink, ${t.ink})`,
+    body: `var(--ff-brand-body, ${t.body})`,
+    muted: `var(--ff-brand-muted, ${t.muted})`,
+    cardBg: wrap(t.cardBg, "--ff-brand-card-bg"),
+    cardBorder: wrap(t.cardBorder, "--ff-brand-card-border"),
+    faqBg: wrap(t.faqBg, "--ff-brand-card-bg"),
+    faqBorder: wrap(t.faqBorder, "--ff-brand-card-border"),
+  };
+}
+
+export function makeSkin(rawTokens: SkinTokens): TemplateSkin {
+  const t = brandAware(rawTokens);
   const Hero = makeHero(t);
   const Cards = makeCards(t);
   const Checks = makeCards(t, { check: true });

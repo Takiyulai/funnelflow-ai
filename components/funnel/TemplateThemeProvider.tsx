@@ -221,6 +221,20 @@ export function TemplateThemeProvider({
     inlineVars["--ff-footer-bg"] = "color-mix(in srgb, var(--ff-ink) 8%, var(--ff-bg))";
     inlineVars["--ff-footer-ink"] = "color-mix(in srgb, var(--ff-ink) 65%, transparent)";
     inlineVars["--ff-footer-business-ink"] = "var(--ff-ink)";
+
+    // 🆕 SKINS (bold-energy, clean-light, premium-minimal, trust-pro, lead-snap,
+    // story-sell…) : leurs tokens figent le texte/les cartes EN DUR (ink #000,
+    // body #4B4B4B, cardBg #fff…) et ignoraient donc les couleurs de marque →
+    // texte foncé illisible sur un fond de marque sombre. Ces variables
+    // `--ff-brand-*` ne sont posées QUE lorsqu'une vraie couleur de marque est
+    // active ; les tokens des skins les consomment avec le défaut du template en
+    // repli (`var(--ff-brand-ink, #000)`), donc les tunnels SANS marque restent
+    // strictement identiques, et ceux AVEC marque héritent du contraste correct.
+    inlineVars["--ff-brand-ink"] = "var(--ff-ink)";
+    inlineVars["--ff-brand-body"] = "color-mix(in srgb, var(--ff-ink) 72%, transparent)";
+    inlineVars["--ff-brand-muted"] = "color-mix(in srgb, var(--ff-ink) 50%, transparent)";
+    inlineVars["--ff-brand-card-bg"] = "var(--ff-card-bg)";
+    inlineVars["--ff-brand-card-border"] = "var(--ff-card-border)";
   }
 
   const customBgActive = Boolean(overrides?.customBgEnabled && overrides.customBg);

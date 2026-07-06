@@ -194,6 +194,44 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+// \ud83c\udd95 Mots vides (FR/EN/ES) + jargon de tunnel \u00e0 EXCLURE du slug public : le
+// slug appara\u00eet dans l'URL vue par le prospect (autofunnel.app/tunnel/<slug>),
+// il doit \u00eatre court et orient\u00e9 b\u00e9n\u00e9fice, jamais donner l'impression d'une
+// \u00ab page de capture / de vente \u00bb.
+const SLUG_STOPWORDS = new Set([
+  // articles / pr\u00e9positions / liaisons FR
+  "le","la","les","un","une","des","du","de","d","l","et","ou","a","au","aux","en","dans","pour","par","sur","avec","sans","vos","votre","ton","ta","tes","mon","ma","mes","ce","cette","ces",
+  // EN
+  "the","a","an","of","for","to","in","on","with","your","my","and","or",
+  // ES
+  "el","los","las","una","unos","unas","y","o","para","por","con","tu","tus","su","sus",
+  // jargon tunnel \u00e0 \u00e9viter dans l'URL publique
+  "tunnel","funnel","webinaire","webinar","page","landing","capture","optin","opt","inscription","vente","sales","offre","offer","checkout","commande","paiement","gratuit","free",
+]);
+
+/**
+ * \ud83c\udd95 Slug public CONCIS et orient\u00e9 b\u00e9n\u00e9fice (1 \u00e0 3 mots). On part de la promesse
+ * / du nom d'offre plut\u00f4t que du nom complet du tunnel (souvent \u00ab Marque \u2014 Offre
+ * \u2026 \u00bb), on retire les mots vides et le jargon de tunnel, et on garde au plus
+ * 3 mots signifiants. Ex : \u00ab Webinaire : g\u00e9n\u00e9rer des revenus en ligne \u00bb \u2192
+ * \u00ab generer-revenus-ligne \u00bb.
+ */
+function conciseSlug(...candidates: (string | undefined)[]): string {
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const words = raw
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s-]+/g, " ")
+      .split(/[\s-]+/)
+      .filter((w) => w.length > 1 && !SLUG_STOPWORDS.has(w));
+    const picked = words.slice(0, 3).join("-").slice(0, 32).replace(/-+$/g, "");
+    if (picked.length >= 3) return picked;
+  }
+  return "";
+}
+
 function uniqueSlug(base: string, existingSlugs: Set<string>): string {
   if (!existingSlugs.has(base)) return base;
   let i = 2;
@@ -721,9 +759,11 @@ export function createFunnelFromAi(
       ? crypto.randomUUID()
       : `ff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const baseSlug = slugify(
-    funnel.funnelName || `${brief.brandName}-${brief.offerName}`,
-  );
+  // 🆕 Slug public court + orienté bénéfice (1-3 mots) dérivé de la promesse /
+  // de l'offre. Repli sur l'ancien slugify (nom du tunnel) si rien d'exploitable.
+  const baseSlug =
+    conciseSlug(brief.promise, brief.offerName, brief.brandName) ||
+    slugify(funnel.funnelName || `${brief.brandName}-${brief.offerName}`).slice(0, 32);
   const existingSlugs = new Set(listFunnels().map((f) => f.slug));
   const slug = uniqueSlug(baseSlug || "tunnel", existingSlugs);
 
@@ -861,7 +901,24 @@ export async function publishFunnel(id: string): Promise<PublishResult> {
       reconcileLocalSlug(id, saved.slug);
     }
     const published = await publishRemote(id);
-    const publishedSlug = published?.publishedSlug;
+
+    // 🆕 FIX 404 « faux publié » : publishRemote renvoie NULL quand l'UPDATE
+    // Supabase n'a touché aucune ligne (session expirée, RLS, id absent). On
+    // remontait quand même remoteOk:true → l'utilisateur voyait « Publié ✓ »
+    // alors que status restait 'draft' et published_content NULL → la page
+    // /tunnel/<slug> renvoyait 404. On traite désormais ce cas comme un ÉCHEC
+    // explicite pour ne plus jamais mentir sur l'état de publication.
+    if (!published) {
+      return {
+        stored: updated,
+        remoteOk: false,
+        error:
+          "Le serveur n'a pas confirmé la publication (aucune ligne mise à jour). " +
+          "Ta session a peut-être expiré : recharge la page, reconnecte-toi si besoin, puis réessaie.",
+      };
+    }
+
+    const publishedSlug = published.publishedSlug;
 
     // On persiste le slug public RÉEL pour que le lien Aperçu pointe juste.
     if (publishedSlug) {
