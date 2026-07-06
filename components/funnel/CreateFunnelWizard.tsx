@@ -265,13 +265,17 @@ export function CreateFunnelWizard() {
             : apiErr.error === "funnel_quota_reached" ||
                 apiErr.error === "quota_exceeded"
               ? "plan-limit"
-              : undefined;
+              : response.status === 401 || apiErr.error === "unauthorized"
+                ? "session-expired"
+                : undefined;
         setErrorReason(gate ?? apiErr.reason ?? "unknown");
         setErrorMessage(
           apiErr.message ??
             (gate === "subscription-required"
               ? "Aucun forfait actif. Choisis un forfait pour générer ton tunnel."
-              : "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI")
+              : gate === "session-expired"
+                ? "Ta session a expiré ou tu n'es pas connecté (refresh token invalide). Reconnecte-toi, puis réessaie."
+                : "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI")
         );
         setFunnel(null);
         return;
@@ -1350,6 +1354,9 @@ function GenerationStep({
   const isRateLimit = errorReason === "rate-limit";
   // 🆕 Gating abonnement : bloc dédié « Aucun forfait actif » + invite à s'abonner.
   const isPaywall = errorReason === "subscription-required" || errorReason === "plan-limit";
+  // 🆕 Session Supabase expirée / refresh token invalide → 401 : proposer de se
+  // reconnecter (au lieu du message trompeur « vérifiez votre clé OpenAI »).
+  const isSessionExpired = errorReason === "session-expired";
 
   return (
     <div className="grid gap-4">
@@ -1443,9 +1450,11 @@ function GenerationStep({
                   ? errorReason === "plan-limit"
                     ? "Limite de ton forfait atteinte"
                     : "Aucun forfait actif"
-                  : isRateLimit
-                    ? "Trop de requêtes"
-                    : "La génération a échoué"}
+                  : isSessionExpired
+                    ? "Session expirée"
+                    : isRateLimit
+                      ? "Trop de requêtes"
+                      : "La génération a échoué"}
             </span>
           </p>
           <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue || isPaywall ? "text-amber-800" : "text-red/90"}`}>
@@ -1464,7 +1473,15 @@ function GenerationStep({
               <Sparkles size={13} /> Voir les forfaits
             </a>
           )}
-          {errorReason && !isPaywall && (
+          {isSessionExpired && (
+            <a
+              href="/login"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-[#080E1A] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-black"
+            >
+              Se reconnecter
+            </a>
+          )}
+          {errorReason && !isPaywall && !isSessionExpired && (
             <p className={`mt-2 text-[10px] uppercase tracking-wider font-bold ${isStorageIssue ? "text-amber-700/80" : "text-red/70"}`}>
               Code: {errorReason}
             </p>

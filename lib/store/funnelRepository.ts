@@ -411,6 +411,19 @@ export async function publishRemote(id: string): Promise<StoredFunnel | null> {
     );
   }
 
+  // 🆕 GARANTIE MÉDIAS : on ré-externalise TOUT média encore en `idb-media://` /
+  // `data:` vers Supabase Storage AVANT de figer le snapshot publié. Sans ça, un
+  // média ajouté juste avant la publication (ou dont le saveRemote « best-effort »
+  // n'a pas abouti) restait une référence `idb-media://` irrésolvable sur le slug
+  // public — typiquement l'IMAGE DE FOND du hero, visible en aperçu (IndexedDB du
+  // créateur) mais invisible pour les visiteurs. publishRemote tourne côté
+  // navigateur du créateur → getMedia (IndexedDB) résout bien les refs ici.
+  const publishedFunnel = await externalizeMediaToSupabase(
+    current.funnel,
+    userId,
+    id,
+  );
+
   // published_slug global : on tente le slug draft, sinon suffixe court
   const publishedSlug = await resolvePublishedSlug(current.slug, id);
 
@@ -418,7 +431,7 @@ export async function publishRemote(id: string): Promise<StoredFunnel | null> {
     .from("funnels")
     .update({
       status: "published",
-      published_content: current.funnel,
+      published_content: publishedFunnel,
       published_slug: publishedSlug,
       published_at: new Date().toISOString(),
     })

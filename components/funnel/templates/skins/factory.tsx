@@ -194,6 +194,33 @@ function Cta({
   );
 }
 
+// 🆕 Liens/CTA supplémentaires (section.ctas) — rangée de boutons secondaires
+// (ex : « Rejoindre le groupe WhatsApp »). Les skins les IGNORAIENT (le rendu
+// standard les affichait, pas les composants de skin) → ils n'apparaissaient pas
+// sur les templates skinnés.
+function ExtraCtas({ props }: { props: SkinSectionProps }) {
+  const ctas = props.section.ctas;
+  if (!Array.isArray(ctas) || ctas.length === 0) return null;
+  return (
+    <div className="ff-extra-ctas">
+      {ctas.map((extra, i) =>
+        extra?.label ? (
+          <CtaLink
+            key={`${props.section.id}-extra-${i}`}
+            cta={extra}
+            funnel={props.funnel}
+            page={props.page}
+            section={props.section}
+            pageLinks={props.pageLinks}
+            slugLinks={props.slugLinks}
+            baseClassName="ff-btn-extra"
+          />
+        ) : null,
+      )}
+    </div>
+  );
+}
+
 /* ─── HERO ─────────────────────────────────────────────────────────────── */
 
 function makeHero(t: SkinTokens) {
@@ -461,6 +488,7 @@ function makeHero(t: SkinTokens) {
           }}
         >
           <Cta t={t} props={props} pulse />
+          <ExtraCtas props={props} />
           {section.reassurance && (
             <div style={{ fontSize: 14, color: t.muted }}>
               <RichText as="span" text={section.reassurance} />
@@ -1231,6 +1259,7 @@ function makeFinalCta(t: SkinTokens) {
               </p>
             )}
             <Cta t={t} props={props} pulse />
+            <ExtraCtas props={props} />
             {section.reassurance && (
               <p style={{ margin: "16px 0 0", fontSize: 13.5, color: t.ctaPanelSub }}>
                 <RichText as="span" text={section.reassurance} />

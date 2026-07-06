@@ -188,6 +188,41 @@ export default function PublicFunnelRuntime() {
     }
     checkoutTriggers.forEach((b) => b.addEventListener("click", onCheckout));
 
+    // ─── FAQ accordéon AutoFunnel (data-acc-toggle) ────────────────────────
+    // 🆕 Le rendu React (skins + standard) pose data-acc-toggle / -panel / -chev
+    // mais AUCUN <script> ne s'exécute sur la page publique. Le runtime éditeur
+    // (useFunnelAnimations) câble ces clics, mais il est ABSENT sur /tunnel/[slug]
+    // → la FAQ ne s'ouvrait pas du tout sur le slug publié. On la câble ici, avec
+    // un garde anti-double-câblage (un clic = une ouverture/fermeture).
+    const accCleanups: Array<() => void> = [];
+    Array.from(document.querySelectorAll<HTMLElement>("[data-faq-item]")).forEach(
+      (item) => {
+        if (item.dataset.accWired === "1") return;
+        const t = item.querySelector<HTMLElement>("[data-acc-toggle]");
+        const pnl = item.querySelector<HTMLElement>("[data-acc-panel]");
+        const c = item.querySelector<HTMLElement>("[data-acc-chev]");
+        if (!t || !pnl) return;
+        item.dataset.accWired = "1";
+        const onToggle = () => {
+          const open = item.getAttribute("data-open") === "1";
+          if (open) {
+            pnl.style.maxHeight = "0px";
+            item.setAttribute("data-open", "0");
+            if (c) c.style.transform = "rotate(0deg)";
+          } else {
+            pnl.style.maxHeight = pnl.scrollHeight + "px";
+            item.setAttribute("data-open", "1");
+            if (c) c.style.transform = "rotate(180deg)";
+          }
+        };
+        t.addEventListener("click", onToggle);
+        accCleanups.push(() => {
+          t.removeEventListener("click", onToggle);
+          delete item.dataset.accWired;
+        });
+      },
+    );
+
     // ─── FAQ accordéon générique (tunnels clonés) ──────────────────────────
     // Le markup cloné (systeme.io…) n'a pas de data-attr AutoFunnel. On détecte
     // les questions (texte court terminé par « ? ») et on replie la réponse
@@ -209,6 +244,8 @@ export default function PublicFunnelRuntime() {
     );
     faqCandidates.forEach((q) => {
       if (q.getAttribute("data-ff-faq-bound") === "1") return;
+      // 🆕 Ne pas re-câbler les FAQ AutoFunnel (déjà gérées par data-acc-toggle).
+      if (q.closest("[data-faq-item]")) return;
       if (q.children.length > 3) return;
       const qt = (q.textContent || "").trim();
       if (!(qt.length > 4 && qt.length < 200 && /\?\s*$/.test(qt))) return;
@@ -235,6 +272,7 @@ export default function PublicFunnelRuntime() {
         overlay.removeEventListener("click", onOverlayClick);
       }
       checkoutTriggers.forEach((b) => b.removeEventListener("click", onCheckout));
+      accCleanups.forEach((fn) => fn());
       faqCleanups.forEach((fn) => fn());
     };
   }, []);
