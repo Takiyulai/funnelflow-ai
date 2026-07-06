@@ -3489,6 +3489,14 @@
   margin-left: auto;
   margin-right: auto;
 }
+/* 🆕 Hero SPLIT (image présente) : le titre s'aligne à GAUCHE, comme l'eyebrow,
+   le sous-titre et le CTA (au lieu du centrage forcé ci-dessus). */
+.sk-hero--split .sk-h1,
+.sk-hero--split .sk-h2 {
+  text-align: left !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* ═══ 🆕 Footer collé en bas (fin de l'espace vide sous le footer) ═══
    Chaîne flex de la page publiée : shell 100vh → FunnelPreview → .ff-page →

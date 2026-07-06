@@ -216,6 +216,17 @@ function makeHero(t: SkinTokens) {
     // centré (et non hérité du style "split" en row/flex-start).
     const isSplitLayout = split && hasMedia && !props.isSuccess;
 
+    // 🆕 Ombrage de l'image piloté par l'onglet Style (section.style.shadow) :
+    // si défini, l'image du hero suit CE réglage (via data-ff-shadow + la couleur
+    // --ff-shadow-color, stylés dans funnel-theme.css) au lieu de l'ombre figée
+    // du token — comportement du rendu standard, régressé sur les skins.
+    const shadowCfg = (section.style as { shadow?: { size?: string; color?: string } } | undefined)?.shadow;
+    const shadowSize = shadowCfg?.size && shadowCfg.size !== "none" ? shadowCfg.size : undefined;
+    const shadowColor = shadowCfg?.color ?? "#000000";
+    const mediaShadowStyle: React.CSSProperties = shadowSize
+      ? ({ ["--ff-shadow-color" as string]: shadowColor } as React.CSSProperties)
+      : { boxShadow: t.cardShadow ?? "0 30px 70px rgba(0,0,0,.18)" };
+
     const media = hasMedia ? (
       <div
         data-reveal
@@ -225,6 +236,7 @@ function makeHero(t: SkinTokens) {
       >
         <div
           {...(t.cardTilt ? { "data-tilt-inner": "" } : {})}
+          data-ff-shadow={shadowSize}
           style={
             t.heroMedia === "book" && !embed?.embedUrl && !imageUrl
               ? {
@@ -241,7 +253,7 @@ function makeHero(t: SkinTokens) {
               : {
                   borderRadius: 14,
                   border: `${t.cardBorderWidth ?? 1}px solid ${t.cardBorder}`,
-                  boxShadow: t.cardShadow ?? "0 30px 70px rgba(0,0,0,.18)",
+                  ...mediaShadowStyle,
                   overflow: "hidden",
                   background: t.dark ? "rgba(255,255,255,.04)" : "#fff",
                   width: split ? "100%" : "min(760px,100%)",
@@ -458,7 +470,11 @@ function makeHero(t: SkinTokens) {
       ) : null;
 
     return (
-      <SkinSection section={section} className="sk-hero" style={ctaStyleVars(t)}>
+      <SkinSection
+        section={section}
+        className={isSplitLayout ? "sk-hero sk-hero--split" : "sk-hero"}
+        style={ctaStyleVars(t)}
+      >
         {isSplitLayout ? (
           <div className="sk-split">
             <div>
