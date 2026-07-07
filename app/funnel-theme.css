@@ -3538,7 +3538,7 @@
 }
 
 /* 🆕 Hero split — RÈGLES MOBILE (container empilé < 880px) :
-   titre + eyebrow CENTRÉS, paragraphes JUSTIFIÉS, CTA centré sous l'image.
+   titre + eyebrow CENTRÉS, paragraphes JUSTIFIÉS, CTA du hero MASQUÉ.
    Placé APRÈS la règle « left » ci-dessus pour gagner la cascade sur mobile. */
 @container (max-width: 880px) {
   /* Le titre repasse au centre (l'eyebrow suit via le centrage du conteneur). */
@@ -3557,12 +3557,8 @@
     margin-left: auto !important;
     margin-right: auto !important;
   }
-  /* Le CTA (désormais après l'image) se centre. */
-  .sk-hero-split__cta > div {
-    justify-content: center !important;
-    flex-direction: column;
-    align-items: center;
-  }
+  /* 🆕 Le CTA du hero est MASQUÉ sur mobile (demande utilisateur). */
+  .sk-hero-split__cta { display: none !important; }
 }
 
 /* ═══ 🆕 Footer collé en bas (fin de l'espace vide sous le footer) ═══
@@ -3831,4 +3827,25 @@
 [data-ff-template] .ff-bonus-card .ff-body,
 [data-ff-template] .ff-testimonial-card .ff-body {
   text-align: center !important;
+}
+
+/* ═══ 🆕 Section « À PROPOS » : contenu long-forme JUSTIFIÉ sur mobile ═══
+   Le texte du about est un .ff-subheadline (bio longue) → centré par la règle
+   mobile générale des sous-titres. Ici on le justifie (bords taillés) sur
+   mobile, comme le corps de texte. Spécificité renforcée ([data-ff-section=
+   "about"]) → l'emporte sur le centrage mobile même à !important égal.
+   Couvre le vrai mobile ET le cadre d'aperçu mobile de l'éditeur. */
+@media (max-width: 767px) {
+  [data-ff-template] .ff-section[data-ff-section="about"] .ff-subheadline,
+  [data-ff-template] .ff-section[data-ff-section="about"] .ff-body {
+    text-align: justify !important;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+}
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-section="about"] .ff-subheadline,
+[data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-section="about"] .ff-body {
+  text-align: justify !important;
+  text-justify: inter-word;
 }

@@ -344,11 +344,11 @@ function makeHero(t: SkinTokens) {
     ) : null;
 
     const textBlock = (
-      // 🆕 Règle typographique : en SPLIT (image présente) le contenu s'aligne
-      // à GAUCHE (titre, eyebrow, sous-titre) — le corps reste justifié via son
-      // style inline, et le CTA est déjà en flex-start. Sans image (hero
-      // centré), tout reste centré.
-      <div style={{ textAlign: isSplitLayout ? "left" : "center" }}>
+      // 🆕 En SPLIT : on NE force PAS l'alignement en inline (sinon il bat le CSS
+      // et l'eyebrow reste à gauche sur mobile). Desktop = gauche (défaut hérité
+      // de .sk-hero-split__text), mobile = centré via la container query.
+      // Sans image (hero centré) : tout reste centré en inline.
+      <div style={isSplitLayout ? undefined : { textAlign: "center" }}>
         {/* 🆕 Badge ✓ des pages de succès (merci/confirmation/livraison) */}
         {props.isSuccess && (
           <div data-reveal style={{ marginBottom: 18 }}>
