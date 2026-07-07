@@ -2,6 +2,7 @@
 
 import type { Funnel, FunnelHeader, CtaConfig } from "@/lib/funnels/types";
 import { LogoUploader } from "@/components/editor/ui/LogoUploader";
+import { formatEventBadge } from "@/lib/funnels/eventDate";
 
 type Props = {
   funnel: Funnel;
@@ -125,9 +126,9 @@ export function HeaderTab({ funnel, onChange }: Props) {
                 value={isoToLocalInput(header.eventDateTime)}
                 onChange={(e) =>
                   update({
-                    eventDateTime: e.target.value
-                      ? new Date(e.target.value).toISOString()
-                      : undefined,
+                    // 🆕 On stocke la valeur wall-clock BRUTE ("YYYY-MM-DDTHH:mm")
+                    // sans conversion UTC — l'heure saisie reste fidèle partout.
+                    eventDateTime: e.target.value || undefined,
                   })
                 }
                 className="ff-input"
@@ -246,24 +247,23 @@ export function HeaderTab({ funnel, onChange }: Props) {
   );
 }
 
-// 🆕 ISO (stocké) → valeur d'un <input type="datetime-local"> (heure locale).
+// 🆕 Valeur stockée (wall-clock naïf "YYYY-MM-DDTHH:mm", ou ancien ISO) →
+// valeur d'un <input type="datetime-local">. Pour une valeur naïve on renvoie
+// les 16 premiers caractères tels quels (aucune conversion de fuseau) ; pour un
+// ancien ISO avec fuseau on retombe sur les getters locaux.
 function isoToLocalInput(iso?: string): string {
   if (!iso) return "";
+  const naive = iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  if (naive) return naive[1];
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// 🆕 Aperçu du badge tel que rendu par FunnelHeader.formatEventBadge().
+// 🆕 Aperçu du badge — délégué au helper STABLE partagé avec FunnelHeader.
 function previewEventBadge(iso: string, language?: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "fr-FR";
-  const datePart = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
-  const timePart = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-  const prefix = language === "en" ? "Live on" : language === "es" ? "En vivo el" : "En direct le";
-  return `${prefix} ${datePart} — ${timePart}`;
+  return formatEventBadge(iso, language) ?? "";
 }
 
 function Section({

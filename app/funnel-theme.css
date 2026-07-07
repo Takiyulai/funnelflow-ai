@@ -1188,7 +1188,11 @@
   .ff-header-event { font-size: 0.75rem; padding: 0.35rem 0.7rem; }
   /* Header SANS badge : autoriser le retour à la ligne du CTA si la marque est longue. */
   .ff-brand-bar-inner { flex-wrap: wrap; row-gap: 0.4rem; }
+  /* 🆕 CTA du HEADER masqué sur mobile (demande utilisateur). */
+  .ff-brand-bar .ff-brand-bar-cta { display: none !important; }
 }
+/* 🆕 Idem dans le cadre d'aperçu mobile de l'éditeur. */
+[data-ff-mobile-frame] .ff-brand-bar .ff-brand-bar-cta { display: none !important; }
 
 @media (max-width: 480px) {
   .ff-brand-bar .ff-brand-bar-cta { padding: 0.4rem 0.75rem; font-size: 0.75rem; }
@@ -3557,8 +3561,12 @@
     margin-left: auto !important;
     margin-right: auto !important;
   }
-  /* 🆕 Le CTA du hero est MASQUÉ sur mobile (demande utilisateur). */
-  .sk-hero-split__cta { display: none !important; }
+  /* Le CTA du hero (désormais APRÈS l'image) se centre sur mobile. */
+  .sk-hero-split__cta > div {
+    justify-content: center !important;
+    flex-direction: column;
+    align-items: center;
+  }
 }
 
 /* ═══ 🆕 Footer collé en bas (fin de l'espace vide sous le footer) ═══

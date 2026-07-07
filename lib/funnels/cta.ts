@@ -61,3 +61,37 @@ export function ctaRel(cta?: CtaConfig | null): string | undefined {
 export function ctaIsExternal(cta?: CtaConfig | null): boolean {
   return Boolean(cta?.mode === "redirect" && cta?.url && isSafeUrl(cta.url));
 }
+
+// 🆕 Action CTA COMMUNE : si l'utilisateur a activé « une seule action pour tous
+// les boutons » (funnel.meta.applyDefaultCtaToAll + funnel.defaultCta), on
+// remplace l'ACTION d'un CTA (mode + destination popup/ancre/redirection) par
+// celle par défaut, TOUT EN conservant son libellé/icône/espacement propres.
+// N'affecte que les CTA principaux : les boutons secondaires (canaux WhatsApp,
+// etc.) gardent leur action. Retourne le CTA inchangé si la fonction est
+// désactivée ou si aucune action par défaut n'est définie.
+export function resolveCtaWithGlobal(
+  cta: CtaConfig,
+  globalCta?: CtaConfig | null,
+  enabled?: boolean,
+): CtaConfig {
+  if (!enabled || !globalCta || !globalCta.mode) return cta;
+  return {
+    ...cta,
+    mode: globalCta.mode,
+    url: globalCta.url,
+    target: globalCta.target,
+    anchorId: globalCta.anchorId,
+    pageId: globalCta.pageId,
+    popupId: globalCta.popupId,
+    popupProvider: globalCta.popupProvider,
+    systemePopupId: globalCta.systemePopupId,
+    popupTitle: globalCta.popupTitle,
+    popupBody: globalCta.popupBody,
+    popupReassurance: globalCta.popupReassurance,
+    popupFields: globalCta.popupFields,
+    popupEmbedHtml: globalCta.popupEmbedHtml,
+    captureTags: globalCta.captureTags,
+    chariow: globalCta.chariow,
+    // label / icon / spacing : on GARDE ceux du CTA d'origine.
+  };
+}

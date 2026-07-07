@@ -2,6 +2,7 @@
 
 import type { Funnel } from "@/lib/funnels/types";
 import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
+import { formatEventBadge } from "@/lib/funnels/eventDate";
 import { ExternalLink } from "lucide-react";
 
 type Props = {
@@ -79,21 +80,8 @@ export default function FunnelHeader({ funnel, logoSrc }: Props) {
   );
 }
 
-/** Formate la date/heure du webinaire pour le badge du header (ex :
- *  "En direct le jeudi 9 juillet — 21:00"). Retourne null si absente/invalide. */
-function formatEventBadge(iso: string | undefined, language?: string): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-
-  const locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "fr-FR";
-  const datePart = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
-  const timePart = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-  const prefix =
-    language === "en" ? "Live on" : language === "es" ? "En vivo el" : "En direct le";
-
-  return `${prefix} ${datePart} — ${timePart}`;
-}
+// 🆕 Le formatage du badge est délégué au helper STABLE (fuseau-indépendant)
+// lib/funnels/eventDate.ts — voir l'import en tête de fichier.
 
 function extractBrandName(fullName: string): string {
   if (!fullName) return "";

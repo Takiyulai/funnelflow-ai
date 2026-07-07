@@ -23,6 +23,12 @@ import type {
 import { makeAnchorCta, makeRedirectCta, normalizeIconName, makePageId } from "@/lib/funnels/types";
 import { buildWebinarIcsDataUri } from "@/lib/funnels/ics";
 import {
+  toWallClockString,
+  wallClockToUtcDate,
+  utcDateToWallClock,
+  formatEventLong,
+} from "@/lib/funnels/eventDate";
+import {
   completeFunnelPrompt,
   mainPagePrompt,
   secondaryPagesPrompt,
@@ -4172,8 +4178,13 @@ if (shouldInjectPricing) {
  */
 function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
   if (!brief.webinarDate) return;
-  const targetDate = new Date(brief.webinarDate);
-  if (Number.isNaN(targetDate.getTime())) return;
+  // 🆕 On raisonne en WALL-CLOCK naïf (l'heure saisie, sans fuseau) pour que
+  // l'affichage soit fidèle et IDENTIQUE côté serveur et client. `targetDate`
+  // (Date construite en UTC littéral) ne sert qu'aux calculs (expiration, ICS).
+  const wc = toWallClockString(brief.webinarDate);
+  if (!wc) return;
+  const targetDate = wallClockToUtcDate(wc);
+  if (!targetDate || Number.isNaN(targetDate.getTime())) return;
 
   const lang = brief.language ?? "fr";
   const labels = {
@@ -4187,15 +4198,8 @@ function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
   // n'est qu'une INSTRUCTION IA, pas garantie). Le label du timer — posé ici,
   // 100% déterministe, jamais réécrit par l'IA — inclut désormais la date
   // formatée : elle s'affiche donc TOUJOURS, quoi qu'écrive le copy autour.
-  const locale = lang === "en" ? "en-US" : lang === "es" ? "es-ES" : "fr-FR";
-  const formattedDate = targetDate.toLocaleString(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // 🆕 Formatage STABLE (fuseau-indépendant) via le helper partagé.
+  const formattedDate = formatEventLong(wc, lang) ?? "";
   const dateLabels = {
     fr: `Le webinaire commence le ${formattedDate} — dans`,
     en: `The webinar starts on ${formattedDate} — in`,
@@ -4205,7 +4209,7 @@ function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
   const timer: TimerItem = {
     id: `timer_webinar_${Date.now().toString(36)}`,
     mode: "countdown-date",
-    targetDate: targetDate.toISOString(),
+    targetDate: wc,
     label: dateLabels[lang] ?? dateLabels.fr ?? labels.fr,
     style: "cards",
     size: "lg",
@@ -4280,7 +4284,7 @@ function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
   // rebours, animée pour attirer l'œil.
   funnel.header = {
     ...funnel.header,
-    eventDateTime: targetDate.toISOString(),
+    eventDateTime: wc,
   };
 
   // 🆕 LOT 4 — Salle d'attente/live : même countdown + CTA vers le lien
@@ -4319,6 +4323,7 @@ function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
   if (replayPage) {
     const hours = Math.max(1, Math.min(720, Number(brief.replayExpiryHours) || 72));
     const expiryDate = new Date(targetDate.getTime() + hours * 60 * 60 * 1000);
+    const expiryWc = utcDateToWallClock(expiryDate);
     const expiryLabels = {
       fr: "Le replay expire dans",
       en: "The replay expires in",
@@ -4332,7 +4337,7 @@ function applyWebinarSchedule(funnel: Funnel, brief: FunnelBrief): void {
     const expiryTimer: TimerItem = {
       id: `timer_replay_expiry_${Date.now().toString(36)}`,
       mode: "countdown-date",
-      targetDate: expiryDate.toISOString(),
+      targetDate: expiryWc,
       label: expiryLabels[lang] ?? expiryLabels.fr,
       expiredMessage: expiredMessages[lang] ?? expiredMessages.fr,
       style: "cards",

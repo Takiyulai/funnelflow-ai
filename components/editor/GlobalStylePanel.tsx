@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { Funnel, FunnelIntegrations } from "@/lib/funnels/types";
+import type { Funnel, FunnelIntegrations, CtaConfig } from "@/lib/funnels/types";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
 
 type Props = {
@@ -328,6 +328,86 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
               }
             />
           </Field>
+        </div>
+
+        {/* 🆕 Action commune des CTA — définir une seule fois pour toute la page */}
+        <div className="mt-6 grid gap-3">
+          <SectionTitle>Action commune des boutons</SectionTitle>
+          <p className="text-[11px] leading-relaxed text-white/40">
+            Activez pour appliquer LA MÊME action à tous les boutons principaux de
+            la page (hero, urgence, CTA final, offre…). Plus besoin de la régler
+            bouton par bouton — le libellé de chaque bouton reste le sien. Les
+            boutons secondaires (canaux WhatsApp/Telegram) ne sont pas affectés.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-white/80">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={funnel.meta?.applyDefaultCtaToAll === true}
+              onChange={(e) => {
+                const on = e.target.checked;
+                onChange({
+                  meta: { ...(funnel.meta ?? {}), applyDefaultCtaToAll: on },
+                  ...(on && !funnel.defaultCta
+                    ? {
+                        defaultCta: {
+                          mode: "popup",
+                          popupProvider: "internal",
+                          label: "S'inscrire",
+                        } as CtaConfig,
+                      }
+                    : {}),
+                });
+              }}
+            />
+            Utiliser une seule action pour tous les boutons
+          </label>
+
+          {funnel.meta?.applyDefaultCtaToAll === true && (
+            <>
+              <Field label="Action appliquée">
+                <select
+                  className={inputClass}
+                  value={funnel.defaultCta?.mode ?? "popup"}
+                  onChange={(e) => {
+                    const mode = e.target.value as CtaConfig["mode"];
+                    const prev: CtaConfig =
+                      funnel.defaultCta ?? { label: "S'inscrire", mode: "popup" };
+                    const next: CtaConfig =
+                      mode === "popup"
+                        ? { ...prev, mode, popupProvider: "internal" }
+                        : mode === "anchor"
+                          ? { ...prev, mode, anchorId: prev.anchorId || "lead-form" }
+                          : { ...prev, mode };
+                    onChange({ defaultCta: next });
+                  }}
+                >
+                  <option value="popup">Popup interne (formulaire AutoFunnel)</option>
+                  <option value="anchor">Aller au formulaire de la page</option>
+                  <option value="redirect">Lien de redirection (URL)</option>
+                </select>
+              </Field>
+              {funnel.defaultCta?.mode === "redirect" && (
+                <Field label="URL de redirection">
+                  <input
+                    type="url"
+                    className={inputClass}
+                    placeholder="https://…"
+                    value={funnel.defaultCta?.url ?? ""}
+                    onChange={(e) =>
+                      onChange({
+                        defaultCta: {
+                          ...(funnel.defaultCta ?? { label: "S'inscrire", mode: "redirect" }),
+                          mode: "redirect",
+                          url: e.target.value || undefined,
+                        } as CtaConfig,
+                      })
+                    }
+                  />
+                </Field>
+              )}
+            </>
+          )}
         </div>
 
         {/* 🆕 Pages de remerciement — canaux communautaires + CTA */}

@@ -434,8 +434,8 @@ function FieldBlock({
     <div className={colSpan}>
       {field.label && (
         <label
-          className="mb-1 block text-xs font-medium"
-          style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.85 }}
+          className="mb-1 block text-xs font-medium text-left"
+          style={{ color: "var(--ff-ink, #0f172a)", opacity: 0.85, textAlign: "left" }}
         >
           {field.label}
           {field.required && <span style={{ color: "#ef4444" }}> *</span>}

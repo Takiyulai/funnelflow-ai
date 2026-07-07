@@ -837,6 +837,14 @@ export type Funnel = {
      */
     hideNextStepCta?: boolean;
     nextStepLabel?: string;
+    /**
+     * 🆕 Action CTA COMMUNE : si true, TOUS les boutons principaux de la page
+     * (hero, urgence, CTA final, offre…) utilisent l'action de `funnel.defaultCta`
+     * (popup interne / ancre / redirection) au lieu de leur action individuelle.
+     * Le libellé de chaque bouton reste le sien. Les boutons secondaires
+     * (canaux WhatsApp, etc.) ne sont pas affectés. Voir resolveCtaWithGlobal().
+     */
+    applyDefaultCtaToAll?: boolean;
   };
 };
 

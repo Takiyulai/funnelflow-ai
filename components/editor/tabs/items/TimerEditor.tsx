@@ -368,8 +368,11 @@ function ModeBtn({
   );
 }
 
-/* Convert ISO ↔ datetime-local input */
+/* Convert stocké (wall-clock naïf, ou ancien ISO) ↔ datetime-local input */
 function toLocalInput(iso: string): string {
+  // 🆕 Valeur naïve "YYYY-MM-DDTHH:mm" → renvoyée telle quelle (pas de fuseau).
+  const naive = iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  if (naive) return naive[1];
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -378,5 +381,7 @@ function toLocalInput(iso: string): string {
 
 function fromLocalInput(local: string): string {
   if (!local) return "";
-  return new Date(local).toISOString();
+  // 🆕 On stocke la valeur wall-clock BRUTE (pas de toISOString → pas de
+  // décalage de fuseau). Le countdown la relit via new Date(local) côté client.
+  return local;
 }

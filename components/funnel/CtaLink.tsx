@@ -12,14 +12,14 @@ import type {
   FunnelPage,
   FunnelSection,
 } from "@/lib/funnels/types";
-import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
+import { ctaHref, ctaTarget, ctaRel, ctaIsExternal, resolveCtaWithGlobal } from "@/lib/funnels/cta";
 import { PopupForm } from "@/components/funnel/PopupForm";
 
 const DEFAULT_BASE_CLASS =
   "ff-btn inline-flex items-center gap-2 px-4 py-2 text-sm font-bold no-underline rounded-lg";
 
 export function CtaLink({
-  cta,
+  cta: ctaProp,
   className = "",
   anim,
   pageLinks,
@@ -45,6 +45,16 @@ export function CtaLink({
   arrow?: boolean;
 }) {
   const base = baseClassName ?? DEFAULT_BASE_CLASS;
+
+  // 🆕 Action CTA commune : appliquée aux CTA PRINCIPAUX uniquement. Les boutons
+  // secondaires (rendus avec la classe « ff-btn-extra ») gardent leur action.
+  const isExtra = (baseClassName ?? "").includes("ff-btn-extra");
+  const cta = resolveCtaWithGlobal(
+    ctaProp,
+    funnel.defaultCta,
+    !isExtra && funnel.meta?.applyDefaultCtaToAll === true,
+  );
+
   const showArrow =
     arrow === true && !/[→➔➜➤›»⟶]\s*$/.test((cta.label ?? "").trim());
 

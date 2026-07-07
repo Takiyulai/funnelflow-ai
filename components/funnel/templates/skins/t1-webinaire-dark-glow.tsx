@@ -14,6 +14,7 @@ import type {
 } from "@/lib/funnels/types";
 import { DEFAULT_TIMER_LABELS } from "@/lib/funnels/types";
 import { getVideoEmbed } from "@/lib/funnels/video";
+import { formatEventParts } from "@/lib/funnels/eventDate";
 import { RichText } from "@/components/funnel/RichText";
 import { CtaLink } from "@/components/funnel/CtaLink";
 import { getIconByName } from "@/components/editor/IconPicker";
@@ -116,9 +117,11 @@ function T1Hero(props: SkinSectionProps) {
     section.image && section.image.mode !== "none" ? section.image.url : undefined;
   const hasMedia = !!embed?.embedUrl || !!imageUrl;
   const timer = firstTimer(section);
-  const badgeDate =
+  // 🆕 Badge date via le helper STABLE (fuseau-indépendant) au lieu de getters
+  // locaux (qui donnaient un jour/mois décalé côté serveur).
+  const badgeParts =
     timer?.mode === "countdown-date" && timer.targetDate
-      ? new Date(timer.targetDate)
+      ? formatEventParts(timer.targetDate, funnel.language)
       : null;
 
   return (
@@ -282,16 +285,16 @@ function T1Hero(props: SkinSectionProps) {
             </div>
 
             {/* Badge date flottant (uniquement si un timer daté existe) */}
-            {badgeDate && !Number.isNaN(badgeDate.getTime()) && (
+            {badgeParts && (
               <div className="t1-date-badge">
                 <div style={{ fontSize: 11, letterSpacing: ".12em", color: "#8A8A8A", textTransform: "uppercase" }}>
-                  {badgeDate.toLocaleDateString(funnel.language === "en" ? "en-US" : funnel.language === "es" ? "es-ES" : "fr-FR", { weekday: "long" })}
+                  {badgeParts.weekday}
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1 }}>
-                  {badgeDate.getDate()}
+                  {badgeParts.day}
                 </div>
                 <div style={{ fontSize: 12, color: ACCENT_SOFT }}>
-                  {badgeDate.toLocaleDateString(funnel.language === "en" ? "en-US" : funnel.language === "es" ? "es-ES" : "fr-FR", { month: "long" })}
+                  {badgeParts.month}
                 </div>
               </div>
             )}
