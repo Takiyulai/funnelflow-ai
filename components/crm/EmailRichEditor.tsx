@@ -12,6 +12,9 @@ import {
   Type,
   Palette,
   Eraser,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from "lucide-react";
 
 /**
@@ -33,6 +36,13 @@ type Props = {
 };
 
 const COLORS = ["#0F172A", "#08498D", "#31845C", "#C7A436", "#DC2626", "#64748B"];
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, "&quot;");
+}
 
 export function EmailRichEditor({ value, onChange, placeholder }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -70,21 +80,46 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
   };
 
   const addLink = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    // 🆕 On SAUVEGARDE la sélection AVANT le prompt : window.prompt vole le focus
+    // et collapse la sélection → sans ça, createLink n'a plus rien à envelopper
+    // et le mot sélectionné (« ici ») reste du texte non cliquable.
+    const sel = window.getSelection();
+    const savedRange =
+      sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+    const hadSelection = !!savedRange && !savedRange.collapsed;
+
     const url = window.prompt(
       "URL du lien (page, fichier à télécharger, etc.) :",
       "https://",
     );
-    if (!url) return;
-    cmd("createLink", url);
-    // Ouvrir dans un nouvel onglet : on retouche le dernier lien créé.
-    const el = ref.current;
-    if (el) {
-      el.querySelectorAll('a[href]:not([target])').forEach((a) => {
-        a.setAttribute("target", "_blank");
-        a.setAttribute("rel", "noopener noreferrer");
-      });
-      emit();
+    if (!url || url === "https://") return;
+
+    // On RESTAURE la sélection perdue à l'ouverture du prompt.
+    el.focus();
+    if (savedRange && sel) {
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
     }
+
+    if (hadSelection) {
+      document.execCommand("createLink", false, url);
+    } else {
+      // Aucun texte sélectionné → on insère un lien cliquable (libellé = URL).
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<a href="${escapeAttr(url)}">${escapeHtml(url)}</a>`,
+      );
+    }
+    // Ouvre dans un nouvel onglet + sécurise (rel) les liens fraîchement créés.
+    el.querySelectorAll('a[href]:not([target])').forEach((a) => {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    });
+    emit();
   };
 
   const addImage = () => {
@@ -120,6 +155,19 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
         </button>
         <button type="button" className={btn} title="Souligné" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("underline")}>
           <Underline className="h-4 w-4" />
+        </button>
+
+        <span className="mx-1 h-5 w-px bg-line" />
+
+        {/* 🆕 Alignement du texte */}
+        <button type="button" className={btn} title="Aligner à gauche" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("justifyLeft")}>
+          <AlignLeft className="h-4 w-4" />
+        </button>
+        <button type="button" className={btn} title="Centrer" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("justifyCenter")}>
+          <AlignCenter className="h-4 w-4" />
+        </button>
+        <button type="button" className={btn} title="Aligner à droite" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("justifyRight")}>
+          <AlignRight className="h-4 w-4" />
         </button>
 
         <span className="mx-1 h-5 w-px bg-line" />

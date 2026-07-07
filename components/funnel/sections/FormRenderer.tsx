@@ -219,14 +219,16 @@ export function FormRenderer({
       const successMessage =
         section.formConfig?.successMessage ||
         (redirectTo
-          ? "Merci ! Redirection…"
+          ? "Merci, c'est confirmé !"
           : "Merci ! Votre inscription a bien été enregistrée.");
 
       if (redirectTo) {
         setState({ kind: "success", message: successMessage });
+        // 🆕 Redirection quasi immédiate (200 ms, juste le temps que l'état
+        // « confirmé » s'affiche). Le prospect ne voit plus « Redirection… ».
         setTimeout(() => {
           window.location.href = redirectTo;
-        }, 600);
+        }, 200);
       } else {
         setState({ kind: "success", message: successMessage });
         formEl.reset();

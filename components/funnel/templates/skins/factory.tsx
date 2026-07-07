@@ -504,12 +504,13 @@ function makeHero(t: SkinTokens) {
         style={ctaStyleVars(t)}
       >
         {isSplitLayout ? (
-          <div className="sk-split">
-            <div>
-              {textBlock}
-              {ctaRow}
-            </div>
-            {media}
+          // 🆕 3 zones (texte / média / CTA) : sur desktop le CTA reste sous le
+          // texte (colonne gauche), sur mobile il passe APRÈS l'image (le CTA
+          // « accompagne » toujours le visuel). Cf. .sk-hero-split dans le CSS.
+          <div className="sk-hero-split">
+            <div className="sk-hero-split__text">{textBlock}</div>
+            <div className="sk-hero-split__media">{media}</div>
+            {ctaRow && <div className="sk-hero-split__cta">{ctaRow}</div>}
           </div>
         ) : (
           <>

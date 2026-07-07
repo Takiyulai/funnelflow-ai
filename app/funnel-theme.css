@@ -3418,6 +3418,29 @@
   .sk-hero { padding: 44px 0 40px; }
 }
 
+/* 🆕 Hero split en 3 zones : desktop = texte (haut) + CTA (bas) à gauche,
+   média à droite ; mobile = texte → média → CTA empilés (le CTA vient
+   TOUJOURS après/avec l'image, jamais avant). */
+.sk-hero-split {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  grid-template-areas: "text media" "cta media";
+  column-gap: 56px;
+  row-gap: 22px;
+  align-items: start;
+}
+.sk-hero-split__text  { grid-area: text; min-width: 0; }
+.sk-hero-split__media { grid-area: media; align-self: center; min-width: 0; }
+.sk-hero-split__cta   { grid-area: cta; align-self: start; }
+@container (max-width: 880px) {
+  .sk-hero-split {
+    grid-template-columns: 1fr;
+    grid-template-areas: "text" "media" "cta";
+    column-gap: 0;
+    row-gap: 28px;
+  }
+}
+
 /* ═══ Fonds de page alignés sur les designs du zip (skins light) ═══ */
 [data-ff-template="lead-snap"] {
   --ff-bg: #ffffff; --ff-ink: #0B1D3A; --ff-ink-soft: #374151; --ff-muted: #6B7280;
@@ -3512,6 +3535,34 @@
   text-align: left !important;
   margin-left: 0 !important;
   margin-right: 0 !important;
+}
+
+/* 🆕 Hero split — RÈGLES MOBILE (container empilé < 880px) :
+   titre + eyebrow CENTRÉS, paragraphes JUSTIFIÉS, CTA centré sous l'image.
+   Placé APRÈS la règle « left » ci-dessus pour gagner la cascade sur mobile. */
+@container (max-width: 880px) {
+  /* Le titre repasse au centre (l'eyebrow suit via le centrage du conteneur). */
+  .sk-hero--split .sk-h1,
+  .sk-hero--split .sk-h2 {
+    text-align: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  /* Centre l'eyebrow (chip inline-flex) et le titre. */
+  .sk-hero-split__text { text-align: center; }
+  /* Mais les PARAGRAPHES (sous-titre + corps) restent JUSTIFIÉS. */
+  .sk-hero-split__text p {
+    text-align: justify !important;
+    text-justify: inter-word;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  /* Le CTA (désormais après l'image) se centre. */
+  .sk-hero-split__cta > div {
+    justify-content: center !important;
+    flex-direction: column;
+    align-items: center;
+  }
 }
 
 /* ═══ 🆕 Footer collé en bas (fin de l'espace vide sous le footer) ═══
