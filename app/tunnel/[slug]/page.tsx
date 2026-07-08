@@ -11,7 +11,12 @@ import PublishedFunnelView from "./PublishedFunnelView";
 // revalidate). Le seul cas lent restant = le TOUT PREMIER rendu quand la base
 // Supabase (offre gratuite) sort de veille (cold start ~15s) — mitigé côté infra
 // (garder la base active / plan supérieur), pas par le cache applicatif.
-export const revalidate = 300;
+// 🆕 Fenêtre ISR ramenée de 300s à 60s : si la revalidation on-demand à la
+// publication échoue (session expirée → /api/revalidate-tunnel renvoie 401),
+// la page se régénère au pire en 60s au lieu de 5 min. Le rendu reste rapide
+// (stale-while-revalidate : le visiteur reçoit la version en cache pendant la
+// régénération en arrière-plan).
+export const revalidate = 60;
 
 export default async function PublishedFunnelPage({
   params,

@@ -29,6 +29,7 @@ export function CtaLink({
   section,
   baseClassName,
   arrow,
+  isExtra: isExtraProp,
 }: {
   cta: NonNullable<FunnelSection["cta"]>;
   className?: string;
@@ -43,12 +44,19 @@ export function CtaLink({
   baseClassName?: string;
   /** 🆕 Ajoute une flèche → après le label (sauf si le label en a déjà une). */
   arrow?: boolean;
+  /** 🆕 Marque explicitement ce bouton comme « supplémentaire » (canaux
+   *  WhatsApp/Telegram…) : exclu de l'action CTA commune, mais peut partager le
+   *  MÊME style que le CTA principal. Repli rétro-compatible : détection par la
+   *  classe « ff-btn-extra » si la prop est absente. */
+  isExtra?: boolean;
 }) {
   const base = baseClassName ?? DEFAULT_BASE_CLASS;
 
   // 🆕 Action CTA commune : appliquée aux CTA PRINCIPAUX uniquement. Les boutons
-  // secondaires (rendus avec la classe « ff-btn-extra ») gardent leur action.
-  const isExtra = (baseClassName ?? "").includes("ff-btn-extra");
+  // secondaires (prop isExtra, ou classe « ff-btn-extra » en repli) gardent
+  // leur propre action.
+  const isExtra =
+    isExtraProp === true || (baseClassName ?? "").includes("ff-btn-extra");
   const cta = resolveCtaWithGlobal(
     ctaProp,
     funnel.defaultCta,
@@ -127,7 +135,10 @@ export function CtaLink({
           →
         </span>
       )}
-      {external && <ExternalLink size={13} />}
+      {/* 🆕 Pas de double flèche : l'icône « lien externe » n'apparaît PLUS
+          quand la flèche décorative → est déjà affichée (évitait le doublon
+          « → ⧉ » sur les CTA de redirection). */}
+      {external && !showArrow && <ExternalLink size={13} />}
     </a>
   );
 }

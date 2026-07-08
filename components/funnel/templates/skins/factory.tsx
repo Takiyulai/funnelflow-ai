@@ -125,8 +125,9 @@ function Head({
   t: SkinTokens;
   section: SkinSectionProps["section"];
 }) {
-  // 🆕 Règle typographique révisée : SEUL le titre est centré. Les autres
-  // textes (sous-titre) sont justifiés par défaut, pas centrés.
+  // 🆕 Règle typographique révisée : le sous-titre d'intro de section (court,
+  // sous un titre centré) est CENTRÉ — dernière ligne comprise. La justification
+  // reste réservée au corps long-forme (cartes, about), pas aux intros.
   if (!section.eyebrow && !section.headline && !section.subheadline) return null;
   return (
     <div data-reveal style={{ textAlign: "center", marginBottom: 44 }}>
@@ -149,13 +150,14 @@ function Head({
       )}
       {section.subheadline && (
         <p
+          className="sk-sub"
           style={{
             fontSize: 17,
             lineHeight: 1.6,
             color: t.body,
             maxWidth: 620,
             margin: "14px auto 0",
-            textAlign: "justify",
+            textAlign: "center",
           }}
         >
           <RichText as="span" text={section.subheadline} />
@@ -198,7 +200,20 @@ function Cta({
 // (ex : « Rejoindre le groupe WhatsApp »). Les skins les IGNORAIENT (le rendu
 // standard les affichait, pas les composants de skin) → ils n'apparaissaient pas
 // sur les templates skinnés.
-function ExtraCtas({ props }: { props: SkinSectionProps }) {
+// 🆕 Les CTA supplémentaires partagent désormais EXACTEMENT le style du CTA
+// principal (même pilule dégradée, même flèche →, même pulsation) : ils sont
+// rendus avec CTA_BASE + les mêmes modificateurs (pulse/block) que le bouton
+// principal de la section. `isExtra` les exclut de l'action CTA commune pour
+// qu'ils gardent leur propre destination (WhatsApp, Telegram…).
+function ExtraCtas({
+  props,
+  pulse,
+  block,
+}: {
+  props: SkinSectionProps;
+  pulse?: boolean;
+  block?: boolean;
+}) {
   const ctas = props.section.ctas;
   if (!Array.isArray(ctas) || ctas.length === 0) return null;
   return (
@@ -213,7 +228,9 @@ function ExtraCtas({ props }: { props: SkinSectionProps }) {
             section={props.section}
             pageLinks={props.pageLinks}
             slugLinks={props.slugLinks}
-            baseClassName="ff-btn-extra"
+            arrow
+            isExtra
+            baseClassName={`${CTA_BASE} ${block ? "sk-cta--block" : ""} ${pulse ? "sk-cta--pulse" : ""}`}
           />
         ) : null,
       )}
@@ -243,6 +260,13 @@ function makeHero(t: SkinTokens) {
     // centré (et non hérité du style "split" en row/flex-start).
     const isSplitLayout = split && hasMedia && !props.isSuccess;
 
+    // 🆕 Image à FOND TRANSPARENT (PNG détouré) : on NE l'enferme PAS dans le
+    // cadre-carte (bordure + fond clair/veil), sinon un fond blanc/gris apparaît
+    // derrière les zones transparentes. On l'affiche « nue », sur le fond de la
+    // section, sans cadre ni ombre de carte.
+    const isTransparentImg =
+      section.image?.transparentBg === true && !!imageUrl && !embed?.embedUrl;
+
     // 🆕 Ombrage de l'image piloté par l'onglet Style (section.style.shadow) :
     // si défini, l'image du hero suit CE réglage (via data-ff-shadow + la couleur
     // --ff-shadow-color, stylés dans funnel-theme.css) au lieu de l'ombre figée
@@ -255,6 +279,25 @@ function makeHero(t: SkinTokens) {
       : { boxShadow: t.cardShadow ?? "0 30px 70px rgba(0,0,0,.18)" };
 
     const media = hasMedia ? (
+      isTransparentImg ? (
+        <div
+          data-reveal
+          data-delay="120"
+          style={{ display: "flex", justifyContent: "center" }}
+        >
+          <img
+            src={imageUrl}
+            alt={section.image?.alt ?? ""}
+            style={{
+              display: "block",
+              width: split ? "100%" : "min(760px,100%)",
+              height: "auto",
+              background: "transparent",
+            }}
+            loading="lazy"
+          />
+        </div>
+      ) : (
       <div
         data-reveal
         data-delay="120"
@@ -341,6 +384,7 @@ function makeHero(t: SkinTokens) {
           )}
         </div>
       </div>
+      )
     ) : null;
 
     const textBlock = (
@@ -488,7 +532,7 @@ function makeHero(t: SkinTokens) {
           }}
         >
           <Cta t={t} props={props} pulse />
-          <ExtraCtas props={props} />
+          <ExtraCtas props={props} pulse />
           {section.reassurance && (
             <div style={{ fontSize: 14, color: t.muted }}>
               <RichText as="span" text={section.reassurance} />
@@ -1260,7 +1304,7 @@ function makeFinalCta(t: SkinTokens) {
               </p>
             )}
             <Cta t={t} props={props} pulse />
-            <ExtraCtas props={props} />
+            <ExtraCtas props={props} pulse />
             {section.reassurance && (
               <p style={{ margin: "16px 0 0", fontSize: 13.5, color: t.ctaPanelSub }}>
                 <RichText as="span" text={section.reassurance} />

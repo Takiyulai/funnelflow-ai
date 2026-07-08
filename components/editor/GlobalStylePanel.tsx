@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import type { Funnel, FunnelIntegrations, CtaConfig } from "@/lib/funnels/types";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
+import { InternalPopupEditor } from "./tabs/items/InternalPopupEditor";
 
 type Props = {
   funnel: Funnel;
@@ -375,7 +376,16 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
                       funnel.defaultCta ?? { label: "S'inscrire", mode: "popup" };
                     const next: CtaConfig =
                       mode === "popup"
-                        ? { ...prev, mode, popupProvider: "internal" }
+                        ? {
+                            ...prev,
+                            mode,
+                            popupProvider: "internal",
+                            popupId: prev.popupId ?? "popup-global",
+                            popupTitle: prev.popupTitle ?? "Recevez votre accès",
+                            popupBody:
+                              prev.popupBody ??
+                              "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
+                          }
                         : mode === "anchor"
                           ? { ...prev, mode, anchorId: prev.anchorId || "lead-form" }
                           : { ...prev, mode };
@@ -406,6 +416,29 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
                   />
                 </Field>
               )}
+              {/* 🆕 Popup interne personnalisable directement depuis le Style
+                  global — même éditeur que l'onglet CTA (titre, texte, champs,
+                  tags CRM). */}
+              {funnel.defaultCta &&
+                funnel.defaultCta.mode === "popup" &&
+                (funnel.defaultCta.popupProvider ?? "internal") === "internal" && (
+                  <InternalPopupEditor
+                    cta={funnel.defaultCta}
+                    idBase="global"
+                    onChange={(patch) =>
+                      onChange({
+                        defaultCta: {
+                          ...(funnel.defaultCta ?? {
+                            label: "S'inscrire",
+                            mode: "popup",
+                            popupProvider: "internal",
+                          }),
+                          ...patch,
+                        } as CtaConfig,
+                      })
+                    }
+                  />
+                )}
             </>
           )}
         </div>

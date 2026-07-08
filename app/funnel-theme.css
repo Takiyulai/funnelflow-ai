@@ -3603,17 +3603,23 @@
    alignés à gauche reste intact). Le HERO gère son alignement à part (gauche en
    split via style inline, centré sinon). Le rendu standard (.ff-*) comme les
    skins (.sk-*, .t1-*) sont couverts. */
+/* 🆕 Les SOUS-TITRES d'intro de section (.sk-sub, .t1-sub, .ff-subheadline) ne
+   sont PLUS justifiés : ils restent centrés (dernière ligne centrée aussi).
+   Seul le CORPS long-forme (.ff-body, .t1-body, descriptions de cartes,
+   paragraphes) est justifié. */
 [data-ff-template] .ff-body,
-[data-ff-template] .sk-sub,
-[data-ff-template] .t1-sub,
 [data-ff-template] .t1-body,
 [data-ff-template] .t1-card-desc,
-[data-ff-template] .ff-section:not([data-ff-section="hero"]) .ff-subheadline,
-[data-ff-template] .ff-section:not([data-ff-section="hero"]) p:not(.ff-eyebrow):not(.ff-headline):not(.ff-subheadline):not(.ff-cta-wrap) {
+[data-ff-template] .ff-section:not([data-ff-section="hero"]) p:not(.ff-eyebrow):not(.ff-headline):not(.ff-subheadline):not(.sk-sub):not(.ff-cta-wrap) {
   text-align: justify;
   text-justify: inter-word;
   hyphens: auto;
   -webkit-hyphens: auto;
+}
+/* Sous-titres d'intro : centrés, quel que soit le template. */
+[data-ff-template] .sk-sub,
+[data-ff-template] .t1-sub {
+  text-align: center;
 }
 
 /* ═══ 🆕 POLISH VISUEL — templates restants (non skinnés) ═══
@@ -3856,4 +3862,14 @@
 [data-ff-mobile-frame] [data-ff-template] .ff-section[data-ff-section="about"] .ff-body {
   text-align: justify !important;
   text-justify: inter-word;
+}
+/* 🆕 About : bio longue justifiée sur TOUS les écrans (pas seulement mobile) →
+   bloc « rectangle » propre en desktop aussi. Bat le centrage global des
+   sous-titres (.ff-subheadline) grâce à la spécificité [data-ff-section]. */
+[data-ff-template] .ff-section[data-ff-section="about"] .ff-subheadline,
+[data-ff-template] .ff-section[data-ff-section="about"] .ff-body {
+  text-align: justify !important;
+  text-justify: inter-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
 }

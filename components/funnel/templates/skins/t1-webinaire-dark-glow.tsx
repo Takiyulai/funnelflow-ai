@@ -116,6 +116,10 @@ function T1Hero(props: SkinSectionProps) {
   const imageUrl =
     section.image && section.image.mode !== "none" ? section.image.url : undefined;
   const hasMedia = !!embed?.embedUrl || !!imageUrl;
+  // 🆕 PNG détouré (fond transparent) : affiché « nu », sans cadre navigateur ni
+  // fond, pour éviter le fond blanc/gris derrière les zones transparentes.
+  const isTransparentImg =
+    section.image?.transparentBg === true && !!imageUrl && !embed?.embedUrl;
   const timer = firstTimer(section);
   // 🆕 Badge date via le helper STABLE (fuseau-indépendant) au lieu de getters
   // locaux (qui donnaient un jour/mois décalé côté serveur).
@@ -228,6 +232,15 @@ function T1Hero(props: SkinSectionProps) {
             }}
           >
             <div data-tilt style={{ width: "min(760px,100%)", perspective: 1000 }}>
+              {isTransparentImg ? (
+                <img
+                  data-tilt-inner
+                  src={imageUrl}
+                  alt={section.image?.alt ?? ""}
+                  style={{ display: "block", width: "100%", height: "auto", background: "transparent" }}
+                  loading="lazy"
+                />
+              ) : (
               <div
                 data-tilt-inner
                 style={{
@@ -282,6 +295,7 @@ function T1Hero(props: SkinSectionProps) {
                   />
                 )}
               </div>
+              )}
             </div>
 
             {/* Badge date flottant (uniquement si un timer daté existe) */}

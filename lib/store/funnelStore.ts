@@ -804,25 +804,25 @@ export function createFunnelFromAi(
       ? crypto.randomUUID()
       : `ff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // 🆕 Slug public COMPLET et orienté prospect : préfixe de TYPE (webinaire/
-  // inscription/réservation…) + 2-3 mots de sujet tirés de l'offre/promesse.
-  // Ex : webinaire « générer des revenus en ligne » →
-  // « webinaire-generer-revenus-ligne ». Repli sur l'ancien slugify si rien.
+  // 🆕 Slug public = UN SEUL mot, le plus important (demande utilisateur) :
+  //  1) le mot-clé de TYPE quand il existe (webinar→« webinaire », lead-magnet
+  //     →« inscription », booking→« reservation », challenge→« challenge ») ;
+  //  2) sinon le 1er mot signifiant du sujet (offre/promesse/marque) ;
+  //  3) sinon le 1er mot signifiant du nom du tunnel ; 4) repli « tunnel ».
+  // Ex : un webinaire → « autofunnelai.cloud/tunnel/webinaire ». Les collisions
+  // (2 webinaires) sont gérées par uniqueSlug (« webinaire », « webinaire-2 »…).
   const kindWord = kindSlugKeyword(brief.funnelKind);
-  const topic = conciseSlug(brief.offerName, brief.promise, brief.brandName);
-  const baseSlug =
-    [kindWord, topic]
-      .filter(Boolean)
-      .join("-")
-      .split("-")
-      .filter((w, i, arr) => w.length > 0 && arr.indexOf(w) === i)
-      .slice(0, 4)
-      .join("-")
-      .slice(0, 42)
-      .replace(/-+$/g, "") ||
-    slugify(funnel.funnelName || `${brief.brandName}-${brief.offerName}`).slice(0, 32);
+  const topicWord = conciseSlug(brief.offerName, brief.promise, brief.brandName)
+    .split("-")
+    .filter(Boolean)[0];
+  const nameWord = slugify(
+    funnel.funnelName || `${brief.brandName ?? ""} ${brief.offerName ?? ""}`,
+  )
+    .split("-")
+    .filter((w) => w.length > 1 && !SLUG_STOPWORDS.has(w))[0];
+  const baseSlug = kindWord || topicWord || nameWord || "tunnel";
   const existingSlugs = new Set(listFunnels().map((f) => f.slug));
-  const slug = uniqueSlug(baseSlug || "tunnel", existingSlugs);
+  const slug = uniqueSlug(baseSlug, existingSlugs);
 
   // 🆕 Auto-tag : on pose un tag de capture par défaut (nom de l'offre) sur les
   // formulaires, pour que les leads soumis soient taggés automatiquement.
@@ -957,7 +957,19 @@ export async function publishFunnel(id: string): Promise<PublishResult> {
     if (saved?.slug && saved.slug !== updated.slug) {
       reconcileLocalSlug(id, saved.slug);
     }
-    const published = await publishRemote(id);
+    // 🆕 Publication distante avec 1 NOUVELLE TENTATIVE : le plan gratuit Supabase
+    // fait des « cold starts » (~15s) qui provoquent des erreurs réseau
+    // transitoires → la publication ne « prenait » pas (published_content restait
+    // figé sur l'ancien instantané) sans raison persistante. On réessaie une fois
+    // après une courte pause avant de considérer l'échec.
+    let published = await publishRemote(id).catch((e) => {
+      console.warn("[funnelStore] publishRemote tentative 1 échouée:", e);
+      return null as Awaited<ReturnType<typeof publishRemote>>;
+    });
+    if (!published) {
+      await new Promise((r) => setTimeout(r, 1200));
+      published = await publishRemote(id);
+    }
 
     // 🆕 FIX 404 « faux publié » : publishRemote renvoie NULL quand l'UPDATE
     // Supabase n'a touché aucune ligne (session expirée, RLS, id absent). On
