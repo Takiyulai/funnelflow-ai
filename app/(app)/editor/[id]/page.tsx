@@ -12,6 +12,7 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { PageSelector } from "@/components/editor/PageSelector";
+import { PageRegenPanel } from "@/components/editor/PageRegenPanel";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { GlobalStylePanel } from "@/components/editor/GlobalStylePanel";
 import { SectionEditorDrawer } from "@/components/editor/SectionEditorDrawer";
@@ -587,6 +588,45 @@ export default function EditorPage() {
     setSelectedSectionId(newPage.sections[0].id);
   }, [funnel, pushHistory]);
 
+  // 🆕 Réordonner les pages (glisser-déposer) : on garde la page d'accueil en
+  // tête (point d'entrée du tunnel) puis on RECHAÎNE la navigation linéaire
+  // (nextPageId) → une inscription redirige automatiquement vers la page qui la
+  // suit (ex. la confirmation qu'on vient de déplacer en 2ᵉ position).
+  const handleReorderPages = useCallback(
+    (orderedIds: string[]) => {
+      if (!funnel?.pages) return;
+      const byId = new Map(funnel.pages.map((p) => [p.id, p]));
+      let reordered = orderedIds
+        .map((id) => byId.get(id))
+        .filter((p): p is FunnelPage => Boolean(p));
+      // Pages non incluses (sécurité) → à la fin.
+      const missing = funnel.pages.filter((p) => !orderedIds.includes(p.id));
+      reordered = [...reordered, ...missing];
+      // La page d'accueil reste TOUJOURS en première position.
+      reordered = [
+        ...reordered.filter((p) => p.isHome),
+        ...reordered.filter((p) => !p.isHome),
+      ];
+      // Rechaînage linéaire : chaque page pointe vers la suivante.
+      const linked = reordered.map((p, i) => ({
+        ...p,
+        nextPageId: reordered[i + 1]?.id,
+      }));
+      pushHistory({ ...funnel, pages: linked });
+    },
+    [funnel, pushHistory],
+  );
+
+  // 🆕 Applique une régénération de PAGE (toutes les sections) issue de l'IA.
+  const handleRegeneratePageApply = useCallback(
+    (sections: FunnelSection[]) => {
+      if (!funnel || !activePage) return;
+      pushHistory(updatePageSections(funnel, activePage.id, sections));
+      setSelectedSectionId(sections[0]?.id ?? null);
+    },
+    [funnel, activePage, pushHistory],
+  );
+
   // 🆕 Supprimer une page (jamais l'accueil).
   const handleDeletePage = useCallback(
     (pageId: string) => {
@@ -923,7 +963,16 @@ export default function EditorPage() {
             onSelect={handlePageSelect}
             onAddPage={handleAddPage}
             onDeletePage={handleDeletePage}
+            onReorder={handleReorderPages}
           />
+
+          {activePage && (
+            <PageRegenPanel
+              funnel={funnel}
+              page={activePage}
+              onApply={handleRegeneratePageApply}
+            />
+          )}
 
           <EditorSidebar
             sections={activeSections}

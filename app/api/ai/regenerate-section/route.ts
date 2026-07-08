@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { FunnelSection, CtaConfig, FunnelBrief } from "@/lib/funnels/types";
 import { regenerateSectionPrompt } from "@/lib/ai/prompts";
+import { callAI, SYSTEM_MESSAGE_FUNNEL } from "@/lib/ai/generate";
 import { guardApiAccess, featureBlockedResponse, quotaExceededResponse } from "@/lib/billing/apiGuard";
 import { consumeQuota } from "@/lib/billing/usage";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
@@ -168,16 +169,20 @@ export async function POST(request: Request) {
     defaultImageMode: briefIn?.defaultImageMode,
   };
 
-  // Pas de clé OpenAI : on renvoie un fallback propre sans planter
-  if (!process.env.OPENAI_API_KEY) {
+  // Pas de clé IA configurée pour le provider courant : fallback propre sans
+  // planter. Provider-aware (Anthropic utilise ANTHROPIC_API_KEY ; OpenAI /
+  // Z.AI / OpenRouter utilisent OPENAI_API_KEY).
+  const aiProvider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  const hasAiKey =
+    aiProvider === "anthropic" || aiProvider === "claude"
+      ? !!process.env.ANTHROPIC_API_KEY
+      : !!process.env.OPENAI_API_KEY;
+  if (!hasAiKey) {
     const regenerated = fallbackSection(parsed.data);
     return NextResponse.json({ section: regenerated, fallback: true });
   }
 
   try {
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
     const prompt = regenerateSectionPrompt({
       brief,
       section: {
@@ -191,13 +196,18 @@ export async function POST(request: Request) {
       instruction,
     });
 
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-      input: prompt,
-      text: { format: { type: "text" } },
+    // 🆕 On passe par le MÊME helper que la génération de tunnel (callAI) :
+    // il respecte AI_PROVIDER / OPENAI_BASE_URL / OPENAI_MODEL (OpenAI, Z.AI,
+    // OpenRouter, Anthropic…). L'ancien appel `client.responses.create` en dur
+    // échouait dès que le provider n'était pas l'OpenAI natif → fallback
+    // systématique (« Régénération IA indisponible… »).
+    const rawText = await callAI({
+      systemMessage: SYSTEM_MESSAGE_FUNNEL,
+      userPrompt: prompt,
+      maxTokens: 1500,
     });
 
-    const aiRaw = stripJsonFences(response.output_text);
+    const aiRaw = stripJsonFences(rawText);
     const aiJson = JSON.parse(aiRaw);
     // 🆕 Robustesse : le modèle peut répondre soit la section à plat
     // ({ type, headline... }), soit enveloppée ({ section: {...} }). On gère les

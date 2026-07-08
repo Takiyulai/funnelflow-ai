@@ -1,6 +1,7 @@
 "use client";
 
-import { Home, Plus, X } from "lucide-react";
+import { useState } from "react";
+import { Home, Plus, X, GripVertical } from "lucide-react";
 import type { FunnelPage } from "@/lib/funnels/types";
 
 type Props = {
@@ -11,6 +12,9 @@ type Props = {
   onAddPage?: () => void;
   /** 🆕 Supprimer une page (jamais la page d'accueil). */
   onDeletePage?: (pageId: string) => void;
+  /** 🆕 Réordonner les pages par glisser-déposer. Reçoit le nouvel ordre d'IDs.
+   *  Le parent replace la home en tête et rechaîne la navigation. */
+  onReorder?: (orderedIds: string[]) => void;
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -42,20 +46,82 @@ export function PageSelector({
   onSelect,
   onAddPage,
   onDeletePage,
+  onReorder,
 }: Props) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
   if (!pages || pages.length === 0) return null;
+
+  const canDrag = typeof onReorder === "function" && pages.length > 1;
+
+  function handleDrop(targetId: string) {
+    if (!dragId || dragId === targetId || !onReorder) {
+      setDragId(null);
+      setOverId(null);
+      return;
+    }
+    const ids = pages.map((p) => p.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) {
+      setDragId(null);
+      setOverId(null);
+      return;
+    }
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    onReorder(ids);
+    setDragId(null);
+    setOverId(null);
+  }
 
   return (
     <div className="rounded-2xl border border-white/15 bg-zinc-900 p-2 shadow-lg">
       <div className="mb-2 px-1 text-[10px] uppercase tracking-wider text-white/50">
         Pages du tunnel ({pages.length})
+        {canDrag && (
+          <span className="ml-2 normal-case text-white/30">
+            — glisse pour réordonner
+          </span>
+        )}
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
         {pages.map((page) => {
           const isSelected = page.id === selectedPageId;
           const label = ROLE_LABELS[page.role] ?? page.name ?? page.role;
           return (
-            <div key={page.id} className="group relative shrink-0">
+            <div
+              key={page.id}
+              className={[
+                "group relative shrink-0 rounded-lg transition-all",
+                overId === page.id && dragId && dragId !== page.id
+                  ? "ring-2 ring-amber-300/60"
+                  : "",
+                dragId === page.id ? "opacity-40" : "",
+              ].join(" ")}
+              draggable={canDrag}
+              onDragStart={
+                canDrag ? () => setDragId(page.id) : undefined
+              }
+              onDragOver={
+                canDrag
+                  ? (e) => {
+                      e.preventDefault();
+                      if (overId !== page.id) setOverId(page.id);
+                    }
+                  : undefined
+              }
+              onDrop={canDrag ? () => handleDrop(page.id) : undefined}
+              onDragEnd={
+                canDrag
+                  ? () => {
+                      setDragId(null);
+                      setOverId(null);
+                    }
+                  : undefined
+              }
+            >
               <button
                 type="button"
                 onClick={() => onSelect(page.id)}
@@ -67,6 +133,12 @@ export function PageSelector({
                 ].join(" ")}
                 title={`${page.name} (${page.slug})`}
               >
+                {canDrag && (
+                  <GripVertical
+                    className="h-3 w-3 cursor-grab text-white/30 active:cursor-grabbing"
+                    aria-hidden
+                  />
+                )}
                 {page.isHome && (
                   <Home
                     className={`h-3 w-3 ${isSelected ? "text-amber-300" : "text-white/50"}`}

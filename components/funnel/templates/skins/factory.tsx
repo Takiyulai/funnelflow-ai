@@ -449,6 +449,12 @@ function makeHero(t: SkinTokens) {
               color: t.body,
               margin: isSplitLayout ? "0 0 26px" : "0 auto 30px",
               maxWidth: isSplitLayout ? 560 : 620,
+              // 🆕 En layout split (hero avec image), le sous-titre est JUSTIFIÉ
+              // comme le corps → bords gauche ET droit alignés (« taillés »),
+              // fini le zig-zag centré sur mobile. Indépendant du @container.
+              ...(isSplitLayout
+                ? { textAlign: "justify" as const, textJustify: "inter-word" as const }
+                : {}),
             }}
           >
             <RichText as="span" text={section.subheadline} />

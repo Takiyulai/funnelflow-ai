@@ -65,6 +65,7 @@ import {
   sectionTypeAcceptsImage,
   sectionTypeAcceptsAvatars,
   sectionTypeAcceptsVideo,
+  type PageBlueprint,
 } from "@/lib/funnels/pageCatalogs";
 import { removeOrFillEmptySections, dedupeSectionsAcrossPages,
   ensurePricingOnConversionPage, tryFillSectionFromBrief,
@@ -2619,7 +2620,7 @@ type AiCallArgs = {
   temperature?: number;
 };
 
-async function callAI(args: AiCallArgs): Promise<string> {
+export async function callAI(args: AiCallArgs): Promise<string> {
   const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
   if (provider === "anthropic" || provider === "claude") {
     return callAnthropic(args);
@@ -2941,7 +2942,7 @@ async function callOpenAI(args: {
   }
 }
 
-const SYSTEM_MESSAGE_FUNNEL =
+export const SYSTEM_MESSAGE_FUNNEL =
   "You are an expert funnel copywriter and conversion specialist. " +
   "You MUST respond with a single JSON object that strictly matches the requested schema. " +
   "Do not wrap the JSON in markdown code fences. Do not add any prose before or after the JSON. " +
@@ -4022,6 +4023,18 @@ if (shouldInjectPricing) {
   // supprime aussi toute page vide (0 section), artefact sans intérêt. On garde
   // toujours la page d'accueil.
   pruneRedundantPages(finalFunnel, brief);
+
+  // ===== ÉTAPE 9ter : 🆕 GARANTIE DES PAGES REQUISES =====
+  // Filet de sécurité FINAL : toute page PRÉVUE par le blueprint (selon les
+  // conditions déjà appliquées → `effectiveBlueprints` : la page de vente
+  // webinaire n'est là que si postWebinarOffer, les OTO que si cochés/prix, etc.)
+  // DOIT exister dans le tunnel final. Une page requise (ex. « confirmation »)
+  // pouvait disparaître de façon intermittente : le dédoublonnage inter-pages
+  // (ÉTAPE 8) la vidait APRÈS le garde-fou anti-vide (6bis), puis prune la
+  // supprimait. Ici on reconstruit toute page requise absente OU vide depuis le
+  // placeholder enrichi, à sa position d'origine. AUCUNE condition n'autorise
+  // l'absence d'une page requise (confirmation incluse).
+  ensureRequiredBlueprintPages(finalFunnel, effectiveBlueprints, brief, homeRole);
 
   // ===== ÉTAPE 10 : Footer meta =====
   applyFooterMeta(finalFunnel, brief);
@@ -5221,6 +5234,181 @@ function pruneRedundantPages(funnel: Funnel, brief: FunnelBrief): void {
 
   // Filet de sécurité : ne jamais tout supprimer.
   funnel.pages = kept.length > 0 ? kept : funnel.pages;
+}
+
+/**
+ * 🆕 GARANTIE DES PAGES REQUISES.
+ *
+ * `effectiveBlueprints` est la liste des pages qui DOIVENT figurer dans le
+ * tunnel — elle encode déjà toutes les conditions (page de vente webinaire
+ * seulement si `postWebinarOffer`, OTO/upsell/downsell seulement si cochés/prix
+ * renseignés, page optionnelle seulement si sélectionnée…). Toute page de cette
+ * liste, absente OU vide dans le tunnel final, est reconstruite depuis le
+ * placeholder enrichi (copy conversion-first du rôle) et ré-insérée à sa
+ * position d'origine (ordre du blueprint). On EXCLUT uniquement ce que
+ * `pruneRedundantPages` retire volontairement (page « checkout » interne quand
+ * l'offre est payante → paiement externalisé). Objectif : aucune page prévue ne
+ * peut « disparaître » silencieusement (bug confirmation manquante).
+ */
+function ensureRequiredBlueprintPages(
+  funnel: Funnel,
+  effectiveBlueprints: PageBlueprint[],
+  brief: FunnelBrief,
+  homeRole: PageRole,
+): void {
+  const pages = funnel.pages;
+  if (!pages || pages.length === 0) return;
+  const paid = !isFreeOffer(brief.price);
+  const isIntentionallyRemoved = (role: PageRole): boolean =>
+    paid && role === "checkout"; // seule suppression volontaire de prune
+
+  const order = effectiveBlueprints.map((b) => b.role);
+  const hasNonEmptyPage = (role: PageRole): boolean =>
+    pages.some(
+      (p) =>
+        p.role === role &&
+        Array.isArray(p.sections) &&
+        p.sections.length > 0,
+    );
+
+  const missing = effectiveBlueprints.filter(
+    (bp) => !isIntentionallyRemoved(bp.role) && !hasNonEmptyPage(bp.role),
+  );
+  if (missing.length === 0) return;
+
+  for (const bp of missing) {
+    const isHome = bp.role === homeRole;
+    const rebuilt = buildPlaceholderPage(bp, brief, isHome);
+    const existingIdx = pages.findIndex((p) => p.role === bp.role);
+    if (existingIdx >= 0) {
+      // Page présente mais vide → on la re-remplit sur place.
+      pages[existingIdx] = {
+        ...pages[existingIdx],
+        sections: rebuilt.sections,
+      };
+    } else {
+      // Page absente → insertion à la bonne position selon l'ordre du blueprint.
+      const targetOrder = order.indexOf(bp.role);
+      let insertAt = pages.length;
+      for (let i = 0; i < pages.length; i++) {
+        const ord = order.indexOf(pages[i].role);
+        if (ord !== -1 && ord > targetOrder) {
+          insertAt = i;
+          break;
+        }
+      }
+      pages.splice(insertAt, 0, rebuilt);
+    }
+  }
+
+  // Ré-insertion → on reconstruit la navigation (nextPageId + CTA « suivant »).
+  funnel.pages = chainPagesNavigation(pages);
+  console.warn(
+    `[ensure-required-pages] Page(s) requise(s) reconstruite(s) : ${missing
+      .map((b) => b.role)
+      .join(", ")}.`,
+  );
+}
+
+/**
+ * 🆕 Régénère le COPY d'UNE seule page (toutes ses sections), sans toucher au
+ * reste du tunnel. Réutilise EXACTEMENT le moteur des pages secondaires
+ * (secondaryPagesPrompt + secondaryPagesSchema + parseSectionsArray + callAI),
+ * donc respecte le provider IA configuré (OpenAI / Z.AI / OpenRouter /
+ * Anthropic). Une INSTRUCTION libre optionnelle pilote le style (« ton plus
+ * direct », « copy plus percutant »…). En cas d'échec IA → sections du
+ * placeholder enrichi du rôle (fallback:true) plutôt qu'une page cassée.
+ */
+export async function regeneratePageSections(args: {
+  brief: FunnelBrief;
+  kind: FunnelKind;
+  role: PageRole;
+  slug?: string;
+  name?: string;
+  instruction?: string;
+  homeContext?: { headline?: string; primaryCtaLabel?: string };
+}): Promise<{ sections: FunnelSection[]; fallback: boolean }> {
+  const { brief, instruction } = args;
+  const normalizedKind = normalizeFunnelKind(args.kind) ?? "lead-magnet";
+  const blueprint = getPageBlueprint(normalizedKind, args.role);
+  const fallbackCta: CtaConfig = brief.primaryCta ?? {
+    label: canonicalCtaLabel(normalizedKind, brief.language),
+    mode: "anchor",
+    anchorId: "lead-form",
+    target: "_self",
+  };
+
+  const placeholderSections = (): FunnelSection[] =>
+    blueprint ? buildPlaceholderPage(blueprint, brief, false).sections : [];
+
+  const slug = args.slug ?? blueprint?.slug ?? String(args.role);
+  const name = args.name ?? blueprint?.name ?? String(args.role);
+
+  // Clé IA absente pour le provider courant → fallback direct (pas de crash).
+  const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+  const hasKey =
+    provider === "anthropic" || provider === "claude"
+      ? !!process.env.ANTHROPIC_API_KEY
+      : !!process.env.OPENAI_API_KEY;
+  if (!hasKey) return { sections: placeholderSections(), fallback: true };
+
+  const coherence =
+    `\n\nCOHÉRENCE : marque "${brief.brandName}", offre "${brief.offerName}".` +
+    (args.homeContext?.headline
+      ? ` Titre de la page principale : "${args.homeContext.headline}".`
+      : "") +
+    (args.homeContext?.primaryCtaLabel
+      ? ` CTA principal du tunnel : "${args.homeContext.primaryCtaLabel}".`
+      : "") +
+    ` Cette page joue son rôle "${args.role}" et ne répète PAS les sections de la page principale.`;
+  const instr =
+    instruction && instruction.trim()
+      ? `\n\nINSTRUCTION UTILISATEUR (à respecter en PRIORITÉ pour le style et le copy) : ${instruction.trim()}\n`
+      : "";
+
+  try {
+    const promptText =
+      secondaryPagesPrompt({
+        brand: brief.brandName,
+        offer: brief.offerName,
+        funnelKind: normalizedKind,
+        language: brief.language,
+        pages: [{ role: args.role, slug, name }],
+        videoUrl: brief.videoUrl,
+        brief,
+      }) +
+      buildCtaInstruction(brief.language, brief) +
+      copyDirectives(brief.language) +
+      coherence +
+      instr;
+
+    const rawText = await callAI({
+      systemMessage: SYSTEM_MESSAGE_FUNNEL,
+      userPrompt: promptText,
+      maxTokens: 3000,
+    });
+
+    const parsed = secondaryPagesSchema.safeParse(
+      normalizeSecondaryPagesRawJson(JSON.parse(extractJsonPayload(rawText))),
+    );
+    if (!parsed.success) return { sections: placeholderSections(), fallback: true };
+
+    const page =
+      parsed.data.pages.find((p) => (p.role as PageRole) === args.role) ??
+      parsed.data.pages[0];
+    if (!page) return { sections: placeholderSections(), fallback: true };
+
+    let sections = parseSectionsArray(page.sections, fallbackCta, brief);
+    if (blueprint) {
+      const filtered = filterSectionsByBlueprint(sections, blueprint);
+      if (filtered.length > 0) sections = filtered;
+    }
+    if (sections.length === 0) return { sections: placeholderSections(), fallback: true };
+    return { sections, fallback: false };
+  } catch (e) {
+    console.error("[regeneratePageSections] échec:", e);
+    return { sections: placeholderSections(), fallback: true };
+  }
 }
 
 function applyPaymentUrlToPricingCtas(funnel: Funnel, url: string): void {

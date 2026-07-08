@@ -16,8 +16,23 @@ function featureLines(plan: Plan): string[] {
   const l = plan.limits;
   const lines: string[] = [];
   lines.push(l.funnels === Infinity ? "Tunnels illimités" : `${l.funnels} tunnels`);
+  lines.push(
+    l.aiFunnelGensPerMonth === Infinity
+      ? "Générations IA de tunnel illimitées"
+      : `${l.aiFunnelGensPerMonth} générations IA de tunnel / mois`,
+  );
   if (l.urlImport) lines.push("Import / clonage par URL");
-  if (l.sectionRegeneration) lines.push("Régénération IA des sections");
+  if (l.sectionRegeneration) {
+    // 🆕 La régénération IA couvre désormais les sections ET les pages entières.
+    lines.push(
+      l.aiCopyRegensPerMonth === Infinity
+        ? "Régénération IA des sections & pages (illimitée)"
+        : `Régénération IA des sections & pages (${l.aiCopyRegensPerMonth}/mois)`,
+    );
+  }
+  // Édition avancée des pages (réorganisation par glisser-déposer, redirections
+  // auto) : incluse dès qu'un plan est actif.
+  lines.push("Gestion des pages : glisser-déposer + redirections auto");
   if (l.crm) lines.push("CRM leads & contacts");
   if (l.leadsExport) lines.push("Export CSV des leads");
   if (l.campaigns)
