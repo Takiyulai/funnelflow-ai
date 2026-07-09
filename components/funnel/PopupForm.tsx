@@ -3,8 +3,36 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { X, Gift, Lock, ArrowRight } from "lucide-react";
+
+// 🆕 Lit les variables de thème (--ff-*) sur le conteneur [data-ff-template] et
+// les renvoie en style inline. Nécessaire quand on PORTALISE le popup vers
+// document.body (hors de l'arbre du tunnel) : sinon les couleurs de branding
+// ne sont plus héritées et le popup retombe sur les valeurs par défaut.
+function readFunnelThemeVars(): React.CSSProperties {
+  if (typeof document === "undefined") return {};
+  const host = document.querySelector(
+    "[data-ff-template], [data-ff-skin], [data-ff-mobile-frame]",
+  ) as HTMLElement | null;
+  if (!host) return {};
+  const cs = getComputedStyle(host);
+  const vars: Record<string, string> = {};
+  for (const name of [
+    "--ff-accent",
+    "--ff-accent-ink",
+    "--ff-bg",
+    "--ff-ink",
+    "--ff-border",
+    "--ff-btn-bg",
+    "--ff-btn-ink",
+  ]) {
+    const v = cs.getPropertyValue(name).trim();
+    if (v) vars[name] = v;
+  }
+  return vars as React.CSSProperties;
+}
 import type {
   CtaConfig,
   Funnel,
@@ -154,6 +182,8 @@ function InternalPopup({
 
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
+  // 🆕 Variables de branding capturées à l'ouverture (pour le portail).
+  const [themeStyle, setThemeStyle] = useState<React.CSSProperties>({});
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const firstInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -173,6 +203,8 @@ function InternalPopup({
 
   useEffect(() => {
     if (!open) return;
+    // Capture les couleurs de branding AVANT le portail (héritage perdu sinon).
+    setThemeStyle(readFunnelThemeVars());
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const t = window.setTimeout(() => {
@@ -340,14 +372,16 @@ function InternalPopup({
         {cta.label}
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="ff-popup-title"
-          className="ff-popup-overlay fixed inset-0 z-[9999] flex items-center justify-center px-4"
+          className="ff-popup-overlay fixed inset-0 z-[2147483000] flex items-center justify-center px-4"
           style={{
-            background: "rgba(0,0,0,0.6)",
+            ...themeStyle,
+            background: "rgba(0,0,0,0.72)",
+            backdropFilter: "blur(2px)",
             animation: "ffPopupFade 180ms ease-out",
           }}
           onMouseDown={(e) => {
@@ -521,7 +555,8 @@ function InternalPopup({
               }
             }
           `}</style>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
@@ -671,12 +706,12 @@ function EmbedPopup({
         {cta.label}
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
-          style={{ background: "rgba(0,0,0,0.6)" }}
+          className="fixed inset-0 z-[2147483000] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(2px)" }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
@@ -721,7 +756,8 @@ function EmbedPopup({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

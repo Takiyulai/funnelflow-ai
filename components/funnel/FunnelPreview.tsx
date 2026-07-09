@@ -1037,7 +1037,13 @@ function PreviewBody({
   const body = (
     <div className={embed ? "ff-fill-col" : undefined}>
       {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
-        <FunnelHeader funnel={funnel} logoSrc={logoSrc} />
+        <FunnelHeader
+          funnel={funnel}
+          logoSrc={logoSrc}
+          page={activePage ?? undefined}
+          pageLinks={pageLinks}
+          slugLinks={slugLinks}
+        />
       )}
 
       {heroSection &&

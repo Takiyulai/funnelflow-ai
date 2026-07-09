@@ -1,17 +1,36 @@
 "use client";
 
-import type { Funnel } from "@/lib/funnels/types";
-import { ctaHref, ctaTarget, ctaRel, ctaIsExternal } from "@/lib/funnels/cta";
+import type { Funnel, FunnelPage, FunnelSection } from "@/lib/funnels/types";
 import { formatEventBadge } from "@/lib/funnels/eventDate";
-import { ExternalLink } from "lucide-react";
+import { CtaLink } from "@/components/funnel/CtaLink";
 
 type Props = {
   funnel: Funnel;
   /** Override du logo (utilisé en preview embed quand on veut forcer une URL) */
   logoSrc?: string;
+  /** 🆕 Contexte de navigation, pour que le CTA du header se comporte comme les
+   *  autres CTA (popup, action commune sur l'accueil, liens inter-pages). */
+  page?: FunnelPage;
+  pageLinks?: Map<string, string>;
+  slugLinks?: Map<string, string>;
 };
 
-export default function FunnelHeader({ funnel, logoSrc }: Props) {
+// Section synthétique : le CTA du header n'appartient à aucune section réelle,
+// mais CtaLink en a besoin (id pour la capture popup, résolution de la page
+// suivante). Un id stable suffit.
+const HEADER_CTA_SECTION: FunnelSection = {
+  id: "ff-header-cta",
+  type: "cta",
+  visible: true,
+} as FunnelSection;
+
+export default function FunnelHeader({
+  funnel,
+  logoSrc,
+  page,
+  pageLinks,
+  slugLinks,
+}: Props) {
   const header = funnel.header ?? {};
   const enabled = header.enabled !== false;
   if (!enabled) return null;
@@ -64,16 +83,15 @@ export default function FunnelHeader({ funnel, logoSrc }: Props) {
         )}
 
         {hasCta && cta && (
-          <a
-            href={ctaHref(cta)}
-            target={ctaTarget(cta)}
-            rel={ctaRel(cta)}
-            className="ff-brand-bar-cta"
-            data-ff-cta
-          >
-            {cta.label}
-            {ctaIsExternal(cta) && <ExternalLink size={13} />}
-          </a>
+          <CtaLink
+            cta={cta}
+            funnel={funnel}
+            page={page}
+            section={HEADER_CTA_SECTION}
+            pageLinks={pageLinks ?? new Map()}
+            slugLinks={slugLinks ?? new Map()}
+            baseClassName="ff-brand-bar-cta"
+          />
         )}
       </div>
     </header>
