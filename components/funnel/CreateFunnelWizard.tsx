@@ -26,7 +26,7 @@ import {
 import { getFunnelKind, FUNNEL_KINDS } from "@/lib/funnels/kinds";
 import { getRequiredPageBlueprints, getOptionalPageBlueprints } from "@/lib/funnels/pageCatalogs";
 import type {
-  Funnel, FunnelBrief, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs, PageRole,
+  Funnel, FunnelBrief, FunnelSection, Language, CtaConfig, CtaMode, ImageMode, FunnelKind, MediaItem, CopywritingPrefs, PageRole,
 } from "@/lib/funnels/types";
 import { makeAnchorCta, makeRedirectCta } from "@/lib/funnels/types";
 import type { AiHealth } from "@/lib/ai/health";
@@ -86,6 +86,491 @@ type ApiError = {
 function capitalize(str: string): string {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Contenu de démonstration du panneau "Live preview" du wizard.
+//
+// Avant : la preview n'affichait qu'une "coquille structurelle" de 3-4
+// sections avec un texte annonçant explicitement "l'aperçu actuel est une
+// coquille" — ça ne donnait AUCUNE idée réaliste du rendu final. Ici, on
+// construit un funnel COMPLET (problème, bénéfices, témoignages, tarif,
+// bonus, garantie, FAQ, CTA final) avec un copy plausible dans les 3 langues
+// supportées, personnalisé avec les quelques champs déjà saisis par
+// l'utilisateur (marque, promesse, audience, prix). Ce n'est PAS le copy réel
+// généré par l'IA (qui reste propre à l'offre) : c'est un GABARIT de
+// démonstration pour que le choix de template/ambiance soit visuellement
+// parlant dès l'étape 2, avant même de lancer la génération.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SHOWCASE_COPY: Record<
+  Language,
+  {
+    problemEyebrow: string;
+    problemHeadline: (audience: string) => string;
+    problemBullets: string[];
+    benefitsEyebrow: string;
+    benefitsHeadline: (promise: string) => string;
+    benefitsBullets: string[];
+    proofEyebrow: string;
+    proofHeadline: string;
+    testimonials: { quote: string; authorName: string; authorRole: string }[];
+    pricingEyebrow: string;
+    pricingHeadline: string;
+    pricingPlanName: string;
+    pricingPeriod: string;
+    pricingDescription: string;
+    pricingFeatures: string[];
+    pricingBadge: string;
+    pricingCta: string;
+    bonusEyebrow: string;
+    bonusHeadline: string;
+    bonuses: { title: string; description: string; value: string }[];
+    guaranteeTitle: string;
+    guaranteeDescription: string;
+    guaranteeDuration: string;
+    faqEyebrow: string;
+    faqHeadline: string;
+    faqs: { question: string; answer: string }[];
+    ctaEyebrow: string;
+    ctaHeadline: string;
+    ctaSubheadline: string;
+    ctaLabel: string;
+  }
+> = {
+  fr: {
+    problemEyebrow: "Le vrai problème",
+    problemHeadline: (audience) =>
+      `Pourquoi ${audience || "la plupart des gens"} n'y arrivent pas seul·e·s`,
+    problemBullets: [
+      "Trop d'informations contradictoires, aucune méthode claire à suivre",
+      "Des heures perdues à tout tester sans résultat concret",
+      "Le sentiment de stagner alors que d'autres avancent plus vite",
+    ],
+    benefitsEyebrow: "Ce que vous obtenez",
+    benefitsHeadline: (promise) =>
+      `Tout ce qu'il faut pour ${promise || "atteindre votre objectif"}`,
+    benefitsBullets: [
+      "Une méthode claire, étape par étape, sans jargon inutile",
+      "Des outils prêts à l'emploi pour gagner du temps immédiatement",
+      "Un accompagnement pensé pour des résultats visibles rapidement",
+      "Une communauté pour ne plus jamais avancer seul·e",
+    ],
+    proofEyebrow: "Ils l'ont fait",
+    proofHeadline: "Ce qu'en disent celles et ceux qui ont déjà commencé",
+    testimonials: [
+      {
+        quote:
+          "Résultat dès les 2 premières semaines. Simple, concret, sans blabla inutile.",
+        authorName: "Camille D.",
+        authorRole: "Cliente depuis 2025",
+      },
+      {
+        quote:
+          "J'ai enfin une méthode claire à suivre au lieu de tout improviser. Ça change tout.",
+        authorName: "Karim B.",
+        authorRole: "Client depuis 2025",
+      },
+      {
+        quote: "Le meilleur investissement que j'ai fait cette année, sans hésiter.",
+        authorName: "Léa M.",
+        authorRole: "Cliente depuis 2026",
+      },
+    ],
+    pricingEyebrow: "L'offre",
+    pricingHeadline: "Un tarif simple, sans surprise",
+    pricingPlanName: "Accès complet",
+    pricingPeriod: "paiement unique",
+    pricingDescription: "Tout ce qu'il faut pour démarrer et obtenir des résultats",
+    pricingFeatures: [
+      "Accès immédiat à l'intégralité du contenu",
+      "Mises à jour gratuites à vie",
+      "Support par email sous 24h",
+      "Garantie satisfait ou remboursé",
+    ],
+    pricingBadge: "Le plus populaire",
+    pricingCta: "Je commence maintenant",
+    bonusEyebrow: "En plus, offert",
+    bonusHeadline: "Des bonus exclusifs pour aller plus vite",
+    bonuses: [
+      {
+        title: "Guide de démarrage rapide",
+        description: "Les 3 premières actions à faire dès aujourd'hui",
+        value: "47€",
+      },
+      {
+        title: "Séance de questions/réponses",
+        description: "Un accès direct pour poser vos questions",
+        value: "97€",
+      },
+    ],
+    guaranteeTitle: "Satisfait ou remboursé",
+    guaranteeDescription:
+      "Testez sans risque : si ça ne vous convient pas, on vous rembourse intégralement, sans question.",
+    guaranteeDuration: "30 jours",
+    faqEyebrow: "Questions fréquentes",
+    faqHeadline: "Tout ce que vous devez savoir",
+    faqs: [
+      {
+        question: "Combien de temps avant de voir des résultats ?",
+        answer:
+          "La majorité des utilisateurs constatent des premiers résultats dès les 2 à 3 premières semaines en appliquant la méthode.",
+      },
+      {
+        question: "Est-ce adapté si je débute complètement ?",
+        answer:
+          "Oui, tout est expliqué étape par étape, sans prérequis. Vous partez de zéro et progressez à votre rythme.",
+      },
+      {
+        question: "Que se passe-t-il si ça ne me convient pas ?",
+        answer:
+          "Vous êtes couvert·e par la garantie : un remboursement intégral, sans justification à fournir.",
+      },
+    ],
+    ctaEyebrow: "Dernière étape",
+    ctaHeadline: "Prêt·e à passer à l'action ?",
+    ctaSubheadline: "Rejoignez celles et ceux qui ont déjà fait le premier pas.",
+    ctaLabel: "Je me lance maintenant",
+  },
+  en: {
+    problemEyebrow: "The real problem",
+    problemHeadline: (audience) =>
+      `Why ${audience || "most people"} can't do it alone`,
+    problemBullets: [
+      "Too much conflicting information, no clear method to follow",
+      "Hours wasted testing things with no real result",
+      "The feeling of standing still while others move faster",
+    ],
+    benefitsEyebrow: "What you get",
+    benefitsHeadline: (promise) =>
+      `Everything you need to ${promise || "reach your goal"}`,
+    benefitsBullets: [
+      "A clear, step-by-step method with no unnecessary jargon",
+      "Ready-to-use tools that save you time immediately",
+      "Guidance designed for visible results, fast",
+      "A community so you're never figuring it out alone",
+    ],
+    proofEyebrow: "Real results",
+    proofHeadline: "What people who already started are saying",
+    testimonials: [
+      {
+        quote: "Results within the first 2 weeks. Simple, concrete, no fluff.",
+        authorName: "Camille D.",
+        authorRole: "Customer since 2025",
+      },
+      {
+        quote:
+          "I finally have a clear method to follow instead of improvising everything. Total game changer.",
+        authorName: "Karim B.",
+        authorRole: "Customer since 2025",
+      },
+      {
+        quote: "Best investment I've made this year, hands down.",
+        authorName: "Léa M.",
+        authorRole: "Customer since 2026",
+      },
+    ],
+    pricingEyebrow: "The offer",
+    pricingHeadline: "Simple pricing, no surprises",
+    pricingPlanName: "Full access",
+    pricingPeriod: "one-time payment",
+    pricingDescription: "Everything you need to get started and see results",
+    pricingFeatures: [
+      "Instant access to the full content",
+      "Free updates for life",
+      "Email support within 24h",
+      "Money-back guarantee",
+    ],
+    pricingBadge: "Most popular",
+    pricingCta: "I'm starting now",
+    bonusEyebrow: "Also included",
+    bonusHeadline: "Exclusive bonuses to move faster",
+    bonuses: [
+      {
+        title: "Quick-start guide",
+        description: "The first 3 actions to take today",
+        value: "$47",
+      },
+      {
+        title: "Live Q&A session",
+        description: "Direct access to ask your questions",
+        value: "$97",
+      },
+    ],
+    guaranteeTitle: "Money-back guarantee",
+    guaranteeDescription:
+      "Try it risk-free: if it's not for you, get a full refund, no questions asked.",
+    guaranteeDuration: "30 days",
+    faqEyebrow: "Frequently asked questions",
+    faqHeadline: "Everything you need to know",
+    faqs: [
+      {
+        question: "How long before I see results?",
+        answer:
+          "Most users see their first results within 2 to 3 weeks of applying the method.",
+      },
+      {
+        question: "Is this suitable for complete beginners?",
+        answer:
+          "Yes, everything is explained step by step, no prerequisites. Start from zero and go at your own pace.",
+      },
+      {
+        question: "What if it's not for me?",
+        answer: "You're covered by the guarantee: a full refund, no justification needed.",
+      },
+    ],
+    ctaEyebrow: "Last step",
+    ctaHeadline: "Ready to take action?",
+    ctaSubheadline: "Join the people who already took the first step.",
+    ctaLabel: "I'm starting now",
+  },
+  es: {
+    problemEyebrow: "El verdadero problema",
+    problemHeadline: (audience) =>
+      `Por qué ${audience || "la mayoría"} no lo logra sola`,
+    problemBullets: [
+      "Demasiada información contradictoria, ningún método claro a seguir",
+      "Horas perdidas probando de todo sin resultados reales",
+      "La sensación de estancarte mientras otros avanzan más rápido",
+    ],
+    benefitsEyebrow: "Lo que obtienes",
+    benefitsHeadline: (promise) => `Todo lo necesario para ${promise || "lograr tu objetivo"}`,
+    benefitsBullets: [
+      "Un método claro, paso a paso, sin jerga innecesaria",
+      "Herramientas listas para usar que ahorran tiempo de inmediato",
+      "Acompañamiento pensado para resultados visibles y rápidos",
+      "Una comunidad para no avanzar nunca más en solitario",
+    ],
+    proofEyebrow: "Ya lo lograron",
+    proofHeadline: "Lo que dicen quienes ya empezaron",
+    testimonials: [
+      {
+        quote: "Resultados desde las 2 primeras semanas. Simple, concreto, sin relleno.",
+        authorName: "Camille D.",
+        authorRole: "Cliente desde 2025",
+      },
+      {
+        quote: "Por fin tengo un método claro a seguir en vez de improvisar todo. Cambia todo.",
+        authorName: "Karim B.",
+        authorRole: "Cliente desde 2025",
+      },
+      {
+        quote: "La mejor inversión que hice este año, sin dudarlo.",
+        authorName: "Léa M.",
+        authorRole: "Cliente desde 2026",
+      },
+    ],
+    pricingEyebrow: "La oferta",
+    pricingHeadline: "Un precio simple, sin sorpresas",
+    pricingPlanName: "Acceso completo",
+    pricingPeriod: "pago único",
+    pricingDescription: "Todo lo necesario para empezar y obtener resultados",
+    pricingFeatures: [
+      "Acceso inmediato a todo el contenido",
+      "Actualizaciones gratuitas de por vida",
+      "Soporte por email en 24h",
+      "Garantía de devolución de dinero",
+    ],
+    pricingBadge: "El más popular",
+    pricingCta: "Empiezo ahora",
+    bonusEyebrow: "Además, de regalo",
+    bonusHeadline: "Bonos exclusivos para avanzar más rápido",
+    bonuses: [
+      {
+        title: "Guía de inicio rápido",
+        description: "Las 3 primeras acciones a hacer hoy mismo",
+        value: "47€",
+      },
+      {
+        title: "Sesión de preguntas y respuestas",
+        description: "Acceso directo para hacer tus preguntas",
+        value: "97€",
+      },
+    ],
+    guaranteeTitle: "Satisfacción garantizada",
+    guaranteeDescription:
+      "Pruébalo sin riesgo: si no te convence, te devolvemos el 100%, sin preguntas.",
+    guaranteeDuration: "30 días",
+    faqEyebrow: "Preguntas frecuentes",
+    faqHeadline: "Todo lo que necesitas saber",
+    faqs: [
+      {
+        question: "¿Cuánto tiempo antes de ver resultados?",
+        answer:
+          "La mayoría de los usuarios ven sus primeros resultados entre 2 y 3 semanas aplicando el método.",
+      },
+      {
+        question: "¿Es apto si soy principiante total?",
+        answer:
+          "Sí, todo se explica paso a paso, sin requisitos previos. Empiezas desde cero y avanzas a tu ritmo.",
+      },
+      {
+        question: "¿Qué pasa si no me convence?",
+        answer: "Estás cubierto por la garantía: devolución completa, sin justificar nada.",
+      },
+    ],
+    ctaEyebrow: "Último paso",
+    ctaHeadline: "¿List·a para pasar a la acción?",
+    ctaSubheadline: "Únete a quienes ya dieron el primer paso.",
+    ctaLabel: "Empiezo ahora",
+  },
+};
+
+/** Construit les sections de démonstration (preview wizard uniquement). */
+function buildShowcaseSections(brief: FunnelBrief): FunnelSection[] {
+  const copy = SHOWCASE_COPY[brief.language] ?? SHOWCASE_COPY.fr;
+  const price = brief.price?.trim() || "97€";
+
+  const sections: FunnelSection[] = [
+    {
+      id: "preview-hero",
+      type: "hero",
+      eyebrow: brief.funnelType,
+      headline: capitalize(brief.promise) || copy.benefitsHeadline(""),
+      subheadline: `Un tunnel pensé pour ${brief.targetAudience || "votre audience"}`,
+      cta: brief.primaryCta,
+      image: { mode: brief.defaultImageMode ?? "none" },
+      visible: true,
+    },
+  ];
+
+  if (brief.aboutText) {
+    sections.push({
+      id: "preview-about",
+      type: "about",
+      eyebrow: "À propos",
+      headline: brief.brandName,
+      body: brief.aboutText,
+      image: { mode: "none" },
+      visible: true,
+    });
+  }
+
+  if (brief.videoUrl) {
+    sections.push({
+      id: "preview-video",
+      type: "video",
+      eyebrow: "Présentation",
+      headline: "Découvrez la méthode en quelques minutes",
+      video: { provider: "url", url: brief.videoUrl },
+      image: { mode: "none" },
+      visible: true,
+    });
+  }
+
+  sections.push(
+    {
+      id: "preview-problem",
+      type: "problem",
+      eyebrow: copy.problemEyebrow,
+      headline: copy.problemHeadline(brief.targetAudience),
+      bullets: copy.problemBullets,
+      image: { mode: "none" },
+      visible: true,
+    },
+    {
+      id: "preview-benefits",
+      type: "benefits",
+      eyebrow: copy.benefitsEyebrow,
+      headline: copy.benefitsHeadline(brief.promise),
+      bullets: copy.benefitsBullets,
+      image: { mode: "none" },
+      visible: true,
+    },
+    {
+      id: "preview-testimonials",
+      type: "testimonials",
+      eyebrow: copy.proofEyebrow,
+      headline: copy.proofHeadline,
+      image: { mode: "none" },
+      visible: true,
+      items: copy.testimonials.map((t) => ({
+        kind: "testimonial" as const,
+        data: {
+          quote: t.quote,
+          authorName: t.authorName,
+          authorRole: t.authorRole,
+          rating: 5,
+        },
+      })),
+    },
+    {
+      id: "preview-pricing",
+      type: "pricing",
+      eyebrow: copy.pricingEyebrow,
+      headline: copy.pricingHeadline,
+      image: { mode: "none" },
+      visible: true,
+      items: [
+        {
+          kind: "pricing" as const,
+          data: {
+            name: copy.pricingPlanName,
+            price,
+            period: copy.pricingPeriod,
+            description: copy.pricingDescription,
+            features: copy.pricingFeatures,
+            highlighted: true,
+            badge: copy.pricingBadge,
+            cta: brief.primaryCta ?? { mode: "anchor", label: copy.pricingCta, anchorId: "lead-form" },
+          },
+        },
+      ],
+    },
+    {
+      id: "preview-bonus",
+      type: "bonus",
+      eyebrow: copy.bonusEyebrow,
+      headline: copy.bonusHeadline,
+      image: { mode: "none" },
+      visible: true,
+      items: copy.bonuses.map((b) => ({
+        kind: "bonus" as const,
+        data: { title: b.title, description: b.description, value: b.value },
+      })),
+    },
+    {
+      id: "preview-guarantee",
+      type: "guarantee",
+      headline: copy.guaranteeTitle,
+      image: { mode: "none" },
+      visible: true,
+      items: [
+        {
+          kind: "guarantee" as const,
+          data: {
+            title: copy.guaranteeTitle,
+            description: copy.guaranteeDescription,
+            duration: copy.guaranteeDuration,
+          },
+        },
+      ],
+    },
+    {
+      id: "preview-faq",
+      type: "faq",
+      eyebrow: copy.faqEyebrow,
+      headline: copy.faqHeadline,
+      image: { mode: "none" },
+      visible: true,
+      items: copy.faqs.map((f) => ({
+        kind: "faq" as const,
+        data: { question: f.question, answer: f.answer },
+      })),
+    },
+    {
+      id: "preview-cta-final",
+      type: "cta",
+      eyebrow: copy.ctaEyebrow,
+      headline: copy.ctaHeadline,
+      subheadline: copy.ctaSubheadline,
+      cta: brief.primaryCta ?? { mode: "anchor", label: copy.ctaLabel, anchorId: "lead-form" },
+      image: { mode: "none" },
+      visible: true,
+    },
+  );
+
+  return sections;
 }
 
 export function CreateFunnelWizard() {
@@ -373,54 +858,10 @@ export function CreateFunnelWizard() {
   const previewFunnelBase: Funnel = funnel ?? {
     funnelName: `${brief.brandName} — ${brief.offerName}`,
     language: brief.language,
-    sections: [
-      {
-        id: "preview-hero",
-        type: "hero",
-        eyebrow: brief.funnelType,
-        headline: capitalize(brief.promise),
-        subheadline: `Un tunnel pensé pour ${brief.targetAudience}`,
-        cta: brief.primaryCta,
-        image: { mode: brief.defaultImageMode ?? "none" },
-        visible: true,
-      },
-      ...(brief.aboutText
-        ? [{
-          id: "preview-about",
-          type: "about" as const,
-          eyebrow: "À propos",
-          headline: brief.brandName,
-          body: brief.aboutText,
-          image: { mode: "none" as const },
-          visible: true,
-        }]
-        : []),
-      ...(brief.videoUrl
-        ? [{
-          id: "preview-video",
-          type: "video" as const,
-          eyebrow: "Présentation",
-          headline: "Découvrez la méthode en quelques minutes",
-          video: { provider: "url" as const, url: brief.videoUrl },
-          image: { mode: "none" as const },
-          visible: true,
-        }]
-        : []),
-      {
-        id: "preview-benefits",
-        type: "benefits",
-        eyebrow: "Aperçu",
-        headline: "Le résultat sera personnalisé après génération IA",
-        bullets: [
-          "Cliquez sur Générer pour produire le copywriting réel",
-          "Toutes les sections seront adaptées à votre offre",
-          "L'aperçu actuel est une coquille structurelle",
-        ],
-        cta: brief.primaryCta,
-        image: { mode: "none" },
-        visible: true,
-      },
-    ],
+    // 🆕 Funnel de démonstration complet (hero → problème → bénéfices →
+    // témoignages → tarif → bonus → garantie → FAQ → CTA) tant que l'IA n'a
+    // pas encore généré le vrai copy — voir buildShowcaseSections ci-dessus.
+    sections: buildShowcaseSections(brief),
     thankYouPage: { headline: "Merci", body: "Votre demande est confirmée" },
     emails: [],
     seo: { title: brief.offerName, description: brief.promise },
@@ -819,6 +1260,7 @@ export function CreateFunnelWizard() {
               funnel={previewFunnel}
               logoSrc={logoPreview}
               viewportHeight={680}
+              autoScrollDemoKey={brief.templateId}
             />
           </div>
         </div>

@@ -1,7 +1,7 @@
 // components/funnel/FunnelPreview.tsx
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Monitor,
   Smartphone,
@@ -78,6 +78,12 @@ interface FunnelPreviewProps {
   pageRole?: PageRole;
   /** 🆕 Mode édition : active l'annotation des éléments raw-html pour le scroll-to. */
   editMode?: boolean;
+  /** 🆕 Clé opt-in : à chaque CHANGEMENT de valeur (ex : templateId), déclenche
+   *  un défilement automatique fluide de haut en bas de la zone d'aperçu, pour
+   *  montrer tout le contenu sans scroll manuel (wizard "Live preview"
+   *  uniquement — undefined ailleurs = aucun comportement, zéro impact sur les
+   *  autres usages de FunnelPreview). Respecte prefers-reduced-motion. */
+  autoScrollDemoKey?: string | number;
 }
 
 const SUCCESS_PAGE_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
@@ -640,6 +646,7 @@ export function FunnelPreview({
   className = "",
   pageRole,
   editMode = false,
+  autoScrollDemoKey,
 }: FunnelPreviewProps) {
   const [mode, setMode] = useState<PreviewMode>(
     forcedMode === "raw" ? "desktop" : (forcedMode ?? defaultMode),
@@ -648,6 +655,50 @@ export function FunnelPreview({
   const activeMode: PreviewMode = isRaw ? "desktop" : (forcedMode ?? mode);
 
   const isEmbed = viewportHeight === "auto";
+
+  // 🆕 Showcase auto-scroll (wizard "Live preview") : à chaque changement de
+  // `autoScrollDemoKey` (ex : templateId), on fait défiler la zone d'aperçu
+  // de haut en bas, doucement, pour que l'utilisateur voie tout le contenu
+  // sans avoir à scroller lui-même. Opt-in : sans la prop, aucun effet.
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (autoScrollDemoKey === undefined || autoScrollDemoKey === null) return;
+    const el = scrollRootRef.current;
+    if (!el) return;
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) return;
+
+    let cancelled = false;
+    // Petit délai : laisse le nouveau contenu (template changé) se poser et
+    // ses dimensions se stabiliser avant de mesurer scrollHeight.
+    const startTimer = setTimeout(() => {
+      if (cancelled) return;
+      el.scrollTo({ top: 0, behavior: "auto" });
+      const distance = el.scrollHeight - el.clientHeight;
+      if (distance <= 4) return;
+      // Vitesse proportionnelle à la distance, bornée pour rester agréable
+      // (ni trop rapide sur une longue page, ni trop lente sur une courte).
+      const duration = Math.min(9000, Math.max(2200, distance * 3.2));
+      const start = performance.now();
+      const step = (now: number) => {
+        if (cancelled) return;
+        const t = Math.min(1, (now - start) / duration);
+        // ease-in-out-quad
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        el.scrollTop = eased * distance;
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(startTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScrollDemoKey]);
 
   const resolvedActivePage = useMemo<FunnelPage | undefined>(
     () => activePage ?? resolveActivePage(funnel),
@@ -769,7 +820,11 @@ export function FunnelPreview({
         <PreviewToolbar mode={activeMode} onChange={setMode} />
       )}
 
-      <div style={innerStyle} className={isEmbed ? "ff-fill-col" : undefined}>
+      <div
+        ref={scrollRootRef}
+        style={innerStyle}
+        className={isEmbed ? "ff-fill-col" : undefined}
+      >
         {isEmbed ? (
           <EmbedFrame {...frameProps} />
         ) : activeMode === "desktop" ? (
