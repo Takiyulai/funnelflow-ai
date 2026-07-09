@@ -4,9 +4,10 @@ import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getPageBySlug } from "@/lib/funnels/types";
 import PublishedFunnelView from "../PublishedFunnelView";
 
-// 🆕 Chantier 3 — caching : ISR (revalidée toutes les 60s) + revalidation
-// on-demand à la publication.
-export const revalidate = 60;
+// 🆕 CORRECTIF FIABILITÉ PUBLICATION — pages secondaires DYNAMIQUES (lecture
+// fraîche), comme la home publique. Évite qu'un 404 mis en cache avant la
+// publication reste « collé » alors que le tunnel est publié.
+export const dynamic = "force-dynamic";
 
 export default async function PublishedFunnelSubPage({
   params,

@@ -74,7 +74,8 @@ export function resolveCtaWithGlobal(
   globalCta?: CtaConfig | null,
   enabled?: boolean,
 ): CtaConfig {
-  if (!enabled || !globalCta || !globalCta.mode) return cta;
+  // 🆕 Opt-out individuel : un CTA marqué `ignoreGlobalCta` garde SON action.
+  if (!enabled || !globalCta || !globalCta.mode || cta.ignoreGlobalCta) return cta;
   return {
     ...cta,
     mode: globalCta.mode,

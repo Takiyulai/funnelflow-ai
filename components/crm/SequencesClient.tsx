@@ -142,7 +142,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       if (!name.trim()) {
         const label = roleLabel(roles[0]) || "Séquence";
         const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
-        setName(fn ? `${label} — ${fn}` : label);
+        // 🆕 Nom auto BORNÉ à 160 (limite serveur) : les noms de tunnels IA sont
+        // parfois très longs → sans cap, l'enregistrement renvoyait invalid_input.
+        const raw = fn ? `${label} — ${fn}` : label;
+        setName(raw.length > 160 ? `${raw.slice(0, 159).trimEnd()}…` : raw);
       }
     } catch { setError("Connexion impossible. Réessayez."); }
     finally { setLoading(false); }
@@ -167,7 +170,18 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.ok) { setError(json.message || json.error || "Enregistrement impossible."); return; }
+      if (!res.ok || !json.ok) {
+        // 🆕 Message plus utile : si la validation échoue, on nomme les champs.
+        const fields = json.details && typeof json.details === "object"
+          ? Object.keys(json.details).join(", ")
+          : "";
+        setError(
+          json.error === "invalid_input" && fields
+            ? `Champs invalides : ${fields}. Corrige puis réessaie.`
+            : json.message || json.error || "Enregistrement impossible.",
+        );
+        return;
+      }
       const s = json.sequence;
       setEditingId(s.id);
       // On récupère les ids d'emails (nécessaires pour l'envoi test).
@@ -389,7 +403,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       {emails && (
         <Card className="p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <input className={`${inputCls} max-w-xs font-semibold`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la séquence" />
+            <input className={`${inputCls} max-w-xs font-semibold`} value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Nom de la séquence" />
             <div className="flex items-center gap-2">
               <button type="button" onClick={addEmail}
                 className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-black/5">

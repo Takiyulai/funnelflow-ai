@@ -336,9 +336,12 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
           <SectionTitle>Action commune des boutons</SectionTitle>
           <p className="text-[11px] leading-relaxed text-white/40">
             Activez pour appliquer LA MÊME action à tous les boutons principaux de
-            la page (hero, urgence, CTA final, offre…). Plus besoin de la régler
-            bouton par bouton — le libellé de chaque bouton reste le sien. Les
-            boutons secondaires (canaux WhatsApp/Telegram) ne sont pas affectés.
+            la <b className="text-white/60">page d&apos;accueil</b> (hero, urgence,
+            CTA final, offre…). Les autres pages (confirmation, merci, replay…)
+            gardent l&apos;action propre de leurs boutons. Le libellé de chaque
+            bouton reste le sien. Les boutons secondaires (canaux WhatsApp/Telegram)
+            ne sont pas affectés, et tu peux désolidariser un bouton précis via
+            «&nbsp;Action spécifique&nbsp;» dans son onglet CTA.
           </p>
           <label className="flex items-center gap-2 text-sm text-white/80">
             <input

@@ -18,27 +18,31 @@ export async function getPublishedFunnelBySlug(
   slug: string,
 ): Promise<PublishedFunnel | null> {
   const supabase = getSupabaseAdmin();
+  const clean = (slug ?? "").replace(/^\/+|\/+$/g, "").trim();
+  if (!clean) return null;
 
-  // 1) Slug public officiel.
-  let { data } = await supabase
-    .from("funnels")
-    .select("name, published_content, status")
-    .eq("published_slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-
-  // 2) Repli : certains tunnels publiés tôt n'ont pas de published_slug distinct
-  //    du slug brouillon. On tente alors par `slug`.
-  if (!data) {
-    const byDraft = await supabase
+  // 🆕 Recherche TOLÉRANTE : on interroge par `published_slug` PUIS par `slug`,
+  // avec `.limit(1)` (jamais `.maybeSingle()`, qui LÈVE une erreur — donc null →
+  // faux 404 — dès que deux lignes matchent le slug). On exige un contenu publié
+  // non nul. Ce chemin ne peut plus renvoyer 404 pour un tunnel réellement
+  // publié à cause d'un doublon de slug ou d'un aléa de requête.
+  const lookup = async (
+    column: "published_slug" | "slug",
+  ): Promise<{ name: string; published_content: unknown } | null> => {
+    const { data } = await supabase
       .from("funnels")
-      .select("name, published_content, status")
-      .eq("slug", slug)
+      .select("name, published_content")
+      .eq(column, clean)
       .eq("status", "published")
-      .maybeSingle();
-    data = byDraft.data;
-  }
+      .not("published_content", "is", null)
+      .order("published_at", { ascending: false })
+      .limit(1);
+    return data && data.length > 0
+      ? (data[0] as { name: string; published_content: unknown })
+      : null;
+  };
 
-  if (!data || !data.published_content) return null;
-  return { funnel: normalizeFunnel(data.published_content), name: data.name };
+  const row = (await lookup("published_slug")) ?? (await lookup("slug"));
+  if (!row || !row.published_content) return null;
+  return { funnel: normalizeFunnel(row.published_content), name: row.name };
 }

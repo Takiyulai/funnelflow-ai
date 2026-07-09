@@ -232,6 +232,24 @@ export function CtaTab({ section, onChange }: Props) {
             </div>
           </Field>
 
+          {/* 🆕 Opt-out de l'action commune, bouton par bouton. */}
+          <label className="flex items-start gap-2 text-xs text-white/70">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={cta.ignoreGlobalCta === true}
+              onChange={(e) => updateCta({ ignoreGlobalCta: e.target.checked })}
+            />
+            <span>
+              Action spécifique — ignorer l&apos;« action commune des boutons »
+              <span className="mt-0.5 block text-[11px] font-normal text-white/40">
+                Utile seulement si tu as activé une action commune (Style global).
+                Coché : ce bouton garde l&apos;action choisie ci-dessus, même sur la
+                page d&apos;accueil.
+              </span>
+            </span>
+          </label>
+
           {/* Mode ANCRE */}
           {cta.mode === "anchor" && (
             <Field

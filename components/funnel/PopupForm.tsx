@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { usePathname } from "next/navigation";
-import { X } from "lucide-react";
+import { X, Gift, Lock, ArrowRight } from "lucide-react";
 import type {
   CtaConfig,
   Funnel,
@@ -320,6 +320,13 @@ function InternalPopup({
 
   const title = cta.popupTitle ?? "Inscrivez-vous";
   const body = cta.popupBody ?? "";
+  // 🆕 Badge décoratif « accès privé » (langue du tunnel).
+  const badgeLabel =
+    funnel?.language === "en"
+      ? "PRIVATE ACCESS"
+      : funnel?.language === "es"
+        ? "ACCESO PRIVADO"
+        : "ACCÈS PRIVÉ";
 
   return (
     <>
@@ -349,11 +356,15 @@ function InternalPopup({
         >
           <div
             ref={dialogRef}
-            className="ff-popup-card relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
+            className="ff-popup-card relative w-full max-w-md rounded-[26px] p-7 text-center"
             style={{
-              background: "var(--ff-bg, #ffffff)",
-              color: "var(--ff-ink, #0f172a)",
-              border: "1px solid var(--ff-border, rgba(0,0,0,0.08))",
+              background: "var(--ff-bg, #0b0b16)",
+              color: "var(--ff-ink, #f8fafc)",
+              // 🆕 Bordure + halo lumineux à la couleur de branding (accent).
+              border:
+                "2px solid color-mix(in srgb, var(--ff-accent, #7c3aed) 65%, transparent)",
+              boxShadow:
+                "0 0 0 1px color-mix(in srgb, var(--ff-accent, #7c3aed) 25%, transparent), 0 24px 70px color-mix(in srgb, var(--ff-accent, #7c3aed) 32%, rgba(0,0,0,0.45)), 0 0 60px color-mix(in srgb, var(--ff-accent, #7c3aed) 22%, transparent)",
               animation: "ffPopupScale 220ms cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           >
@@ -361,28 +372,53 @@ function InternalPopup({
               type="button"
               onClick={close}
               aria-label="Fermer"
-              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-black/5"
+              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full transition"
+              style={{ color: "var(--ff-ink, #f8fafc)", opacity: 0.55 }}
               disabled={state.kind === "submitting"}
             >
-              <X size={16} />
+              <X size={18} />
             </button>
 
-            <div className="mb-4 px-8">
+            {/* 🆕 Badge « accès privé » — pastille accent + halo */}
+            <div className="mb-4 flex justify-center">
+              <span
+                className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider"
+                style={{
+                  color: "var(--ff-accent, #a78bfa)",
+                  background:
+                    "color-mix(in srgb, var(--ff-accent, #7c3aed) 14%, transparent)",
+                  border:
+                    "1px solid color-mix(in srgb, var(--ff-accent, #7c3aed) 45%, transparent)",
+                }}
+              >
+                <Gift size={14} />
+                {badgeLabel}
+              </span>
+            </div>
+
+            <div className="mb-5">
               <h2
                 id="ff-popup-title"
-                className="text-xl font-black uppercase leading-tight text-center"
-                style={{ color: "var(--ff-ink, #0f172a)" }}
+                className="text-2xl font-black uppercase leading-tight"
+                style={{
+                  color: "var(--ff-ink, #f8fafc)",
+                  textShadow:
+                    "0 0 26px color-mix(in srgb, var(--ff-accent, #7c3aed) 40%, transparent)",
+                }}
               >
                 {title}
               </h2>
               {body && (
-                <p className="mt-1.5 text-center text-sm" style={{ opacity: 0.75 }}>
+                <p
+                  className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed"
+                  style={{ opacity: 0.72 }}
+                >
                   {body}
                 </p>
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-2.5 text-left">
               {fields.map((f, idx) => (
                 <PopupField
                   key={`${f.name}-${idx}`}
@@ -397,11 +433,14 @@ function InternalPopup({
                 disabled={
                   state.kind === "submitting" || state.kind === "success"
                 }
-                className="mt-2 w-full rounded-lg px-4 py-3 text-sm font-bold transition disabled:opacity-70 disabled:cursor-not-allowed"
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-black uppercase tracking-wide transition disabled:opacity-70 disabled:cursor-not-allowed"
                 style={{
-                  background: "var(--ff-accent, #2563eb)",
+                  background:
+                    "linear-gradient(135deg, color-mix(in srgb, var(--ff-accent, #7c3aed) 88%, #fff), var(--ff-accent, #7c3aed))",
                   color: "var(--ff-accent-ink, #ffffff)",
                   border: "none",
+                  boxShadow:
+                    "0 12px 30px color-mix(in srgb, var(--ff-accent, #7c3aed) 45%, transparent)",
                   cursor:
                     state.kind === "submitting" || state.kind === "success"
                       ? "not-allowed"
@@ -413,6 +452,7 @@ function InternalPopup({
                   : state.kind === "success"
                     ? "Envoyé ✓"
                     : cta.label || "Valider"}
+                {state.kind === "idle" && <ArrowRight size={16} />}
               </button>
 
               {isPreview && state.kind !== "success" && (
@@ -427,7 +467,7 @@ function InternalPopup({
                   className="rounded-lg px-3 py-2 text-center text-sm font-medium"
                   style={{
                     background: "rgba(34, 197, 94, 0.12)",
-                    color: "rgb(22, 163, 74)",
+                    color: "rgb(74, 222, 128)",
                     border: "1px solid rgba(34, 197, 94, 0.3)",
                   }}
                 >
@@ -441,7 +481,7 @@ function InternalPopup({
                   className="rounded-lg px-3 py-2 text-center text-sm font-medium"
                   style={{
                     background: "rgba(239, 68, 68, 0.12)",
-                    color: "rgb(220, 38, 38)",
+                    color: "rgb(248, 113, 113)",
                     border: "1px solid rgba(239, 68, 68, 0.3)",
                   }}
                 >
@@ -451,7 +491,11 @@ function InternalPopup({
             </form>
 
             {reassuranceText && (
-              <p className="mt-4 text-center text-[11px]" style={{ opacity: 0.6 }}>
+              <p
+                className="mt-5 flex items-center justify-center gap-1.5 text-[11px]"
+                style={{ opacity: 0.55 }}
+              >
+                <Lock size={12} />
                 {reassuranceText}
               </p>
             )}
@@ -692,12 +736,14 @@ function PopupField({
   disabled: boolean;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
+  // 🆕 Champs blancs arrondis (inspiration image) : ils ressortent sur la carte
+  // sombre. Placeholder gris, focus cerclé à la couleur de branding.
   const inputClass =
-    "w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-60";
+    "ff-popup-input w-full rounded-xl px-4 py-3 text-sm focus:outline-none transition disabled:opacity-60";
   const inputStyle: React.CSSProperties = {
-    border: "1px solid var(--ff-border, rgba(0,0,0,0.12))",
-    background: "rgba(255,255,255,0.06)",
-    color: "var(--ff-ink, #0f172a)",
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "#ffffff",
+    color: "#0f172a",
   };
 
   if (field.type === "checkbox") {

@@ -3597,6 +3597,16 @@
 .t1-cta:hover .sk-cta-arrow,
 .sk-cta:hover .sk-cta-arrow { transform: translateX(4px); }
 
+/* ═══ 🆕 Champs des popups/formulaires internes — focus à la couleur de branding ═══
+   Règle NON scopée ([data-ff-template] non requis) : l'overlay du popup peut être
+   rendu haut dans l'arbre. Les variables --ff-accent sont héritées via le DOM. */
+.ff-popup-input::placeholder { color: #9ca3af; opacity: 1; }
+.ff-popup-input:focus {
+  border-color: var(--ff-accent, #7c3aed) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ff-accent, #7c3aed) 22%, transparent);
+}
+.ff-popup-input:hover { border-color: color-mix(in srgb, var(--ff-accent, #7c3aed) 35%, rgba(0,0,0,0.1)); }
+
 /* ═══ 🆕 Corps de texte JUSTIFIÉ par défaut (bords gauche+droite taillés) ═══
    S'applique à TOUS les écrans, uniquement au corps / sous-titres / descriptions
    de cartes (jamais aux titres ni eyebrows → l'alignement des templates à titres

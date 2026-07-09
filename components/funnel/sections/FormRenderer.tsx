@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type { FormEvent } from "react";
 import { usePathname } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 import type {
   Funnel,
   FunnelPage,
@@ -255,7 +256,7 @@ export function FormRenderer({
           name="name"
           placeholder="Votre prénom"
           disabled={isSubmitting || isSuccess}
-          className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-60"
+          className="ff-popup-input w-full rounded-xl px-4 py-3 text-sm focus:outline-none transition disabled:opacity-60"
           style={inputStyle}
         />
         <input
@@ -264,7 +265,7 @@ export function FormRenderer({
           placeholder="Votre email"
           required
           disabled={isSubmitting || isSuccess}
-          className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-60"
+          className="ff-popup-input w-full rounded-xl px-4 py-3 text-sm focus:outline-none transition disabled:opacity-60"
           style={inputStyle}
         />
         <SubmitButton label={ctaLabel} state={state} isPreview={isPreview} />
@@ -311,9 +312,10 @@ export function FormRenderer({
 }
 
 const inputStyle: React.CSSProperties = {
-  border: "1px solid var(--ff-border, rgba(0,0,0,0.12))",
-  background: "rgba(255,255,255,0.06)",
-  color: "var(--ff-ink, #0f172a)",
+  // 🆕 Champs blancs arrondis (cohérence avec le popup interne).
+  border: "1px solid rgba(0,0,0,0.10)",
+  background: "#ffffff",
+  color: "#0f172a",
 };
 
 function SubmitButton({
@@ -337,16 +339,21 @@ function SubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="mt-4 w-full px-4 py-2.5 text-sm font-bold transition rounded-lg disabled:opacity-70 disabled:cursor-not-allowed"
+      className="mt-4 inline-flex w-full items-center justify-center gap-2 px-4 py-3.5 text-sm font-black uppercase tracking-wide transition rounded-2xl disabled:opacity-70 disabled:cursor-not-allowed"
       data-ff-cta
       style={{
-        background: "var(--ff-accent, #2563eb)",
+        // 🆕 Dégradé accent + halo (cohérence avec le popup interne).
+        background:
+          "linear-gradient(135deg, color-mix(in srgb, var(--ff-accent, #7c3aed) 88%, #fff), var(--ff-accent, #7c3aed))",
         color: "var(--ff-accent-ink, #ffffff)",
         border: "none",
+        boxShadow:
+          "0 12px 30px color-mix(in srgb, var(--ff-accent, #7c3aed) 40%, transparent)",
         cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
       {display}
+      {state.kind === "idle" && <ArrowRight size={16} />}
     </button>
   );
 }
@@ -410,7 +417,7 @@ function FieldBlock({
 }) {
   const colSpan = field.width === "half" ? "col-span-1" : "col-span-2";
   const inputClass =
-    "w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-60";
+    "ff-popup-input w-full rounded-xl px-4 py-3 text-sm focus:outline-none transition disabled:opacity-60";
 
   if (field.type === "checkbox") {
     return (

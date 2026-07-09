@@ -52,15 +52,23 @@ export function CtaLink({
 }) {
   const base = baseClassName ?? DEFAULT_BASE_CLASS;
 
-  // 🆕 Action CTA commune : appliquée aux CTA PRINCIPAUX uniquement. Les boutons
-  // secondaires (prop isExtra, ou classe « ff-btn-extra » en repli) gardent
-  // leur propre action.
+  // 🆕 Action CTA commune : appliquée aux CTA PRINCIPAUX de la PAGE D'ACCUEIL
+  // UNIQUEMENT. Les autres pages (confirmation, merci, replay…) gardent l'action
+  // propre de leurs boutons — une redirection WhatsApp sur la confirmation n'est
+  // donc plus écrasée par le popup commun. Les boutons secondaires (prop isExtra
+  // ou classe « ff-btn-extra ») ne sont jamais affectés, et chaque CTA peut se
+  // désolidariser via `ignoreGlobalCta` (géré dans resolveCtaWithGlobal).
   const isExtra =
     isExtraProp === true || (baseClassName ?? "").includes("ff-btn-extra");
+  // Page d'accueil = la page portant isHome ; pour un tunnel mono-page (sans
+  // contexte de page), on considère que c'est l'accueil.
+  const isHomePage = page
+    ? page.isHome === true
+    : (funnel.pages?.length ?? 0) <= 1;
   const cta = resolveCtaWithGlobal(
     ctaProp,
     funnel.defaultCta,
-    !isExtra && funnel.meta?.applyDefaultCtaToAll === true,
+    !isExtra && isHomePage && funnel.meta?.applyDefaultCtaToAll === true,
   );
 
   const showArrow =

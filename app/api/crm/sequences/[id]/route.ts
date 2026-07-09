@@ -29,7 +29,10 @@ const roleSchema = z.object({
 });
 
 const inputSchema = z.object({
-  name: z.string().min(1).max(160),
+  // 🆕 Nom TRONQUÉ (jamais rejeté) — voir POST /api/crm/sequences : évite un
+  // « invalid_input » quand le nom auto « Bienvenue — <nom du tunnel> » dépasse
+  // 160 caractères (noms de tunnels IA très longs).
+  name: z.string().min(1).max(2000).transform((s) => s.trim().slice(0, 160)),
   type: sequenceTypeEnum,
   roles: z.array(roleSchema).min(1).max(10).optional(),
   context: z.string().max(4000).nullish(),

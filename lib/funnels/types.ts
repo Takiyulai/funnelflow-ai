@@ -141,7 +141,11 @@ export type CtaConfig = {
   popupEmbedHtml?: string;
   /** 🆕 Tags CRM appliqués automatiquement aux leads capturés via ce popup interne. */
   captureTags?: string[];
-
+  /** 🆕 Action INDIVIDUELLE : si true, ce CTA garde SON action propre et n'est
+   *  PAS remplacé par l'« action commune des boutons » (funnel.meta
+   *  .applyDefaultCtaToAll), même sur la page d'accueil. Permet de personnaliser
+   *  un bouton précis tout en gardant l'action commune sur les autres. */
+  ignoreGlobalCta?: boolean;
 };
 
 export type ImageMode = "none" | "upload" | "ai-suggested";

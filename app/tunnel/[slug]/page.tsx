@@ -4,19 +4,18 @@ import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getHomePage } from "@/lib/funnels/types";
 import PublishedFunnelView from "./PublishedFunnelView";
 
-// 🆕 Chantier 3 — caching : page PUBLIQUE identique pour tous → ISR + revalidation
-// ON-DEMAND à la publication (cf. funnelRepository). Fenêtre portée à 300s : une
-// fois la page en cache, les visiteurs la reçoivent en ~300ms (mesuré) sans
-// retoucher la base ; la régénération se fait en arrière-plan (stale-while-
-// revalidate). Le seul cas lent restant = le TOUT PREMIER rendu quand la base
-// Supabase (offre gratuite) sort de veille (cold start ~15s) — mitigé côté infra
-// (garder la base active / plan supérieur), pas par le cache applicatif.
-// 🆕 Fenêtre ISR ramenée de 300s à 60s : si la revalidation on-demand à la
-// publication échoue (session expirée → /api/revalidate-tunnel renvoie 401),
-// la page se régénère au pire en 60s au lieu de 5 min. Le rendu reste rapide
-// (stale-while-revalidate : le visiteur reçoit la version en cache pendant la
-// régénération en arrière-plan).
-export const revalidate = 60;
+// 🆕 CORRECTIF FIABILITÉ PUBLICATION — la page publique est DYNAMIQUE (lecture
+// fraîche de la base à chaque requête), comme les pages sœurs (merci/success/
+// cancel). L'ISR précédent (revalidate=60) mettait en cache un 404 rendu AVANT
+// la publication (ou pendant la fenêtre create→publish) ; si la revalidation
+// on-demand échouait (session expirée → /api/revalidate-tunnel = 401), le slug
+// restait 404 alors que le tunnel était bien publié — ce qui décrédibilise la
+// plateforme. En dynamique, un tunnel publié est IMMÉDIATEMENT accessible et un
+// 404 périmé ne peut plus « coller ». La lecture est une requête indexée unique
+// (client admin). Le seul cas lent = cold start de la base (offre gratuite) →
+// à traiter côté infra (garder la base active), pas par un cache qui masque les
+// tunnels publiés.
+export const dynamic = "force-dynamic";
 
 export default async function PublishedFunnelPage({
   params,

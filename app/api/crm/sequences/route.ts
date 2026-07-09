@@ -24,7 +24,11 @@ const roleSchema = z.object({
 });
 
 const inputSchema = z.object({
-  name: z.string().min(1).max(160),
+  // 🆕 Nom TRONQUÉ (jamais rejeté) : les noms de tunnels générés par l'IA sont
+  // parfois très longs (titre complet). Un `.max(160)` strict faisait échouer
+  // l'enregistrement d'une séquence (« invalid_input ») dont le nom auto valait
+  // « Bienvenue — <nom du tunnel> ». On accepte et on tronque à 160.
+  name: z.string().min(1).max(2000).transform((s) => s.trim().slice(0, 160)),
   type: sequenceTypeEnum,
   // 🆕 LOT 1 : liste ordonnée des rôles (1 par mail). Optionnelle pour
   // rétrocompat avec d'anciens appels ; `type` reste la source de vérité si absent.
