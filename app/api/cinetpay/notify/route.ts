@@ -6,6 +6,7 @@
 // On répond toujours 200 pour éviter les re-tentatives inutiles.
 
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   getCinetpayCredentials,
@@ -36,38 +37,47 @@ export async function POST(req: Request) {
   const txnId = await extractTransactionId(req);
   if (!txnId) return NextResponse.json({ ok: true }, { status: 200 });
 
-  const admin = getSupabaseAdmin();
-  const { data: order } = await admin
-    .from("orders")
-    .select("user_id, status")
-    .eq("cinetpay_transaction_id", txnId)
-    .maybeSingle();
-  if (!order || order.status === "paid") {
-    return NextResponse.json({ ok: true }, { status: 200 });
-  }
+  // 🆕 Instrumentation ciblée : notify_url de paiement → toute panne doit
+  // remonter dans Sentry en priorité (jamais txnId brut ni email en tag).
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: order } = await admin
+      .from("orders")
+      .select("user_id, status")
+      .eq("cinetpay_transaction_id", txnId)
+      .maybeSingle();
+    if (!order || order.status === "paid") {
+      return NextResponse.json({ ok: true }, { status: 200 });
+    }
 
-  const creds = await getCinetpayCredentials(order.user_id as string);
-  if (!creds) return NextResponse.json({ ok: true }, { status: 200 });
+    const creds = await getCinetpayCredentials(order.user_id as string);
+    if (!creds) return NextResponse.json({ ok: true }, { status: 200 });
 
-  const check = await checkCinetpayPayment(creds.apikey, creds.siteId, txnId);
-  if (check.paid) {
-    const marked = await markOrderPaidByCinetpayTransaction(txnId, null);
-    if (marked?.email) {
-      try {
-        await promoteContactToClient({
-          userId: marked.userId,
-          funnelId: marked.funnelId,
-          email: marked.email,
-          amount: marked.amount,
-          currency: marked.currency,
-        });
-      } catch (e) {
-        console.warn("[cinetpay/notify] promoteContactToClient échoué", e);
+    const check = await checkCinetpayPayment(creds.apikey, creds.siteId, txnId);
+    if (check.paid) {
+      const marked = await markOrderPaidByCinetpayTransaction(txnId, null);
+      if (marked?.email) {
+        try {
+          await promoteContactToClient({
+            userId: marked.userId,
+            funnelId: marked.funnelId,
+            email: marked.email,
+            amount: marked.amount,
+            currency: marked.currency,
+          });
+        } catch (e) {
+          console.warn("[cinetpay/notify] promoteContactToClient échoué", e);
+          Sentry.captureException(e, { tags: { area: "payment-cinetpay-notify" } });
+        }
       }
     }
-  }
 
-  return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (e) {
+    console.error("[cinetpay/notify] erreur inattendue", e);
+    Sentry.captureException(e, { tags: { area: "payment-cinetpay-notify" } });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  }
 }
 
 // CinetPay teste parfois l'URL en GET.

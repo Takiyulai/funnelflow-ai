@@ -1,5 +1,6 @@
-// This file configures the initialization of Sentry on the server.
-// The config you add here will be used whenever the server handles a request.
+// This file configures the initialization of Sentry for edge features (middleware, edge routes, and so on).
+// The config you add here will be used whenever one of the edge features is loaded.
+// Note that this config is unrelated to the Vercel Edge Runtime and is also required when running locally.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
@@ -21,9 +22,8 @@ Sentry.init({
     // httpBodies: [],
   },
 
-  // 🆕 Sécurité : retire systématiquement headers d'auth, cookies, corps de
-  // requête paiement/webhook et emails complets avant tout envoi à Sentry.
-  // Voir lib/observability/sentryScrub.ts pour le détail.
+  // 🆕 Sécurité : même scrubbing que sentry.server.config.ts (headers d'auth,
+  // cookies, corps de requête paiement/webhook, emails complets).
   beforeSend(event) {
     return scrubSentryEvent(event) as typeof event;
   },

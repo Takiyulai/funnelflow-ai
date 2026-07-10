@@ -10,6 +10,7 @@
 //   3) un email de confirmation/livraison part (Resend).
 
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import type Stripe from "stripe";
 import { createStripeClient } from "@/lib/billing/stripe";
 import {
@@ -110,6 +111,9 @@ export async function POST(req: Request) {
       await syncSubscriptionToProfile(sub);
     } catch (e) {
       console.error("[stripe/webhook] syncSubscription échoué:", e);
+      Sentry.captureException(e, {
+        tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+      });
     }
     return NextResponse.json({ received: true }, { status: 200 });
   }
@@ -123,6 +127,9 @@ export async function POST(req: Request) {
         await markPastDueByCustomer(customerId);
       } catch (e) {
         console.error("[stripe/webhook] markPastDue échoué:", e);
+        Sentry.captureException(e, {
+          tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+        });
       }
     }
     return NextResponse.json({ received: true }, { status: 200 });
@@ -140,6 +147,9 @@ export async function POST(req: Request) {
         await markOrderPaidByPaymentIntent(pi.id);
       } catch (e) {
         console.error("[stripe/webhook] markOrderPaidByPI échoué:", e);
+        Sentry.captureException(e, {
+          tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+        });
       }
     }
     return NextResponse.json({ received: true }, { status: 200 });
@@ -151,6 +161,9 @@ export async function POST(req: Request) {
       await markOrderFailedByPaymentIntent(pi.id);
     } catch (e) {
       console.error("[stripe/webhook] markOrderFailedByPI échoué:", e);
+      Sentry.captureException(e, {
+        tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+      });
     }
     return NextResponse.json({ received: true }, { status: 200 });
   }
@@ -170,6 +183,9 @@ export async function POST(req: Request) {
           await syncSubscriptionToProfile(sub);
         } catch (e) {
           console.error("[stripe/webhook] activation abonnement échouée:", e);
+          Sentry.captureException(e, {
+            tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+          });
         }
       }
       return NextResponse.json({ received: true }, { status: 200 });
@@ -200,6 +216,9 @@ export async function POST(req: Request) {
           });
         } catch (e) {
           console.warn("[stripe/webhook] markContactAsClient échoué:", e);
+          Sentry.captureException(e, {
+            tags: { area: "payment-stripe-webhook", stripeEvent: event.type },
+          });
         }
 
         // Email de confirmation / livraison (non bloquant).

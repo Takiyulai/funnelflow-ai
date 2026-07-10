@@ -3446,15 +3446,15 @@
 }
 
 /* ═══ Fonds de page alignés sur les designs du zip (skins light) ═══ */
-[data-ff-template="lead-snap"] {
-  --ff-bg: #ffffff; --ff-ink: #0B1D3A; --ff-ink-soft: #374151; --ff-muted: #6B7280;
-  --ff-brand-bar-bg: #ffffff; --ff-brand-bar-ink: #0B1D3A;
-  --ff-footer-bg: #0B1D3A; --ff-footer-ink: rgba(255,255,255,0.6);
-  --ff-footer-business-ink: #ffffff;
-  background: #ffffff; color: #0B1D3A;
-}
-[data-ff-template="lead-snap"]::before,
-[data-ff-template="lead-snap"]::after { display: none; }
+/* 🆕 FIX contraste/zones blanches : lead-snap, trust-pro et bold-energy sont
+   des templates SOMBRES à part entière (défs complètes plus haut dans ce
+   fichier, avec leurs propres --ff-card-bg dédiés). Ils avaient été inclus
+   ici par erreur (copié-collé du bloc "skins light"), ce qui les forçait
+   silencieusement vers un fond blanc + encre --ff-ink adaptée au blanc,
+   pendant que leurs cartes gardaient un fond sombre → texte illisible
+   (encre sombre sur carte sombre) et grandes zones blanches inattendues.
+   On les retire de ce bloc pour laisser leurs définitions sombres d'origine
+   s'appliquer sans être écrasées. Ne PAS les rajouter ici. */
 
 [data-ff-template="clean-light"] {
   --ff-bg: #ffffff; --ff-ink: #1D4A4A; --ff-ink-soft: #4B5563; --ff-muted: #6B7280;
@@ -3471,26 +3471,6 @@
   --ff-footer-business-ink: #ffffff;
   background: #ffffff; color: #111827;
 }
-
-[data-ff-template="trust-pro"] {
-  --ff-bg: #ffffff; --ff-ink: #1F2937; --ff-ink-soft: #4B5563; --ff-muted: #6B7280;
-  --ff-brand-bar-bg: #ffffff; --ff-brand-bar-ink: #1F2937;
-  --ff-footer-bg: #1F2937; --ff-footer-ink: rgba(255,255,255,0.6);
-  --ff-footer-business-ink: #ffffff;
-  background: #ffffff; color: #1F2937;
-}
-[data-ff-template="trust-pro"]::before,
-[data-ff-template="trust-pro"]::after { display: none; }
-
-[data-ff-template="bold-energy"] {
-  --ff-bg: #ffffff; --ff-ink: #000000; --ff-ink-soft: #4B4B4B; --ff-muted: #6B6B6B;
-  --ff-brand-bar-bg: #000000; --ff-brand-bar-ink: #ffffff;
-  --ff-footer-bg: #000000; --ff-footer-ink: rgba(255,255,255,0.6);
-  --ff-footer-business-ink: #ffffff;
-  background: #ffffff; color: #000000;
-}
-[data-ff-template="bold-energy"]::before,
-[data-ff-template="bold-energy"]::after { display: none; }
 
 /* Événement Dark (story-sell) : fond du zip #161616 + grille subtile */
 [data-ff-template="story-sell"] {

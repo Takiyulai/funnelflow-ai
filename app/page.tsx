@@ -1486,8 +1486,8 @@ export default function LandingPage() {
           </div>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
             {[
-              ["#", t.footer.cgv],
-              ["#", t.footer.privacy],
+              ["/terms", t.footer.cgv],
+              ["/privacy", t.footer.privacy],
             ].map(([href, label]) => (
               <a key={label} href={href} className="ff-body hover:text-[#C7A436] transition-colors" style={{ fontSize: 12.5, color: "rgba(255,255,255,0.4)" }}>
                 {label}

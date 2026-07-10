@@ -1,5 +1,6 @@
 // app/api/ai/generate-funnel/route.ts
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import {
   generateMultiPageFunnelWithAI,
@@ -280,6 +281,16 @@ export async function POST(request: Request) {
       console.warn(
         `[generate-funnel] AI failure after ${duration}ms reason=${error.reason} details=${error.details ?? "none"}`,
       );
+      // 🆕 Instrumentation ciblée : seuls les échecs qui trahissent un VRAI
+      // problème (clé invalide, réseau, réponse IA non conforme…) partent
+      // vers Sentry. Le quota/rate-limit sont un comportement attendu du
+      // produit, pas une panne — les y ajouter noierait les vraies alertes.
+      if (error.reason !== "insufficient-quota" && error.reason !== "rate-limit") {
+        Sentry.captureException(error, {
+          tags: { area: "ai-generate-funnel", reason: error.reason },
+          extra: { durationMs: duration },
+        });
+      }
       return NextResponse.json(
         {
           error: "ai-generation-failed",
@@ -291,6 +302,10 @@ export async function POST(request: Request) {
     }
 
     console.error(`[generate-funnel] UNEXPECTED error after ${duration}ms:`, error);
+    Sentry.captureException(error, {
+      tags: { area: "ai-generate-funnel", reason: "unknown" },
+      extra: { durationMs: duration },
+    });
     return NextResponse.json(
       {
         error: "ai-generation-failed",

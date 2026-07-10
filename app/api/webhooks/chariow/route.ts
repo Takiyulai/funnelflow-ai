@@ -11,6 +11,7 @@
 //     idempotent (upsert par user_id / update par license_key).
 
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   validateChariowLicense,
@@ -81,63 +82,83 @@ export async function POST(request: Request) {
   const email = str(payload.customer?.email);
   const productId = str(payload.product?.id);
 
-  // ── Licence expirée / révoquée → verrouillage local ──────────────────
-  if (event === "license.expired" || event === "license.revoked") {
-    if (licenseKey) {
-      await markLicenseByKey(
+  // 🆕 Instrumentation ciblée : ce webhook active/révoque l'accès payant des
+  // utilisateurs → toute erreur inattendue doit remonter dans Sentry en
+  // priorité (pas juste dans les logs). Jamais d'email/licence en clair dans
+  // les tags (seulement des identifiants tronqués), et on répond toujours
+  // 200 pour respecter la politique de retry de Chariow.
+  try {
+    // ── Licence expirée / révoquée → verrouillage local ──────────────────
+    if (event === "license.expired" || event === "license.revoked") {
+      if (licenseKey) {
+        await markLicenseByKey(
+          licenseKey,
+          event === "license.expired" ? "expired" : "revoked",
+        );
+        console.log(`[chariow-webhook] ${event} → licence ${licenseKey.slice(0, 6)}… verrouillée.`);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Vente / émission / activation de licence → activation locale ─────
+    // (successful.sale porte aussi la licence quand le produit est de type License)
+    if (
+      event === "successful.sale" ||
+      event === "license.issued" ||
+      event === "license.activated"
+    ) {
+      if (!licenseKey) {
+        // Vente d'un produit sans licence : rien à faire côté paywall.
+        return NextResponse.json({ ok: true, skipped: "no_license_key" });
+      }
+      if (!email) {
+        return NextResponse.json({ ok: true, skipped: "no_customer_email" });
+      }
+
+      // SOURCE DE VÉRITÉ : on ne fait jamais confiance au payload seul — la
+      // licence est re-validée auprès de l'API Chariow avant activation.
+      const check = await validateChariowLicense(licenseKey);
+      if (!check.ok) {
+        console.warn(
+          `[chariow-webhook] ${event} reçu mais licence non valide côté API (${check.status}${check.error ? `, ${check.error}` : ""}).`,
+        );
+        Sentry.captureMessage("chariow-webhook: licence invalide côté API", {
+          level: "warning",
+          tags: { area: "chariow-webhook", event, apiStatus: String(check.status) },
+        });
+        return NextResponse.json({ ok: true, skipped: `api_status_${check.status}` });
+      }
+
+      const userId = await findUserIdByEmail(email);
+      if (!userId) {
+        // Le client n'a pas (encore) de compte AutoFunnel : la licence sera
+        // activée quand il la saisira sur la page Abonnement (clé de licence).
+        console.warn(`[chariow-webhook] aucun compte pour ${email} — activation différée.`);
+        return NextResponse.json({ ok: true, deferred: true });
+      }
+
+      await upsertUserLicense({
+        userId,
         licenseKey,
-        event === "license.expired" ? "expired" : "revoked",
-      );
-      console.log(`[chariow-webhook] ${event} → licence ${licenseKey.slice(0, 6)}… verrouillée.`);
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  // ── Vente / émission / activation de licence → activation locale ─────
-  // (successful.sale porte aussi la licence quand le produit est de type License)
-  if (
-    event === "successful.sale" ||
-    event === "license.issued" ||
-    event === "license.activated"
-  ) {
-    if (!licenseKey) {
-      // Vente d'un produit sans licence : rien à faire côté paywall.
-      return NextResponse.json({ ok: true, skipped: "no_license_key" });
-    }
-    if (!email) {
-      return NextResponse.json({ ok: true, skipped: "no_customer_email" });
+        status: "active",
+        expiresAt: check.expiresAt ?? payload.license?.expires_at ?? null,
+        productId: check.productId ?? productId,
+      });
+      console.log(`[chariow-webhook] licence activée pour user ${userId} (${event}).`);
+      return NextResponse.json({ ok: true });
     }
 
-    // SOURCE DE VÉRITÉ : on ne fait jamais confiance au payload seul — la
-    // licence est re-validée auprès de l'API Chariow avant activation.
-    const check = await validateChariowLicense(licenseKey);
-    if (!check.ok) {
-      console.warn(
-        `[chariow-webhook] ${event} reçu mais licence non valide côté API (${check.status}${check.error ? `, ${check.error}` : ""}).`,
-      );
-      return NextResponse.json({ ok: true, skipped: `api_status_${check.status}` });
-    }
-
-    const userId = await findUserIdByEmail(email);
-    if (!userId) {
-      // Le client n'a pas (encore) de compte AutoFunnel : la licence sera
-      // activée quand il la saisira sur la page Abonnement (clé de licence).
-      console.warn(`[chariow-webhook] aucun compte pour ${email} — activation différée.`);
-      return NextResponse.json({ ok: true, deferred: true });
-    }
-
-    await upsertUserLicense({
-      userId,
-      licenseKey,
-      status: "active",
-      expiresAt: check.expiresAt ?? payload.license?.expires_at ?? null,
-      productId: check.productId ?? productId,
+    // Événement non géré (abandoned.sale, failed.sale, affiliate.joined…) :
+    // 200 pour éviter les retries en boucle.
+    return NextResponse.json({ ok: true, ignored: event || "unknown_event" });
+  } catch (e) {
+    console.error(`[chariow-webhook] erreur inattendue sur l'event ${event}:`, e);
+    Sentry.captureException(e, {
+      tags: { area: "chariow-webhook", event },
+      extra: { licenseKeyPrefix: licenseKey?.slice(0, 6) ?? null },
     });
-    console.log(`[chariow-webhook] licence activée pour user ${userId} (${event}).`);
-    return NextResponse.json({ ok: true });
+    // 200 quand même : Chariow réessaierait sinon en boucle sur une erreur
+    // potentiellement persistante (ex: bug de code) sans que ça aide.
+    return NextResponse.json({ ok: true, error: "internal_error" });
   }
-
-  // Événement non géré (abandoned.sale, failed.sale, affiliate.joined…) :
-  // 200 pour éviter les retries en boucle.
-  return NextResponse.json({ ok: true, ignored: event || "unknown_event" });
 }

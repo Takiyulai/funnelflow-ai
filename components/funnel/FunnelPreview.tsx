@@ -660,42 +660,67 @@ export function FunnelPreview({
   // `autoScrollDemoKey` (ex : templateId), on fait défiler la zone d'aperçu
   // de haut en bas, doucement, pour que l'utilisateur voie tout le contenu
   // sans avoir à scroller lui-même. Opt-in : sans la prop, aucun effet.
+  //
+  // 🆕 FIX RÉGRESSION : la version précédente pilotait l'animation via une
+  // boucle requestAnimationFrame() manuelle (el.scrollTop += à chaque frame).
+  // Vérifié en direct : rAF ne se déclenche QUE si la page/l'onglet est au
+  // premier plan — dans certains contextes (onglet en arrière-plan, fenêtre
+  // non focus, embed dans un contexte automatisé) le navigateur planifie la
+  // frame mais ne l'exécute JAMAIS, donc l'animation ne partait jamais alors
+  // que le code s'exécutait correctement (aucune erreur console). On utilise
+  // maintenant scrollTo({ behavior:"smooth" }) natif, piloté par de simples
+  // setTimeout — aucune dépendance à rAF, fonctionne même onglet non focus.
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (autoScrollDemoKey === undefined || autoScrollDemoKey === null) return;
-    const el = scrollRootRef.current;
-    if (!el) return;
     const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (prefersReduced) return;
 
     let cancelled = false;
-    // Petit délai : laisse le nouveau contenu (template changé) se poser et
-    // ses dimensions se stabiliser avant de mesurer scrollHeight.
-    const startTimer = setTimeout(() => {
-      if (cancelled) return;
+    let started = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const runScroll = (el: HTMLDivElement, distance: number) => {
+      if (started) return;
+      started = true;
       el.scrollTo({ top: 0, behavior: "auto" });
-      const distance = el.scrollHeight - el.clientHeight;
-      if (distance <= 4) return;
-      // Vitesse proportionnelle à la distance, bornée pour rester agréable
-      // (ni trop rapide sur une longue page, ni trop lente sur une courte).
-      const duration = Math.min(9000, Math.max(2200, distance * 3.2));
-      const start = performance.now();
-      const step = (now: number) => {
-        if (cancelled) return;
-        const t = Math.min(1, (now - start) / duration);
-        // ease-in-out-quad
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        el.scrollTop = eased * distance;
-        if (t < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    }, 450);
+      // Visite guidée en plusieurs étapes (scroll natif fluide), plutôt qu'une
+      // seule grande animation d'un coup — plus agréable sur une page longue
+      // et beaucoup plus robuste qu'une boucle rAF pilotée à la main.
+      const STEPS = 5;
+      const STEP_DELAY = 850;
+      for (let i = 1; i <= STEPS; i++) {
+        timers.push(
+          setTimeout(() => {
+            if (cancelled) return;
+            el.scrollTo({ top: (distance * i) / STEPS, behavior: "smooth" });
+          }, i * STEP_DELAY),
+        );
+      }
+    };
+
+    // Tentatives à intervalles croissants : le nouveau contenu (template
+    // changé → re-render de tout l'arbre de sections) peut ne pas avoir fini
+    // de se stabiliser (polices/images en cours de layout) au 1er essai —
+    // on RE-VÉRIFIE plusieurs fois jusqu'à trouver une zone scrollable.
+    const probeDelays = [200, 500, 900, 1400, 2000];
+    probeDelays.forEach((delay) => {
+      timers.push(
+        setTimeout(() => {
+          if (cancelled || started) return;
+          const el = scrollRootRef.current;
+          if (!el) return;
+          const distance = el.scrollHeight - el.clientHeight;
+          if (distance > 4) runScroll(el, distance);
+        }, delay),
+      );
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(startTimer);
+      timers.forEach((id) => clearTimeout(id));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScrollDemoKey]);

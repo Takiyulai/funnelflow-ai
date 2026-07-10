@@ -10,6 +10,7 @@
 //    il faudra Stripe Connect (Palier 3).
 
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createStripeClient } from "@/lib/billing/stripe";
@@ -188,6 +189,13 @@ export async function POST(req: Request) {
       metadata: JSON.stringify({ funnelId: funnel.id, userId: funnel.user_id, pageSlug: pageSlug ?? "" }),
     });
     if (!init.ok || !init.paymentUrl) {
+      // 🆕 Instrumentation ciblée : un client bloqué à l'étape paiement doit
+      // être visible en priorité. Pas de montant/email dans les tags.
+      Sentry.captureMessage("checkout: échec initialisation CinetPay", {
+        level: "error",
+        tags: { area: "payment-checkout", provider: "cinetpay", funnelId: funnel.id },
+        extra: { error: init.error ?? null },
+      });
       return NextResponse.json(
         { ok: false, error: "cinetpay_init_failed", message: init.error ?? "Échec de l'initialisation CinetPay." },
         { status: 502 },
@@ -289,6 +297,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, url: session.url, nextUrl }, { status: 200 });
   } catch (e) {
     console.error("[api/checkout] stripe error", e);
+    Sentry.captureException(e, {
+      tags: { area: "payment-checkout", provider: "stripe", funnelId: funnel.id },
+    });
     return NextResponse.json(
       { ok: false, error: "stripe_error", message: e instanceof Error ? e.message : undefined },
       { status: 500 },

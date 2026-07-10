@@ -6,3 +6,6 @@ coverage
 .env.local
 .vercel
 *.log
+
+# Sentry Config File
+.env.sentry-build-plugin
