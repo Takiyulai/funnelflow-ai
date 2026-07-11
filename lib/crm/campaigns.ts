@@ -5,6 +5,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Campaign, LeadStatus } from "./types";
 import { sendEmail } from "./email";
+import {
+  wrapEmailLinksForTracking,
+  appendOpenTrackingPixel,
+} from "./emailTracking";
 import { getUserMarketingSender } from "@/lib/email/userSender";
 import { getAccess } from "@/lib/billing/subscription";
 import { consumeQuota } from "@/lib/billing/usage";
@@ -193,7 +197,32 @@ export async function sendCampaign(
   let failed = 0;
 
   for (const r of recipients) {
-    const html = renderEmailHtml(campaign.content, r);
+    // 🆕 LOT 3 — La ligne d'envoi est créée AVANT l'envoi pour disposer de son
+    // id (messageId) dans les liens trackés et le pixel d'ouverture. En cas
+    // d'échec d'insertion (rare), on envoie quand même, sans tracking stats.
+    const { data: sendRow } = await sb
+      .from("crm_email_sends")
+      .insert({
+        campaign_id: id,
+        contact_id: r.id,
+        user_id: userId,
+        email: r.email,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    const tracking = {
+      userId,
+      contactId: r.id,
+      messageId: (sendRow?.id as string | undefined) ?? null,
+      sourceType: "newsletter",
+      campaignId: id,
+    };
+    const html = appendOpenTrackingPixel(
+      wrapEmailLinksForTracking(renderEmailHtml(campaign.content, r), tracking),
+      tracking,
+    );
     const result = await sendEmail({
       to: r.email,
       subject: campaign.subject,
@@ -201,16 +230,28 @@ export async function sendCampaign(
       from: sender.from,
       replyTo: sender.replyTo,
     });
-    await sb.from("crm_email_sends").insert({
-      campaign_id: id,
-      contact_id: r.id,
-      user_id: userId,
-      email: r.email,
-      status: result.ok ? "sent" : "failed",
-      resend_id: result.id ?? null,
-      error: result.error ?? null,
-      sent_at: result.ok ? new Date().toISOString() : null,
-    });
+    if (sendRow?.id) {
+      await sb
+        .from("crm_email_sends")
+        .update({
+          status: result.ok ? "sent" : "failed",
+          resend_id: result.id ?? null,
+          error: result.error ?? null,
+          sent_at: result.ok ? new Date().toISOString() : null,
+        })
+        .eq("id", sendRow.id);
+    } else {
+      await sb.from("crm_email_sends").insert({
+        campaign_id: id,
+        contact_id: r.id,
+        user_id: userId,
+        email: r.email,
+        status: result.ok ? "sent" : "failed",
+        resend_id: result.id ?? null,
+        error: result.error ?? null,
+        sent_at: result.ok ? new Date().toISOString() : null,
+      });
+    }
     if (result.ok) sent++;
     else {
       failed++;

@@ -11,9 +11,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 import { enrollContact } from "@/lib/crm/sequences";
+import { personalize, renderSequenceEmailHtml } from "@/lib/crm/emailRender";
 import { getActiveWorkflowsForEvent, getActiveWorkflowsWaitingOnEvent } from "./repository";
 import type {
   WorkflowActionConfig,
+  WorkflowConditionTest,
   WorkflowTriggerConfig,
   WorkflowTriggerEvent,
   LeadStatus,
@@ -187,17 +189,26 @@ export async function runLeadCreatedWorkflows(params: {
   });
 }
 
+/** 🆕 VAGUE 1 / LOT 5 — Profondeur max d'imbrication des conditions (une
+ *  condition peut contenir des conditions dans ses branches, avec une limite
+ *  dure pour éviter toute récursion pathologique). */
+const MAX_CONDITION_DEPTH = 3;
+
 /** 🆕 LOT 2 — Exportée pour être réutilisée par le CRON qui traite les
- *  exécutions différées `workflow_pending_runs` (déclencheur `time.elapsed`). */
+ *  exécutions différées `workflow_pending_runs` (déclencheur `time.elapsed`).
+ *  🆕 LOT 5 — `initialDelayMs`/`depth` servent à la récursion des branches de
+ *  condition ; les appels existants (2 ou 4 arguments) sont inchangés. */
 export async function executeActions(
   admin: SupabaseClient,
   userId: string,
   lead: LeadContext,
   actions: WorkflowActionConfig[],
+  initialDelayMs = 0,
+  depth = 0,
 ): Promise<void> {
   // 🆕 Accumulateur de délai en MILLISECONDES : le "wait" accepte désormais
   // jours + heures + minutes (rétro-compat : anciennes étapes { days }).
-  let delayMs = 0;
+  let delayMs = initialDelayMs;
 
   for (const action of actions) {
     // 🆕 Robustesse : chaque action est isolée. Si l'une échoue (ex. enrôlement
@@ -254,6 +265,46 @@ export async function executeActions(
           }
           break;
         }
+        // 🆕 LOT 5 — Email direct AU CONTACT, sans séquence. Respecte les
+        // "wait" accumulés (déposé dans la file scheduled_emails → cron).
+        case "send_email": {
+          const subject = action.subject?.trim();
+          const content = action.content?.trim();
+          if (!subject || !content) break; // config incomplète : ignorée
+          await scheduleEmail(admin, {
+            userId,
+            contactId: lead.id,
+            recipient: lead.email,
+            subject: personalize(subject, {
+              name: lead.name ?? null,
+              email: lead.email,
+            }),
+            content: renderSequenceEmailHtml(content, {
+              name: lead.name ?? null,
+              email: lead.email,
+            }),
+            delayMs,
+          });
+          break;
+        }
+        // 🆕 LOT 5 — Embranchement si/alors (test logique, aucun appel IA).
+        // La branche choisie hérite du délai accumulé jusqu'ici ; le workflow
+        // continue ensuite avec les actions APRÈS la condition (délai inchangé,
+        // les "wait" internes à une branche restent locaux à cette branche).
+        case "condition": {
+          if (depth >= MAX_CONDITION_DEPTH) {
+            console.warn("[workflows] condition ignorée (profondeur max atteinte)");
+            break;
+          }
+          const ok = await evaluateConditionTest(admin, userId, lead, action.test);
+          const branch = (action.negate ? !ok : ok)
+            ? action.then
+            : action.otherwise;
+          if (Array.isArray(branch) && branch.length > 0) {
+            await executeActions(admin, userId, lead, branch, delayMs, depth + 1);
+          }
+          break;
+        }
       }
     } catch (e) {
       console.warn(
@@ -261,6 +312,79 @@ export async function executeActions(
         e,
       );
     }
+  }
+}
+
+// ─── 🆕 VAGUE 1 / LOT 5 — Évaluation des tests de condition ─────────────────
+// Purement logique et déterministe : lecture des données existantes (leads,
+// crm_contact_tags, email_events). AUCUN appel IA. Toute erreur de lecture
+// fait échouer le test en `false` (comportement prudent, jamais bloquant).
+
+async function evaluateConditionTest(
+  admin: SupabaseClient,
+  userId: string,
+  lead: LeadContext,
+  test: WorkflowConditionTest,
+): Promise<boolean> {
+  try {
+    switch (test.type) {
+      case "has_tag": {
+        if (!test.tagId) return false;
+        const { data } = await admin
+          .from("crm_contact_tags")
+          .select("contact_id")
+          .eq("user_id", userId)
+          .eq("contact_id", lead.id)
+          .eq("tag_id", test.tagId)
+          .maybeSingle();
+        return Boolean(data);
+      }
+      case "status_is":
+      case "language_is":
+      case "source_is":
+      case "country_is": {
+        const { data } = await admin
+          .from("leads")
+          .select("status, language, source, phone_country")
+          .eq("user_id", userId)
+          .eq("id", lead.id)
+          .maybeSingle();
+        if (!data) return false;
+        if (test.type === "status_is") return data.status === test.status;
+        if (test.type === "language_is")
+          return (data.language ?? "").toLowerCase().startsWith(test.language);
+        if (test.type === "source_is")
+          return (data.source ?? "") === test.source.trim();
+        return (
+          (data.phone_country ?? "").toUpperCase() ===
+          test.country.trim().toUpperCase()
+        );
+      }
+      case "has_opened_email":
+      case "has_clicked_email": {
+        const kind = test.type === "has_opened_email" ? "open" : "click";
+        let query = admin
+          .from("email_events")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("contact_id", lead.id)
+          .eq("kind", kind);
+        const days = Number(test.sinceDays) || 0;
+        if (days > 0) {
+          query = query.gte(
+            "created_at",
+            new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+          );
+        }
+        const { count } = await query;
+        return (count ?? 0) > 0;
+      }
+      default:
+        return false;
+    }
+  } catch (e) {
+    console.warn("[workflows] évaluation de condition échouée → false:", e);
+    return false;
   }
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Download, ExternalLink, Users } from "lucide-react";
+import { ArrowLeft, Pencil, Download, ExternalLink, Users, BarChart3 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -74,6 +74,10 @@ export default function FunnelDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => router.push(`/funnels/${funnelId}/stats`)}>
+            <BarChart3 className="h-4 w-4" />
+            Stats
+          </Button>
           <Button variant="secondary" onClick={() => router.push(`/funnels/${funnelId}/leads`)}>
             <Users className="h-4 w-4" />
             Leads

@@ -72,9 +72,16 @@ type Props = {
   initialCampaigns: Campaign[];
   contactsCount: number;
   resendReady: boolean;
+  /** 🆕 LOT 3 — Ouvertures/clics par campagne (messages distincts). */
+  campaignStats?: Record<string, { opens: number; clicks: number }>;
 };
 
-export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }: Props) {
+export function CampaignsClient({
+  initialCampaigns,
+  contactsCount,
+  resendReady,
+  campaignStats = {},
+}: Props) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -313,6 +320,15 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
                       {c.failed_count > 0 && (
                         <span style={{ color: "#DC2626" }}> · {c.failed_count} échecs</span>
                       )}
+                      {/* 🆕 LOT 3 — open/click rate (si la migration stats est en place) */}
+                      {campaignStats[c.id] && c.sent_count > 0 && (
+                        <span className="text-muted">
+                          {" · "}
+                          {campaignStats[c.id].opens} ouverts (
+                          {Math.round((campaignStats[c.id].opens / c.sent_count) * 100)}
+                          %) · {campaignStats[c.id].clicks} clics
+                        </span>
+                      )}
                     </span>
                   ) : (
                     "—"
@@ -482,6 +498,23 @@ export function CampaignsClient({ initialCampaigns, contactsCount, resendReady }
               <Stat label="Envoyés" value={String(viewing.sent_count)} />
               <Stat label="Échecs" value={String(viewing.failed_count)} />
             </div>
+            {/* 🆕 LOT 3 — Taux d'ouverture / de clic (messages distincts) */}
+            {campaignStats[viewing.id] && viewing.sent_count > 0 && (
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <Stat
+                  label="Ouvertures"
+                  value={`${campaignStats[viewing.id].opens} (${Math.round(
+                    (campaignStats[viewing.id].opens / viewing.sent_count) * 100,
+                  )} %)`}
+                />
+                <Stat
+                  label="Clics"
+                  value={`${campaignStats[viewing.id].clicks} (${Math.round(
+                    (campaignStats[viewing.id].clicks / viewing.sent_count) * 100,
+                  )} %)`}
+                />
+              </div>
+            )}
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">Envoyée le</div>
             <div className="mb-4 text-sm text-ink">{fmtDate(viewing.sent_at)}</div>
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">Objet</div>

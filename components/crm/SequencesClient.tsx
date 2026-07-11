@@ -72,6 +72,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [sequences, setSequences] = useState<Sequence[]>([]);
+  // 🆕 LOT 3 — Stats envoyés/ouverts/cliqués par séquence.
+  const [seqStats, setSeqStats] = useState<
+    Record<string, { sent: number; opens: number; clicks: number }>
+  >({});
   const [contacts, setContacts] = useState<ContactLite[]>([]);
   const [enrollId, setEnrollId] = useState("");
   const [enrolling, setEnrolling] = useState(false);
@@ -104,7 +108,15 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     try {
       const res = await fetch("/api/crm/sequences");
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok) setSequences(json.sequences as Sequence[]);
+      if (res.ok && json.ok) {
+        setSequences(json.sequences as Sequence[]);
+        setSeqStats(
+          (json.stats ?? {}) as Record<
+            string,
+            { sent: number; opens: number; clicks: number }
+          >,
+        );
+      }
     } catch { /* non bloquant */ }
   }
   useEffect(() => {
@@ -297,6 +309,15 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   <div className="truncate text-sm font-semibold text-ink">{s.name}</div>
                   <div className="text-xs text-muted">
                     {TYPE_OPTIONS.find((t) => t.value === s.type)?.label ?? s.type} · {s.status}
+                    {/* 🆕 LOT 3 — open/click rate (si la migration stats est en place) */}
+                    {seqStats[s.id] && seqStats[s.id].sent > 0 && (
+                      <>
+                        {" · "}
+                        {seqStats[s.id].sent} envoyés · {seqStats[s.id].opens} ouverts (
+                        {Math.round((seqStats[s.id].opens / seqStats[s.id].sent) * 100)}
+                        %) · {seqStats[s.id].clicks} clics
+                      </>
+                    )}
                   </div>
                 </button>
                 <button type="button" onClick={() => removeSequence(s.id)}

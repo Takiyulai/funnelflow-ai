@@ -49,7 +49,29 @@ export async function GET() {
 
   try {
     const sequences = await listSequences(sb, user.id);
-    return NextResponse.json({ ok: true, sequences });
+
+    // 🆕 LOT 3 — Stats envoyés/ouverts/cliqués par séquence (best-effort :
+    // {} si la migration db/email-events-schema.sql n'est pas encore passée).
+    const stats: Record<string, { sent: number; opens: number; clicks: number }> = {};
+    if (sequences.length > 0) {
+      const { data: statsRows } = await sb.rpc("sequence_email_stats_v1", {
+        p_sequence_ids: sequences.map((s) => s.id),
+      });
+      for (const row of (statsRows ?? []) as Array<{
+        sequence_id: string;
+        sent: number;
+        opens: number;
+        clicks: number;
+      }>) {
+        stats[row.sequence_id] = {
+          sent: Number(row.sent) || 0,
+          opens: Number(row.opens) || 0,
+          clicks: Number(row.clicks) || 0,
+        };
+      }
+    }
+
+    return NextResponse.json({ ok: true, sequences, stats });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "list_failed" },

@@ -25,12 +25,15 @@ export function EmailsModule({
   resendReady,
   initialTab = "newsletter",
   publishedFunnels = [],
+  campaignStats = {},
 }: {
   initialCampaigns: Campaign[];
   contactsCount: number;
   resendReady: boolean;
   initialTab?: Tab;
   publishedFunnels?: PublishedFunnelOption[];
+  /** 🆕 LOT 3 — Ouvertures/clics par campagne (messages distincts). */
+  campaignStats?: Record<string, { opens: number; clicks: number }>;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -70,6 +73,7 @@ export function EmailsModule({
           initialCampaigns={initialCampaigns}
           contactsCount={contactsCount}
           resendReady={resendReady}
+          campaignStats={campaignStats}
         />
       </div>
       <div className={tab === "sequences" ? "" : "hidden"}>

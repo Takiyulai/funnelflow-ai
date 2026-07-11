@@ -36,17 +36,27 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
             key={idx}
             className="ff-bonus-card rounded-xl p-5 flex gap-4 items-start transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
             style={{
+              // 🆕 FIX : --ff-card-bg/--ff-card-border sont dédiées aux cartes et
+              // réglées par template. --ff-accent, elle, est réassignée à
+              // var(--ff-band-eyebrow) dans les sections "bande foncée" de
+              // Coach Light / SaaS Light Blue (funnel-theme.css, règle #6) —
+              // ce qui peut valoir blanc/quasi-blanc. En dériver le fond de
+              // carte produisait un voile blanc peu lisible ; --ff-card-bg
+              // n'est jamais touchée par cette règle.
               background:
-                "color-mix(in srgb, var(--ff-accent, #31845C) 10%, transparent)",
+                "var(--ff-card-bg, color-mix(in srgb, var(--ff-accent, #31845C) 10%, transparent))",
               border:
-                "1px solid color-mix(in srgb, var(--ff-accent, #31845C) 35%, transparent)",
+                "1px solid var(--ff-card-border, color-mix(in srgb, var(--ff-accent, #31845C) 35%, transparent))",
             }}
           >
             <div
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
               style={{
-                background: "var(--ff-accent, #31845C)",
-                color: "#ffffff",
+                // 🆕 FIX icône "floue/trop blanche" : mêmes variables dédiées
+                // (--ff-card-icon-bg/ink) plutôt que --ff-accent + blanc en dur,
+                // qui devenait blanc-sur-blanc dans les sections "bande".
+                background: "var(--ff-card-icon-bg, var(--ff-accent, #31845C))",
+                color: "var(--ff-card-icon-ink, #ffffff)",
               }}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
@@ -58,14 +68,15 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
                   as="p"
                   className={`${bodySize} font-bold leading-relaxed`}
                   text={item.data.title || `Bonus ${idx + 1}`}
+                  style={{ color: "var(--ff-ink, #0f172a)" }}
                 />
 
                 {item.data.value && (
                   <span
                     className="text-xs font-semibold rounded-full px-2 py-0.5"
                     style={{
-                      background: "var(--ff-accent, #31845C)",
-                      color: "#ffffff",
+                      background: "var(--ff-card-icon-bg, var(--ff-accent, #31845C))",
+                      color: "var(--ff-card-icon-ink, #ffffff)",
                     }}
                   >
                     {item.data.value}

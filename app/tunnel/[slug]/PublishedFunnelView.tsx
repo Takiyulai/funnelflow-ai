@@ -16,6 +16,7 @@
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import PublicFunnelRuntime from "@/components/funnel/PublicFunnelRuntime";
 import { PageViewBeacon } from "@/components/funnel/PageViewBeacon";
+import { TrackingPixels } from "@/components/funnel/TrackingPixels";
 import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 
 export default function PublishedFunnelView({
@@ -49,6 +50,9 @@ export default function PublishedFunnelView({
       />
       <PublicFunnelRuntime />
       <PageViewBeacon />
+      {/* 🆕 LOT 4 — Pixels publicitaires : pages publiées UNIQUEMENT (ce
+          composant n'est jamais monté dans le dashboard/éditeur). */}
+      <TrackingPixels tracking={funnel.tracking} />
     </div>
   );
 }

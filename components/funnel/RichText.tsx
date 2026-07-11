@@ -1,6 +1,6 @@
 "use client";
 
-import type { ElementType, ReactNode } from "react";
+import type { CSSProperties, ElementType, ReactNode } from "react";
 
 /**
  * RichText — Parse la syntaxe de surlignage [[texte]] ou [[texte|#hex]]
@@ -22,6 +22,14 @@ type RichTextProps = {
   as?: ElementType;
   /** Attribut data-ff-anim (animation au scroll) */
   dataAnim?: string;
+  /**
+   * 🆕 Style inline forwardé au tag conteneur. Sans ce prop, un appelant qui
+   * veut fixer explicitement `color` (ex: var(--ff-ink)) n'avait aucun moyen
+   * de le faire — le texte retombait alors sur l'héritage CSS ambiant, ce qui
+   * a causé des titres illisibles (texte sombre sur carte sombre) dans
+   * BonusRenderer/GuaranteeRenderer.
+   */
+  style?: CSSProperties;
 };
 
 const HIGHLIGHT_RE = /\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g;
@@ -47,13 +55,14 @@ export function RichText({
   className,
   as: Tag = "span",
   dataAnim,
+  style,
 }: RichTextProps) {
   if (!text) return null;
 
   // Fast path : pas de balise [[…]]
   if (text.indexOf("[[") === -1) {
     return (
-      <Tag className={className} data-ff-anim={dataAnim}>
+      <Tag className={className} data-ff-anim={dataAnim} style={style}>
         {text}
       </Tag>
     );
@@ -94,7 +103,7 @@ export function RichText({
   }
 
   return (
-    <Tag className={className} data-ff-anim={dataAnim}>
+    <Tag className={className} data-ff-anim={dataAnim} style={style}>
       {parts}
     </Tag>
   );

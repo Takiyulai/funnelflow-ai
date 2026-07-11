@@ -16,7 +16,10 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/crm/email";
 import { getFunnelMarketingSender } from "@/lib/email/userSender";
 import type { Sender } from "@/lib/email/sender";
-import { wrapEmailLinksForTracking } from "@/lib/crm/emailTracking";
+import {
+  wrapEmailLinksForTracking,
+  appendOpenTrackingPixel,
+} from "@/lib/crm/emailTracking";
 import { executeActions } from "@/lib/workflows/engine";
 import { getWorkflow } from "@/lib/workflows/repository";
 
@@ -33,6 +36,10 @@ type DueRow = {
   recipient_email: string;
   subject: string | null;
   content: string | null;
+  // 🆕 LOT 3 — identifiants de stats (open/click rate).
+  source_type: string | null;
+  campaign_id: string | null;
+  sequence_id: string | null;
 };
 
 function authorized(request: Request): boolean {
@@ -48,7 +55,9 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
 
   const { data, error } = await sb
     .from("scheduled_emails")
-    .select("id, user_id, funnel_id, contact_id, recipient_email, subject, content")
+    .select(
+      "id, user_id, funnel_id, contact_id, recipient_email, subject, content, source_type, campaign_id, sequence_id",
+    )
     .eq("status", "pending")
     .lte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true })
@@ -82,15 +91,24 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
       continue;
     }
     const sender = await senderFor(row.user_id, row.funnel_id);
-    // 🆕 LOT 2 — Réécrit les liens pour le tracking de clic (déclencheur
-    // Workflow `email.link_clicked`). Sans contact_id (cas historique), on
-    // envoie le contenu tel quel plutôt que de bloquer l'envoi.
-    const html = row.contact_id
-      ? wrapEmailLinksForTracking(row.content || "", {
-          userId: row.user_id,
-          contactId: row.contact_id,
-        })
-      : row.content || "";
+    // LOT 2 — Réécrit les liens pour le tracking de clic (déclencheur
+    // Workflow `email.link_clicked`).
+    // 🆕 LOT 3 — Les mêmes liens portent les identifiants de stats
+    // (messageId = ligne scheduled_emails), + pixel d'ouverture. Fonctionne
+    // désormais AVEC ou SANS contact_id (le trigger workflow, lui, ne se
+    // déclenche que si un contact est identifié — inchangé côté /track/click).
+    const tracking = {
+      userId: row.user_id,
+      contactId: row.contact_id,
+      messageId: row.id,
+      sourceType: row.source_type,
+      campaignId: row.campaign_id,
+      sequenceId: row.sequence_id,
+    };
+    const html = appendOpenTrackingPixel(
+      wrapEmailLinksForTracking(row.content || "", tracking),
+      tracking,
+    );
     const result = await sendEmail({
       to: row.recipient_email,
       subject: row.subject || "(sans objet)",

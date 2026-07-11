@@ -74,13 +74,17 @@ export const TIME_ELAPSED_BASE_EVENTS: readonly WorkflowTriggerEvent[] = [
 /** Types d'étape stockés dans workflow_steps.type. */
 export type WorkflowStepType = "trigger" | "action";
 
-/** Actions disponibles en V1 (workflow_steps.config.kind). */
+/** Actions disponibles (workflow_steps.config.kind).
+ *  🆕 VAGUE 1 / LOT 5 : send_email (email direct sans séquence) et condition
+ *  (embranchement si/alors, purement logique — AUCUN appel IA). */
 export type WorkflowActionKind =
   | "add_tag"
   | "set_status"
   | "enroll_in_sequence"
   | "notify_owner"
-  | "wait";
+  | "wait"
+  | "send_email"
+  | "condition";
 
 /** Statuts CRM valides d'un lead (cf. contrainte SQL leads.status). */
 export type LeadStatus = "nouveau" | "contacte" | "qualifie" | "client" | "perdu";
@@ -99,6 +103,41 @@ export const WORKFLOW_ACTION_KINDS: readonly WorkflowActionKind[] = [
   "enroll_in_sequence",
   "notify_owner",
   "wait",
+  "send_email",
+  "condition",
+] as const;
+
+// ─── 🆕 VAGUE 1 / LOT 5 — Conditions si/alors ───────────────────────────────
+// Tests purement LOGIQUES et déterministes, évalués sur les données déjà
+// présentes en base au moment où le workflow s'exécute. AUCUN appel IA
+// (volontaire : gratuit, instantané, fiable). Une éventuelle « action IA »
+// optionnelle est prévue pour une vague ultérieure.
+
+/** Types de test disponibles. */
+export type WorkflowConditionTest =
+  /** Le contact porte (ou non) ce tag (crm_contact_tags). */
+  | { type: "has_tag"; tagId: string }
+  /** Le statut CRM du contact est cette valeur (leads.status). */
+  | { type: "status_is"; status: LeadStatus }
+  /** La langue du contact est cette valeur (leads.language). */
+  | { type: "language_is"; language: "fr" | "en" | "es" }
+  /** La source du contact est cette valeur exacte (leads.source, ex. "funnel_form"). */
+  | { type: "source_is"; source: string }
+  /** Le pays téléphonique du contact (leads.phone_country, ISO-2, ex. "CI"). */
+  | { type: "country_is"; country: string }
+  /** A ouvert AU MOINS un email (email_events kind='open'), option : sur les N derniers jours. */
+  | { type: "has_opened_email"; sinceDays?: number }
+  /** A cliqué AU MOINS un lien d'email (email_events kind='click'), option : N derniers jours. */
+  | { type: "has_clicked_email"; sinceDays?: number };
+
+export const WORKFLOW_CONDITION_TYPES = [
+  "has_tag",
+  "status_is",
+  "language_is",
+  "source_is",
+  "country_is",
+  "has_opened_email",
+  "has_clicked_email",
 ] as const;
 
 // ─── Configs typées ──────────────────────────────────────────────────────────
@@ -132,7 +171,20 @@ export type WorkflowActionConfig =
   | { kind: "notify_owner"; subject?: string; message?: string }
   /** 🆕 Attente en jours ET/OU heures ET/OU minutes (rétro-compat : les
    *  anciennes étapes n'ont que `days`). */
-  | { kind: "wait"; days?: number; hours?: number; minutes?: number };
+  | { kind: "wait"; days?: number; hours?: number; minutes?: number }
+  /** 🆕 LOT 5 — Email direct au contact, sans passer par une séquence.
+   *  Personnalisation {{prenom}}/{{nom}}/{{email}} comme les séquences. */
+  | { kind: "send_email"; subject: string; content: string }
+  /** 🆕 LOT 5 — Embranchement si/alors. `negate` inverse le test. Chaque
+   *  branche contient ses propres actions (imbrication limitée, validée côté
+   *  API). Un workflow SANS condition reste strictement linéaire (inchangé). */
+  | {
+      kind: "condition";
+      test: WorkflowConditionTest;
+      negate?: boolean;
+      then: WorkflowActionConfig[];
+      otherwise: WorkflowActionConfig[];
+    };
 
 /** 🆕 Durée totale d'une étape "wait" en millisecondes (rétro-compatible). */
 export function waitActionMs(a: { days?: number; hours?: number; minutes?: number }): number {

@@ -130,8 +130,12 @@ export const PLANS: Record<PlanId, Plan> = {
       htmlExport: true,
       multiPlatform: true,
       clientWorkspaces: 0,
-      customSendingDomain: true,
-      customDomains: 1,
+      // 🚧 NON IMPLÉMENTÉ — remis à false/0 tant que la fonctionnalité n'existe
+      // pas (audit 2026-07 : aucun flux de vérification ni routage hostname).
+      // Valeurs cibles à restaurer à la livraison : customSendingDomain: true,
+      // customDomains: 1.
+      customSendingDomain: false,
+      customDomains: 0,
       paymentsInFunnels: true,
       platformFeePercent: 0,
       prioritySupport: true,
@@ -160,9 +164,13 @@ export const PLANS: Record<PlanId, Plan> = {
       systemeExport: true,
       htmlExport: true,
       multiPlatform: true,
-      clientWorkspaces: 25,
-      customSendingDomain: true,
-      customDomains: Infinity,
+      // 🚧 NON IMPLÉMENTÉ — remis à 0/false tant que ces fonctionnalités
+      // n'existent pas (audit 2026-07). Valeurs cibles à restaurer à la
+      // livraison : clientWorkspaces: 25, customSendingDomain: true,
+      // customDomains: Infinity.
+      clientWorkspaces: 0,
+      customSendingDomain: false,
+      customDomains: 0,
       paymentsInFunnels: true,
       platformFeePercent: 0,
       prioritySupport: true,

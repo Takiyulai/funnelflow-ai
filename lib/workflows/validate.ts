@@ -3,7 +3,38 @@
 import { z } from "zod";
 import type { WorkflowInput } from "./types";
 
-const actionSchema = z.discriminatedUnion("kind", [
+// 🆕 VAGUE 1 / LOT 5 — Test de condition (purement logique, aucun appel IA).
+const conditionTestSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("has_tag"), tagId: z.string().uuid() }),
+  z.object({
+    type: z.literal("status_is"),
+    status: z.enum(["nouveau", "contacte", "qualifie", "client", "perdu"]),
+  }),
+  z.object({ type: z.literal("language_is"), language: z.enum(["fr", "en", "es"]) }),
+  z.object({ type: z.literal("source_is"), source: z.string().trim().min(1).max(120) }),
+  z.object({
+    type: z.literal("country_is"),
+    country: z.string().trim().length(2),
+  }),
+  z.object({
+    type: z.literal("has_opened_email"),
+    sinceDays: z.number().int().min(1).max(365).optional(),
+  }),
+  z.object({
+    type: z.literal("has_clicked_email"),
+    sinceDays: z.number().int().min(1).max(365).optional(),
+  }),
+]);
+
+// ⚠️ Piège connu (cf. briefSchema) : tout champ absent d'un schéma zod est
+// SILENCIEUSEMENT retiré. Chaque nouveau champ d'action doit donc être ajouté
+// ici ET dans lib/workflows/types.ts.
+//
+// Les branches d'une condition contiennent des actions → schéma récursif via
+// z.lazy(), profondeur bornée par le superRefine du tableau d'actions.
+type ActionSchemaType = z.ZodTypeAny;
+
+const baseActionSchemas = [
   z.object({
     kind: z.literal("add_tag"),
     tags: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
@@ -29,7 +60,39 @@ const actionSchema = z.discriminatedUnion("kind", [
     hours: z.number().int().min(0).max(23).optional(),
     minutes: z.number().int().min(0).max(59).optional(),
   }),
-]);
+  // 🆕 LOT 5 — Email direct au contact.
+  z.object({
+    kind: z.literal("send_email"),
+    subject: z.string().trim().min(1).max(300),
+    content: z.string().trim().min(1).max(20000),
+  }),
+] as const;
+
+const actionSchema: ActionSchemaType = z.lazy(() =>
+  z.discriminatedUnion("kind", [
+    ...baseActionSchemas,
+    // 🆕 LOT 5 — Condition si/alors : branches d'actions imbriquées.
+    z.object({
+      kind: z.literal("condition"),
+      test: conditionTestSchema,
+      negate: z.boolean().optional(),
+      then: z.array(actionSchema).max(10).default([]),
+      otherwise: z.array(actionSchema).max(10).default([]),
+    }),
+  ]),
+);
+
+/** Profondeur d'imbrication des conditions (2 niveaux max côté API). */
+function conditionDepth(action: unknown, depth = 0): number {
+  const a = action as { kind?: string; then?: unknown[]; otherwise?: unknown[] };
+  if (a?.kind !== "condition") return depth;
+  const branches = [...(a.then ?? []), ...(a.otherwise ?? [])];
+  return Math.max(
+    depth + 1,
+    ...branches.map((b) => conditionDepth(b, depth + 1)),
+    depth + 1,
+  );
+}
 
 // 🆕 LOT 2 — Événements déclencheurs étendus.
 const triggerEventEnum = z.enum([
@@ -89,15 +152,35 @@ export const workflowInputSchema = z.object({
     .array(actionSchema)
     .max(20)
     .superRefine((actions, ctx) => {
-      actions.forEach((a, i) => {
+      const checkWait = (a: unknown, path: (number | string)[]) => {
+        const w = a as { kind?: string; days?: number; hours?: number; minutes?: number };
         if (
-          a.kind === "wait" &&
-          (a.days ?? 0) + (a.hours ?? 0) + (a.minutes ?? 0) <= 0
+          w?.kind === "wait" &&
+          (w.days ?? 0) + (w.hours ?? 0) + (w.minutes ?? 0) <= 0
         ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: [i],
+            path,
             message: "L'attente doit être d'au moins 1 minute.",
+          });
+        }
+        // 🆕 LOT 5 — vérifie aussi les "wait" imbriqués dans les branches.
+        const c = a as { kind?: string; then?: unknown[]; otherwise?: unknown[] };
+        if (c?.kind === "condition") {
+          (c.then ?? []).forEach((b, j) => checkWait(b, [...path, "then", j]));
+          (c.otherwise ?? []).forEach((b, j) =>
+            checkWait(b, [...path, "otherwise", j]),
+          );
+        }
+      };
+      actions.forEach((a, i) => {
+        checkWait(a, [i]);
+        // 🆕 LOT 5 — imbrication des conditions bornée (2 niveaux).
+        if (conditionDepth(a) > 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [i],
+            message: "Deux niveaux de condition imbriqués maximum.",
           });
         }
       });

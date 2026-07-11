@@ -31,6 +31,9 @@ export default async function EmailsPage({
   let campaigns: Campaign[] = [];
   let contactsCount = 0;
   let publishedFunnels: PublishedFunnelOpt[] = [];
+  // 🆕 LOT 3 — Ouvertures/clics par campagne (best-effort : {} si la migration
+  // db/email-events-schema.sql n'est pas encore passée).
+  const campaignStats: Record<string, { opens: number; clicks: number }> = {};
   try {
     const [campaignsRes, contactsRes, publishedFunnelsRes] = await Promise.all([
       listCampaigns(sb, user.id),
@@ -48,6 +51,23 @@ export default async function EmailsPage({
     publishedFunnels = (publishedFunnelsRes.data ?? []).map(
       (f: { id: string; name: string | null }) => ({ id: f.id, name: f.name || "Tunnel" }),
     );
+
+    // 🆕 LOT 3 — Stats open/click des campagnes (RPC SECURITY INVOKER → RLS).
+    if (campaigns.length > 0) {
+      const { data: statsRows } = await sb.rpc("campaign_email_stats_v1", {
+        p_campaign_ids: campaigns.map((c) => c.id),
+      });
+      for (const row of (statsRows ?? []) as Array<{
+        campaign_id: string;
+        opens: number;
+        clicks: number;
+      }>) {
+        campaignStats[row.campaign_id] = {
+          opens: Number(row.opens) || 0,
+          clicks: Number(row.clicks) || 0,
+        };
+      }
+    }
   } catch (e) {
     console.error("[emails] chargement des données échoué (réseau/Supabase):", e);
   }
@@ -60,6 +80,7 @@ export default async function EmailsPage({
         resendReady={resendConfigured()}
         initialTab={initialTab}
         publishedFunnels={publishedFunnels}
+        campaignStats={campaignStats}
       />
     </AppShell>
   );

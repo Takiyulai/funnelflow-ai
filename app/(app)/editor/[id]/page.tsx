@@ -30,6 +30,7 @@ import {
 import type { Funnel, FunnelPage, FunnelSection } from "@/lib/funnels/types";
 import SioLinkingTab from "@/components/editor/SioLinkingTab";
 import DeliveryEmailTab from "@/components/editor/DeliveryEmailTab";
+import TrackingPixelsTab from "@/components/editor/TrackingPixelsTab";
 import { InlineColorToolbar } from "@/components/editor/InlineColorToolbar";
 
 type HistoryState = {
@@ -93,6 +94,8 @@ export default function EditorPage() {
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
   const [sioLinkingOpen, setSioLinkingOpen] = useState(false);
   const [deliveryEmailOpen, setDeliveryEmailOpen] = useState(false);
+  // 🆕 LOT 4 — Panneau « Pixels publicitaires ».
+  const [trackingOpen, setTrackingOpen] = useState(false);
 
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -987,6 +990,7 @@ export default function EditorPage() {
             onOpenHeader={() => setHeaderOpen(true)}
             onOpenSioLinking={() => setSioLinkingOpen(true)}
             onOpenDeliveryEmail={() => setDeliveryEmailOpen(true)}
+            onOpenTracking={() => setTrackingOpen(true)}
             deliveryEmailEnabled={!!funnel.meta?.deliveryEmail?.enabled}
           />
         </div>
@@ -1055,6 +1059,14 @@ export default function EditorPage() {
           funnel={funnel}
           onChange={updateFunnelMeta}
           onClose={() => setDeliveryEmailOpen(false)}
+        />
+      )}
+
+      {trackingOpen && (
+        <TrackingPixelsTab
+          funnel={funnel}
+          onChange={updateFunnelMeta}
+          onClose={() => setTrackingOpen(false)}
         />
       )}
 

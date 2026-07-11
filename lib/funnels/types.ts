@@ -791,6 +791,24 @@ export type Funnel = {
     postPurchaseUrl?: string;
   };
 
+  /**
+   * 🆕 VAGUE 1 / LOT 4 — Pixels publicitaires du tunnel. L'utilisateur colle
+   * simplement ses identifiants ; les scripts sont injectés UNIQUEMENT sur les
+   * pages publiées (`PublishedFunnelView`), jamais dans le dashboard/éditeur.
+   * Les identifiants sont validés par format strict avant toute injection
+   * (cf. components/funnel/TrackingPixels.tsx) — aucun script arbitraire.
+   */
+  tracking?: {
+    /** Meta (Facebook) Pixel ID — numérique, ex. "1234567890123456". */
+    metaPixelId?: string;
+    /** Google Analytics 4 — format "G-XXXXXXXXXX". */
+    ga4Id?: string;
+    /** Google Tag Manager — format "GTM-XXXXXXX". */
+    gtmId?: string;
+    /** TikTok Pixel ID — alphanumérique, ex. "C9XXXXXXXXXXXXXXXX". */
+    tiktokPixelId?: string;
+  };
+
   meta?: {
     funnelKind?: FunnelKind;
     moodId?: MoodId;

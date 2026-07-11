@@ -23,18 +23,22 @@ export function GuaranteeRenderer({ section, bodySize = "text-base" }: Props) {
     <div
       className="ff-guarantee mt-4 mx-auto max-w-2xl rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left"
       style={{
+        // 🆕 FIX : voir le commentaire équivalent dans BonusRenderer.tsx —
+        // --ff-card-bg/--ff-card-border ne sont jamais réassignées par la
+        // règle "bande foncée" (contrairement à --ff-accent), donc plus
+        // fiables comme fond de carte.
         background:
-          "color-mix(in srgb, var(--ff-accent, #31845C) 8%, transparent)",
+          "var(--ff-card-bg, color-mix(in srgb, var(--ff-accent, #31845C) 8%, transparent))",
         border:
-          "2px solid color-mix(in srgb, var(--ff-accent, #31845C) 30%, transparent)",
+          "2px solid var(--ff-card-border, color-mix(in srgb, var(--ff-accent, #31845C) 30%, transparent))",
       }}
       data-ff-anim={section.animations?.body ?? "fade-up"}
     >
       <div
         className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full"
         style={{
-          background: "var(--ff-accent, #31845C)",
-          color: "#ffffff",
+          background: "var(--ff-card-icon-bg, var(--ff-accent, #31845C))",
+          color: "var(--ff-card-icon-ink, #ffffff)",
         }}
       >
         <Icon className="h-8 w-8" aria-hidden="true" />
@@ -46,13 +50,14 @@ export function GuaranteeRenderer({ section, bodySize = "text-base" }: Props) {
             as="h3"
             className="text-xl font-black"
             text={item.data.title || "Notre garantie"}
+            style={{ color: "var(--ff-ink, #0f172a)" }}
           />
           {item.data.duration && (
             <span
               className="text-sm font-bold rounded-full px-3 py-1"
               style={{
-                background: "var(--ff-accent, #31845C)",
-                color: "#ffffff",
+                background: "var(--ff-card-icon-bg, var(--ff-accent, #31845C))",
+                color: "var(--ff-card-icon-ink, #ffffff)",
               }}
             >
               {item.data.duration}
@@ -64,6 +69,7 @@ export function GuaranteeRenderer({ section, bodySize = "text-base" }: Props) {
             as="p"
             className={`${bodySize} leading-relaxed`}
             text={item.data.description}
+            style={{ color: "var(--ff-ink-soft, var(--ff-ink, #0f172a))", opacity: 0.85 }}
           />
         )}
       </div>

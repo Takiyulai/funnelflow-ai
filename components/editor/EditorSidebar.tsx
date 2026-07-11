@@ -11,6 +11,7 @@ import {
   Layout,
   Link2,
   Mail,
+  Radar,
 } from "lucide-react";
 import type { FunnelSection } from "@/lib/funnels/types";
 import { AddSectionMenu } from "@/components/editor/AddSectionMenu";
@@ -29,6 +30,8 @@ type Props = {
   onOpenHeader: () => void;
   onOpenSioLinking: () => void;
   onOpenDeliveryEmail: () => void;
+  /** 🆕 LOT 4 — Ouvre le panneau « Pixels publicitaires ». */
+  onOpenTracking: () => void;
   /** Affiche une pastille d'incitation si l'email de livraison n'est pas activé. */
   deliveryEmailEnabled?: boolean;
 };
@@ -67,6 +70,7 @@ export function EditorSidebar({
   onOpenHeader,
   onOpenSioLinking,
   onOpenDeliveryEmail,
+  onOpenTracking,
   deliveryEmailEnabled,
 }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -155,6 +159,15 @@ export function EditorSidebar({
                 aria-hidden
               />
             )}
+          </button>
+          {/* 🆕 LOT 4 — Pixels publicitaires (Meta / GA4 / GTM / TikTok) */}
+          <button
+            type="button"
+            onClick={onOpenTracking}
+            title="Pixels publicitaires (Meta, GA4, GTM, TikTok)"
+            className="rounded-md border border-white/15 bg-zinc-950/50 p-1.5 text-white/70 hover:border-amber-300/40 hover:text-amber-300"
+          >
+            <Radar className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

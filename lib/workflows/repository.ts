@@ -9,6 +9,7 @@ import type {
   Workflow,
   WorkflowAction,
   WorkflowActionConfig,
+  WorkflowConditionTest,
   WorkflowInput,
   WorkflowRow,
   WorkflowStatus,
@@ -117,6 +118,76 @@ function parseActionConfig(config: Record<string, unknown>): WorkflowActionConfi
         ...(days ? { days } : {}),
         ...(hours ? { hours } : {}),
         ...(minutes ? { minutes } : {}),
+      };
+    }
+    // 🆕 VAGUE 1 / LOT 5 — Email direct au contact.
+    case "send_email": {
+      const subject = typeof config.subject === "string" ? config.subject.trim() : "";
+      const content = typeof config.content === "string" ? config.content.trim() : "";
+      if (!subject || !content) return null;
+      return { kind: "send_email", subject, content };
+    }
+    // 🆕 VAGUE 1 / LOT 5 — Condition si/alors : branches parsées récursivement
+    // (une action de branche invalide est simplement ignorée, comme au niveau
+    // racine — jamais bloquant).
+    case "condition": {
+      const test = parseConditionTest(config.test);
+      if (!test) return null;
+      const parseBranch = (raw: unknown): WorkflowActionConfig[] => {
+        if (!Array.isArray(raw)) return [];
+        const out: WorkflowActionConfig[] = [];
+        for (const item of raw) {
+          const parsed = parseActionConfig(asRecord(item));
+          if (parsed) out.push(parsed);
+        }
+        return out;
+      };
+      return {
+        kind: "condition",
+        test,
+        ...(config.negate === true ? { negate: true } : {}),
+        then: parseBranch(config.then),
+        otherwise: parseBranch(config.otherwise),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+/** 🆕 VAGUE 1 / LOT 5 — Parse défensif d'un test de condition stocké en base. */
+function parseConditionTest(raw: unknown): WorkflowConditionTest | null {
+  const t = asRecord(raw);
+  switch (t.type) {
+    case "has_tag":
+      return typeof t.tagId === "string" && t.tagId.trim()
+        ? { type: "has_tag", tagId: t.tagId.trim() }
+        : null;
+    case "status_is":
+      return typeof t.status === "string" &&
+        (LEAD_STATUSES as readonly string[]).includes(t.status)
+        ? { type: "status_is", status: t.status as LeadStatus }
+        : null;
+    case "language_is":
+      return t.language === "fr" || t.language === "en" || t.language === "es"
+        ? { type: "language_is", language: t.language }
+        : null;
+    case "source_is":
+      return typeof t.source === "string" && t.source.trim()
+        ? { type: "source_is", source: t.source.trim() }
+        : null;
+    case "country_is":
+      return typeof t.country === "string" && t.country.trim().length === 2
+        ? { type: "country_is", country: t.country.trim().toUpperCase() }
+        : null;
+    case "has_opened_email":
+    case "has_clicked_email": {
+      const n = Number(t.sinceDays);
+      return {
+        type: t.type,
+        ...(Number.isFinite(n) && n > 0
+          ? { sinceDays: Math.min(365, Math.round(n)) }
+          : {}),
       };
     }
     default:

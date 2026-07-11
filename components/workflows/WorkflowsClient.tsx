@@ -5,6 +5,8 @@ import { handlePlanGate } from "@/lib/billing/planGate";
 import {
   Bell,
   Clock,
+  GitBranch,
+  Mail,
   Send,
   Plus,
   Tag,
@@ -18,6 +20,7 @@ import type {
   Workflow,
   WorkflowActionConfig,
   WorkflowActionKind,
+  WorkflowConditionTest,
   WorkflowStatus,
   WorkflowTriggerEvent,
 } from "@/lib/workflows/types";
@@ -64,14 +67,17 @@ const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
   "page.visited": "Page visitée",
 };
 
+// 🆕 VAGUE 1 / LOT 5 — `webinar.attended` et `webinar.absent` sont MASQUÉS du
+// sélecteur tant qu'aucun événement ne les émet (la détection de présence au
+// webinaire n'existe pas encore). Les workflows existants qui les utilisent
+// restent affichés/éditables (labels conservés ci-dessus). À réintroduire ici
+// le jour où la présence live est trackée.
 const TRIGGER_EVENTS: WorkflowTriggerEvent[] = [
   "lead.created",
   "tag.added",
   "status.changed",
   "purchase.completed",
   "webinar.registered",
-  "webinar.attended",
-  "webinar.absent",
   "application.submitted",
   "appointment.booked",
   "email.link_clicked",
@@ -106,7 +112,33 @@ const ACTION_META: Record<
   enroll_in_sequence: { label: "Inscrire dans une séquence", icon: Send },
   notify_owner: { label: "Me notifier", icon: Bell },
   wait: { label: "Attendre", icon: Clock },
+  // 🆕 VAGUE 1 / LOT 5
+  send_email: { label: "Envoyer un email", icon: Mail },
+  condition: { label: "Condition (si / alors)", icon: GitBranch },
 };
+
+// 🆕 LOT 5 — Libellés des tests de condition.
+const CONDITION_TYPE_LABELS: Record<WorkflowConditionTest["type"], string> = {
+  has_tag: "Le contact a le tag…",
+  status_is: "Le statut CRM est…",
+  language_is: "La langue du contact est…",
+  source_is: "La source du contact est…",
+  country_is: "Le pays (téléphone) est…",
+  has_opened_email: "A ouvert au moins un email",
+  has_clicked_email: "A cliqué au moins un lien d'email",
+};
+
+// Dans les branches d'une condition, on propose toutes les actions SAUF une
+// nouvelle condition (l'imbrication est supportée côté moteur/API, mais on
+// garde l'interface simple et lisible pour les débutants).
+const BRANCH_ACTION_KINDS: WorkflowActionKind[] = [
+  "add_tag",
+  "set_status",
+  "enroll_in_sequence",
+  "send_email",
+  "notify_owner",
+  "wait",
+];
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   nouveau: "Nouveau",
@@ -187,6 +219,37 @@ function defaultActionConfig(kind: WorkflowActionKind): WorkflowActionConfig {
       return { kind, subject: "", message: "" };
     case "wait":
       return { kind, days: 1 };
+    // 🆕 VAGUE 1 / LOT 5
+    case "send_email":
+      return { kind, subject: "", content: "" };
+    case "condition":
+      return {
+        kind,
+        test: { type: "has_opened_email" },
+        then: [],
+        otherwise: [],
+      };
+  }
+}
+
+// 🆕 LOT 5 — Config par défaut d'un test quand on change son type.
+function defaultConditionTest(
+  type: WorkflowConditionTest["type"],
+): WorkflowConditionTest {
+  switch (type) {
+    case "has_tag":
+      return { type, tagId: "" };
+    case "status_is":
+      return { type, status: "client" };
+    case "language_is":
+      return { type, language: "fr" };
+    case "source_is":
+      return { type, source: "funnel_form" };
+    case "country_is":
+      return { type, country: "" };
+    case "has_opened_email":
+    case "has_clicked_email":
+      return { type };
   }
 }
 
@@ -524,8 +587,10 @@ function WorkflowEditor({
     "add_tag",
     "set_status",
     "enroll_in_sequence",
+    "send_email",
     "notify_owner",
     "wait",
+    "condition",
   ];
 
   return (
@@ -787,6 +852,7 @@ function WorkflowEditor({
                 <ActionConfigFields
                   action={action}
                   sequences={sequences}
+                  tags={tags}
                   onChange={(next) => onUpdateAction(i, next)}
                 />
               </TimelineNode>
@@ -940,10 +1006,12 @@ function TimelineNode({
 function ActionConfigFields({
   action,
   sequences,
+  tags,
   onChange,
 }: {
   action: WorkflowActionConfig;
   sequences: SequenceOption[];
+  tags: TagOption[];
   onChange: (next: WorkflowActionConfig) => void;
 }) {
   return (
@@ -1084,6 +1152,294 @@ function ActionConfigFields({
             )}
           </div>
         )}
+
+        {/* 🆕 VAGUE 1 / LOT 5 — Email direct au contact */}
+        {action.kind === "send_email" && (
+          <div className="grid gap-2">
+            <input
+              value={action.subject}
+              onChange={(e) =>
+                onChange({ ...action, subject: e.target.value })
+              }
+              placeholder="Objet — ex. Bienvenue {{prenom}} !"
+              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            />
+            <textarea
+              value={action.content}
+              onChange={(e) =>
+                onChange({ ...action, content: e.target.value })
+              }
+              rows={4}
+              placeholder={"Contenu de l'email…\nVariables : {{prenom}}, {{email}}"}
+              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            />
+            <p className="text-[11px] text-muted">
+              Envoyé au contact (mise en forme automatique, même gabarit que les
+              séquences). Respecte les « Attendre » placés avant.
+            </p>
+          </div>
+        )}
+
+        {/* 🆕 VAGUE 1 / LOT 5 — Condition si/alors */}
+        {action.kind === "condition" && (
+          <ConditionFields
+            action={action}
+            sequences={sequences}
+            tags={tags}
+            onChange={onChange}
+          />
+        )}
       </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 VAGUE 1 / LOT 5 — Éditeur de condition si/alors.
+// Test purement logique (aucun appel IA), deux branches d'actions simples.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ConditionAction = Extract<WorkflowActionConfig, { kind: "condition" }>;
+
+function ConditionFields({
+  action,
+  sequences,
+  tags,
+  onChange,
+}: {
+  action: ConditionAction;
+  sequences: SequenceOption[];
+  tags: TagOption[];
+  onChange: (next: WorkflowActionConfig) => void;
+}) {
+  const test = action.test;
+
+  const setTest = (next: WorkflowConditionTest) =>
+    onChange({ ...action, test: next });
+
+  const setBranch = (branch: "then" | "otherwise", actions: WorkflowActionConfig[]) =>
+    onChange({ ...action, [branch]: actions });
+
+  return (
+    <div className="grid gap-3">
+      {/* Choix du test */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <select
+          value={test.type}
+          onChange={(e) =>
+            setTest(defaultConditionTest(e.target.value as WorkflowConditionTest["type"]))
+          }
+          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+        >
+          {(Object.keys(CONDITION_TYPE_LABELS) as WorkflowConditionTest["type"][]).map(
+            (t) => (
+              <option key={t} value={t}>
+                {CONDITION_TYPE_LABELS[t]}
+              </option>
+            ),
+          )}
+        </select>
+
+        {/* Paramètre du test selon son type */}
+        {test.type === "has_tag" && (
+          <select
+            value={test.tagId}
+            onChange={(e) => setTest({ type: "has_tag", tagId: e.target.value })}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="">— Choisir un tag —</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {test.type === "status_is" && (
+          <select
+            value={test.status}
+            onChange={(e) =>
+              setTest({ type: "status_is", status: e.target.value as LeadStatus })
+            }
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            {(Object.keys(STATUS_LABELS) as LeadStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        )}
+        {test.type === "language_is" && (
+          <select
+            value={test.language}
+            onChange={(e) =>
+              setTest({
+                type: "language_is",
+                language: e.target.value as "fr" | "en" | "es",
+              })
+            }
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="fr">Français</option>
+            <option value="en">Anglais</option>
+            <option value="es">Espagnol</option>
+          </select>
+        )}
+        {test.type === "source_is" && (
+          <input
+            value={test.source}
+            onChange={(e) => setTest({ type: "source_is", source: e.target.value })}
+            placeholder='Ex. "funnel_form"'
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          />
+        )}
+        {test.type === "country_is" && (
+          <input
+            value={test.country}
+            onChange={(e) =>
+              setTest({ type: "country_is", country: e.target.value.toUpperCase() })
+            }
+            placeholder="Code pays à 2 lettres — ex. CI, FR, CM"
+            maxLength={2}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          />
+        )}
+        {(test.type === "has_opened_email" || test.type === "has_clicked_email") && (
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <span className="text-xs text-muted">Sur les</span>
+            <input
+              type="number"
+              min={0}
+              max={365}
+              value={test.sinceDays ?? 0}
+              onChange={(e) => {
+                const n = Math.min(365, Math.max(0, Number(e.target.value) || 0));
+                setTest({ type: test.type, sinceDays: n > 0 ? n : undefined });
+              }}
+              className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+              aria-label="Jours"
+            />
+            <span className="text-xs text-muted">derniers jours (0 = toujours)</span>
+          </label>
+        )}
+      </div>
+
+      <label className="flex items-center gap-2 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={Boolean(action.negate)}
+          onChange={(e) => onChange({ ...action, negate: e.target.checked })}
+          className="h-3.5 w-3.5"
+        />
+        Inverser la condition (« SI ce n&apos;est PAS le cas »)
+      </label>
+
+      <p className="rounded-lg bg-canvas px-3 py-2 text-[11px] text-muted">
+        La condition est évaluée au moment où le workflow s&apos;exécute, sur les
+        données réelles du contact — instantané, sans IA. Les emails des branches
+        respectent les « Attendre » placés avant la condition.
+      </p>
+
+      {/* Branches */}
+      <ConditionBranch
+        label="SI OUI"
+        tone="green"
+        actions={action.then}
+        sequences={sequences}
+        tags={tags}
+        onChange={(a) => setBranch("then", a)}
+      />
+      <ConditionBranch
+        label="SINON"
+        tone="red"
+        actions={action.otherwise}
+        sequences={sequences}
+        tags={tags}
+        onChange={(a) => setBranch("otherwise", a)}
+      />
+    </div>
+  );
+}
+
+function ConditionBranch({
+  label,
+  tone,
+  actions,
+  sequences,
+  tags,
+  onChange,
+}: {
+  label: string;
+  tone: "green" | "red";
+  actions: WorkflowActionConfig[];
+  sequences: SequenceOption[];
+  tags: TagOption[];
+  onChange: (actions: WorkflowActionConfig[]) => void;
+}) {
+  const toneCls =
+    tone === "green"
+      ? "border-green/40 bg-green/5 text-green"
+      : "border-red/40 bg-red/5 text-red";
+
+  return (
+    <div className="rounded-lg border border-line bg-canvas/60 p-3">
+      <span
+        className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${toneCls}`}
+      >
+        {label}
+      </span>
+
+      {actions.length === 0 && (
+        <p className="mt-2 text-[11px] text-muted">
+          Aucune action dans cette branche (rien ne se passera).
+        </p>
+      )}
+
+      <div className="mt-2 grid gap-2">
+        {actions.map((a, i) => {
+          const Meta = ACTION_META[a.kind];
+          const Icon = Meta.icon;
+          return (
+            <div key={i} className="rounded-lg border border-line bg-surface p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
+                  <Icon size={13} /> {Meta.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onChange(actions.filter((_, j) => j !== i))}
+                  className="grid h-6 w-6 place-items-center rounded-md border border-line text-muted hover:text-red"
+                  aria-label="Retirer"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+              <ActionConfigFields
+                action={a}
+                sequences={sequences}
+                tags={tags}
+                onChange={(next) => onChange(actions.map((x, j) => (j === i ? next : x)))}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {BRANCH_ACTION_KINDS.map((kind) => {
+          const Meta = ACTION_META[kind];
+          return (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => onChange([...actions, defaultActionConfig(kind)])}
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink hover:border-navy/40"
+            >
+              <Plus size={11} /> {Meta.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
