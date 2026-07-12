@@ -66,6 +66,7 @@ const NO_ACCESS: PlanLimits = {
   customSendingDomain: false,
   customDomains: 0,
   paymentsInFunnels: false,
+  customCode: false,
   platformFeePercent: 0,
   prioritySupport: false,
 };
@@ -102,6 +103,27 @@ export async function getProfile(userId: string): Promise<ProfileRow | null> {
     stripe_subscription_id: (data.stripe_subscription_id as string | null) ?? null,
     current_period_end: (data.current_period_end as string | null) ?? null,
   };
+}
+
+/**
+ * 🆕 VAGUE CUSTOM-CODE — Plan réellement SOUSCRIT (profil actif, sinon licence
+ * Chariow active), indépendamment de BILLING_ENFORCED. À utiliser pour les
+ * fonctionnalités sensibles qui doivent rester réservées à un plan précis MÊME
+ * quand le gating global est désactivé (ex. injection de code personnalisé :
+ * getAccess() retomberait sur « Agency pour tous » en phase de test, ce qui
+ * ouvrirait l'injection de script à n'importe quel compte).
+ */
+export async function getSubscribedPlanId(userId: string): Promise<PlanId | null> {
+  try {
+    const profile = await getProfile(userId);
+    if (profile?.plan && statusGrantsAccess(profile.status)) return profile.plan;
+    const license = await getActiveChariowLicense(userId);
+    if (license && isPlanId(license.plan)) return license.plan;
+    return null;
+  } catch (e) {
+    console.error("[subscription] getSubscribedPlanId error", e);
+    return null; // prudent : en cas de doute, pas de privilège
+  }
 }
 
 /**

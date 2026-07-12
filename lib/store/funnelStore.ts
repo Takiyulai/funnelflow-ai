@@ -1,7 +1,7 @@
 // lib/store/funnelStore.ts
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Funnel, FunnelBrief, FunnelPage } from "@/lib/funnels/types";
 import { FUNNEL_SCHEMA_VERSION, makePageId } from "@/lib/funnels/types";
 import { migrateAllSections } from "@/lib/funnels/sectionItems";
@@ -503,11 +503,15 @@ function hydrateLocalFromRemote(remote: StoredFunnel): void {
   }
 
   try {
-    safeSetItem(
-      STORAGE_PREFIX + remote.id,
-      serializeStored(remote),
-      remote.id,
-    );
+    // 🆕 FIX « tunnels disparus du dashboard » : l'hydratation est un simple
+    // REMPLISSAGE DE CACHE, pas une sauvegarde utilisateur → on n'utilise PAS
+    // safeSetItem. safeSetItem, en cas de quota plein, PURGE les AUTRES tunnels
+    // (et les retire de l'index d'affichage) pour faire de la place : hydrater
+    // N tunnels distants trop lourds évinçait donc les précédents un par un,
+    // et la liste du dashboard se vidait. Ici : si ça ne rentre pas, on ignore
+    // — Supabase reste la source de vérité et l'affichage de la liste passe
+    // par la fusion distant+local dans useFunnelList (plus par le seul cache).
+    window.localStorage.setItem(STORAGE_PREFIX + remote.id, serializeStored(remote));
     const ids = readIndex();
     if (!ids.includes(remote.id)) writeIndex([remote.id, ...ids]);
   } catch {
@@ -1076,8 +1080,34 @@ export function clearAllFunnels(): void {
 // Hooks React
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** 🆕 FIX « tunnels disparus » — Fusionne la liste DISTANTE (source de vérité)
+ *  avec les brouillons LOCAUX. L'affichage ne dépend donc plus du fait que le
+ *  cache localStorage ait pu, ou non, accueillir tous les tunnels (quota).
+ *  Règles : tombstones exclus ; en doublon, la version la plus récente gagne
+ *  (protège un brouillon local en avance sur le distant). */
+function mergeRemoteAndLocal(remoteList: StoredFunnel[]): StoredFunnel[] {
+  const deleted = new Set(readDeleted());
+  const byId = new Map<string, StoredFunnel>();
+  for (const r of remoteList) {
+    if (!deleted.has(r.id)) byId.set(r.id, r);
+  }
+  for (const l of listFunnels()) {
+    // listFunnels() exclut déjà les tombstones.
+    const existing = byId.get(l.id);
+    if (!existing || (l.updatedAt ?? "") > (existing.updatedAt ?? "")) {
+      byId.set(l.id, l);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+  );
+}
+
 export function useFunnelList(): StoredFunnel[] {
   const [list, setList] = useState<StoredFunnel[]>([]);
+  // 🆕 Dernière liste distante connue, pour que les mises à jour locales
+  // (subscribe) n'écrasent pas l'affichage avec le seul cache localStorage.
+  const remoteRef = useRef<StoredFunnel[]>([]);
   useEffect(() => {
     let cancelled = false;
 
@@ -1126,7 +1156,10 @@ export function useFunnelList(): StoredFunnel[] {
           for (const remote of remoteList) {
             hydrateLocalFromRemote(remote);
           }
-          if (!cancelled) setList(listFunnels());
+          // 🆕 FIX : l'affichage vient de la fusion distant+local (et plus du
+          // seul cache localStorage, qui peut être plein → tunnels manquants).
+          remoteRef.current = remoteList;
+          if (!cancelled) setList(mergeRemoteAndLocal(remoteList));
         })
         .catch((e) => console.warn("[useFunnelList] listRemote:", e));
     }
@@ -1153,7 +1186,9 @@ export function useFunnelList(): StoredFunnel[] {
       });
 
     const unsub = subscribe(() => {
-      if (!cancelled) setList(listFunnels());
+      // 🆕 FIX : une mise à jour locale (save/suppression) re-fusionne avec la
+      // dernière liste distante connue au lieu de retomber sur le seul cache.
+      if (!cancelled) setList(mergeRemoteAndLocal(remoteRef.current));
     });
     return () => {
       cancelled = true;

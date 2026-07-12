@@ -2,6 +2,8 @@
 import { notFound } from "next/navigation";
 import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getPageBySlug } from "@/lib/funnels/types";
+import { resolvePublicCustomCode } from "@/lib/funnels/customCode";
+import { CustomCodeBlock } from "@/components/funnel/CustomCodeBlock";
 import PublishedFunnelView from "../PublishedFunnelView";
 
 // 🆕 CORRECTIF FIABILITÉ PUBLICATION — pages secondaires DYNAMIQUES (lecture
@@ -25,5 +27,14 @@ export default async function PublishedFunnelSubPage({
   if (!page) notFound();
 
   // 🆕 Rendu unifié via FunnelPreview (parité exacte avec l'aperçu).
-  return <PublishedFunnelView funnel={published.funnel} activePage={page} />;
+  // 🆕 VAGUE CUSTOM-CODE — même résolution serveur que la page d'entrée.
+  const customCode = await resolvePublicCustomCode(published.funnel, published.ownerId);
+
+  return (
+    <>
+      <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
+      <PublishedFunnelView funnel={published.funnel} activePage={page} />
+      <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
+    </>
+  );
 }

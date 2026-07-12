@@ -2,6 +2,8 @@
 import { notFound } from "next/navigation";
 import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getHomePage } from "@/lib/funnels/types";
+import { resolvePublicCustomCode } from "@/lib/funnels/customCode";
+import { CustomCodeBlock } from "@/components/funnel/CustomCodeBlock";
 import PublishedFunnelView from "./PublishedFunnelView";
 
 // 🆕 CORRECTIF FIABILITÉ PUBLICATION — la page publique est DYNAMIQUE (lecture
@@ -28,5 +30,16 @@ export default async function PublishedFunnelPage({
 
   // 🆕 Rendu unifié via FunnelPreview (parité exacte avec l'aperçu).
   const home = getHomePage(published.funnel);
-  return <PublishedFunnelView funnel={published.funnel} activePage={home} />;
+
+  // 🆕 VAGUE CUSTOM-CODE — Résolu CÔTÉ SERVEUR (kill switch + plan Agency du
+  // propriétaire + taille). null pour tout autre plan, quoi que contienne le JSON.
+  const customCode = await resolvePublicCustomCode(published.funnel, published.ownerId);
+
+  return (
+    <>
+      <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
+      <PublishedFunnelView funnel={published.funnel} activePage={home} />
+      <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
+    </>
+  );
 }

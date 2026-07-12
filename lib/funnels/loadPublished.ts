@@ -2,7 +2,13 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeFunnel } from "@/lib/store/normalizeFunnel";
 
-export type PublishedFunnel = { funnel: ReturnType<typeof normalizeFunnel>; name: string };
+export type PublishedFunnel = {
+  funnel: ReturnType<typeof normalizeFunnel>;
+  name: string;
+  /** 🆕 VAGUE CUSTOM-CODE — Propriétaire du tunnel, requis pour la vérification
+   *  de plan côté serveur avant injection du code personnalisé. */
+  ownerId: string;
+};
 
 /**
  * Charge un tunnel PUBLIÉ par son slug public, pour la page publique
@@ -28,21 +34,25 @@ export async function getPublishedFunnelBySlug(
   // publié à cause d'un doublon de slug ou d'un aléa de requête.
   const lookup = async (
     column: "published_slug" | "slug",
-  ): Promise<{ name: string; published_content: unknown } | null> => {
+  ): Promise<{ name: string; published_content: unknown; user_id: string } | null> => {
     const { data } = await supabase
       .from("funnels")
-      .select("name, published_content")
+      .select("name, published_content, user_id")
       .eq(column, clean)
       .eq("status", "published")
       .not("published_content", "is", null)
       .order("published_at", { ascending: false })
       .limit(1);
     return data && data.length > 0
-      ? (data[0] as { name: string; published_content: unknown })
+      ? (data[0] as { name: string; published_content: unknown; user_id: string })
       : null;
   };
 
   const row = (await lookup("published_slug")) ?? (await lookup("slug"));
   if (!row || !row.published_content) return null;
-  return { funnel: normalizeFunnel(row.published_content), name: row.name };
+  return {
+    funnel: normalizeFunnel(row.published_content),
+    name: row.name,
+    ownerId: row.user_id,
+  };
 }

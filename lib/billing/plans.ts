@@ -56,6 +56,11 @@ export type PlanLimits = {
   customDomains: number;
   /** 🆕 Paiement dans les tunnels (Stripe Connect / CinetPay) activé. */
   paymentsInFunnels: boolean;
+  /** 🆕 VAGUE CUSTOM-CODE — Code personnalisé head/body injecté sur les pages
+   *  publiées. STRICTEMENT réservé au plan le plus élevé (risque XSS assumé,
+   *  cf. components/funnel/CustomCode.tsx). Le contrôle qui compte est fait
+   *  côté serveur AU RENDU (lib/funnels/customCode.ts), pas seulement en UI. */
+  customCode: boolean;
   /** 🆕 Commission plateforme sur les ventes de tunnels (% — Stripe Connect
    *  application_fee). 0 = aucune. Dégressive selon le plan. Prête mais peut
    *  rester inappliquée tant qu'on ne la branche pas dans le checkout. */
@@ -102,6 +107,7 @@ export const PLANS: Record<PlanId, Plan> = {
       customSendingDomain: false,
       customDomains: 0,
       paymentsInFunnels: true,
+      customCode: false,
       platformFeePercent: 2,
       prioritySupport: false,
     },
@@ -137,6 +143,7 @@ export const PLANS: Record<PlanId, Plan> = {
       customSendingDomain: false,
       customDomains: 0,
       paymentsInFunnels: true,
+      customCode: false,
       platformFeePercent: 0,
       prioritySupport: true,
     },
@@ -172,6 +179,7 @@ export const PLANS: Record<PlanId, Plan> = {
       customSendingDomain: false,
       customDomains: 0,
       paymentsInFunnels: true,
+      customCode: true,
       platformFeePercent: 0,
       prioritySupport: true,
     },

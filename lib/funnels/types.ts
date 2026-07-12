@@ -809,6 +809,25 @@ export type Funnel = {
     tiktokPixelId?: string;
   };
 
+  /**
+   * 🆕 VAGUE CUSTOM-CODE — Code personnalisé injecté sur les pages PUBLIÉES du
+   * tunnel (jamais dashboard/éditeur/preview). ⚠️ SENSIBLE : exécuté tel quel
+   * chez les visiteurs, sous la responsabilité de l'utilisateur. Réservé au
+   * plan Agency — contrôle fait CÔTÉ SERVEUR au rendu (lib/funnels/customCode.ts),
+   * pas seulement en UI : un compte non-Agency qui écrirait ce champ à la main
+   * ne verra jamais son code injecté. Audit en base via trigger
+   * (db/custom-code-audit.sql). Kill switch global : env CUSTOM_CODE_DISABLED.
+   */
+  customCode?: {
+    /** Injecté tout en HAUT de la page (exécuté avant le contenu). */
+    head?: string;
+    /** Injecté tout en BAS de la page (fin de body). */
+    body?: string;
+  };
+  // NB : la taille max d'une zone est MAX_CUSTOM_CODE_LEN (exportée plus bas,
+  // ici dans types.ts pour rester importable côté CLIENT sans tirer le module
+  // serveur lib/funnels/customCode.ts).
+
   meta?: {
     funnelKind?: FunnelKind;
     moodId?: MoodId;
@@ -872,6 +891,11 @@ export type Funnel = {
 
 /** Version actuelle du schéma Funnel (incrémentée à chaque migration majeure) */
 export const FUNNEL_SCHEMA_VERSION = 2;
+
+/** 🆕 VAGUE CUSTOM-CODE — Taille max (caractères) d'une zone de code
+ *  personnalisé (head OU body). Au-delà : zone ignorée au rendu public et
+ *  signalée en rouge dans l'éditeur. Exportée depuis types.ts (client-safe). */
+export const MAX_CUSTOM_CODE_LEN = 20000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers multi-pages
