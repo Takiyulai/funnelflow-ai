@@ -102,7 +102,18 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     const observed = new WeakSet<Element>();
 
     const prep = (el: HTMLElement, scrollRoot: HTMLElement | null) => {
-      if (observed.has(el)) return;
+      // 🆕 FIX « aperçu vide au changement de template » : au re-render React
+      // (changement de template/variant → MÊMES nœuds DOM réutilisés), React
+      // réécrit `className` avec la valeur rendue, ce qui EFFACE nos classes
+      // impératives ff-anim-active/ff-in → l'élément repasse en opacity:0.
+      // L'ancien garde `observed.has(el)` bloquait alors toute re-préparation :
+      // l'élément restait invisible jusqu'à un remontage complet (toggle
+      // desktop→mobile→desktop). On re-prépare donc TOUT élément dont les
+      // classes ont disparu, même déjà vu.
+      const hasState =
+        el.classList.contains("ff-anim-active") ||
+        el.classList.contains("ff-anim-pending");
+      if (observed.has(el) && hasState) return;
       observed.add(el);
 
       if (isVisibleNow(el, scrollRoot)) {
@@ -113,12 +124,29 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       }
     };
 
+    // 🆕 Filet de sécurité RÉ-ARMABLE : après chaque scan qui laisse des
+    // éléments non actifs, on (re)programme une activation forcée à 1.2s.
+    let failsafeTimer: ReturnType<typeof setTimeout> | null = null;
+    const armFailsafe = () => {
+      if (failsafeTimer) clearTimeout(failsafeTimer);
+      failsafeTimer = setTimeout(() => {
+        collect().forEach((el) => {
+          if (!el.classList.contains("ff-anim-active")) activate(el);
+        });
+      }, 1200);
+    };
+
     const scan = () => {
       const scrollRoot = getScrollRoot();
       if (!observer) buildObserver(scrollRoot);
+      let leftPending = false;
       collect().forEach((el) => {
-        if (!el.classList.contains("ff-anim-active")) prep(el, scrollRoot);
+        if (!el.classList.contains("ff-anim-active")) {
+          prep(el, scrollRoot);
+          if (!el.classList.contains("ff-anim-active")) leftPending = true;
+        }
       });
+      if (leftPending) armFailsafe();
     };
 
     // 🆕 Multi-passages : au premier mount, les dimensions ne sont pas
@@ -175,10 +203,49 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     // ceux sous la ligne de flottaison sont mis en file et animés normalement
     // au scroll — le filet de sécurité à 1.2s reste en place si jamais
     // l'IntersectionObserver ne se déclenchait pas.
-    const mo = new MutationObserver(() => {
-      scan();
+    // 🆕 FIX : on observe AUSSI les mutations d'attribut `class` — c'est le
+    // signal du re-render React qui efface nos classes impératives (changement
+    // de template dans le wizard, édition de section…). Sans ça, seul un
+    // ajout/retrait de nœud déclenchait un re-scan, et un simple re-render
+    // laissait tout l'aperçu invisible. Débouncé, et nos propres écritures de
+    // classe (ff-anim-active déjà présent) ne re-déclenchent rien de coûteux :
+    // scan() ignore les éléments déjà actifs.
+    let moScanTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastScanAt = 0;
+    const mo = new MutationObserver((mutations) => {
+      // ⚠️ Filtre STRICT anti-tempête : on ne re-scanne QUE si
+      //  - des nœuds ont été ajoutés/retirés (childList), OU
+      //  - un élément [data-ff-anim] a PERDU ses classes d'état (le cas
+      //    « re-render React efface ff-anim-active » → aperçu invisible).
+      // Toute autre mutation de classe (activations par nos soins, tick d'un
+      // timer, auto-scaling de headline, hover…) est ignorée — sinon chaque
+      // frame déclenchait un scan + layout complet et gelait l'onglet.
+      const relevant = mutations.some((m) => {
+        if (m.type === "childList") {
+          return m.addedNodes.length > 0 || m.removedNodes.length > 0;
+        }
+        const t = m.target as HTMLElement;
+        return (
+          t.hasAttribute?.("data-ff-anim") &&
+          !t.classList.contains("ff-anim-active") &&
+          !t.classList.contains("ff-anim-pending")
+        );
+      });
+      if (!relevant) return;
+      // Throttle dur : au plus un scan toutes les 300 ms.
+      const wait = Math.max(60, 300 - (Date.now() - lastScanAt));
+      if (moScanTimer) clearTimeout(moScanTimer);
+      moScanTimer = setTimeout(() => {
+        lastScanAt = Date.now();
+        scan();
+      }, wait);
     });
-    mo.observe(container, { childList: true, subtree: true });
+    mo.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     // 🆕 Re-scan au resize (changement viewport mobile/desktop)
     const onResize = () => scan();
@@ -189,6 +256,8 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       mo.disconnect();
       rafs.forEach((id) => cancelAnimationFrame(id));
       timers.forEach((id) => clearTimeout(id));
+      if (failsafeTimer) clearTimeout(failsafeTimer);
+      if (moScanTimer) clearTimeout(moScanTimer);
       window.removeEventListener("load", onLoad);
       window.removeEventListener("resize", onResize);
     };

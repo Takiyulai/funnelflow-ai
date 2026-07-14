@@ -97,6 +97,13 @@ export default function TrackingPixelsTab({ funnel, onChange, onClose }: Props) 
             </label>
           ))}
 
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>Pensez à re-publier le tunnel</strong> après modification :
+            les pixels ne sont injectés que sur la version publiée
+            (<code className="font-mono text-xs">/tunnel/votre-slug</code>) —
+            jamais dans l&apos;éditeur ni l&apos;aperçu.
+          </div>
+
           <p className="text-xs text-gray-400">
             Rappel RGPD : si votre audience est en Europe, l&apos;usage de ces
             pixels peut nécessiter un bandeau de consentement selon votre

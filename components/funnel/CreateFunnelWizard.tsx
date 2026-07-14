@@ -1247,7 +1247,30 @@ export function CreateFunnelWizard() {
                 </p>
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <Button href="/funnels/demo" variant="secondary">Démo</Button>
+                {/* 🆕 FIX : « Démo » ouvrait /funnels/demo (route inexistante →
+                    « Tunnel introuvable »). Il ouvre désormais l'aperçu PLEIN
+                    NAVIGATEUR du tunnel en cours (template/ambiance actuels)
+                    dans un nouvel onglet, via /create/demo qui lit la clé
+                    ff:wizard-demo déposée ici. */}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    try {
+                      const payload = JSON.stringify(previewFunnel);
+                      try {
+                        window.localStorage.setItem("ff:wizard-demo", payload);
+                      } catch {
+                        window.sessionStorage.setItem("ff:wizard-demo", payload);
+                      }
+                    } catch {
+                      /* storage plein : la démo retombera sur l'exemple générique */
+                    }
+                    window.open("/create/demo", "_blank", "noopener");
+                  }}
+                >
+                  Démo
+                </Button>
                 <Button href="/export-systeme" variant="secondary">
                   <Upload size={14} /> Export
                 </Button>

@@ -145,6 +145,14 @@ export default function CustomCodeTab({ funnel, onChange, onClose }: Props) {
             "Injecté tout en bas de la page. Pour les widgets (chat, avis), scripts non critiques.",
           )}
 
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>Pensez à re-publier le tunnel</strong> après modification :
+            le code n&apos;est injecté que sur la version publiée
+            (<code className="font-mono text-xs">/tunnel/votre-slug</code>) —
+            jamais dans l&apos;éditeur ni l&apos;aperçu. Ne collez pas le même
+            script dans les deux zones (double exécution).
+          </div>
+
           <p className="text-xs text-gray-400">
             Rappel : vos pixels Meta / GA4 / GTM / TikTok par identifiant (panneau
             « Pixels publicitaires ») restent le moyen le plus sûr — n&apos;utilisez
