@@ -142,6 +142,37 @@ export function PlanPicker({
     setBusy(null);
   }
 
+  // ── 🆕 Paiement Mobile Money via CinetPay (Bénin, XOF) ─────────────────
+  // Abonnement "manuel" : le paiement active une licence de 30 jours (pas de
+  // prélèvement récurrent automatique côté CinetPay) — l'utilisateur repaie
+  // lui-même à l'échéance, comme pour la licence Chariow.
+  const [cinetpayError, setCinetpayError] = useState<string | null>(null);
+
+  async function payWithCinetpay() {
+    setBusy("cinetpay");
+    setCinetpayError(null);
+    try {
+      const res = await fetch("/api/billing/cinetpay/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: planForPayment }),
+      });
+      const data = await res.json();
+      if (data?.ok && data.paymentUrl) {
+        window.location.href = data.paymentUrl as string;
+        return;
+      }
+      setCinetpayError(
+        data?.error === "cinetpay_not_configured"
+          ? "Le paiement Mobile Money n'est pas encore configuré. Réessaie plus tard."
+          : "Impossible d'initier le paiement. Réessaie.",
+      );
+    } catch {
+      setCinetpayError("Erreur réseau. Réessaie.");
+    }
+    setBusy(null);
+  }
+
   async function openPortal() {
     setBusy("portal");
     setError(null);
@@ -254,15 +285,19 @@ export function PlanPicker({
           Méthode de paiement
           {selectedPlan ? (
             <span className="ml-2 text-sm font-semibold text-emerald-600">
-              — plan {PLANS[planForPayment].name} ({PLANS[planForPayment].priceEur}€/mois)
+              — plan {PLANS[planForPayment].name} (
+              {PLANS[planForPayment].priceEur}€/mois par carte, ou{" "}
+              {PLANS[planForPayment].priceXof.toLocaleString("fr-FR")} FCFA via
+              Mobile Money)
             </span>
           ) : null}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Choisis comment régler ton abonnement.
+          Choisis comment régler ton abonnement — le prix affiché dépend du
+          moyen de paiement choisi (€ par carte, FCFA en Mobile Money).
         </p>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           {/* Chariow — ACTIF */}
           <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
             <div className="flex items-center justify-between">
@@ -332,6 +367,42 @@ export function PlanPicker({
                 </p>
               )}
             </div>
+          </div>
+
+          {/* 🆕 CinetPay — Mobile Money direct (Bénin, XOF) */}
+          <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-ink">
+                <Smartphone size={17} className="text-emerald-600" />
+                Mobile Money (CinetPay)
+              </div>
+            </div>
+            <div className="mt-2 flex items-end gap-1">
+              <span className="text-2xl font-black text-ink">
+                {PLANS[planForPayment].priceXof.toLocaleString("fr-FR")}
+              </span>
+              <span className="mb-0.5 text-xs text-muted">FCFA</span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted">
+              Orange Money, MTN, Moov… au Bénin. Réglage unique qui débloque{" "}
+              <b className="text-ink">30 jours d&apos;accès</b> — pas de
+              prélèvement automatique : reviens ici renouveler à l&apos;échéance.
+            </p>
+            <button
+              type="button"
+              onClick={payWithCinetpay}
+              disabled={busy !== null}
+              className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {busy === "cinetpay" ? (
+                <Loader2 className="mx-auto animate-spin" size={16} />
+              ) : (
+                "Payer avec Mobile Money →"
+              )}
+            </button>
+            {cinetpayError && (
+              <p className="mt-2 text-xs font-semibold text-red-600">{cinetpayError}</p>
+            )}
           </div>
 
           {/* Stripe — MUET (bientôt) */}

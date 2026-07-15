@@ -2164,6 +2164,7 @@ function renderSkinTextAndCta(
   section: FunnelSection,
   ctx: SectionContext,
   cardsHtml: string,
+  splitMediaHtml?: string,
 ): string {
   // 🆕 FIX PARITÉ Head() (factory.tsx) : pour les sections cartes/étapes
   // (qualification/solution/benefits/process/program), le skin live n'utilise
@@ -2194,6 +2195,25 @@ function renderSkinTextAndCta(
   const headHtml = eyebrow || headline || subheadline
     ? `<div style="text-align:center;margin-bottom:44px">${eyebrow}${headline}${subheadline}</div>`
     : "";
+
+  // 🆕 FIX PARITÉ withSectionImage() (factory.tsx) : quand la section porte
+  // une image, le skin live garde le Head() centré PLEINE LARGEUR au-dessus,
+  // et ne met en grille split (contre l'image) que les cartes/étapes — pas
+  // l'eyebrow/titre comme pour le hero. Avant ce fix, une section process/
+  // program AVEC image sortait entièrement du rendu skin (retombait sur le
+  // rendu générique hors-split) → sous-titre non centré et body fantôme
+  // réapparaissaient, d'où le "recadrage hors sections split pas effectif".
+  if (splitMediaHtml) {
+    const variant = effectiveLayoutVariant(section, ctx.funnel);
+    const order =
+      variant === "split-image-text"
+        ? `<div class="ff-split-media">${splitMediaHtml}</div><div class="ff-split-text">${cardsHtml}</div>`
+        : `<div class="ff-split-text">${cardsHtml}</div><div class="ff-split-media">${splitMediaHtml}</div>`;
+    const ctaCentered =
+      cta ? `<div style="text-align:center;margin-top:40px">${cta}</div>` : "";
+    return `${headHtml}<div class="ff-split-grid">${order}</div>${ctaCentered}${extraCtas}`;
+  }
+
   return `${headHtml}${cardsHtml}${cta}${extraCtas}`;
 }
 
@@ -2298,10 +2318,19 @@ function renderSkinProcessSection(
   section: FunnelSection,
   t: SkinTokens,
   ctx: SectionContext,
+  hasImage: boolean,
 ): string {
   const cardsHtml = renderSkinProcessCards(section, t);
-  const inner = renderSkinTextAndCta(section, ctx, cardsHtml);
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ff-layout-centered" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}">
+  // 🆕 Variante avec image (port withSectionImage()) : cf. commentaire dans
+  // renderSkinTextAndCta. Ne s'applique qu'aux sections process/program
+  // portant une image réelle — sinon comportement inchangé.
+  const mediaHtml = hasImage
+    ? renderImage(section.image, ctx.funnel, animOf(section, "image", "fade-in"))
+    : "";
+  const inner = renderSkinTextAndCta(section, ctx, cardsHtml, mediaHtml || undefined);
+  const layoutClass = mediaHtml ? "ff-layout-split" : "ff-layout-centered";
+  const layoutAttr = mediaHtml ? "split" : "centered";
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ${layoutClass}" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layoutAttr}">
   <div class="ff-section-inner">${inner}</div>
 </section>`;
 }
@@ -2368,11 +2397,12 @@ function renderSection(
 
   // 🆕 FIX PARITÉ SKINS (voir bloc de commentaires ci-dessus) : pour les
   // templates "factory" (bold-energy, lead-snap, story-sell, clean-light,
-  // premium-minimal, trust-pro), le CTA final et les cartes process/program
-  // ont un rendu bespoke qui prend le dessus sur le rendu générique dans
-  // l'aperçu live — on reproduit ce comportement ici. Scopé aux sections SANS
-  // image/vidéo (cas le plus courant) pour rester sur un terrain sûr ; avec
-  // image, on retombe sur le rendu générique existant (inchangé).
+  // premium-minimal, trust-pro), le CTA final, l'urgence et les cartes
+  // process/program ont un rendu bespoke qui prend le dessus sur le rendu
+  // générique dans l'aperçu live — on reproduit ce comportement ici. Scopé
+  // aux sections SANS image/vidéo pour cta-final/urgency (makeFinalCta/
+  // makeUrgency ne gèrent pas d'image côté live) ; avec image, on retombe
+  // sur le rendu générique existant (inchangé) pour ces deux-là.
   const skinTokens = getFactorySkinTokens(ctx.funnel);
   if (!hasImageEarly && !hasVideoEarly) {
     if (skinTokens) {
@@ -2383,18 +2413,27 @@ function renderSection(
         return renderSkinCtaFinalSection(section, skinTokens, ctx);
       }
       if (
-        (section.type === "process" || section.type === "program") &&
-        Array.isArray(section.bullets) &&
-        section.bullets.some((b) => typeof b === "string" && b.trim().length > 0)
-      ) {
-        return renderSkinProcessSection(section, skinTokens, ctx);
-      }
-      if (
         section.type === "urgency" &&
         (section.headline || section.eyebrow || extractTimers(section).length > 0)
       ) {
         return renderSkinUrgencySection(section, skinTokens, ctx);
       }
+    }
+  }
+  // 🆕 process/program : contrairement à cta-final/urgency, le skin live
+  // (makeProcess() + withSectionImage()) GÈRE le cas avec image — le Head()
+  // reste centré pleine largeur, seules les cartes/étapes passent en split
+  // contre l'image. On ne sort donc PAS du rendu skin quand une image est
+  // présente (seule la vidéo, non gérée par le skin, retombe sur le
+  // générique) — avant ce fix, une section process/program avec image
+  // perdait tout le fix de centrage/alignement du Head().
+  if (!hasVideoEarly && skinTokens) {
+    if (
+      (section.type === "process" || section.type === "program") &&
+      Array.isArray(section.bullets) &&
+      section.bullets.some((b) => typeof b === "string" && b.trim().length > 0)
+    ) {
+      return renderSkinProcessSection(section, skinTokens, ctx, hasImageEarly);
     }
   }
 

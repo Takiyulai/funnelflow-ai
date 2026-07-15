@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  Funnel,
   FunnelSection,
   Language,
   CtaConfig,
@@ -16,7 +17,14 @@ import { TagsInput } from "./items/TagsInput";
 type Props = {
   section: FunnelSection;
   language: Language;
+  funnel: Funnel;
   onChange: (patch: Partial<FunnelSection>) => void;
+  // 🆕 Écrit funnel.defaultCta / funnel.meta.applyDefaultCtaToAll — remplace
+  // l'ancien réglage "Action commune des boutons" du panneau Style global
+  // (qui ne proposait qu'un popup interne, sans option Systeme.io ni code
+  // externe, et restait trop caché). L'action commune se définit désormais
+  // directement ici, avec TOUTES les options déjà disponibles dans cet onglet.
+  onFunnelChange: (patch: Partial<Funnel>) => void;
 };
 
 const ICON_OPTIONS: { value: CtaIcon; label: string }[] = [
@@ -37,7 +45,7 @@ const DEFAULT_POPUP_FIELDS: FormFieldItem[] = [
   { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "full" },
 ];
 
-export function CtaTab({ section, onChange }: Props) {
+export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
   const cta: CtaConfig | undefined = section.cta;
   const enabled = Boolean(cta);
 
@@ -232,6 +240,46 @@ export function CtaTab({ section, onChange }: Props) {
             </div>
           </Field>
 
+          {/* 🆕 Action commune : remplace l'ancien réglage "Style global"
+              (retiré — il ne proposait qu'un popup interne, sans option
+              Systeme.io/code externe, et était trop caché). Cocher ici
+              partage l'action DE CE BOUTON (mode + destination popup/ancre/
+              redirection) avec tous les boutons principaux de la page
+              d'accueil. Le libellé/icône/espacement de chaque bouton restent
+              les leurs — seule l'action au clic est partagée. */}
+          <label className="flex items-start justify-between gap-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5">
+            <div>
+              <div className="text-xs font-medium text-white">
+                🔗 Appliquer cette action à tous les CTA de la page
+              </div>
+              <div className="mt-0.5 text-[10px] leading-relaxed text-white/50">
+                Tous les boutons principaux de la page d&apos;accueil (hero,
+                urgence, CTA final, offre…) utiliseront la même action que ce
+                bouton. Les libellés restent propres à chaque bouton. Décoche
+                un bouton précis via «&nbsp;Action spécifique&nbsp;»
+                ci-dessous pour l&apos;exclure.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={funnel.meta?.applyDefaultCtaToAll === true}
+              onChange={(e) => {
+                const on = e.target.checked;
+                onFunnelChange({
+                  meta: { ...(funnel.meta ?? {}), applyDefaultCtaToAll: on },
+                  ...(on ? { defaultCta: { ...cta } } : {}),
+                });
+                // Si ce bouton était lui-même marqué "action spécifique", on
+                // lève l'exclusion : sinon activer l'action commune DEPUIS ce
+                // bouton tout en le laissant l'ignorer serait contradictoire.
+                if (on && cta.ignoreGlobalCta) {
+                  updateCta({ ignoreGlobalCta: false });
+                }
+              }}
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
+            />
+          </label>
+
           {/* 🆕 Opt-out de l'action commune, bouton par bouton. */}
           <label className="flex items-start gap-2 text-xs text-white/70">
             <input
@@ -243,9 +291,9 @@ export function CtaTab({ section, onChange }: Props) {
             <span>
               Action spécifique — ignorer l&apos;« action commune des boutons »
               <span className="mt-0.5 block text-[11px] font-normal text-white/40">
-                Utile seulement si tu as activé une action commune (Style global).
-                Coché : ce bouton garde l&apos;action choisie ci-dessus, même sur la
-                page d&apos;accueil.
+                Utile seulement si tu as activé une action commune ci-dessus.
+                Coché : ce bouton garde l&apos;action choisie plus haut, même sur
+                la page d&apos;accueil.
               </span>
             </span>
           </label>

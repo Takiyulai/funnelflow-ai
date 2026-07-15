@@ -72,8 +72,17 @@ export type PlanLimits = {
 export type Plan = {
   id: PlanId;
   name: string;
-  /** Prix mensuel en euros (affichage). */
+  /** Prix mensuel en euros (affichage + Stripe/carte bancaire). */
   priceEur: number;
+  /** 🆕 Prix "mensuel" en F CFA (XOF) — Mobile Money via CinetPay (Bénin).
+   *  CinetPay ne gère pas d'abonnement récurrent natif : ce montant sert de
+   *  base à un paiement ponctuel qui active une licence de 30 jours
+   *  (re-paiement manuel à l'échéance, cf. lib/billing/cinetpay.ts).
+   *  Conversion 1€ = 655,957 XOF, arrondie au millier pour rester lisible.
+   *  Distinct de priceEur : NE PAS dériver l'un de l'autre au runtime, les
+   *  deux sont des prix affichés indépendamment selon le moyen de paiement
+   *  choisi (cf. page /abonnement). */
+  priceXof: number;
   /** Nom de la variable d'env contenant le price_id Stripe récurrent. */
   envPriceKey: string;
   limits: PlanLimits;
@@ -84,6 +93,7 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "starter",
     name: "Starter",
     priceEur: 29,
+    priceXof: 19000,
     envPriceKey: "STRIPE_PRICE_STARTER",
     limits: {
       funnels: 5,
@@ -116,6 +126,7 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     priceEur: 59,
+    priceXof: 39000,
     envPriceKey: "STRIPE_PRICE_PRO",
     limits: {
       funnels: 15,
@@ -152,6 +163,7 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "agency",
     name: "Agency",
     priceEur: 97,
+    priceXof: 64000,
     envPriceKey: "STRIPE_PRICE_AGENCY",
     limits: {
       funnels: Infinity,

@@ -33,6 +33,10 @@ export default async function AbonnementPage({
   const sp = await searchParams;
   const rawPlan = Array.isArray(sp.plan) ? sp.plan[0] : sp.plan;
   const initialPlan: PlanId | null = isPlanId(rawPlan) ? rawPlan : null;
+  // 🆕 failed_url de CinetPay (Point 2) : paiement annulé/refusé côté Mobile
+  // Money — on l'affiche simplement, l'utilisateur peut retenter directement.
+  const cinetpayFailed =
+    (Array.isArray(sp.cinetpay) ? sp.cinetpay[0] : sp.cinetpay) === "failed";
 
   const statusLabel: Record<string, string> = {
     active: "Abonnement actif",
@@ -51,6 +55,14 @@ export default async function AbonnementPage({
           ? "Gère ton plan ou change d'offre à tout moment."
           : "Choisis un plan pour débloquer la génération de tunnels et l'ensemble de la plateforme."}
       </p>
+
+      {cinetpayFailed && (
+        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Le paiement Mobile Money n&apos;a pas abouti (annulé ou refusé).
+          Aucun montant n&apos;a été débité côté abonnement — tu peux
+          retenter juste en dessous.
+        </div>
+      )}
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-ink">
         <span

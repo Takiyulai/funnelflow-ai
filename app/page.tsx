@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, CheckCircle2, Download, Globe2, Sparkles, Upload,
@@ -68,8 +68,8 @@ const translations = {
     hero: {
       label: "Plus qu'un builder de pages",
       titleStart: "Le copilote IA",
-      titleMid: "qui transforme une offre en",
-      titleDynamic: ["machine de vente complète", "machine de conversion", "système de vente automatisé"],
+      titleMid: "qui transforme votre offre en",
+      titleEnd: "machine de vente",
       desc: "Tunnel, CRM, emails, automatisations, import intelligent, scoring leads et optimisation conversion : une équipe d'agents IA spécialisés construit toute ta machine de vente, à partir d'une simple description de ton offre.",
       ctaPrimary: "Lancer mes agents IA",
       ctaSecondary: "Voir comment ça marche",
@@ -299,8 +299,8 @@ const translations = {
     hero: {
       label: "More than a page builder",
       titleStart: "The AI copilot",
-      titleMid: "that turns an offer into a",
-      titleDynamic: ["complete sales machine", "conversion machine", "automated sales system"],
+      titleMid: "that turns your offer into a",
+      titleEnd: "sales machine",
       desc: "Funnel, CRM, emails, automations, smart import, lead scoring and conversion optimization: a team of specialized AI agents builds your entire sales machine from a simple description of your offer.",
       ctaPrimary: "Launch my AI agents",
       ctaSecondary: "See how it works",
@@ -511,8 +511,8 @@ const translations = {
     hero: {
       label: "Más que un creador de páginas",
       titleStart: "El copiloto IA",
-      titleMid: "que convierte una oferta en una",
-      titleDynamic: ["máquina de ventas completa", "máquina de conversión", "sistema de ventas automatizado"],
+      titleMid: "que convierte tu oferta en una",
+      titleEnd: "máquina de ventas",
       desc: "Embudo, CRM, emails, automatizaciones, importación inteligente, scoring de leads y optimización de conversión: un equipo de agentes IA especializados construye toda tu máquina de ventas a partir de una simple descripción de tu oferta.",
       ctaPrimary: "Lanzar mis agentes IA",
       ctaSecondary: "Ver cómo funciona",
@@ -766,16 +766,9 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 const LANG_CYCLE: Lang[] = ["fr", "en", "es"];
 
 export default function LandingPage() {
-  const [wordIdx, setWordIdx] = useState(0);
   const [lang, setLang] = useState<Lang>("fr");
   const t = translations[lang];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-
-  useEffect(() => {
-    const interval = setInterval(() => setWordIdx(p => (p + 1) % t.hero.titleDynamic.length), 2500);
-    return () => clearInterval(interval);
-  }, [lang, t.hero.titleDynamic.length]);
 
   const cycleLang = () => {
     const next = LANG_CYCLE[(LANG_CYCLE.indexOf(lang) + 1) % LANG_CYCLE.length];
@@ -996,15 +989,11 @@ export default function LandingPage() {
                 <Sparkles size={10} /> {t.hero.label}
               </div>
 
-              {/* Promesse principale */}
+              {/* Promesse principale — hook direct, statique (plus de cycle de mots) */}
               <h1 className="ff-title hero-title mt-5 leading-[1.04] text-white" style={{ fontSize: "clamp(2.1rem,4.7vw,3.6rem)", fontWeight: 700 }}>
                 {t.hero.titleStart}{" "}
                 {t.hero.titleMid}{" "}
-                <AnimatePresence mode="wait">
-                  <motion.span key={wordIdx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35 }} style={{ color: "#C7A436" }}>
-                    {t.hero.titleDynamic[wordIdx]}
-                  </motion.span>
-                </AnimatePresence>
+                <span style={{ color: "#C7A436" }}>{t.hero.titleEnd}</span>
               </h1>
 
               <p className="hero-sub mt-6 max-w-xl ff-body" style={{ fontSize: 16, color: MUTED2, lineHeight: 1.62 }}>

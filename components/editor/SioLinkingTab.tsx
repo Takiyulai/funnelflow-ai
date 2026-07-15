@@ -78,7 +78,9 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
               Liaison Systeme.io
             </h2>
             <p className="text-xs text-gray-500">
-              Centralise la configuration Systeme.io de ce tunnel.
+              Centralise la configuration Systeme.io de ce tunnel — quel que
+              soit son type (webinaire, vente directe/VSL, lead magnet,
+              coaching, e-commerce…).
             </p>
           </div>
           <button
@@ -174,22 +176,35 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
             <h3 className="mb-2 text-sm font-semibold text-gray-900">
               3. Checklist d'intégration
             </h3>
+            <p className="mb-3 text-xs text-gray-600">
+              Cette procédure s'applique à{" "}
+              <strong>tous les types de tunnels</strong> — webinaire, page de
+              vente/VSL, lead magnet, coaching, prise de rendez-vous,
+              e-commerce… Adapte simplement le nombre et le rôle des étapes
+              (capture, vente, remerciement, livraison…) à ton propre tunnel.
+            </p>
             <ol className="space-y-2 text-xs text-gray-700">
               <li className="flex gap-2">
                 <span className="font-semibold text-blue-600">①</span>
                 <span>
-                  Crée le tunnel et toutes ses étapes (vides) dans Systeme.io.
+                  Crée le tunnel et toutes ses étapes (vides) dans Systeme.io —
+                  autant que de pages dans ton tunnel AutoFunnel (capture,
+                  vente, confirmation, remerciement, livraison…).
                 </span>
               </li>
               <li className="flex gap-2">
                 <span className="font-semibold text-blue-600">②</span>
                 <span>
-                  Pour l'étape <strong>formulaire</strong> : choisis "Commencer
-                  de zéro" ou "Choisir un template", puis configure{" "}
+                  Pour chaque étape qui contient un{" "}
+                  <strong>formulaire de capture</strong> (inscription
+                  webinaire, opt-in, prise de coordonnées avant paiement…) :
+                  choisis "Commencer de zéro" ou "Choisir un template", puis
+                  configure{" "}
                   <em>
                     Action après soumission → rediriger vers l'étape suivante
                   </em>
-                  .
+                  . Les étapes sans formulaire (vente, remerciement…) n'ont pas
+                  besoin de ce réglage.
                 </span>
               </li>
               <li className="flex gap-2">

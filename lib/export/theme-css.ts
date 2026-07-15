@@ -2875,59 +2875,72 @@ const THEMES_CSS = `
   animation: ff-decor-drift 28s ease-in-out infinite;
 }
 
-/* ═══ BOLD ENERGY ═══ */
+/* ═══ BOLD ENERGY ═══
+   🆕 FIX FOND ROUGE PERSISTANT (re-diagnostic) : ce bloc peignait encore la
+   toute PREMIÈRE version (sombre, #1a0808) du template. Le live app a depuis
+   redesigné bold-energy en thème CLAIR (voir app/funnel-theme.css, blocs
+   [data-ff-template="bold-energy"] lignes ~807 et ~3222, + commentaire qui y
+   explique explicitement ce même changement : "le skin factory (T7_TOKENS,
+   dark:false, ink #000000) rendait les titres/texte en NOIR alors que ce
+   bloc peignait encore un fond sombre hérité de l'ancienne version dark du
+   template". L'export n'avait JAMAIS reçu cette mise à jour → fond sombre +
+   glows décoratifs 2x plus opaques que la version actuelle du live app,
+   d'où le "rouge dégradé" bien plus dominant et visible sur les 2 premières
+   sections (glows ::before/::after positionnés en haut de page, ~55-60% de
+   sa hauteur). Valeurs ci-dessous = fusion EXACTE des 2 blocs live (le second,
+   plus tardif dans le fichier, gagne sur --ff-accent/--ff-btn-*/section-alt-2/
+   background ; le premier reste pour --ff-bg/--ff-ink/brand-bar/footer). */
 .ff-page[data-ff-theme="bold-energy"] {
-  --ff-bg: #1a0808;
-  --ff-surface: #220c0c;
-  --ff-ink: #fff5ee;
-  --ff-ink-soft: #fde9d4;
-  --ff-muted: #b89579;
-  --ff-border: rgba(255, 107, 53, 0.25);
-  --ff-accent: #ff6b35;
-  --ff-accent-ink: #1a0808;
-  --ff-accent-soft: rgba(255, 107, 53, 0.22);
-  --ff-accent-card: rgba(255, 107, 53, 0.12);
-  --ff-accent-glow: rgba(255, 107, 53, 0.50);
-  --ff-btn-glow-color: rgba(255, 107, 53, 0.55);
+  --ff-bg: #ffffff;
+  --ff-surface: #fff8f5;
+  --ff-ink: #000000;
+  --ff-ink-soft: #4b4b4b;
+  --ff-muted: #6b6b6b;
+  --ff-border: rgba(0, 0, 0, 0.10);
+  --ff-accent: #ef4444;
+  --ff-accent-ink: #ffffff;
+  --ff-accent-soft: rgba(239, 68, 68, 0.16);
+  --ff-accent-card: rgba(239, 68, 68, 0.06);
+  --ff-accent-glow: rgba(239, 68, 68, 0.40);
+  --ff-btn-glow-color: rgba(239, 68, 68, 0.40);
   --ff-font-heading: "Bricolage Grotesque", "Space Grotesk", "Inter", system-ui, sans-serif;
   --ff-heading-weight: 800;
   --ff-heading-tracking: -0.03em;
   --ff-heading-leading: 1.1;
   --ff-btn-radius: 999px;
-  --ff-btn-bg: linear-gradient(135deg, #ff6b35 0%, #e07a3e 100%);
-  --ff-btn-ink: #fff5ee;
-  --ff-btn-shadow: 0 16px 40px rgba(255, 107, 53, 0.50);
-  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
-  --ff-section-alt-2: rgba(255, 107, 53, 0.13);
-  --ff-section-alt-border: rgba(255, 107, 53, 0.30);
-  --ff-brand-bar-bg: #1a0808;
+  --ff-btn-bg: linear-gradient(100deg, #ef4444 0%, #f97316 100%);
+  --ff-btn-ink: #ffffff;
+  --ff-btn-shadow: 0 12px 34px rgba(239, 68, 68, 0.40);
+  --ff-section-alt-1: rgba(0, 0, 0, 0.015);
+  --ff-section-alt-2: rgba(239, 68, 68, 0.06);
+  --ff-section-alt-border: rgba(239, 68, 68, 0.16);
+  --ff-brand-bar-bg: #2a0e0e;
   --ff-brand-bar-ink: #fff5ee;
   --ff-brand-bar-border: rgba(255, 107, 53, 0.25);
-  --ff-footer-bg: #120505;
-  --ff-footer-ink: rgba(255, 245, 238, 0.65);
+  --ff-footer-bg: #0f0303;
+  --ff-footer-ink: rgba(255, 245, 238, 0.55);
   --ff-footer-business-ink: #fff5ee;
   --ff-footer-border: rgba(255, 107, 53, 0.20);
   background-image:
-    radial-gradient(ellipse at 20% 0%, rgba(255, 107, 53, 0.18), transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(255, 107, 53, 0.12), transparent 50%),
-    linear-gradient(180deg, #1a0808 0%, #220c0c 100%);
+    radial-gradient(ellipse at 50% 0%, rgba(239, 68, 68, 0.08), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
 }
 .ff-page[data-ff-theme="bold-energy"] .ff-headline { text-transform: none; }
 .ff-page[data-ff-theme="bold-energy"] .ff-eyebrow {
-  background: rgba(255, 107, 53, 0.22);
-  color: #ff8a5b;
-  border-color: rgba(255, 107, 53, 0.35);
+  background: color-mix(in srgb, #ff6b35 16%, transparent);
+  color: #c2410c;
+  border-color: color-mix(in srgb, #ff6b35 35%, transparent);
 }
 .ff-page[data-ff-theme="bold-energy"]::before {
   width: 60%; height: 60%; top: -20%; left: -15%;
-  background: radial-gradient(circle, rgba(255, 107, 53, 0.55), transparent 65%);
-  opacity: 0.7;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.22), transparent 70%);
+  opacity: 0.5;
   animation: ff-decor-drift 20s ease-in-out infinite;
 }
 .ff-page[data-ff-theme="bold-energy"]::after {
   width: 55%; height: 55%; top: -10%; right: -15%;
-  background: radial-gradient(circle, rgba(255, 87, 51, 0.45), transparent 65%);
-  opacity: 0.55;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.16), transparent 70%);
+  opacity: 0.4;
   animation: ff-decor-drift 26s ease-in-out infinite reverse;
 }
 
@@ -3139,111 +3152,114 @@ const THEMES_CSS = `
   opacity: 0.5;
 }
 
-/* ═══ TRUST PRO ═══ */
+/* ═══ TRUST PRO (🆕 fond clair — le skin factory T6 est dark:false) ═══ */
 .ff-page[data-ff-theme="trust-pro"] {
-  --ff-bg: #0b1e3d;
-  --ff-surface: #0f2847;
-  --ff-ink: #e2e8f0;
-  --ff-ink-soft: #94a3b8;
-  --ff-muted: #6b8aaf;
-  --ff-border: rgba(6, 182, 212, 0.20);
-  --ff-accent: #06b6d4;
+  --ff-bg: #f9fafb;
+  --ff-surface: #f0fdfa;
+  --ff-ink: #1f2937;
+  --ff-ink-soft: #4b5563;
+  --ff-muted: #6b7280;
+  --ff-border: rgba(17, 24, 39, 0.08);
+  --ff-accent: #0d9488;
   --ff-accent-ink: #ffffff;
-  --ff-accent-soft: rgba(6, 182, 212, 0.20);
-  --ff-accent-card: rgba(6, 182, 212, 0.10);
-  --ff-accent-glow: rgba(6, 182, 212, 0.40);
-  --ff-btn-glow-color: rgba(6, 182, 212, 0.45);
-  --ff-font-heading: "Inter", system-ui, sans-serif;
-  --ff-font-body: "Inter", system-ui, sans-serif;
-  --ff-heading-weight: 700;
-  --ff-heading-tracking: -0.02em;
-  --ff-heading-leading: 1.15;
+  --ff-accent-soft: rgba(13, 148, 136, 0.16);
+  --ff-accent-card: rgba(13, 148, 136, 0.06);
+  --ff-accent-glow: rgba(13, 148, 136, 0.35);
+  --ff-btn-glow-color: rgba(13, 148, 136, 0.35);
+  --ff-font-heading: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --ff-heading-weight: 600;
+  --ff-heading-tracking: -0.015em;
+  --ff-heading-leading: 1.2;
   --ff-btn-radius: 999px;
-  --ff-btn-bg: #06b6d4;
+  --ff-btn-bg: linear-gradient(100deg, #0d9488 0%, #14b8a6 100%);
   --ff-btn-ink: #ffffff;
-  --ff-btn-shadow: 0 6px 16px rgba(6, 182, 212, 0.30);
-  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
-  --ff-section-alt-2: rgba(6, 182, 212, 0.10);
-  --ff-section-alt-border: rgba(6, 182, 212, 0.25);
-  --ff-brand-bar-bg: #0b1e3d;
+  --ff-btn-shadow: 0 12px 32px rgba(13, 148, 136, 0.35);
+  --ff-section-alt-1: rgba(17, 24, 39, 0.012);
+  --ff-section-alt-2: rgba(13, 148, 136, 0.06);
+  --ff-section-alt-border: rgba(13, 148, 136, 0.16);
+  --ff-brand-bar-bg: #102b52;
   --ff-brand-bar-ink: #e2e8f0;
-  --ff-brand-bar-border: rgba(6, 182, 212, 0.18);
-  --ff-footer-bg: #07152b;
-  --ff-footer-ink: rgba(226, 232, 240, 0.65);
+  --ff-brand-bar-border: rgba(13, 148, 136, 0.18);
+  --ff-footer-bg: #06122a;
+  --ff-footer-ink: rgba(226, 232, 240, 0.55);
   --ff-footer-business-ink: #e2e8f0;
-  --ff-footer-border: rgba(6, 182, 212, 0.18);
+  --ff-footer-border: rgba(13, 148, 136, 0.18);
   background-image:
-    radial-gradient(ellipse at 0% 0%, rgba(6, 182, 212, 0.18), transparent 50%),
-    radial-gradient(ellipse at 100% 100%, rgba(6, 182, 212, 0.12), transparent 50%),
-    linear-gradient(135deg, #0b1e3d 0%, #0f2847 100%);
+    radial-gradient(ellipse at 0% 0%, rgba(6, 182, 212, 0.08), transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(6, 182, 212, 0.05), transparent 50%),
+    linear-gradient(180deg, #f9fafb 0%, #f9fafb 100%);
 }
 .ff-page[data-ff-theme="trust-pro"] .ff-eyebrow {
-  background: rgba(6, 182, 212, 0.15);
-  color: #67e8f9;
+  background: rgba(6, 182, 212, 0.12);
+  color: #0e7490;
 }
 .ff-page[data-ff-theme="trust-pro"]::before {
   width: 55%; height: 55%; top: -15%; left: -15%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.45), transparent 65%);
-  opacity: 0.6;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.18), transparent 70%);
+  opacity: 0.45;
   animation: ff-decor-drift 30s ease-in-out infinite;
 }
 .ff-page[data-ff-theme="trust-pro"]::after {
   width: 50%; height: 50%; bottom: -15%; right: -15%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.30), transparent 65%);
-  opacity: 0.5;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.12), transparent 70%);
+  opacity: 0.35;
   animation: ff-decor-drift 36s ease-in-out infinite reverse;
 }
 
-/* ═══ LEAD SNAP ═══ */
+/* ═══ LEAD SNAP (🆕 fond clair — le skin factory T2 est dark:false) ═══ */
 .ff-page[data-ff-theme="lead-snap"] {
-  --ff-bg: #1a0f2e;
-  --ff-surface: #271847;
-  --ff-ink: #f3e8ff;
-  --ff-ink-soft: #c4b5dc;
-  --ff-muted: #8c7aab;
-  --ff-border: rgba(192, 132, 252, 0.20);
-  --ff-accent: #c084fc;
+  --ff-bg: #ffffff;
+  --ff-surface: #fff8f0;
+  --ff-ink: #0b1d3a;
+  --ff-ink-soft: #374151;
+  --ff-muted: #6b7280;
+  --ff-border: rgba(11, 29, 58, 0.10);
+  --ff-accent: #f58a1e;
   --ff-accent-ink: #1a0f2e;
-  --ff-accent-soft: rgba(192, 132, 252, 0.22);
-  --ff-accent-card: rgba(192, 132, 252, 0.12);
-  --ff-accent-glow: rgba(192, 132, 252, 0.50);
-  --ff-btn-glow-color: rgba(192, 132, 252, 0.50);
-  --ff-font-heading: "Space Grotesk", "Inter", sans-serif;
-  --ff-font-body: "Inter", system-ui, sans-serif;
+  --ff-accent-soft: rgba(245, 138, 30, 0.18);
+  --ff-accent-card: rgba(245, 138, 30, 0.08);
+  --ff-accent-glow: rgba(245, 138, 30, 0.40);
+  --ff-btn-glow-color: rgba(245, 138, 30, 0.40);
+  --ff-font-heading: "Sora", "Inter", system-ui, sans-serif;
   --ff-heading-weight: 700;
   --ff-heading-tracking: -0.02em;
-  --ff-heading-leading: 1.12;
+  --ff-heading-leading: 1.15;
   --ff-btn-radius: 999px;
-  --ff-btn-bg: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
+  --ff-btn-bg: linear-gradient(100deg, #f58a1e 0%, #fbbf24 100%);
   --ff-btn-ink: #1a0f2e;
-  --ff-btn-shadow: 0 8px 24px rgba(192, 132, 252, 0.45);
-  --ff-anim-duration: 350ms;
-  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
-  --ff-section-alt-2: rgba(192, 132, 252, 0.12);
-  --ff-section-alt-border: rgba(192, 132, 252, 0.28);
-  --ff-brand-bar-bg: #1a0f2e;
+  --ff-btn-shadow: 0 12px 32px rgba(245, 138, 30, 0.38);
+  --ff-section-alt-1: rgba(11, 29, 58, 0.012);
+  --ff-section-alt-2: rgba(245, 138, 30, 0.06);
+  --ff-section-alt-border: rgba(245, 138, 30, 0.16);
+  --ff-brand-bar-bg: #271847;
   --ff-brand-bar-ink: #f3e8ff;
-  --ff-brand-bar-border: rgba(192, 132, 252, 0.18);
-  --ff-footer-bg: #120921;
-  --ff-footer-ink: rgba(243, 232, 255, 0.65);
+  --ff-brand-bar-border: rgba(245, 138, 30, 0.18);
+  --ff-footer-bg: #0e0820;
+  --ff-footer-ink: rgba(243, 232, 255, 0.55);
   --ff-footer-business-ink: #f3e8ff;
-  --ff-footer-border: rgba(192, 132, 252, 0.18);
-  background-color: #1a0f2e;
+  --ff-footer-border: rgba(245, 138, 30, 0.18);
+  background-color: #ffffff;
   background-image:
-    linear-gradient(rgba(192, 132, 252, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(192, 132, 252, 0.06) 1px, transparent 1px),
-    radial-gradient(ellipse at 100% 0%, rgba(192, 132, 252, 0.18), transparent 55%);
+    linear-gradient(rgba(192, 132, 252, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(192, 132, 252, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 100% 0%, rgba(192, 132, 252, 0.08), transparent 55%);
   background-size: 32px 32px, 32px 32px, 100% 100%;
+}
+.ff-page[data-ff-theme="lead-snap"] .ff-eyebrow {
+  color: #f58a1e;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .ff-page[data-ff-theme="lead-snap"]::before {
   width: 50%; height: 50%; top: -15%; right: -15%;
-  background: radial-gradient(circle, rgba(192, 132, 252, 0.40), transparent 65%);
-  opacity: 0.6;
+  background: radial-gradient(circle, rgba(245, 138, 30, 0.18), transparent 70%);
+  opacity: 0.45;
 }
 .ff-page[data-ff-theme="lead-snap"]::after {
   width: 35%; height: 35%; bottom: -10%; left: -10%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.30), transparent 65%);
-  opacity: 0.5;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.14), transparent 70%);
+  opacity: 0.35;
 }
 
 /* ═══ STORY SELL ═══ */

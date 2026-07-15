@@ -1038,6 +1038,7 @@ export default function EditorPage() {
             onChange={(patch: Partial<FunnelSection>) =>
               updateSection(selectedSection.id, patch)
             }
+            onFunnelChange={updateFunnelMeta}
           />
         )}
       </SectionEditorDrawer>

@@ -1,9 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { Funnel, FunnelIntegrations, CtaConfig } from "@/lib/funnels/types";
+import type { Funnel, FunnelIntegrations } from "@/lib/funnels/types";
 import { getTemplateButtonAnim } from "@/lib/funnels/templates";
-import { InternalPopupEditor } from "./tabs/items/InternalPopupEditor";
 
 type Props = {
   funnel: Funnel;
@@ -331,120 +330,21 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
           </Field>
         </div>
 
-        {/* 🆕 Action commune des CTA — définir une seule fois pour toute la page */}
-        <div className="mt-6 grid gap-3">
-          <SectionTitle>Action commune des boutons</SectionTitle>
-          <p className="text-[11px] leading-relaxed text-white/40">
-            Activez pour appliquer LA MÊME action à tous les boutons principaux de
-            la <b className="text-white/60">page d&apos;accueil</b> (hero, urgence,
-            CTA final, offre…). Les autres pages (confirmation, merci, replay…)
-            gardent l&apos;action propre de leurs boutons. Le libellé de chaque
-            bouton reste le sien. Les boutons secondaires (canaux WhatsApp/Telegram)
-            ne sont pas affectés, et tu peux désolidariser un bouton précis via
-            «&nbsp;Action spécifique&nbsp;» dans son onglet CTA.
-          </p>
-          <label className="flex items-center gap-2 text-sm text-white/80">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={funnel.meta?.applyDefaultCtaToAll === true}
-              onChange={(e) => {
-                const on = e.target.checked;
-                onChange({
-                  meta: { ...(funnel.meta ?? {}), applyDefaultCtaToAll: on },
-                  ...(on && !funnel.defaultCta
-                    ? {
-                        defaultCta: {
-                          mode: "popup",
-                          popupProvider: "internal",
-                          label: "S'inscrire",
-                        } as CtaConfig,
-                      }
-                    : {}),
-                });
-              }}
-            />
-            Utiliser une seule action pour tous les boutons
-          </label>
-
-          {funnel.meta?.applyDefaultCtaToAll === true && (
-            <>
-              <Field label="Action appliquée">
-                <select
-                  className={inputClass}
-                  value={funnel.defaultCta?.mode ?? "popup"}
-                  onChange={(e) => {
-                    const mode = e.target.value as CtaConfig["mode"];
-                    const prev: CtaConfig =
-                      funnel.defaultCta ?? { label: "S'inscrire", mode: "popup" };
-                    const next: CtaConfig =
-                      mode === "popup"
-                        ? {
-                            ...prev,
-                            mode,
-                            popupProvider: "internal",
-                            popupId: prev.popupId ?? "popup-global",
-                            popupTitle: prev.popupTitle ?? "Recevez votre accès",
-                            popupBody:
-                              prev.popupBody ??
-                              "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
-                          }
-                        : mode === "anchor"
-                          ? { ...prev, mode, anchorId: prev.anchorId || "lead-form" }
-                          : { ...prev, mode };
-                    onChange({ defaultCta: next });
-                  }}
-                >
-                  <option value="popup">Popup interne (formulaire AutoFunnel)</option>
-                  <option value="anchor">Aller au formulaire de la page</option>
-                  <option value="redirect">Lien de redirection (URL)</option>
-                </select>
-              </Field>
-              {funnel.defaultCta?.mode === "redirect" && (
-                <Field label="URL de redirection">
-                  <input
-                    type="url"
-                    className={inputClass}
-                    placeholder="https://…"
-                    value={funnel.defaultCta?.url ?? ""}
-                    onChange={(e) =>
-                      onChange({
-                        defaultCta: {
-                          ...(funnel.defaultCta ?? { label: "S'inscrire", mode: "redirect" }),
-                          mode: "redirect",
-                          url: e.target.value || undefined,
-                        } as CtaConfig,
-                      })
-                    }
-                  />
-                </Field>
-              )}
-              {/* 🆕 Popup interne personnalisable directement depuis le Style
-                  global — même éditeur que l'onglet CTA (titre, texte, champs,
-                  tags CRM). */}
-              {funnel.defaultCta &&
-                funnel.defaultCta.mode === "popup" &&
-                (funnel.defaultCta.popupProvider ?? "internal") === "internal" && (
-                  <InternalPopupEditor
-                    cta={funnel.defaultCta}
-                    idBase="global"
-                    onChange={(patch) =>
-                      onChange({
-                        defaultCta: {
-                          ...(funnel.defaultCta ?? {
-                            label: "S'inscrire",
-                            mode: "popup",
-                            popupProvider: "internal",
-                          }),
-                          ...patch,
-                        } as CtaConfig,
-                      })
-                    }
-                  />
-                )}
-            </>
-          )}
-        </div>
+        {/* 🆕 Action commune des CTA — déplacée dans l'onglet CTA de chaque
+            section (case "Appliquer cette action à tous les CTA de la page").
+            Motif : ce panneau ne proposait qu'un popup interne (pas de popup
+            Systeme.io ni de code externe) et était peu visible ici. L'onglet
+            CTA propose déjà TOUTES les options d'action — on y ajoute juste
+            la case pour la partager avec le reste de la page, au même endroit
+            où l'utilisateur configure déjà son bouton. */}
+        {funnel.meta?.applyDefaultCtaToAll === true && (
+          <div className="mt-6 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100/80">
+            ⚡ Une action commune est active pour les boutons principaux de la
+            page d&apos;accueil. Pour la modifier, ouvre l&apos;onglet
+            «&nbsp;CTA&nbsp;» de n&apos;importe quelle section et coche
+            «&nbsp;Appliquer cette action à tous les CTA de la page&nbsp;».
+          </div>
+        )}
 
         {/* 🆕 Pages de remerciement — canaux communautaires + CTA */}
         <div className="mt-6 grid gap-3">
