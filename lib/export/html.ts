@@ -46,7 +46,13 @@ import {
   materializeSectionImage,
   effectiveLayoutVariant,
   isUsableMediaUrl,
+  sectionHasSubstantialText,
 } from "@/lib/funnels/resolveMedia";
+// 🆕 FIX PARITÉ HEADER : badge événement ("En direct le jeudi 9 juillet —
+// 19:00"), affiché dans le header live (components/funnel/FunnelHeader.tsx)
+// mais jamais porté à l'export. Helper pur (pas de dépendance React), sûr à
+// importer côté serveur.
+import { formatEventBadge } from "@/lib/funnels/eventDate";
 import {
   getFunnelThemeCss,
   getFunnelThemeCssNoGlobalReset,
@@ -61,7 +67,22 @@ import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import { applyRawHtmlPatchesServer as applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches.server";
 import { FAQ_RUNTIME_SCRIPT } from "./faq-script";
-import { contrastInk } from "@/lib/funnels/color";
+// 🆕 FIX PARITÉ SKINS — jeux de tokens des 6 templates "factory" (system de
+// skins bespoke, components/funnel/templates/skins/factory.tsx), réutilisés
+// pour reproduire fidèlement le CTA final et les cartes programme/process dans
+// l'export (voir renderSkinCtaFinalSection / renderSkinProcessSection
+// ci-dessous). configs.ts est un simple objet de données (aucune dépendance
+// React) : sûr à importer côté serveur malgré le "use client" de factory.tsx
+// (dont seul le TYPE SkinTokens est importé, effacé à la compilation).
+import type { SkinTokens } from "@/components/funnel/templates/skins/factory";
+import {
+  T2_TOKENS,
+  T3_TOKENS,
+  T4_TOKENS,
+  T5_TOKENS,
+  T6_TOKENS,
+  T7_TOKENS,
+} from "@/components/funnel/templates/skins/configs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 Contexte de navigation publique (liens inter-pages /p/[slug]/[pageSlug])
@@ -2079,19 +2100,330 @@ ${reassuranceHtml}
 </form>`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 FIX PARITÉ SKINS — CTA final & cartes programme/process
+//
+// Constat (vérifié en base sur un funnel réel) : les templates "factory"
+// (bold-energy, lead-snap, story-sell, clean-light, premium-minimal,
+// trust-pro) ont, dans l'aperçu live, un DEUXIÈME système de rendu qui prend
+// le dessus sur le rendu générique ET sur le système de "patterns" — le skin
+// (components/funnel/templates/skins/factory.tsx). Pour ces templates,
+// `section.pattern` est ignoré : c'est skin.sections[section.type] qui décide
+// du rendu (ex. "cta" → panneau sombre avec halo, "process"/"program" → cartes
+// à badge numéroté coloré). L'export n'a jamais porté ce système, d'où le CTA
+// final et les cartes "3 étapes" visuellement différents entre aperçu et
+// export SIO. On reproduit ici, à l'identique, UNIQUEMENT les deux rendus
+// explicitement signalés (cta / process / program), pilotés par les mêmes
+// tokens que le live (T2–T7_TOKENS) pour rester fidèle aux 6 templates d'un
+// coup. Un template non couvert (ex. sharp-launch, bespoke) retombe sans
+// changement sur le rendu générique existant — zéro régression.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FACTORY_SKIN_TOKENS: Record<string, SkinTokens> = {
+  "lead-snap": T2_TOKENS,
+  "story-sell": T3_TOKENS,
+  "clean-light": T4_TOKENS,
+  "premium-minimal": T5_TOKENS,
+  "trust-pro": T6_TOKENS,
+  "bold-energy": T7_TOKENS,
+};
+
+/** Port fidèle de factory.tsx → brandAware() : les tokens hex "figés" du
+ *  template (ink/body/muted/cardBg/cardBorder) deviennent des expressions
+ *  var(--ff-brand-*, fallback) — actives UNIQUEMENT quand une couleur de
+ *  marque est active (ces variables ne sont posées, en inline style, que par
+ *  buildThemeRootAttrs() quand design.brandColorsEnabled === true). */
+function brandAwareSkinTokens(t: SkinTokens): SkinTokens {
+  const isHex = (v: string) => /^#([0-9a-f]{3,8})$/i.test(v.trim());
+  const wrap = (v: string, name: string) => (isHex(v) ? `var(${name}, ${v})` : v);
+  return {
+    ...t,
+    ink: `var(--ff-brand-ink, ${t.ink})`,
+    body: `var(--ff-brand-body, ${t.body})`,
+    muted: `var(--ff-brand-muted, ${t.muted})`,
+    cardBg: wrap(t.cardBg, "--ff-brand-card-bg"),
+    cardBorder: wrap(t.cardBorder, "--ff-brand-card-border"),
+    faqBg: wrap(t.faqBg, "--ff-brand-card-bg"),
+    faqBorder: wrap(t.faqBorder, "--ff-brand-card-border"),
+  };
+}
+
+function getFactorySkinTokens(funnel: Funnel): SkinTokens | undefined {
+  const meta = funnel.meta as { templateId?: string } | undefined;
+  const design = (funnel.design ?? {}) as { templateId?: string };
+  const templateId = meta?.templateId ?? design.templateId;
+  const raw = templateId ? FACTORY_SKIN_TOKENS[templateId] : undefined;
+  return raw ? brandAwareSkinTokens(raw) : undefined;
+}
+
+/** Bloc eyebrow/headline/subheadline/body + CTA(s), factorisé pour être
+ *  réutilisé par les rendus "skin" ci-dessous à la place de
+ *  renderSectionInnerContent() (dont on ne veut PAS la portion `bullets`,
+ *  remplacée par `cardsHtml`). */
+function renderSkinTextAndCta(
+  section: FunnelSection,
+  ctx: SectionContext,
+  cardsHtml: string,
+): string {
+  // 🆕 FIX PARITÉ Head() (factory.tsx) : pour les sections cartes/étapes
+  // (qualification/solution/benefits/process/program), le skin live n'utilise
+  // JAMAIS le rendu générique eyebrow+headline+subheadline+body — il rend
+  // le bloc "Head" : eyebrow + titre + UN SEUL sous-titre COURT, TOUJOURS
+  // CENTRÉ (y compris la dernière ligne), max-width 620px, jamais justifié.
+  // "section.body" (corps long-forme) n'est JAMAIS affiché par Head/
+  // makeProcess/makeCards — la justification est réservée aux cartes/about.
+  // L'ancien code de l'export affichait subheadline JUSTIFIÉ (classe
+  // générique .ff-subheadline) PUIS body en plus → sous-titre mal aligné
+  // ("Places limitées" non centré) et paragraphe fantôme absent de l'aperçu
+  // live, d'où le "décalage" signalé entre les deux blocs de texte.
+  const eyebrow = section.eyebrow
+    ? `<div class="ff-eyebrow ${animClass(animOf(section, "eyebrow", "fade-in"))}" style="text-align:center">${applyInlineHighlights(escapeHtml(section.eyebrow))}</div>`
+    : "";
+  const headline = section.headline
+    ? `<h2 class="ff-headline ${animClass(animOf(section, "headline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.headline))}</h2>`
+    : "";
+  const subheadline = section.subheadline
+    ? `<p class="ff-subheadline ${animClass(animOf(section, "subheadline", "fade-up"))}" style="text-align:center;max-width:620px;margin:14px auto 0">${applyInlineHighlights(escapeHtml(section.subheadline))}</p>`
+    : "";
+  const ctaWrapStyle = ctaWrapInlineStyle(section.cta?.spacing);
+  const ctaStyleAttr = ctaWrapStyle ? ` style="${escapeAttr(ctaWrapStyle)}"` : "";
+  const cta = section.cta?.label
+    ? `<div class="ff-cta-wrap ${animClass(animOf(section, "cta", "fade-up"))}"${ctaStyleAttr}>${renderCtaButton(section.cta, "", animOf(section, "cta", "fade-up"), ctx.nav)}</div>`
+    : "";
+  const extraCtas = renderExtraCtas(section.ctas, ctx.nav);
+  const headHtml = eyebrow || headline || subheadline
+    ? `<div style="text-align:center;margin-bottom:44px">${eyebrow}${headline}${subheadline}</div>`
+    : "";
+  return `${headHtml}${cardsHtml}${cta}${extraCtas}`;
+}
+
+/** Port de factory.tsx → makeFinalCta(). Panneau plein (fond sombre du
+ *  template, halo radial en accent) — remplace le rendu générique du CTA
+ *  final pour les templates factory-skinnés. */
+function renderSkinCtaFinalSection(
+  section: FunnelSection,
+  t: SkinTokens,
+  ctx: SectionContext,
+): string {
+  const eyebrowHtml = section.eyebrow
+    ? `<div class="ff-skin-cta-final__eyebrow">${applyInlineHighlights(escapeHtml(section.eyebrow))}</div>`
+    : "";
+  const headlineHtml = section.headline
+    ? `<h2 class="ff-skin-cta-final__headline">${applyInlineHighlights(escapeHtml(section.headline))}</h2>`
+    : "";
+  const subBody = section.subheadline || section.body;
+  const subHtml = subBody
+    ? `<p class="ff-skin-cta-final__sub">${applyInlineHighlights(escapeHtml(subBody))}</p>`
+    : "";
+  const ctaHtml = section.cta?.label
+    ? renderCtaButton(section.cta, "ff-skin-cta-final__btn", animOf(section, "cta", "fade-up"), ctx.nav)
+    : "";
+  const extraCtasHtml = renderExtraCtas(section.ctas, ctx.nav);
+  const reassuranceHtml = section.reassurance
+    ? `<p class="ff-skin-cta-final__reassurance">${applyInlineHighlights(escapeHtml(section.reassurance))}</p>`
+    : "";
+
+  const boxStyle = [
+    `border-radius:${t.cardRadius + 10}px`,
+    `background:${t.ctaPanelBg}`,
+    `--sk-cta-ink:${t.ctaPanelInk}`,
+    `--sk-cta-sub:${t.ctaPanelSub}`,
+    `--sk-accent:${t.accent}`,
+  ].join(";");
+  const glowStyle = `background:radial-gradient(circle, color-mix(in srgb, ${t.accent} 30%, transparent), transparent 65%)`;
+
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-cta ff-layout-centered" data-ff-section="cta" data-ff-section-id="${escapeAttr(section.id)}" data-ff-custom-bg="true">
+  <div class="ff-section-inner">
+    <div class="ff-skin-cta-final" style="${escapeAttr(boxStyle)}">
+      <div class="ff-skin-cta-final__glow" aria-hidden="true" style="${escapeAttr(glowStyle)}"></div>
+      <div class="ff-skin-cta-final__content">
+        ${eyebrowHtml}${headlineHtml}${subHtml}${ctaHtml}${extraCtasHtml}${reassuranceHtml}
+      </div>
+    </div>
+  </div>
+</section>`;
+}
+
+/** Port de factory.tsx → makeProcess() / renderCardsVariant(). Cartes à badge
+ *  numéroté (couleur accent/accent2 alternée) ou lignes numérotées ("editorial"),
+ *  selon t.processRows — remplace la liste à puces générique pour les sections
+ *  process/program des templates factory-skinnés. */
+function renderSkinProcessCards(section: FunnelSection, t: SkinTokens): string {
+  const bullets = (Array.isArray(section.bullets) ? section.bullets : []).filter(
+    (b): b is string => typeof b === "string" && b.trim().length > 0,
+  );
+  if (bullets.length === 0) return "";
+
+  if (t.processRows) {
+    const rows = bullets
+      .map((b, i) => {
+        const split = splitBulletTitleDesc(b);
+        const isLast = i === bullets.length - 1;
+        const textHtml = split
+          ? `<div><h3 class="ff-skin-process-row__title">${applyInlineHighlights(escapeHtml(split.title))}</h3><p class="ff-skin-process-row__desc">${applyInlineHighlights(escapeHtml(split.description))}</p></div>`
+          : `<p class="ff-skin-process-row__desc">${applyInlineHighlights(escapeHtml(b))}</p>`;
+        return `<div class="ff-skin-process-row${isLast ? " ff-skin-process-row--last" : ""}"><div class="ff-skin-process-row__num">${String(i + 1).padStart(2, "0")}</div>${textHtml}</div>`;
+      })
+      .join("\n");
+    return `<div class="ff-skin-process-rows">${rows}</div>`;
+  }
+
+  const cards = bullets
+    .map((b, i) => {
+      const split = splitBulletTitleDesc(b);
+      const badgeBg = t.numberVariant === "chip-grad" ? t.grad : i % 2 === 0 ? t.accent : t.accent2;
+      const badgeCircle = t.numberVariant === "circle";
+      const badgeStyle = [
+        `width:${badgeCircle ? 50 : 58}px`,
+        `height:${badgeCircle ? 50 : 58}px`,
+        `border-radius:${badgeCircle ? "50%" : "14px"}`,
+        `background:${badgeBg}`,
+      ].join(";");
+      const cardStyle = [
+        `border-radius:${t.cardRadius}px`,
+        `background:${t.cardBg}`,
+        `border:${t.cardBorderWidth ?? 1}px solid ${t.cardBorder}`,
+      ].join(";");
+      const textHtml = split
+        ? `<h3 class="ff-skin-process-card__title">${applyInlineHighlights(escapeHtml(split.title))}</h3><p class="ff-skin-process-card__desc">${applyInlineHighlights(escapeHtml(split.description))}</p>`
+        : `<p class="ff-skin-process-card__desc">${applyInlineHighlights(escapeHtml(b))}</p>`;
+      return `<div class="ff-skin-process-card" style="${escapeAttr(cardStyle)}"><div class="ff-skin-process-card__num" style="${escapeAttr(badgeStyle)}">${i + 1}</div>${textHtml}</div>`;
+    })
+    .join("\n");
+  const cols = Math.min(3, Math.max(2, bullets.length));
+  return `<div class="ff-skin-process-grid" data-cols="${cols}">${cards}</div>`;
+}
+
+function renderSkinProcessSection(
+  section: FunnelSection,
+  t: SkinTokens,
+  ctx: SectionContext,
+): string {
+  const cardsHtml = renderSkinProcessCards(section, t);
+  const inner = renderSkinTextAndCta(section, ctx, cardsHtml);
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ff-layout-centered" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}">
+  <div class="ff-section-inner">${inner}</div>
+</section>`;
+}
+
+/** Port de factory.tsx → makeUrgency(). Le skin live n'affiche JAMAIS
+ *  section.subheadline pour l'urgence : un SEUL titre (priorité
+ *  timer.label > headline > eyebrow), en petit badge centré, au-dessus du
+ *  compte à rebours — dans un panneau aux couleurs dédiées (t.urgencyBg).
+ *  L'ancien rendu générique de l'export affichait headline ET subheadline
+ *  ("Places limitées") côte à côte, non centré → contenu fantôme absent de
+ *  l'aperçu live, d'où le signalement. Le minuteur lui-même réutilise
+ *  renderSectionTimers (script JS partagé, inchangé). */
+function renderSkinUrgencySection(
+  section: FunnelSection,
+  t: SkinTokens,
+  ctx: SectionContext,
+): string {
+  const timers = extractTimers(section);
+  const title = (timers[0]?.label || section.headline || section.eyebrow || "").trim();
+  const titleHtml = title
+    ? `<div style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:${escapeAttr(t.accent)};font-weight:700;margin-bottom:22px;text-align:center">${applyInlineHighlights(escapeHtml(title))}</div>`
+    : "";
+  // 🆕 Le titre ci-dessus (titleHtml) reprend déjà timer.label en priorité —
+  // on le retire des items avant renderSectionTimers() pour éviter un
+  // doublon (renderTimer() ré-affiche sinon timer.label DANS le panneau).
+  const sectionForTimer: FunnelSection = Array.isArray(section.items)
+    ? {
+        ...section,
+        items: section.items.map((it) =>
+          it.kind === "timer" && it.data.label
+            ? { ...it, data: { ...it.data, label: undefined } }
+            : it,
+        ),
+      }
+    : section;
+  const timerHtml = renderSectionTimers(sectionForTimer, ctx.funnel, ctx.pageId ?? "default");
+  const panelStyle = [
+    `background:${t.urgencyBg}`,
+    `border:${t.cardBorderWidth ?? 1}px solid ${t.cardBorder}`,
+    `border-radius:${t.cardRadius + 8}px`,
+    `padding:40px 28px`,
+    `text-align:center`,
+  ].join(";");
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-urgency ff-layout-centered" data-ff-section="urgency" data-ff-section-id="${escapeAttr(section.id)}">
+  <div class="ff-section-inner">
+    <div style="${escapeAttr(panelStyle)}">
+      ${titleHtml}${timerHtml}
+    </div>
+  </div>
+</section>`;
+}
+
 function renderSection(
   section: FunnelSection,
   ctx: SectionContext,
   isFirst: boolean,
 ): string {
-  const layout = resolveLayout(section, ctx);
-  const isHero = section.type === "hero" || isFirst;
-  const hasVideo = isUsableMediaUrl(section.video?.url);
-  const hasImage =
+  const hasVideoEarly = isUsableMediaUrl(section.video?.url);
+  const hasImageEarly =
     !!section.image &&
     section.image.mode !== "none" &&
     (isUsableMediaUrl(section.image.url) ||
       isUsableMediaUrl(materializeSectionImage(section.image, ctx.funnel)?.url));
+
+  // 🆕 FIX PARITÉ SKINS (voir bloc de commentaires ci-dessus) : pour les
+  // templates "factory" (bold-energy, lead-snap, story-sell, clean-light,
+  // premium-minimal, trust-pro), le CTA final et les cartes process/program
+  // ont un rendu bespoke qui prend le dessus sur le rendu générique dans
+  // l'aperçu live — on reproduit ce comportement ici. Scopé aux sections SANS
+  // image/vidéo (cas le plus courant) pour rester sur un terrain sûr ; avec
+  // image, on retombe sur le rendu générique existant (inchangé).
+  const skinTokens = getFactorySkinTokens(ctx.funnel);
+  if (!hasImageEarly && !hasVideoEarly) {
+    if (skinTokens) {
+      if (
+        section.type === "cta" &&
+        (section.headline || section.cta?.label || section.body || section.subheadline)
+      ) {
+        return renderSkinCtaFinalSection(section, skinTokens, ctx);
+      }
+      if (
+        (section.type === "process" || section.type === "program") &&
+        Array.isArray(section.bullets) &&
+        section.bullets.some((b) => typeof b === "string" && b.trim().length > 0)
+      ) {
+        return renderSkinProcessSection(section, skinTokens, ctx);
+      }
+      if (
+        section.type === "urgency" &&
+        (section.headline || section.eyebrow || extractTimers(section).length > 0)
+      ) {
+        return renderSkinUrgencySection(section, skinTokens, ctx);
+      }
+    }
+  }
+
+  // 🆕 FIX SPLIT SKIN (hero à image) : dans l'aperçu live, makeHero() force
+  // TOUJOURS le layout "split" (texte à gauche, CTA sous le texte, média à
+  // droite) dès qu'une IMAGE réelle est présente — indépendamment de
+  // `section.layoutVariant` stocké (souvent resté à "centered" par défaut).
+  // resolveLayout(), lui, respecte tel quel un layoutVariant explicite
+  // non-split → d'où le hero qui ressortait centré à l'export alors qu'il
+  // est split dans l'aperçu. On reproduit ici la même règle.
+  // ⚠️ Scopé au SEUL type "hero" : pour qualification/solution/benefits/
+  // process/program, le skin garde le TITRE centré pleine largeur (Head, tou-
+  // jours textAlign:center) et ne « split » que les cartes/étapes contre
+  // l'image (withSectionImage), PAS l'ensemble eyebrow+titre+CTA comme le
+  // hero. Le layout "split" générique de l'export, lui, met tout le bloc
+  // texte (y compris titre) dans la colonne de gauche → forcer split ici
+  // pour ces types désalignerait le titre au lieu de le corriger.
+  const skinForcesSplit =
+    !!skinTokens &&
+    !ctx.isSuccess &&
+    hasImageEarly &&
+    !hasVideoEarly &&
+    section.type === "hero" &&
+    sectionHasSubstantialText(section);
+
+  const layout = skinForcesSplit ? "split" : resolveLayout(section, ctx);
+  const isHero = section.type === "hero" || isFirst;
+  const hasVideo = hasVideoEarly;
+  const hasImage = hasImageEarly;
 
   const shadow = buildShadowStyle(section.style);
 
@@ -2169,7 +2501,14 @@ function renderSection(
     inner = `<div class="ff-section-inner">${renderSectionInnerContent(section, ctx)}</div>`;
   }
 
-  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-layout="${layout}"${hasVideo ? ' data-ff-has-video="true"' : ""}>
+  // 🆕 FIX ATTRIBUT MANQUANT : "data-ff-section" n'était jamais posé sur le
+  // rendu générique (seuls les rendus "skin" dédiés — cta/process/urgency —
+  // l'avaient). Or plusieurs règles CSS du thème en dépendent (alternance de
+  // fonds testimonials/faq/pricing/..., proportions image/texte de "about",
+  // etc.) → elles ne matchaient JAMAIS pour la quasi-totalité des sections
+  // exportées. Miroir de FunnelPreview.tsx qui pose déjà data-ff-section
+  // partout dans l'aperçu live.
+  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${hasVideo ? ' data-ff-has-video="true"' : ""}>
 ${overlay}${inner}
 </section>`;
 }
@@ -2195,7 +2534,9 @@ function renderHeader(funnel: Funnel, nav?: PublicNavContext): string {
   const displayMode = h.displayMode ?? "both";
   const showLogo = (displayMode === "logo" || displayMode === "both") && !!logo;
   const showName = (displayMode === "name" || displayMode === "both") && !!brand;
-  if (!showLogo && !showName && !h.cta?.label) return "";
+  // 🆕 Badge événement (mode Live) — voir components/funnel/FunnelHeader.tsx.
+  const eventLabel = formatEventBadge(h.eventDateTime, funnel.language);
+  if (!showLogo && !showName && !h.cta?.label && !eventLabel) return "";
 
   const classes = ["ff-brand-bar"];
   if (h.sticky) classes.push("ff-brand-bar--sticky");
@@ -2208,6 +2549,9 @@ function renderHeader(funnel: Funnel, nav?: PublicNavContext): string {
 
   const hasCta = !!h.cta?.label;
   const ctaHtml = h.cta?.label ? renderBrandCtaButton(h.cta, nav) : "";
+  const eventHtml = eventLabel
+    ? `<div class="ff-header-event"><span class="ff-header-event-dot" aria-hidden="true"></span><span>${escapeHtml(eventLabel)}</span></div>`
+    : "";
 
   return `<div class="${classes.join(" ")}" data-ff-brand-type="${brandType}" data-ff-brand-has-cta="${hasCta ? "true" : "false"}">
   <div class="ff-brand-bar-inner">
@@ -2215,26 +2559,159 @@ function renderHeader(funnel: Funnel, nav?: PublicNavContext): string {
       ${showLogo ? `<img src="${escapeAttr(logo!)}" alt="" />` : ""}
       ${showName ? `<span>${escapeHtml(brand)}</span>` : ""}
     </div>
+    ${eventHtml}
     ${ctaHtml}
   </div>
 </div>`;
 }
 
-function renderFooter(funnel: Funnel): string {
+// 🆕 FIX PARITÉ FOOTER — miroir de components/funnel/FunnelFooter.tsx (aperçu
+// live), qui propose 3 variantes pilotées par funnel.meta.footerVariant.
+// L'export n'implémentait QUE l'équivalent de "footer-minimal-centered" et
+// ignorait totalement footerVariant → un funnel réglé sur "footer-grid-sitemap"
+// (marque+description / Navigation / Contact, 3 colonnes) retombait sur un
+// footer minimal (nom + copyright), d'où l'écart signalé entre aperçu et export.
+const FOOTER_I18N: Record<
+  "fr" | "en" | "es",
+  {
+    rights: string;
+    legalFallback: string;
+    contactLabel: string;
+    nav: string;
+    newsletterTitle: string;
+    newsletterSubtitle: string;
+    emailPlaceholder: string;
+    subscribe: string;
+  }
+> = {
+  fr: {
+    rights: "Tous droits réservés",
+    legalFallback:
+      "Ce site n'est pas affilié à Facebook, Google, ou toute autre plateforme tierce. Les résultats mentionnés ne sont pas garantis et peuvent varier selon votre engagement et votre situation personnelle.",
+    contactLabel: "Contact",
+    nav: "Navigation",
+    newsletterTitle: "Reste informé",
+    newsletterSubtitle: "Reçois nos meilleurs conseils et nos nouveautés directement par email.",
+    emailPlaceholder: "Votre adresse email",
+    subscribe: "Je m'inscris",
+  },
+  en: {
+    rights: "All rights reserved",
+    legalFallback:
+      "This site is not affiliated with Facebook, Google, or any other third-party platform. Results mentioned are not guaranteed and may vary based on your engagement and personal situation.",
+    contactLabel: "Contact",
+    nav: "Navigation",
+    newsletterTitle: "Stay in the loop",
+    newsletterSubtitle: "Get our best tips and latest updates straight to your inbox.",
+    emailPlaceholder: "Your email address",
+    subscribe: "Subscribe",
+  },
+  es: {
+    rights: "Todos los derechos reservados",
+    legalFallback:
+      "Este sitio no está afiliado a Facebook, Google ni a ninguna otra plataforma de terceros. Los resultados mencionados no están garantizados y pueden variar según su compromiso y situación personal.",
+    contactLabel: "Contacto",
+    nav: "Navegación",
+    newsletterTitle: "Mantente al día",
+    newsletterSubtitle: "Recibe nuestros mejores consejos y novedades directamente en tu correo.",
+    emailPlaceholder: "Tu correo electrónico",
+    subscribe: "Suscribirme",
+  },
+};
+
+function normalizeFooterVariant(
+  v: string | undefined,
+): "footer-minimal-centered" | "footer-grid-sitemap" | "footer-cta-newsletter" {
+  if (v === "footer-grid-sitemap" || v === "footer-cta-newsletter") return v;
+  return "footer-minimal-centered";
+}
+
+function renderFooter(funnel: Funnel, nav?: PublicNavContext): string {
   const meta = funnel.meta;
+  const lang = (funnel.language as "fr" | "en" | "es") || "fr";
+  const t = FOOTER_I18N[lang] ?? FOOTER_I18N.fr;
+
   const businessName = meta?.businessName?.trim();
-  const legalNotice = meta?.legalNotice?.trim();
+  const displayName =
+    businessName ||
+    funnel.header?.brandName?.trim() ||
+    extractBrandName(funnel.funnelName || "") ||
+    funnel.funnelName?.trim() ||
+    "—";
+
+  const legalNotice = meta?.legalNotice?.trim() || t.legalFallback;
   const contactEmail = meta?.contactEmail?.trim();
   const year = new Date().getFullYear();
-  const displayName =
-    businessName || extractBrandName(funnel.funnelName) || "AutoFunnel";
 
+  const copyHtml = `<div class="ff-footer-copy">© ${year} ${escapeHtml(displayName)} — ${escapeHtml(t.rights)}</div>`;
+
+  const variant = normalizeFooterVariant(meta?.footerVariant);
+
+  if (variant === "footer-grid-sitemap") {
+    const pages = (funnel.pages ?? []).filter((p) => p.visible !== false);
+    const navCol =
+      pages.length > 0
+        ? `<div class="ff-footer-col">
+      <div class="ff-footer-col-title">${escapeHtml(t.nav)}</div>
+      ${pages
+        .map((p) => {
+          const href = nav ? publicPageUrl(nav, p.id) : null;
+          const label = escapeHtml(p.name || p.slug || "");
+          return href
+            ? `<a class="ff-footer-nav-link" href="${escapeAttr(href)}">${label}</a>`
+            : `<span class="ff-footer-nav-link ff-footer-nav-link--static">${label}</span>`;
+        })
+        .join("\n      ")}
+    </div>`
+        : "";
+
+    const contactCol = `<div class="ff-footer-col">
+      <div class="ff-footer-col-title">${escapeHtml(t.contactLabel)}</div>
+      ${
+        contactEmail
+          ? `<a class="ff-footer-nav-link ff-footer-nav-link--accent" href="mailto:${escapeAttr(contactEmail)}">${escapeHtml(contactEmail)}</a>`
+          : `<span class="ff-footer-nav-link ff-footer-nav-link--static">—</span>`
+      }
+    </div>`;
+
+    return `<footer class="ff-footer ff-footer--sitemap">
+  <div class="ff-footer-inner ff-footer-inner--grid">
+    <div class="ff-footer-grid">
+      <div class="ff-footer-col ff-footer-col--brand">
+        <div class="ff-footer-brand">${escapeHtml(displayName)}</div>
+        <div class="ff-footer-legal">${escapeHtml(legalNotice)}</div>
+      </div>
+      ${navCol}
+      ${contactCol}
+    </div>
+    ${copyHtml}
+  </div>
+</footer>`;
+  }
+
+  if (variant === "footer-cta-newsletter") {
+    return `<footer class="ff-footer ff-footer--newsletter">
+  <div class="ff-footer-inner ff-footer-inner--newsletter">
+    <div class="ff-footer-newsletter-title">${escapeHtml(t.newsletterTitle)}</div>
+    <p class="ff-footer-newsletter-sub">${escapeHtml(t.newsletterSubtitle)}</p>
+    <a class="ff-btn ff-footer-newsletter-btn" href="#lead-form">${escapeHtml(t.subscribe)}</a>
+    <div class="ff-footer-newsletter-divider">
+      <div class="ff-footer-brand">${escapeHtml(displayName)}</div>
+      <div class="ff-footer-legal">${escapeHtml(legalNotice)}</div>
+      ${contactEmail ? `<div><a class="ff-footer-link" href="mailto:${escapeAttr(contactEmail)}">${escapeHtml(contactEmail)}</a></div>` : ""}
+      ${copyHtml}
+    </div>
+  </div>
+</footer>`;
+  }
+
+  // footer-minimal-centered (défaut historique)
   return `<footer class="ff-footer">
   <div class="ff-footer-inner">
     <div class="ff-footer-brand">${escapeHtml(displayName)}</div>
-    ${legalNotice ? `<div class="ff-footer-legal">${escapeHtml(legalNotice)}</div>` : ""}
+    <div class="ff-footer-legal">${escapeHtml(legalNotice)}</div>
     ${contactEmail ? `<div><a class="ff-footer-link" href="mailto:${escapeAttr(contactEmail)}">${escapeHtml(contactEmail)}</a></div>` : ""}
-    <div class="ff-footer-copy">© ${year} ${escapeHtml(displayName)} — Tous droits réservés</div>
+    ${copyHtml}
   </div>
 </footer>`;
 }
@@ -2553,9 +3030,11 @@ export function renderFunnelHtml(
 ${getFunnelThemeCss()}
 </style>`;
 
-  const designOverrideBlock = isFullyClonedFunnel
-    ? ""
-    : renderDesignOverrideCss(funnel);
+  // 🆕 FIX couleurs de marque : les overrides --ff-bg/--ff-accent/... sont
+  // désormais posés en inline style par buildThemeRootAttrs() (voir
+  // theme-css.ts) — un <style> séparé (ancien renderDesignOverrideCss) perdait
+  // la bataille de spécificité CSS contre .ff-page[data-ff-theme="..."].
+  const designOverrideBlock = "";
 
   const rootAttrs = isFullyClonedFunnel
     ? { dataAttrs: {} as Record<string, string>, inlineStyle: "" }
@@ -2596,7 +3075,7 @@ ${getFunnelThemeCss()}
   // 🆕 Header uniquement sur la page d'accueil : un tunnel est un parcours, les
   // pages secondaires (merci, accès, etc.) n'ont pas besoin du header de l'optin.
   const headerHtml = isFullyClonedFunnel || !isHome ? "" : renderHeader(funnel, nav);
-  const footerHtml = isFullyClonedFunnel ? "" : renderFooter(funnel);
+  const footerHtml = isFullyClonedFunnel ? "" : renderFooter(funnel, nav);
 
   // 🆕 CTA runtime : overlay popup interne + script de capture/redirection.
   const internalPopup =
@@ -2807,7 +3286,6 @@ ${FAQ_RUNTIME_SCRIPT}`;
       const html = `<style>
 ${scopedTheme}
 </style>
-${renderDesignOverrideCss(funnel)}
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
      ${dataAttrsHtml}${styleAttr}>
@@ -2863,7 +3341,6 @@ export function createSystemeFormBlock(funnel: Funnel): SystemeBlock {
   const html = `<style>
 ${scopedTheme}
 </style>
-${renderDesignOverrideCss(funnel)}
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
      ${dataAttrsHtml}${styleAttr}>
@@ -2933,63 +3410,13 @@ export function createImportGuide(language: Funnel["language"] = "fr"): string {
   return (guides[language] ?? guides.fr).join("\n");
 }
 
-function renderDesignOverrideCss(funnel: Funnel): string {
-  const design = (funnel as any).design;
-  if (!design || typeof design !== "object") return "";
-
-  const primary = typeof design.primaryColor === "string" ? design.primaryColor : null;
-  const secondary = typeof design.secondaryColor === "string" ? design.secondaryColor : null;
-  const accent = typeof design.accentColor === "string" ? design.accentColor : null;
-  const accent2 = typeof design.accentColor2 === "string" ? design.accentColor2 : null;
-
-  const isHex = (c: string) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
-
-  const overrides: string[] = [];
-  if (primary && isHex(primary)) {
-    overrides.push(`--ff-brand-surface: ${primary};`);
-    overrides.push(`--ff-bg: ${primary};`);
-    // 🆕 Contraste automatique : texte principal lisible sur le fond choisi.
-    const ink = contrastInk(primary);
-    if (ink) overrides.push(`--ff-ink: ${ink};`);
-    // 🆕 Redérive toute la palette dépendante (surface/cartes/bandes) pour que
-    // les templates qui figent ces valeurs en dur ne gardent pas un rendu
-    // calibré pour un fond différent de celui choisi par l'utilisateur.
-    overrides.push(`--ff-surface: color-mix(in srgb, var(--ff-ink) 4%, var(--ff-bg));`);
-    overrides.push(`--ff-ink-soft: color-mix(in srgb, var(--ff-ink) 78%, transparent);`);
-    overrides.push(`--ff-muted: color-mix(in srgb, var(--ff-ink) 55%, transparent);`);
-    overrides.push(`--ff-border: color-mix(in srgb, var(--ff-ink) 10%, transparent);`);
-  }
-  if (secondary && isHex(secondary)) {
-    overrides.push(`--ff-accent: ${secondary};`);
-    overrides.push(`--ff-brand: ${secondary};`);
-    overrides.push(`--ff-btn-bg: var(--ff-accent);`);
-    // 🆕 Texte de bouton lisible sur la couleur d'accent choisie (évite un
-    // CTA "incolore" quand le texte se confond avec son propre fond).
-    const accentInk = contrastInk(secondary);
-    if (accentInk) {
-      overrides.push(`--ff-accent-ink: ${accentInk};`);
-      overrides.push(`--ff-btn-ink: var(--ff-accent-ink);`);
-    }
-    overrides.push(`--ff-card-bg: color-mix(in srgb, var(--ff-accent) 6%, var(--ff-surface));`);
-    overrides.push(`--ff-card-border: color-mix(in srgb, var(--ff-accent) 16%, transparent);`);
-    overrides.push(`--ff-section-alt-1: color-mix(in srgb, var(--ff-accent) 4%, var(--ff-bg));`);
-    overrides.push(`--ff-section-alt-2: color-mix(in srgb, var(--ff-accent) 7%, var(--ff-bg));`);
-    overrides.push(`--ff-section-alt-border: color-mix(in srgb, var(--ff-accent) 12%, transparent);`);
-  }
-  if (accent && isHex(accent)) {
-    overrides.push(`--ff-link: ${accent};`);
-    overrides.push(`--ff-accent2: ${accent};`);
-  }
-  if (accent2 && isHex(accent2)) {
-    overrides.push(`--ff-accent3: ${accent2};`);
-  }
-
-  if (overrides.length === 0) return "";
-
-  return `<style data-ff-design-override="true">
-.ff-page { ${overrides.join(" ")} }
-</style>`;
-}
+// 🆕 renderDesignOverrideCss (ancien mécanisme de couleurs de marque) a été
+// retiré : il émettait un <style>.ff-page{...} qui perdait systématiquement
+// la bataille de spécificité CSS contre .ff-page[data-ff-theme="..."], et
+// ignorait design.brandColorsEnabled (recolorait même les funnels non
+// brandés). Remplacé par l'injection inline (style="") dans
+// theme-css.ts → buildThemeRootAttrs(), gardée par brandColorsEnabled et
+// alignée sur components/funnel/TemplateThemeProvider.tsx (aperçu live).
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ZIP exports

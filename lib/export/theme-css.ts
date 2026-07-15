@@ -29,6 +29,7 @@
  * ========================================================================= */
 
 import type { Funnel } from "@/lib/funnels/types";
+import { contrastInk } from "@/lib/funnels/color";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. BASE CSS
@@ -303,11 +304,16 @@ const BASE_CSS = `
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    text-align: left;
+    text-align: left !important;
   }
+  /* 🆕 FIX titre centré en split (bug confirmé) : .ff-headline/.ff-subheadline/
+     .ff-body ont "text-align: center|justify" en spécificité égale (0,1,0) et
+     APPARAISSENT PLUS BAS dans la feuille → à égalité de spécificité, la
+     règle la plus tardive gagne, donc le split perdait TOUJOURS ce duel sans
+     !important, même si ".ff-split-text > *" est bien appliqué. */
   .ff-split-text > * {
     width: auto;
-    text-align: left;
+    text-align: left !important;
     display: block;
     order: 0;
   }
@@ -337,6 +343,26 @@ const BASE_CSS = `
   .ff-split-text .ff-eyebrow {
     align-self: flex-start;
   }
+  /* 🆕 FIX PROPORTIONS "About" : par défaut le split limite l'image à
+     max-height:540px + object-fit:contain (taille intrinsèque, PAS étirée —
+     volontaire pour hero/produits). Pour la section "about" spécifiquement,
+     le texte (bio longue) dépasse largement cette hauteur → photo minuscule
+     à côté d'un pavé de texte disproportionné. On fait ici EXCEPTION : la
+     photo s'étire (object-fit:cover) pour occuper toute la hauteur de la
+     colonne de texte en face — les deux blocs deviennent proportionnels. */
+  .ff-section[data-ff-section="about"] .ff-split-grid { align-items: stretch; }
+  .ff-section[data-ff-section="about"] .ff-split-media {
+    align-self: stretch;
+    max-height: none;
+  }
+  .ff-section[data-ff-section="about"] .ff-split-media img,
+  .ff-section[data-ff-section="about"] .ff-split-media .ff-image,
+  .ff-section[data-ff-section="about"] .ff-split-media .ff-image-wrap {
+    height: 100%;
+    max-height: 620px;
+    width: 100%;
+    object-fit: cover;
+  }
 }
 /* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
    seulement en l'absence de container queries), pour activer le layout desktop
@@ -350,11 +376,11 @@ const BASE_CSS = `
       flex-direction: column;
       align-items: flex-start;
       justify-content: center;
-      text-align: left;
+      text-align: left !important;
     }
     .ff-split-text > * {
       width: auto;
-      text-align: left;
+      text-align: left !important;
       display: block;
       order: 0;
     }
@@ -375,6 +401,20 @@ const BASE_CSS = `
     }
     .ff-layout-split-image-text .ff-split-grid { flex-direction: row-reverse; }
     .ff-split-text .ff-eyebrow { align-self: flex-start; }
+    /* 🆕 FIX PROPORTIONS "About" (voir commentaire ci-dessus, même règle) */
+    .ff-section[data-ff-section="about"] .ff-split-grid { align-items: stretch; }
+    .ff-section[data-ff-section="about"] .ff-split-media {
+      align-self: stretch;
+      max-height: none;
+    }
+    .ff-section[data-ff-section="about"] .ff-split-media img,
+    .ff-section[data-ff-section="about"] .ff-split-media .ff-image,
+    .ff-section[data-ff-section="about"] .ff-split-media .ff-image-wrap {
+      height: 100%;
+      max-height: 620px;
+      width: 100%;
+      object-fit: cover;
+    }
   }
 }
 
@@ -779,7 +819,17 @@ const BASE_CSS = `
 .ff-bullet-desc { opacity: 0.9; }
 
 .ff-btn,
-.ff-cta {
+a.ff-cta {
+  /* 🆕 FIX CHEVAUCHEMENT CTA FINAL : ".ff-cta" sert ICI à styler le BOUTON
+     CTA (classe posée par renderCtaButton), mais le nom de classe de section
+     "ff-" + section.type pose AUSSI la classe "ff-cta" sur la <section>
+     elle-même pour toute section de type "cta" (ex: renderSkinCtaFinalSection).
+     Un sélecteur ".ff-cta" nu matchait donc AUSSI la section entière →
+     display:inline-flex, min-height:58px, margin-top:14px, animation de
+     bouton appliqués à la SECTION → sortie du flux normal → chevauchement
+     avec la section précédente. Scopé à "a.ff-cta" (le bouton est toujours
+     un lien <a>, jamais la <section>) pour lever l'ambiguïté sans toucher
+     au nommage existant. */
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -810,7 +860,7 @@ const BASE_CSS = `
 }
 @media (max-width: 640px) {
   .ff-btn,
-  .ff-cta {
+  a.ff-cta {
     min-height: 52px;
     font-size: calc(1.0625rem * var(--ff-btn-scale));
     padding: 0 calc(1.5rem * var(--ff-btn-scale));
@@ -818,7 +868,7 @@ const BASE_CSS = `
 }
 
 .ff-btn:hover,
-.ff-cta:hover {
+a.ff-cta:hover {
   opacity: 0.92;
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
@@ -831,8 +881,78 @@ const BASE_CSS = `
 
 /* Desactivation du glow si data-ff-btn-anim="lift" */
 .ff-page[data-ff-btn-anim="lift"] .ff-btn,
-.ff-page[data-ff-btn-anim="lift"] .ff-cta {
+.ff-page[data-ff-btn-anim="lift"] a.ff-cta {
   animation: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🆕 FIX PARITÉ ANIMATION CTA — les 6 templates "factory" (bold-energy,
+   lead-snap, story-sell, clean-light, premium-minimal, trust-pro) animent
+   leurs CTA très différemment de l'ancien glow générique ci-dessus : un
+   PULSE d'échelle (scale 1→1.05, hp-cta) + un REFLET qui balaie le bouton
+   (af-shine, pseudo-élément ::after) — port de app/funnel-theme.css
+   (classes .sk-cta / .af-cta, CTA_BASE de factory.tsx). Le glow générique
+   (ff-btn-glow) restait utilisé par l'export même sur ces templates → CTA
+   visuellement différents de l'aperçu live. Scopé via data-ff-theme (déjà
+   posé par buildThemeRootAttrs), pas besoin de nouvel attribut. */
+@keyframes af-shine {
+  0% { transform: translateX(-160%) skewX(-18deg); }
+  55%, 100% { transform: translateX(360%) skewX(-18deg); }
+}
+@keyframes hp-cta {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+/* ⚠️ Scopé STRICTEMENT à "a.ff-cta" (PAS ".ff-btn" en général) : le CTA du
+   header (ff-brand-cta ff-btn) et les boutons de formulaire (ff-form-submit)
+   portent aussi la classe ff-btn mais N'ONT PAS ce traitement côté skin live
+   (CTA_BASE "af-cta sk-cta" n'est posé QUE sur les CTA de section). Un
+   sélecteur ".ff-btn" nu aurait fait pulser/briller ces boutons à tort. */
+.ff-page[data-ff-theme="bold-energy"] a.ff-cta,
+.ff-page[data-ff-theme="lead-snap"] a.ff-cta,
+.ff-page[data-ff-theme="story-sell"] a.ff-cta,
+.ff-page[data-ff-theme="clean-light"] a.ff-cta,
+.ff-page[data-ff-theme="premium-minimal"] a.ff-cta,
+.ff-page[data-ff-theme="trust-pro"] a.ff-cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  animation: hp-cta 3.4s ease-in-out infinite;
+}
+.ff-page[data-ff-theme="bold-energy"] a.ff-cta::after,
+.ff-page[data-ff-theme="lead-snap"] a.ff-cta::after,
+.ff-page[data-ff-theme="story-sell"] a.ff-cta::after,
+.ff-page[data-ff-theme="clean-light"] a.ff-cta::after,
+.ff-page[data-ff-theme="premium-minimal"] a.ff-cta::after,
+.ff-page[data-ff-theme="trust-pro"] a.ff-cta::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 34%;
+  height: 100%;
+  z-index: -1;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: af-shine 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+/* data-ff-btn-anim="lift" et prefers-reduced-motion neutralisent aussi ce pulse. */
+.ff-page[data-ff-btn-anim="lift"] a.ff-cta {
+  animation: none !important;
+}
+.ff-page[data-ff-btn-anim="lift"] a.ff-cta::after {
+  animation: none !important;
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-page[data-ff-theme="bold-energy"] a.ff-cta,
+  .ff-page[data-ff-theme="lead-snap"] a.ff-cta,
+  .ff-page[data-ff-theme="story-sell"] a.ff-cta,
+  .ff-page[data-ff-theme="clean-light"] a.ff-cta,
+  .ff-page[data-ff-theme="premium-minimal"] a.ff-cta,
+  .ff-page[data-ff-theme="trust-pro"] a.ff-cta {
+    animation: none !important;
+  }
 }
 
 .ff-cta-wrap {
@@ -980,7 +1100,15 @@ const BASE_CSS = `
 }
 .ff-bullet-num--sm { width: 1.5rem; height: 1.5rem; font-size: 0.8rem; }
 
-.ff-testimonials {
+/* 🆕 FIX COLLISION SECTION/GRILLE : le nom de classe de section "ff-" +
+   section.type pose la classe "ff-testimonials" (idem "ff-pricing"/
+   "ff-bonus" plus bas) sur la <section> ELLE-MÊME pour toute section de ce
+   type, en plus du <div> de grille interne qui porte la MÊME classe. Un
+   sélecteur nu appliquait donc display:grid + margin:24px 0 0 à la section,
+   en conflit avec les règles .ff-section (margin:0). Scopé à "div." (le
+   wrapper de grille est toujours un <div>, jamais la <section>) pour lever
+   l'ambiguïté. */
+div.ff-testimonials {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 1.25rem;
@@ -1082,7 +1210,9 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 }
 .ff-faq-a p { margin: 0; white-space: pre-line; }
 
-.ff-pricing {
+/* 🆕 FIX COLLISION SECTION/GRILLE (voir commentaire sur div.ff-testimonials
+   plus haut) — scopé à "div." pour ne pas matcher la <section ff-pricing>. */
+div.ff-pricing {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 1.25rem;
@@ -1152,7 +1282,9 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
 .ff-feat-check { color: var(--ff-accent); flex-shrink: 0; display: inline-flex; line-height: 0; }
 .ff-pricing-cta { margin-top: auto; width: 100%; }
 
-.ff-bonus {
+/* 🆕 FIX COLLISION SECTION/GRILLE (voir commentaire sur div.ff-testimonials
+   plus haut) — scopé à "div." pour ne pas matcher la <section ff-bonus>. */
+div.ff-bonus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 1rem;
@@ -1205,7 +1337,11 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   overflow-wrap: anywhere;
 }
 
-.ff-guarantee {
+/* 🆕 FIX COLLISION SECTION/CARTE : "ff-guarantee" est posé à la fois sur la
+   <section> (type "guarantee") ET sur le <div> carte interne — scopé à
+   "div." pour ne pas rétrécir toute la section (max-width:720px + border +
+   padding prévus pour la carte, pas la section pleine largeur). */
+div.ff-guarantee {
   max-width: 720px;
   margin: 24px auto 0;
   padding: 24px;
@@ -1220,7 +1356,7 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   text-align: center;
 }
 @container ffpage (min-width: 640px) {
-  .ff-guarantee { flex-direction: row; text-align: left; }
+  div.ff-guarantee { flex-direction: row; text-align: left; }
 }
 /* 🆕 Export SIO : ces media-queries viewport s'appliquent TOUJOURS (et plus
    seulement en l'absence de container queries), pour activer le layout desktop
@@ -1228,7 +1364,7 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
    toujours vraie = « que les container queries soient supportées ou non ». */
 @supports (container-type: inline-size) or (not (container-type: inline-size)) {
   @media (min-width: 640px) {
-    .ff-guarantee { flex-direction: row; text-align: left; }
+    div.ff-guarantee { flex-direction: row; text-align: left; }
   }
 }
 .ff-guarantee-icon {
@@ -1492,6 +1628,85 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   🆕 FIX PARITÉ HEADER — badge événement (mode Live), port de
+   components/funnel/FunnelHeader.tsx + app/funnel-theme.css. Classes
+   .ff-header-event / .ff-header-event-dot autonomes (ne dépendent pas de
+   .ff-brand-id / .ff-brand-cta, réutilisées ici telles quelles). */
+.ff-brand-bar-inner:has(.ff-header-event) {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+.ff-brand-bar-inner:has(.ff-header-event) .ff-brand-id { justify-self: start; }
+.ff-brand-bar-inner:has(.ff-header-event) .ff-brand-cta { justify-self: end; }
+.ff-header-event {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ff-accent, #c7a436) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ff-accent, #c7a436) 45%, transparent);
+  color: var(--ff-brand-bar-ink, #fff);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: ff-header-event-pulse 2.4s ease-in-out infinite;
+}
+.ff-header-event-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--ff-accent, #c7a436);
+  animation: ff-header-event-dot-ping 1.6s ease-out infinite;
+}
+@keyframes ff-header-event-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent, #c7a436) 0%, transparent); }
+  50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--ff-accent, #c7a436) 45%, transparent); }
+}
+@keyframes ff-header-event-dot-ping {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent, #c7a436) 55%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ff-accent, #c7a436) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-accent, #c7a436) 0%, transparent); }
+}
+.ff-page[data-ff-animations="off"] .ff-header-event,
+.ff-page[data-ff-animations="off"] .ff-header-event-dot {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-header-event, .ff-header-event-dot { animation: none !important; }
+}
+/* Tablette (≤860px) : badge sur sa propre ligne. */
+@media (max-width: 860px) {
+  .ff-brand-bar-inner:has(.ff-header-event) {
+    grid-template-columns: 1fr auto;
+    row-gap: 0.5rem;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-id {
+    grid-column: 1; grid-row: 1; justify-self: start; min-width: 0;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-cta {
+    grid-column: 2; grid-row: 1; justify-self: end;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event {
+    grid-column: 1 / -1; grid-row: 2; justify-self: center;
+  }
+}
+/* Mobile (≤560px) : tout empilé et centré. */
+@media (max-width: 560px) {
+  .ff-brand-bar-inner:has(.ff-header-event) { grid-template-columns: 1fr; }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-id,
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-cta,
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event {
+    grid-column: 1 / -1; grid-row: auto; justify-self: center;
+  }
+  .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-id { justify-content: center; }
+  .ff-header-event { font-size: 0.75rem; padding: 0.35rem 0.7rem; }
+}
+
 .ff-brand-cta,
 a.ff-brand-cta,
 .ff-page a.ff-brand-cta {
@@ -1579,6 +1794,230 @@ a.ff-brand-cta:hover {
   border-top: 1px solid var(--ff-footer-border);
 }
 
+/* ─── Footer : variante "grille sitemap" (marque / navigation / contact) ───
+   Parité avec components/funnel/FunnelFooter.tsx (FooterSitemap). Activée via
+   funnel.meta.footerVariant === "footer-grid-sitemap". ─── */
+.ff-footer--sitemap .ff-footer-inner--grid {
+  max-width: 1080px;
+  text-align: left;
+}
+.ff-footer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+  text-align: left;
+}
+@container ffpage (min-width: 760px) {
+  .ff-footer-grid { grid-template-columns: 1.6fr 1fr 1fr; gap: 32px; }
+}
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
+  @media (min-width: 760px) {
+    .ff-footer-grid { grid-template-columns: 1.6fr 1fr 1fr; gap: 32px; }
+  }
+}
+.ff-footer-col { display: flex; flex-direction: column; gap: 4px; }
+.ff-footer-col--brand { gap: 10px; }
+.ff-footer-col--brand .ff-footer-legal { max-width: 420px; }
+.ff-footer-col-title {
+  color: var(--ff-footer-business-ink);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+.ff-footer-nav-link {
+  color: var(--ff-footer-ink);
+  text-decoration: none;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+  line-height: 1.9;
+}
+.ff-footer-nav-link:hover { opacity: 1; }
+.ff-footer-nav-link--static { cursor: default; }
+.ff-footer-nav-link--accent {
+  color: var(--ff-accent);
+  opacity: 1;
+  font-weight: 500;
+}
+.ff-footer--sitemap .ff-footer-copy { text-align: left; }
+
+/* ─── Footer : variante "CTA newsletter" ───
+   Parité avec FunnelFooter.tsx (FooterNewsletter). Activée via
+   funnel.meta.footerVariant === "footer-cta-newsletter". La capture réelle
+   d'email nécessite un formulaire JS (hors scope export statique) : on affiche
+   un CTA qui pointe vers le formulaire de la page (#lead-form). ─── */
+.ff-footer-inner--newsletter {
+  max-width: 620px;
+  text-align: center;
+}
+.ff-footer-newsletter-title {
+  color: var(--ff-footer-business-ink);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+.ff-footer-newsletter-sub {
+  opacity: 0.75;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+.ff-footer-newsletter-btn {
+  margin-top: 18px;
+  min-height: 46px;
+  font-size: 0.875rem;
+  padding: 0 24px;
+}
+.ff-footer-newsletter-divider {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ff-footer-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🆕 FIX PARITÉ SKINS — CTA final & cartes process/program
+   Généré par lib/export/html.ts (renderSkinCtaFinalSection /
+   renderSkinProcessSection) UNIQUEMENT pour les templates ayant un skin
+   "factory" côté aperçu (bold-energy, lead-snap, story-sell, clean-light,
+   premium-minimal, trust-pro). Parité visuelle avec
+   components/funnel/templates/skins/factory.tsx (makeFinalCta / makeProcess).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ff-skin-cta-final {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 64px 32px;
+  text-align: center;
+}
+.ff-skin-cta-final__glow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+}
+.ff-skin-cta-final__content { position: relative; z-index: 1; }
+.ff-skin-cta-final__eyebrow {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sk-accent);
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.ff-skin-cta-final__headline {
+  font-size: var(--ff-headline-scale);
+  font-weight: 800;
+  color: var(--sk-cta-ink);
+  margin: 0 0 14px;
+  line-height: 1.15;
+}
+.ff-skin-cta-final__sub {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--sk-cta-sub);
+  max-width: 540px;
+  margin: 0 auto 28px;
+}
+.ff-skin-cta-final__reassurance {
+  margin: 16px 0 0;
+  font-size: 13.5px;
+  color: var(--sk-cta-sub);
+}
+
+.ff-skin-process-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+  margin-top: 24px;
+  text-align: left;
+}
+@container ffpage (min-width: 760px) {
+  .ff-skin-process-grid[data-cols="2"] { grid-template-columns: repeat(2, 1fr); }
+  .ff-skin-process-grid[data-cols="3"] { grid-template-columns: repeat(3, 1fr); }
+}
+@supports (container-type: inline-size) or (not (container-type: inline-size)) {
+  @media (min-width: 760px) {
+    .ff-skin-process-grid[data-cols="2"] { grid-template-columns: repeat(2, 1fr); }
+    .ff-skin-process-grid[data-cols="3"] { grid-template-columns: repeat(3, 1fr); }
+  }
+}
+.ff-skin-process-card { padding: 32px 26px; text-align: left; }
+.ff-skin-process-card__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 18px;
+}
+.ff-skin-process-card__title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ff-ink);
+  margin: 0 0 8px;
+}
+.ff-skin-process-card__desc {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ff-ink-soft);
+  margin: 0;
+}
+.ff-skin-process-rows {
+  width: 100%;
+  margin-top: 24px;
+  text-align: left;
+}
+.ff-skin-process-row {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  gap: 20px;
+  padding: 26px 0;
+  border-top: 1px solid var(--ff-border);
+}
+.ff-skin-process-row--last { border-bottom: 1px solid var(--ff-border); }
+.ff-skin-process-row__num {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ff-accent);
+}
+.ff-skin-process-row__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ff-ink);
+  margin: 0 0 6px;
+}
+.ff-skin-process-row__desc {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ff-ink-soft);
+  margin: 0;
+  text-align: justify;
+}
+
+/* 🆕 FIX RESPONSIVE MOBILE : les blocs skin ci-dessus (ajoutés pour la
+   parité CTA final / process factory) n'avaient aucun ajustement mobile —
+   padding desktop (64px/32px/26px) trop genereux sur petit ecran, glow
+   400x400 disproportionné sur une carte pleine largeur ≤375px. */
+@media (max-width: 640px) {
+  .ff-skin-cta-final { padding: 40px 20px; }
+  .ff-skin-cta-final__glow { width: 260px; height: 260px; top: -50px; }
+  .ff-skin-process-card { padding: 22px 18px; }
+  .ff-skin-process-row { padding: 20px 0; gap: 14px; grid-template-columns: 38px 1fr; }
+  .ff-skin-process-row__num { font-size: 20px; }
+}
+
 /* ─── Animations CSS (declenchees au chargement, comme l'ancien) ─── */
 .ff-page [class*="ff-anim-"] {
   opacity: 0;
@@ -1624,7 +2063,7 @@ a.ff-brand-cta:hover {
     transform: none !important;
   }
   .ff-page .ff-btn,
-  .ff-page .ff-cta { animation: none !important; }
+  .ff-page a.ff-cta { animation: none !important; }
 }
 
 /* ─── Alternance de fonds entre sections ─── */
@@ -1756,7 +2195,7 @@ textarea.ff-input {
   transform: none !important;
 }
 .ff-page[data-ff-animations="off"] .ff-btn,
-.ff-page[data-ff-animations="off"] .ff-cta {
+.ff-page[data-ff-animations="off"] a.ff-cta {
   animation: none !important;
 }
 
@@ -1771,7 +2210,6 @@ textarea.ff-input {
 
 /* ─── Renforcement de specificite pour resister au CSS de SIO ─── */
 .ff-page .ff-btn:hover,
-.ff-page .ff-cta:hover,
 .ff-page a.ff-btn:hover,
 .ff-page a.ff-cta:hover {
   opacity: 0.92 !important;
@@ -1801,7 +2239,7 @@ textarea.ff-input {
 
 /* Force l'animation glow malgre SIO qui peut redefinir animation: none */
 .ff-page[data-ff-btn-anim="glow"] .ff-btn,
-.ff-page[data-ff-btn-anim="glow"] .ff-cta {
+.ff-page[data-ff-btn-anim="glow"] a.ff-cta {
   animation: ff-btn-glow 2.2s ease-in-out infinite !important;
 }
 
@@ -3041,6 +3479,81 @@ const THEMES_CSS = `
   opacity: 0.65;
   line-height: 1.5;
 }
+
+/* ═══ BRANDING (data-ff-branded="true") ═══
+ * Miroir exact de app/funnel-theme.css → [data-ff-template][data-ff-branded="true"].
+ * Neutralise les background-image codés en dur des blocs par thème ci-dessus
+ * (ex: .ff-page[data-ff-theme="bold-energy"]) qui ne consomment jamais
+ * var(--ff-bg) : le raccourci "background" réinitialise aussi background-image
+ * → none. Spécificité (.ff-page + 2 attributs = 0,3,0) > règle de thème
+ * (.ff-page + 1 attribut = 0,2,0), donc gagne même sans !important — le
+ * !important est conservé pour rester rigoureusement aligné avec le live app. */
+.ff-page[data-ff-theme][data-ff-branded="true"] {
+  background: var(--ff-bg) !important;
+}
+.ff-page[data-ff-theme][data-ff-branded="true"] .ff-btn,
+.ff-page[data-ff-theme][data-ff-branded="true"] a.ff-cta {
+  background: var(--ff-btn-bg) !important;
+  color: var(--ff-btn-ink) !important;
+}
+.ff-page[data-ff-theme][data-ff-branded="true"] .ff-card,
+.ff-page[data-ff-theme][data-ff-branded="true"] .ff-card-elevated {
+  background: var(--ff-card-bg, var(--ff-surface)) !important;
+  border-color: var(--ff-card-border, var(--ff-border)) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🆕 ALIGNEMENT DU TEXTE — RÈGLE UTILISATEUR RÉPÉTÉE (port app/funnel-theme.css)
+   ═══════════════════════════════════════════════════════════════════════
+   Tout contenu textuel de paragraphe/liste (HORS titres — ff-headline/
+   ff-subheadline/ff-eyebrow — et HORS cartes) doit être aligné à gauche ou
+   justifié, JAMAIS centré — quel que soit le layout de section (split ou
+   non) et quel que soit le viewport. Placé en dernier dans le fichier +
+   !important pour trancher tous les ex-æquo de spécificité avec les règles
+   de centrage par défaut (.ff-body, .ff-bullets li n'ont pas de classe
+   dédiée et héritent sinon du centrage layout-centered). Équivalent export
+   de [data-ff-template] → .ff-page ici (pas de data-ff-template en export). */
+.ff-page .ff-section .ff-body,
+.ff-page .ff-bullets li,
+.ff-page .ff-bullets li span,
+.ff-page .ff-strip-label {
+  text-align: justify !important;
+}
+/* Cartes explicitement EXCLUES de la justification — gardent leur propre
+   alignement (centré dans la quasi-totalité des cards existantes). */
+.ff-page .ff-card .ff-body,
+.ff-page .ff-card-elevated .ff-body,
+.ff-page .ff-card .ff-bullets li,
+.ff-page .ff-card .ff-bullets li span,
+.ff-page .ff-pricing-card .ff-body,
+.ff-page .ff-bonus-card .ff-body,
+.ff-page .ff-testimonial-card .ff-body {
+  text-align: center !important;
+}
+
+/* ═══ About : contenu long-forme JUSTIFIÉ sur tous les écrans ═══
+   Bat le centrage global des sous-titres (.ff-subheadline) grâce à la
+   spécificité [data-ff-section="about"]. */
+.ff-page .ff-section[data-ff-section="about"] .ff-subheadline,
+.ff-page .ff-section[data-ff-section="about"] .ff-body {
+  text-align: justify !important;
+  text-justify: inter-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+
+/* 🆕 Split (hero + sections à image) : la RÈGLE ci-dessus justifie .ff-body
+   partout, y compris en split desktop où .ff-split-text > * force
+   text-align:left !important (cf. plus haut). Les deux sont !important à
+   spécificité comparable ; celle-ci arrive APRÈS dans le fichier donc
+   l'emporterait sur le body/bullets du split — on la neutralise EXPLICITE-
+   MENT ici pour le split, qui doit rester aligné à gauche (pas justifié)
+   pour le corps de texte court des colonnes texte/média. */
+.ff-page .ff-split-text > .ff-body,
+.ff-page .ff-split-text > .ff-bullets li,
+.ff-page .ff-split-text > .ff-bullets li span {
+  text-align: left !important;
+}
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3105,6 +3618,10 @@ export function getScopedFunnelThemeCss(scopeClass: string): string {
     "ff-decor-drift",
     "ff-section-pulse",
     "ff-timer-pulse", // 🆕 timer
+    "ff-header-event-pulse", // 🆕 badge événement header
+    "ff-header-event-dot-ping",
+    "af-shine", // 🆕 animation CTA templates factory
+    "hp-cta",
   ];
 
   const base = `${BASE_CSS}\n${THEMES_CSS}`;
@@ -3217,6 +3734,102 @@ export function buildThemeRootAttrs(funnel: Funnel): ThemeRootAttrs {
   if (typeof design.customBackground === "string" && design.customBackground.trim()) {
     dataAttrs["data-ff-custom-bg"] = "true";
     styleParts.push(`--ff-custom-bg:${design.customBackground}`);
+  }
+
+  // 🆕 FIX PARITÉ COULEURS — Couleurs de marque (design.brandColorsEnabled).
+  // Miroir EXACT de components/funnel/TemplateThemeProvider.tsx (aperçu live) :
+  // primaryColor → --ff-bg, secondaryColor → --ff-accent, accentColor/accentColor2
+  // → --ff-accent2/--ff-accent3, + toute la palette dépendante (surface, cartes,
+  // bandes, header/footer, tokens --ff-brand-*).
+  //
+  // Posées ICI (dans `inlineStyle`, injecté en attribut `style=""` sur .ff-page
+  // par les 3 call-sites de html.ts) et NON dans une balise <style> séparée :
+  // un style INLINE gagne TOUJOURS face à une règle de classe/attribut comme
+  // `.ff-page[data-ff-theme="bold-energy"] { --ff-bg: ... }` (spécificité CSS
+  // supérieure), qui écrasait silencieusement l'ancienne tentative
+  // (`renderDesignOverrideCss`, html.ts — supprimée) même si son mapping de
+  // champs était correct. Sans ce garde, on obtenait la palette BRUTE du
+  // template (ex. rouge/orange de bold-energy) au lieu des couleurs de marque
+  // choisies par l'utilisateur (ex. navy + or).
+  //
+  // Gardé par brandColorsEnabled === true, exactement comme l'aperçu live :
+  // primaryColor/secondaryColor/accentColor ont TOUJOURS une valeur (générée
+  // par l'IA ou par défaut du wizard) — ce n'est PAS un signal fiable que la
+  // marque est activée. Sans ce garde, tous les exports (même non brandés)
+  // seraient recolorés.
+  if (design.brandColorsEnabled === true) {
+    // 🆕 FIX fond rouge/orange persistant après export : plusieurs templates
+    // (bold-energy, story-sell notamment) déclarent un `background-image`
+    // LITTÉRAL (gradient hex figé) sur .ff-page[data-ff-theme="…"], qui ne
+    // consomme JAMAIS var(--ff-bg) — les variables posées ci-dessus n'y changent
+    // donc rien : elles ne touchent que background-COLOR, pas background-IMAGE.
+    // `data-ff-branded="true"` active un bloc CSS dédié (plus bas dans ce
+    // fichier, section "BRANDING") qui pose `background: var(--ff-bg) !important`
+    // (le raccourci `background` réinitialise aussi background-image → none),
+    // à plus haute spécificité que la règle du template. Miroir exact de
+    // funnel-theme.css (aperçu live), bloc [data-ff-template][data-ff-branded].
+    dataAttrs["data-ff-branded"] = "true";
+
+    const isHex = (v: unknown): v is string =>
+      typeof v === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v.trim());
+
+    const primary = design.primaryColor;
+    const secondary = design.secondaryColor;
+    const accent2Color = design.accentColor;
+    const accent3Color = design.accentColor2;
+
+    if (isHex(primary)) {
+      styleParts.push(`--ff-bg:${primary}`);
+      // 🆕 RENFORT fond rouge/orange (belt-and-suspenders) : en plus de la
+      // règle CSS dédiée [data-ff-branded="true"] plus bas, on pose AUSSI le
+      // raccourci "background" directement en INLINE STYLE ici. Un style
+      // inline avec !important gagne face à TOUTE règle de feuille de style,
+      // même !important — c'est la garantie la plus forte possible contre
+      // d'éventuels resets CSS imposés par l'environnement d'accueil (SIO)
+      // ou un souci d'ordre/portée de la balise <style> injectée par bloc.
+      styleParts.push(`background:var(--ff-bg) !important`);
+      const ink = contrastInk(primary);
+      if (ink) styleParts.push(`--ff-ink:${ink}`);
+      styleParts.push(`--ff-surface:color-mix(in srgb, var(--ff-ink) 4%, var(--ff-bg))`);
+      styleParts.push(`--ff-ink-soft:color-mix(in srgb, var(--ff-ink) 78%, transparent)`);
+      styleParts.push(`--ff-muted:color-mix(in srgb, var(--ff-ink) 55%, transparent)`);
+      styleParts.push(`--ff-border:color-mix(in srgb, var(--ff-ink) 10%, transparent)`);
+      styleParts.push(`--ff-brand-bar-bg:color-mix(in srgb, var(--ff-ink) 6%, var(--ff-bg))`);
+      styleParts.push(`--ff-brand-bar-ink:var(--ff-ink)`);
+      styleParts.push(`--ff-footer-bg:color-mix(in srgb, var(--ff-ink) 8%, var(--ff-bg))`);
+      styleParts.push(`--ff-footer-ink:color-mix(in srgb, var(--ff-ink) 65%, transparent)`);
+      styleParts.push(`--ff-footer-business-ink:var(--ff-ink)`);
+      styleParts.push(`--ff-brand-ink:var(--ff-ink)`);
+      styleParts.push(`--ff-brand-body:color-mix(in srgb, var(--ff-ink) 72%, transparent)`);
+      styleParts.push(`--ff-brand-muted:color-mix(in srgb, var(--ff-ink) 50%, transparent)`);
+    }
+    if (isHex(secondary)) {
+      styleParts.push(`--ff-accent:${secondary}`);
+      styleParts.push(`--ff-btn-bg:var(--ff-accent)`);
+      const accentInk = contrastInk(secondary);
+      if (accentInk) {
+        styleParts.push(`--ff-accent-ink:${accentInk}`);
+        styleParts.push(`--ff-btn-ink:var(--ff-accent-ink)`);
+      }
+    }
+    if (isHex(accent2Color)) {
+      styleParts.push(`--ff-accent2:${accent2Color}`);
+    }
+    if (isHex(accent3Color)) {
+      styleParts.push(`--ff-accent3:${accent3Color}`);
+    }
+    // 🆕 Cartes dérivées de l'accent + tokens --ff-brand-* (consommés par le
+    // système de skins, factory.tsx) — posés dès que bg OU accent sont actifs,
+    // pour matcher le comportement de TemplateThemeProvider (bloc "if overrides?.bg").
+    if (isHex(primary)) {
+      styleParts.push(`--ff-card-bg:color-mix(in srgb, var(--ff-accent) 6%, var(--ff-surface))`);
+      styleParts.push(`--ff-card-border:color-mix(in srgb, var(--ff-accent) 16%, transparent)`);
+      styleParts.push(`--ff-section-alt-1:color-mix(in srgb, var(--ff-accent) 4%, var(--ff-bg))`);
+      styleParts.push(`--ff-section-alt-2:color-mix(in srgb, var(--ff-accent) 7%, var(--ff-bg))`);
+      styleParts.push(`--ff-section-alt-border:color-mix(in srgb, var(--ff-accent) 12%, transparent)`);
+      styleParts.push(`--ff-brand-card-bg:var(--ff-card-bg)`);
+      styleParts.push(`--ff-brand-card-border:var(--ff-card-border)`);
+    }
   }
 
   return {
