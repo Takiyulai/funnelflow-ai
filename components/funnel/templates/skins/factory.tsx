@@ -490,7 +490,9 @@ function makeHero(t: SkinTokens) {
               textAlign: "left",
             }}
           >
-            {section.bullets.map((b, i) => (
+            {section.bullets
+              .filter((b) => typeof b === "string" && b.trim().length > 0)
+              .map((b, i) => (
               <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11, fontSize: 15.5, color: t.body }}>
                 <span
                   aria-hidden
@@ -791,7 +793,11 @@ function renderCardsVariant(
 function makeCards(t: SkinTokens, opts?: { check?: boolean }) {
   return function SkinCards(props: SkinSectionProps) {
     const { section } = props;
-    const bullets = Array.isArray(section.bullets) ? section.bullets : [];
+    // 🆕 FIX bug visuel « card vide » : une puce vide/blanche ne doit jamais
+    // produire une carte fantôme (bordure + marqueur, sans texte).
+    const bullets = (Array.isArray(section.bullets) ? section.bullets : []).filter(
+      (b) => typeof b === "string" && b.trim().length > 0,
+    );
     const hasImage = !!(section.image && section.image.mode !== "none" && section.image.url);
     // Une image force la grille simple (variante 0) pour rester lisible en split.
     const variant = hasImage ? 0 : props.variant ?? 0;
@@ -818,7 +824,11 @@ function makeCards(t: SkinTokens, opts?: { check?: boolean }) {
 function makeProcess(t: SkinTokens) {
   return function SkinProcess(props: SkinSectionProps) {
     const { section } = props;
-    const bullets = Array.isArray(section.bullets) ? section.bullets : [];
+    // 🆕 FIX bug visuel « card vide » : une puce vide/blanche ne doit jamais
+    // produire une étape fantôme (numéro + bordure, sans texte).
+    const bullets = (Array.isArray(section.bullets) ? section.bullets : []).filter(
+      (b) => typeof b === "string" && b.trim().length > 0,
+    );
     return (
       <SkinSection section={section} style={ctaStyleVars(t)}>
         <Head t={t} section={section} />

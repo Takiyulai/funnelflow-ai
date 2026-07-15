@@ -805,8 +805,13 @@
 [data-ff-template="neo-brutalist"] .ff-bullets--grid li { border: 2px solid #14110A !important; border-radius: 0 !important; box-shadow: 5px 5px 0 #14110A !important; }
 
 [data-ff-template="bold-energy"] {
-  --ff-bg: #1A0808; --ff-ink: #FFF5EE; --ff-ink-soft: #fde9d4; --ff-muted: #b89579;
-  --ff-border: rgba(255, 107, 53, 0.25); --ff-accent: #FF6B35; --ff-accent-ink: #1A0808;
+  /* 🆕 FIX contraste : le skin factory (T7_TOKENS, dark:false, ink #000000)
+     rendait les titres/texte en NOIR alors que ce bloc peignait encore un fond
+     sombre hérité de l'ancienne version dark du template → texte noir illisible
+     sur fond marron/noir. Le design cible (voir configs.ts) est blanc/noir/rouge :
+     fond clair, encre sombre, avec les mêmes accents rouge/orange en décor. */
+  --ff-bg: #FFFFFF; --ff-ink: #000000; --ff-ink-soft: #4B4B4B; --ff-muted: #6B6B6B;
+  --ff-border: rgba(0, 0, 0, 0.10); --ff-accent: #FF6B35; --ff-accent-ink: #1A0808;
   --ff-headline-scale: calc(clamp(1.5rem, 2.8vw, 2.25rem) * var(--ff-text-scale));
   --ff-headline-weight: 900; --ff-headline-tracking: -0.03em;
   --ff-headline-family: "Archivo Black", "Inter", system-ui, sans-serif;
@@ -818,24 +823,24 @@
   --ff-brand-bar-bg: #2A0E0E; --ff-brand-bar-ink: #FFF5EE;
   --ff-footer-bg: #0F0303; --ff-footer-ink: rgba(255, 245, 238, 0.55);
   --ff-footer-business-ink: #FFF5EE;
-  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
-  --ff-section-alt-2: rgba(255, 107, 53, 0.13);
-  --ff-section-alt-border: rgba(255, 107, 53, 0.30);
+  --ff-section-alt-1: rgba(0, 0, 0, 0.015);
+  --ff-section-alt-2: rgba(255, 107, 53, 0.06);
+  --ff-section-alt-border: rgba(255, 107, 53, 0.18);
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(255, 107, 53, 0.18), transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(255, 107, 53, 0.12), transparent 50%),
-    linear-gradient(180deg, #1A0808 0%, #220C0C 100%);
-  color: #FFF5EE;
+    radial-gradient(ellipse at 20% 0%, rgba(255, 107, 53, 0.10), transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(255, 107, 53, 0.07), transparent 55%),
+    #FFFFFF;
+  color: #000000;
 }
 [data-ff-template="bold-energy"]::before {
   width: 60%; height: 60%; top: -20%; left: -15%;
-  background: radial-gradient(circle, rgba(255, 107, 53, 0.65), transparent 65%);
-  opacity: 0.7; animation: ff-decor-drift 20s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(255, 107, 53, 0.28), transparent 65%);
+  opacity: 0.5; animation: ff-decor-drift 20s ease-in-out infinite;
 }
 [data-ff-template="bold-energy"]::after {
   width: 55%; height: 55%; top: -10%; right: -15%;
-  background: radial-gradient(circle, rgba(255, 87, 51, 0.55), transparent 65%);
-  opacity: 0.6; animation: ff-decor-drift 26s ease-in-out infinite reverse;
+  background: radial-gradient(circle, rgba(255, 87, 51, 0.22), transparent 65%);
+  opacity: 0.4; animation: ff-decor-drift 26s ease-in-out infinite reverse;
 }
 [data-ff-template="bold-energy"] .ff-headline,
 [data-ff-template="bold-energy"] .ff-headline-scaled {
@@ -848,8 +853,8 @@
 [data-ff-template="bold-energy"] .ff-eyebrow {
   font-family: "Inter", system-ui, sans-serif !important;
   font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px;
-  background: color-mix(in srgb, #FF6B35 22%, transparent);
-  color: #FF8A5B;
+  background: color-mix(in srgb, #FF6B35 16%, transparent);
+  color: #C2410C;
   border: 1px solid color-mix(in srgb, #FF6B35 35%, transparent);
   padding: 7px 16px; border-radius: 999px; display: inline-block;
 }
@@ -936,8 +941,12 @@
 }
 
 [data-ff-template="trust-pro"] {
-  --ff-bg: #0B1E3D; --ff-ink: #E2E8F0; --ff-ink-soft: #94a3b8; --ff-muted: #6b8aaf;
-  --ff-border: rgba(6, 182, 212, 0.20); --ff-accent: #06B6D4; --ff-accent-ink: #ffffff;
+  /* 🆕 FIX contraste : le skin factory (T6_TOKENS, dark:false, ink #1F2937)
+     rendait les titres en gris très sombre alors que ce bloc peignait encore
+     le fond bleu nuit hérité de l'ancienne version dark → texte illisible.
+     Design cible (configs.ts) : gris clair/teal/ambre, fond clair. */
+  --ff-bg: #F9FAFB; --ff-ink: #1F2937; --ff-ink-soft: #4B5563; --ff-muted: #6B7280;
+  --ff-border: rgba(17, 24, 39, 0.08); --ff-accent: #06B6D4; --ff-accent-ink: #ffffff;
   --ff-headline-scale: calc(clamp(1.5rem, 2.8vw, 2.25rem) * var(--ff-text-scale));
   --ff-headline-weight: 600; --ff-headline-tracking: -0.015em;
   --ff-headline-family: "IBM Plex Sans", "Inter", system-ui, sans-serif;
@@ -949,24 +958,24 @@
   --ff-brand-bar-bg: #102B52; --ff-brand-bar-ink: #E2E8F0;
   --ff-footer-bg: #06122A; --ff-footer-ink: rgba(226, 232, 240, 0.55);
   --ff-footer-business-ink: #E2E8F0;
-  --ff-section-alt-1: rgba(255, 255, 255, 0.03);
-  --ff-section-alt-2: rgba(6, 182, 212, 0.10);
-  --ff-section-alt-border: rgba(6, 182, 212, 0.25);
+  --ff-section-alt-1: rgba(17, 24, 39, 0.012);
+  --ff-section-alt-2: rgba(6, 182, 212, 0.06);
+  --ff-section-alt-border: rgba(6, 182, 212, 0.16);
   background:
-    radial-gradient(ellipse at 0% 0%, rgba(6, 182, 212, 0.18), transparent 50%),
-    radial-gradient(ellipse at 100% 100%, rgba(6, 182, 212, 0.12), transparent 50%),
-    linear-gradient(135deg, #0B1E3D 0%, #0F2847 100%);
-  color: #E2E8F0;
+    radial-gradient(ellipse at 0% 0%, rgba(6, 182, 212, 0.08), transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(6, 182, 212, 0.05), transparent 50%),
+    #F9FAFB;
+  color: #1F2937;
 }
 [data-ff-template="trust-pro"]::before {
   width: 55%; height: 55%; top: -15%; left: -15%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.55), transparent 65%);
-  opacity: 0.65; animation: ff-decor-drift 30s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.24), transparent 65%);
+  opacity: 0.45; animation: ff-decor-drift 30s ease-in-out infinite;
 }
 [data-ff-template="trust-pro"]::after {
   width: 50%; height: 50%; bottom: -15%; right: -15%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.40), transparent 65%);
-  opacity: 0.55; animation: ff-decor-drift 36s ease-in-out infinite reverse;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.16), transparent 65%);
+  opacity: 0.35; animation: ff-decor-drift 36s ease-in-out infinite reverse;
 }
 [data-ff-template="trust-pro"] .ff-headline,
 [data-ff-template="trust-pro"] .ff-headline-scaled {
@@ -981,7 +990,7 @@
 }
 [data-ff-template="trust-pro"] .ff-eyebrow {
   font-family: "IBM Plex Mono", ui-monospace, monospace !important;
-  background: rgba(6, 182, 212, 0.15); color: #67E8F9;
+  background: rgba(6, 182, 212, 0.12); color: #0E7490;
   padding: 7px 16px; border-radius: 999px;
   letter-spacing: 0.08em; font-size: 11px; font-weight: 500; text-transform: uppercase;
 }
@@ -990,8 +999,12 @@
 }
 
 [data-ff-template="lead-snap"] {
-  --ff-bg: #1A0F2E; --ff-ink: #F3E8FF; --ff-ink-soft: #C4B5DC; --ff-muted: #8C7AAB;
-  --ff-border: rgba(192, 132, 252, 0.20); --ff-accent: #C084FC; --ff-accent-ink: #1A0F2E;
+  /* 🆕 FIX contraste : le skin factory (T2_TOKENS, dark:false, ink #0B1D3A)
+     rendait les titres en bleu marine très sombre alors que ce bloc peignait
+     encore le fond violet hérité de l'ancienne version dark → texte illisible.
+     Design cible (configs.ts) : navy/orange/teal clair, fond clair. */
+  --ff-bg: #FFFFFF; --ff-ink: #0B1D3A; --ff-ink-soft: #374151; --ff-muted: #6B7280;
+  --ff-border: rgba(11, 29, 58, 0.10); --ff-accent: #C084FC; --ff-accent-ink: #1A0F2E;
   --ff-headline-scale: calc(clamp(1.4rem, 2.6vw, 2.1rem) * var(--ff-text-scale));
   --ff-headline-weight: 700; --ff-headline-tracking: -0.02em;
   --ff-headline-family: "Sora", "Inter", system-ui, sans-serif;
@@ -1005,27 +1018,27 @@
   --ff-brand-bar-bg: #271847; --ff-brand-bar-ink: #F3E8FF;
   --ff-footer-bg: #0E0820; --ff-footer-ink: rgba(243, 232, 255, 0.55);
   --ff-footer-business-ink: #F3E8FF;
-  --ff-section-alt-1: rgba(255, 255, 255, 0.035);
-  --ff-section-alt-2: rgba(192, 132, 252, 0.12);
-  --ff-section-alt-border: rgba(192, 132, 252, 0.28);
-  background-color: #1A0F2E;
+  --ff-section-alt-1: rgba(11, 29, 58, 0.012);
+  --ff-section-alt-2: rgba(192, 132, 252, 0.06);
+  --ff-section-alt-border: rgba(192, 132, 252, 0.18);
+  background-color: #FFFFFF;
   background-image:
-    linear-gradient(rgba(192, 132, 252, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(192, 132, 252, 0.06) 1px, transparent 1px),
-    radial-gradient(ellipse at 100% 0%, rgba(192, 132, 252, 0.18), transparent 55%);
+    linear-gradient(rgba(192, 132, 252, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(192, 132, 252, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 100% 0%, rgba(192, 132, 252, 0.08), transparent 55%);
   background-size: 32px 32px, 32px 32px, 100% 100%;
   background-position: 0 0, 0 0, 0 0;
-  color: #F3E8FF;
+  color: #0B1D3A;
 }
 [data-ff-template="lead-snap"]::before {
   width: 50%; height: 50%; top: -15%; right: -15%;
-  background: radial-gradient(circle, rgba(192, 132, 252, 0.45), transparent 65%);
-  opacity: 0.65;
+  background: radial-gradient(circle, rgba(192, 132, 252, 0.20), transparent 65%);
+  opacity: 0.45;
 }
 [data-ff-template="lead-snap"]::after {
   width: 35%; height: 35%; bottom: -10%; left: -10%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.35), transparent 65%);
-  opacity: 0.5;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.14), transparent 65%);
+  opacity: 0.35;
 }
 [data-ff-template="lead-snap"] .ff-headline,
 [data-ff-template="lead-snap"] .ff-headline-scaled {
@@ -2113,10 +2126,12 @@
 [data-ff-template="editorial-warm"] { --ff-card-bg: #FFFFFF; --ff-card-icon-bg: color-mix(in srgb, var(--ff-accent) 14%, #FFFFFF); --ff-card-icon-ink: var(--ff-accent); --ff-card-shadow: 0 1px 2px rgba(43,29,22,0.05), 0 22px 48px -28px rgba(43,29,22,0.22); }
 [data-ff-template="clean-dark"]     { --ff-card-bg: #1C0A0E; --ff-card-border: rgba(255,46,67,0.34); --ff-card-icon-bg: rgba(255,46,67,0.18); --ff-card-icon-ink: #FF6B78; }
 [data-ff-template="story-sell"]     { --ff-card-bg: #1A1209; --ff-card-border: rgba(212,175,55,0.22); --ff-card-icon-bg: rgba(212,175,55,0.16); --ff-card-icon-ink: #D4AF37; }
-[data-ff-template="bold-energy"]    { --ff-card-bg: #2A1410; --ff-card-border: rgba(255,107,53,0.30); --ff-card-icon-bg: rgba(255,107,53,0.18); --ff-card-icon-ink: #FF6B35; }
+/* 🆕 bold-energy/trust-pro/lead-snap : cartes claires (#FFFFFF), cohérentes
+   avec le fond désormais clair de ces 3 templates (cf. blocs de base plus haut). */
+[data-ff-template="bold-energy"]    { --ff-card-bg: #FFFFFF; --ff-card-border: rgba(0,0,0,0.10); --ff-card-icon-bg: rgba(255,107,53,0.12); --ff-card-icon-ink: #EF4444; }
 [data-ff-template="sharp-launch"]   { --ff-card-bg: #0E141A; --ff-card-border: rgba(34,211,238,0.22); --ff-card-icon-bg: rgba(34,211,238,0.16); --ff-card-icon-ink: #22D3EE; }
-[data-ff-template="trust-pro"]      { --ff-card-bg: #112A4D; --ff-card-border: rgba(6,182,212,0.22); --ff-card-icon-bg: rgba(6,182,212,0.16); --ff-card-icon-ink: #22D3EE; }
-[data-ff-template="lead-snap"]      { --ff-card-bg: #241640; --ff-card-border: rgba(192,132,252,0.24); --ff-card-icon-bg: rgba(192,132,252,0.18); --ff-card-icon-ink: #C084FC; }
+[data-ff-template="trust-pro"]      { --ff-card-bg: #FFFFFF; --ff-card-border: #EEF1F5; --ff-card-icon-bg: rgba(13,148,136,0.12); --ff-card-icon-ink: #0D9488; }
+[data-ff-template="lead-snap"]      { --ff-card-bg: #FFFFFF; --ff-card-border: #EDF0F2; --ff-card-icon-bg: rgba(245,138,30,0.14); --ff-card-icon-ink: #F58A1E; }
 /* 🆕 Cards dérivées de l'accent pour les 3 templates qui retombaient sur un voile blanc identique. */
 [data-ff-template="webinar-live"]   { --ff-card-bg: #141A35; --ff-card-border: rgba(99,102,241,0.26); --ff-card-icon-bg: rgba(99,102,241,0.18); --ff-card-icon-ink: #818CF8; }
 [data-ff-template="showcase"]       { --ff-card-bg: #161B22; --ff-card-border: rgba(52,211,153,0.24); --ff-card-icon-bg: rgba(52,211,153,0.18); --ff-card-icon-ink: #34D399; }
@@ -3193,41 +3208,41 @@
   --ff-section-alt-2: rgba(37,99,235,0.06); --ff-section-alt-border: rgba(37,99,235,0.18);
 }
 
-/* Agence B2B (teal sur bleu nuit) */
+/* Agence B2B (teal sur gris clair) — 🆕 border/bande/glow allégés pour fond clair */
 [data-ff-template="trust-pro"] {
   --ff-accent: #0D9488; --ff-accent-ink: #ffffff;
-  --ff-border: rgba(13,148,136,0.24);
+  --ff-border: rgba(17,24,39,0.08);
   --ff-btn-bg: linear-gradient(100deg,#0D9488,#14B8A6); --ff-btn-ink: #ffffff;
   --ff-btn-shadow: 0 12px 32px rgba(13,148,136,0.35);
-  --ff-section-alt-2: rgba(13,148,136,0.10); --ff-section-alt-border: rgba(13,148,136,0.25);
+  --ff-section-alt-2: rgba(13,148,136,0.06); --ff-section-alt-border: rgba(13,148,136,0.16);
 }
-[data-ff-template="trust-pro"]::before { background: radial-gradient(circle, rgba(13,148,136,0.40), transparent 70%); }
-[data-ff-template="trust-pro"]::after  { background: radial-gradient(circle, rgba(37,99,235,0.28), transparent 70%); }
+[data-ff-template="trust-pro"]::before { background: radial-gradient(circle, rgba(13,148,136,0.18), transparent 70%); }
+[data-ff-template="trust-pro"]::after  { background: radial-gradient(circle, rgba(37,99,235,0.12), transparent 70%); }
 
-/* Fitness Dark Energy (rouge) */
+/* Fitness Energy (blanc/noir/rouge) — 🆕 fond clair (le skin factory T7 est dark:false) */
 [data-ff-template="bold-energy"] {
   --ff-accent: #EF4444; --ff-accent-ink: #ffffff;
-  --ff-border: rgba(239,68,68,0.24);
+  --ff-border: rgba(0,0,0,0.10);
   --ff-btn-bg: linear-gradient(100deg,#EF4444,#F97316); --ff-btn-ink: #ffffff;
   --ff-btn-shadow: 0 12px 34px rgba(239,68,68,0.40);
-  --ff-section-alt-2: rgba(239,68,68,0.10); --ff-section-alt-border: rgba(239,68,68,0.25);
+  --ff-section-alt-2: rgba(239,68,68,0.06); --ff-section-alt-border: rgba(239,68,68,0.16);
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.16), transparent 60%),
-    linear-gradient(180deg,#140606 0%,#1C0A0A 100%);
+    radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.08), transparent 60%),
+    #FFFFFF;
 }
-[data-ff-template="bold-energy"]::before { background: radial-gradient(circle, rgba(239,68,68,0.45), transparent 70%); }
-[data-ff-template="bold-energy"]::after  { background: radial-gradient(circle, rgba(249,115,22,0.32), transparent 70%); }
+[data-ff-template="bold-energy"]::before { background: radial-gradient(circle, rgba(239,68,68,0.22), transparent 70%); }
+[data-ff-template="bold-energy"]::after  { background: radial-gradient(circle, rgba(249,115,22,0.16), transparent 70%); }
 
-/* Lead Magnet E-book (orange sur violet) */
+/* Lead Magnet E-book (navy/orange/teal clair) — 🆕 fond clair (le skin factory T2 est dark:false) */
 [data-ff-template="lead-snap"] {
   --ff-accent: #F58A1E; --ff-accent-ink: #1A0F2E;
-  --ff-border: rgba(245,138,30,0.26);
+  --ff-border: rgba(11,29,58,0.10);
   --ff-btn-bg: linear-gradient(100deg,#F58A1E,#FBBF24); --ff-btn-ink: #1A0F2E;
   --ff-btn-shadow: 0 12px 32px rgba(245,138,30,0.38);
-  --ff-section-alt-2: rgba(245,138,30,0.10); --ff-section-alt-border: rgba(245,138,30,0.25);
+  --ff-section-alt-2: rgba(245,138,30,0.06); --ff-section-alt-border: rgba(245,138,30,0.16);
 }
-[data-ff-template="lead-snap"]::before { background: radial-gradient(circle, rgba(245,138,30,0.38), transparent 70%); }
-[data-ff-template="lead-snap"]::after  { background: radial-gradient(circle, rgba(139,92,246,0.30), transparent 70%); }
+[data-ff-template="lead-snap"]::before { background: radial-gradient(circle, rgba(245,138,30,0.18), transparent 70%); }
+[data-ff-template="lead-snap"]::after  { background: radial-gradient(circle, rgba(139,92,246,0.14), transparent 70%); }
 
 /* Événement Dark (magenta) */
 [data-ff-template="story-sell"] {
@@ -3446,15 +3461,20 @@
 }
 
 /* ═══ Fonds de page alignés sur les designs du zip (skins light) ═══ */
-/* 🆕 FIX contraste/zones blanches : lead-snap, trust-pro et bold-energy sont
-   des templates SOMBRES à part entière (défs complètes plus haut dans ce
-   fichier, avec leurs propres --ff-card-bg dédiés). Ils avaient été inclus
-   ici par erreur (copié-collé du bloc "skins light"), ce qui les forçait
-   silencieusement vers un fond blanc + encre --ff-ink adaptée au blanc,
-   pendant que leurs cartes gardaient un fond sombre → texte illisible
-   (encre sombre sur carte sombre) et grandes zones blanches inattendues.
-   On les retire de ce bloc pour laisser leurs définitions sombres d'origine
-   s'appliquer sans être écrasées. Ne PAS les rajouter ici. */
+/* 🆕 CORRECTIF (mise à jour) : lead-snap, trust-pro et bold-energy sont pilotés
+   par le SKIN FACTORY (components/funnel/templates/skins/configs.ts → T2/T6/T7,
+   dark:false, encre foncée #0B1D3A/#1F2937/#000000 posée en style INLINE React,
+   indépendamment de var(--ff-ink)). Ce sont donc bien des templates CLAIRS
+   depuis la refonte skin — la note précédente ici ("templates SOMBRES à part
+   entière") datait d'avant cette refonte et était devenue fausse : elle avait
+   fait repasser leurs blocs de base (plus haut dans ce fichier) à un fond
+   sombre, ce qui recréait le bug inverse — encre foncée du skin factory sur
+   fond de page resté sombre (texte quasi invisible, régression signalée par
+   captures d'écran sur /create/demo). Le fond clair + l'encre foncée + les
+   cartes claires (--ff-card-bg) de ces 3 templates sont maintenant définis
+   directement dans leurs blocs [data-ff-template="…"] d'origine plus haut
+   (fond blanc/gris très clair, glows décoratifs allégés) : NE PAS les
+   rajouter ici (ce bloc générique écraserait leurs glows/dégradés bespoke). */
 
 [data-ff-template="clean-light"] {
   --ff-bg: #ffffff; --ff-ink: #1D4A4A; --ff-ink-soft: #4B5563; --ff-muted: #6B7280;
@@ -3494,9 +3514,14 @@
 
 /* 🆕 RÈGLE TYPOGRAPHIQUE GLOBALE (préférence utilisateur) :
    eyebrow / titre / sous-titre TOUJOURS centrés — y compris dans les sections
-   split et dès l'aperçu du wizard. Le corps (.ff-body) reste justifié. */
+   split et dès l'aperçu du wizard. Le corps (.ff-body) reste justifié.
+   🆕 FIX largeur : `display: block` ici écrasait (même spécificité, cascade
+   plus tardive) le `display: table` posé plus haut sur .ff-eyebrow pour que
+   la pastille épouse la largeur de son texte. `block` fait un élément pleine
+   largeur → pastille étirée sur tout le conteneur (bug signalé). `table` centre
+   tout aussi bien via margin auto tout en gardant une largeur = contenu. */
 [data-ff-template] .ff-eyebrow {
-  display: block;
+  display: table;
   text-align: center !important;
 }
 [data-ff-template] .ff-headline,

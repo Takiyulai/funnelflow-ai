@@ -2237,8 +2237,23 @@ function BulletsList({
    * déséquilibré en pile texte-centré + cartes dessous). */
   forceMode?: BulletsMode;
 }) {
+  // 🆕 FIX bug visuel « card vide » : une puce vide/blanche (générée par l'IA,
+  // ou laissée par l'édition manuelle) ne doit JAMAIS produire une carte
+  // fantôme (bordure + icône + padding, sans aucun texte). On filtre les
+  // puces blanches AVANT tout rendu, en conservant l'index d'origine pour que
+  // `bulletIcons[i]` (indexé sur le tableau BRUT) reste correctement aligné.
+  // Ce composant étant partagé par toutes les sections « cartes » (problem,
+  // benefits, process, solution, program, stats…), corriger ici évite que le
+  // bug ne se reproduise ailleurs.
+  const entries = bullets
+    .map((bullet, i) => ({ bullet, i }))
+    .filter(({ bullet }) => typeof bullet === "string" && bullet.trim().length > 0);
+
+  if (entries.length === 0) return null;
+
+  const cleanBullets = entries.map((e) => e.bullet);
   const DefaultBulletIcon = getIconByName(defaultIconName);
-  const mode = forceMode ?? decideBulletsMode(sectionType, bullets, isSuccess);
+  const mode = forceMode ?? decideBulletsMode(sectionType, cleanBullets, isSuccess);
   const shadowAttr =
     shadowSize && shadowSize !== "none" ? shadowSize : undefined;
 
@@ -2256,7 +2271,7 @@ function BulletsList({
         data-ff-bullets-mode="inline-strip"
         className={`ff-bullets ${modeClass} list-none pl-0`}
       >
-        {bullets.map((bullet, i) => {
+        {entries.map(({ bullet, i }) => {
           const split = splitBulletValueLabel(bullet);
           const value = split?.value ?? bullet;
           const label = split?.label ?? "";
@@ -2287,7 +2302,7 @@ function BulletsList({
         data-ff-shadow={shadowAttr}
         className={`ff-bullets ${modeClass} list-none pl-0`}
       >
-        {bullets.map((bullet, i) => {
+        {entries.map(({ bullet, i }) => {
           const PerBulletIcon = bulletIcons?.[i]
             ? getIconByName(bulletIcons[i] as string)
             : DefaultBulletIcon;
@@ -2342,7 +2357,7 @@ function BulletsList({
         isSuccess ? "inline-block text-left" : ""
       }`}
     >
-      {bullets.map((bullet, i) => {
+      {entries.map(({ bullet, i }) => {
         const PerBulletIcon = bulletIcons?.[i]
           ? getIconByName(bulletIcons[i] as string)
           : DefaultBulletIcon;
