@@ -27,6 +27,15 @@ export type WorkflowStatus = "draft" | "active" | "paused";
  *                           Ne se déclenche JAMAIS directement : le moteur
  *                           planifie son exécution dans `workflow_pending_runs`
  *                           quand `afterEvent` se produit.
+ *  - time.before_event    : 🆕 délai AVANT une date fixe (funnel.header.eventDateTime,
+ *                           ex. l'heure d'un webinaire live), au lieu d'après un
+ *                           événement relatif comme time.elapsed. `funnelId` est
+ *                           OBLIGATOIRE (une date par tunnel). Se déclenche JAMAIS
+ *                           directement : planifié dans `workflow_pending_runs` dès
+ *                           l'inscription (`webinar.registered`) sur ce tunnel, à
+ *                           `eventDateTime - delayDays/delayHours`. Si ce calcul tombe
+ *                           dans le passé (inscription trop tardive), rien n'est
+ *                           planifié — évite un rappel envoyé après le live.
  *  - email.link_clicked   : 🆕 LOT 2 — un lien a été cliqué dans un email envoyé.
  *  - page.visited         : 🆕 LOT 2 — un contact déjà identifié revisite une page. */
 export type WorkflowTriggerEvent =
@@ -40,6 +49,7 @@ export type WorkflowTriggerEvent =
   | "application.submitted"
   | "appointment.booked"
   | "time.elapsed"
+  | "time.before_event"
   | "email.link_clicked"
   | "page.visited";
 
@@ -54,6 +64,7 @@ export const WORKFLOW_TRIGGER_EVENTS: readonly WorkflowTriggerEvent[] = [
   "application.submitted",
   "appointment.booked",
   "time.elapsed",
+  "time.before_event",
   "email.link_clicked",
   "page.visited",
 ] as const;
@@ -125,10 +136,21 @@ export type WorkflowConditionTest =
   | { type: "source_is"; source: string }
   /** Le pays téléphonique du contact (leads.phone_country, ISO-2, ex. "CI"). */
   | { type: "country_is"; country: string }
-  /** A ouvert AU MOINS un email (email_events kind='open'), option : sur les N derniers jours. */
-  | { type: "has_opened_email"; sinceDays?: number }
-  /** A cliqué AU MOINS un lien d'email (email_events kind='click'), option : N derniers jours. */
-  | { type: "has_clicked_email"; sinceDays?: number };
+  /** A ouvert AU MOINS un email (email_events kind='open'), option : sur les N
+   *  derniers jours, et/ou limité aux emails d'UNE séquence précise
+   *  (email_events.sequence_id) — sinon « n'importe quel email envoyé ».
+   *  🆕 sequenceEmailId : limite à UN email précis DANS cette séquence
+   *  (email_events.sequence_email_id) — ex. « a ouvert le rappel H-2 »,
+   *  distinct de « a ouvert un email quelconque de cette séquence ». Ignoré
+   *  si sequenceId n'est pas renseigné. */
+  | { type: "has_opened_email"; sinceDays?: number; sequenceId?: string; sequenceEmailId?: string }
+  /** A cliqué AU MOINS un lien d'email (email_events kind='click'), option :
+   *  N derniers jours, limité à une séquence précise (et/ou un email précis
+   *  de cette séquence via sequenceEmailId), et/ou limité aux clics dont
+   *  l'URL contient ce texte (email_events.url, ex. l'URL de la page de
+   *  vente) — utile pour distinguer « a cliqué LE lien d'achat » de « a cliqué
+   *  un lien quelconque ». */
+  | { type: "has_clicked_email"; sinceDays?: number; sequenceId?: string; sequenceEmailId?: string; urlContains?: string };
 
 export const WORKFLOW_CONDITION_TYPES = [
   "has_tag",

@@ -33,11 +33,16 @@ export async function POST(request: Request) {
 
   // 🆕 CINETPAY_BASE_URL/API_KEY/API_PASSWORD manquants (Point 6, dev local
   // sans config) → erreur explicite plutôt qu'un crash 500 opaque.
-  if (
-    !process.env.CINETPAY_BASE_URL?.trim() ||
-    !process.env.CINETPAY_API_KEY?.trim() ||
-    !process.env.CINETPAY_API_PASSWORD?.trim()
-  ) {
+  const missing = [
+    !process.env.CINETPAY_BASE_URL?.trim() && "CINETPAY_BASE_URL",
+    !process.env.CINETPAY_API_KEY?.trim() && "CINETPAY_API_KEY",
+    !process.env.CINETPAY_API_PASSWORD?.trim() && "CINETPAY_API_PASSWORD",
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    // 🆕 Journalise PRÉCISÉMENT quelle(s) variable(s) manquent (jamais leur
+    // valeur) — indispensable pour diagnostiquer un souci de scope Vercel
+    // (Production/Preview/Development) sans avoir à deviner.
+    console.error("[cinetpay] variables manquantes en runtime:", missing.join(", "));
     return NextResponse.json(
       { ok: false, error: "cinetpay_not_configured" },
       { status: 503 },

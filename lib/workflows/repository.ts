@@ -180,14 +180,56 @@ function parseConditionTest(raw: unknown): WorkflowConditionTest | null {
       return typeof t.country === "string" && t.country.trim().length === 2
         ? { type: "country_is", country: t.country.trim().toUpperCase() }
         : null;
-    case "has_opened_email":
-    case "has_clicked_email": {
+    // 🆕 sequenceId / urlContains : sans ce parsing, ces filtres seraient
+    // silencieusement retirés à l'enregistrement (même piège que
+    // briefSchema — voir autofunnel-zod-brief-schema-gap) : le champ existe
+    // dans le type et l'UI, mais jamais reconstruit depuis la base. Cas
+    // séparés (plutôt qu'un fallthrough commun) pour que chaque objet retourné
+    // corresponde exactement au membre d'union attendu.
+    case "has_opened_email": {
       const n = Number(t.sinceDays);
+      const sequenceId =
+        typeof t.sequenceId === "string" && t.sequenceId.trim()
+          ? t.sequenceId.trim()
+          : undefined;
+      // 🆕 sequenceEmailId : même piège que sequenceId — sans ce parsing, un
+      // ciblage "cet email précis" enregistré redeviendrait silencieusement
+      // "n'importe quel email de la séquence" au rechargement.
+      const sequenceEmailId =
+        typeof t.sequenceEmailId === "string" && t.sequenceEmailId.trim()
+          ? t.sequenceEmailId.trim()
+          : undefined;
       return {
-        type: t.type,
+        type: "has_opened_email",
         ...(Number.isFinite(n) && n > 0
           ? { sinceDays: Math.min(365, Math.round(n)) }
           : {}),
+        ...(sequenceId ? { sequenceId } : {}),
+        ...(sequenceEmailId ? { sequenceEmailId } : {}),
+      };
+    }
+    case "has_clicked_email": {
+      const n = Number(t.sinceDays);
+      const sequenceId =
+        typeof t.sequenceId === "string" && t.sequenceId.trim()
+          ? t.sequenceId.trim()
+          : undefined;
+      const sequenceEmailId =
+        typeof t.sequenceEmailId === "string" && t.sequenceEmailId.trim()
+          ? t.sequenceEmailId.trim()
+          : undefined;
+      const urlContains =
+        typeof t.urlContains === "string" && t.urlContains.trim()
+          ? t.urlContains.trim().slice(0, 500)
+          : undefined;
+      return {
+        type: "has_clicked_email",
+        ...(Number.isFinite(n) && n > 0
+          ? { sinceDays: Math.min(365, Math.round(n)) }
+          : {}),
+        ...(sequenceId ? { sequenceId } : {}),
+        ...(sequenceEmailId ? { sequenceEmailId } : {}),
+        ...(urlContains ? { urlContains } : {}),
       };
     }
     default:

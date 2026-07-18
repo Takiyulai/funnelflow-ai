@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 const emailSchema = z.object({
   position: z.coerce.number().int().min(0).default(0),
   delay_days: z.coerce.number().int().min(0).max(365).default(0),
+  // 🆕 Sans cette entrée, delay_hours est silencieusement retiré par ce schéma
+  // avant d'atteindre replaceEmails — même piège que briefSchema (voir
+  // autofunnel-zod-brief-schema-gap) : le champ existe côté type/UI/DB mais
+  // n'arrive jamais en base tant qu'il n'est pas aussi listé ici.
+  delay_hours: z.coerce.number().int().min(0).max(23).default(0),
   subject: z.string().default(""),
   content: z.string().default(""),
 });

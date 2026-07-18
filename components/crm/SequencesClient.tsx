@@ -19,7 +19,7 @@ type PublishedFunnel = { id: string; name: string };
 type Lang = "fr" | "en" | "es";
 type ContactLite = { id: string; email: string; name: string | null };
 /** Email édité : porte l'id quand la séquence est enregistrée (pour l'envoi test). */
-type EditableEmail = { id?: string; position: number; delayDays: number; subject: string; body: string };
+type EditableEmail = { id?: string; position: number; delayDays: number; delayHours: number; subject: string; body: string };
 
 // 🆕 LOT 1 : rôles proposés dans le constructeur de séquence (+ "autre" en
 // saisie libre). Remplace l'ancien champ "type" unique + "nombre de mails".
@@ -149,8 +149,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       // 🆕 Invite d'abonnement uniforme (aucun forfait actif / quota atteint).
       if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!res.ok || !json.ok) { setError(json.message || json.error || "Génération impossible."); return; }
-      setEmails((json.emails as Array<{ position: number; delayDays: number; subject: string; body: string }>)
-        .map((e, i) => ({ position: i, delayDays: e.delayDays, subject: e.subject, body: e.body })));
+      setEmails((json.emails as Array<{ position: number; delayDays: number; delayHours?: number; subject: string; body: string }>)
+        .map((e, i) => ({ position: i, delayDays: e.delayDays, delayHours: e.delayHours ?? 0, subject: e.subject, body: e.body })));
       if (!name.trim()) {
         const label = roleLabel(roles[0]) || "Séquence";
         const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
@@ -173,7 +173,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       type: roles[0]?.id ?? "autre",
       roles,
       context: context || null, language, funnel_id: funnelId || null,
-      emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, subject: e.subject, content: e.body })),
+      emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, delay_hours: e.delayHours, subject: e.subject, content: e.body })),
     };
     try {
       const res = await fetch(editingId ? `/api/crm/sequences/${editingId}` : "/api/crm/sequences", {
@@ -197,8 +197,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       const s = json.sequence;
       setEditingId(s.id);
       // On récupère les ids d'emails (nécessaires pour l'envoi test).
-      setEmails((s.emails as Array<{ id: string; delay_days: number; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; subject: string; content: string }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, subject: e.subject, body: e.content })));
       setNotice("Séquence enregistrée.");
       refreshList();
     } catch { setError("Connexion impossible. Réessayez."); }
@@ -218,8 +218,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       setRoles(Array.isArray(s.roles) && s.roles.length > 0 ? s.roles : [{ id: s.type }]);
       setContext(s.context ?? "");
       setLanguage(s.language as Lang); setFunnelId(s.funnel_id ?? "");
-      setEmails((s.emails as Array<{ id: string; delay_days: number; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; subject: string; content: string }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, subject: e.subject, body: e.content })));
     } catch { setError("Connexion impossible."); }
   }
 
@@ -279,7 +279,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     setEmails((cur) => {
       const list = cur ?? [];
       const lastDelay = list.length ? list[list.length - 1].delayDays : -2;
-      return reindex([...list, { position: list.length, delayDays: lastDelay + 2, subject: "", body: "" }]);
+      return reindex([...list, { position: list.length, delayDays: lastDelay + 2, delayHours: 0, subject: "", body: "" }]);
     });
   }
 
@@ -458,7 +458,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                <div className="grid gap-3 sm:grid-cols-[1fr_100px_100px]">
                   <label className="grid gap-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Objet</span>
                     <input className={inputCls} value={em.subject} onChange={(e) => updateEmail(i, { subject: e.target.value })} placeholder="Objet de l'email" />
@@ -467,6 +467,11 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                     <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Délai (jours)</span>
                     <input type="number" min={0} max={365} className={inputCls} value={em.delayDays}
                       onChange={(e) => updateEmail(i, { delayDays: Math.max(0, Number(e.target.value) || 0) })} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">+ heures</span>
+                    <input type="number" min={0} max={23} className={inputCls} value={em.delayHours}
+                      onChange={(e) => updateEmail(i, { delayHours: Math.min(23, Math.max(0, Number(e.target.value) || 0)) })} />
                   </label>
                 </div>
 

@@ -26,6 +26,7 @@ export function EmailsModule({
   initialTab = "newsletter",
   publishedFunnels = [],
   campaignStats = {},
+  tags = [],
 }: {
   initialCampaigns: Campaign[];
   contactsCount: number;
@@ -34,6 +35,8 @@ export function EmailsModule({
   publishedFunnels?: PublishedFunnelOption[];
   /** 🆕 LOT 3 — Ouvertures/clics par campagne (messages distincts). */
   campaignStats?: Record<string, { opens: number; clicks: number }>;
+  /** 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes. */
+  tags?: { id: string; name: string }[];
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -74,6 +77,7 @@ export function EmailsModule({
           contactsCount={contactsCount}
           resendReady={resendReady}
           campaignStats={campaignStats}
+          tags={tags}
         />
       </div>
       <div className={tab === "sequences" ? "" : "hidden"}>

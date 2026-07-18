@@ -230,6 +230,9 @@ export type SequenceEmail = {
   user_id: string;
   position: number;
   delay_days: number;
+  /** 🆕 Heures supplémentaires (0-23), cumulées avec delay_days — harmonise
+   *  avec la granularité jours/heures/minutes des "Attendre" de workflow. */
+  delay_hours: number;
   subject: string;
   content: string;
   created_at: string;
@@ -251,6 +254,8 @@ export type SequenceInput = {
   emails: Array<{
     position: number;
     delay_days: number;
+    /** 🆕 Optionnel pour compat ascendante — défaut 0 côté service. */
+    delay_hours?: number;
     subject: string;
     content: string;
   }>;

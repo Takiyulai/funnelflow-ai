@@ -123,6 +123,79 @@ async function scheduleTimeElapsedWorkflows(
   }
 }
 
+// 🆕 Événements considérés comme « le contact vient d'entrer dans le tunnel »,
+// seuls habilités à déclencher la planification `time.before_event`. Volontairement
+// restreint à UN SEUL événement (webinar.registered) : /api/leads déclenche à la
+// fois lead.created (toujours) ET l'événement sémantique de la page (souvent en
+// PLUS) pour la même inscription — écouter les deux planifierait le même rappel
+// deux fois pour le même contact.
+const BEFORE_EVENT_ENTRY_EVENTS: readonly WorkflowTriggerEvent[] = ["webinar.registered"];
+
+/** 🆕 Planifie les workflows dont le déclencheur est `time.before_event` pour LE
+ *  TUNNEL de cet événement : calcule `funnel.header.eventDateTime - délai` et
+ *  insère dans `workflow_pending_runs` (même mécanisme que time.elapsed, déjà
+ *  traité par le cron existant — aucun nouveau job à configurer). Si la date de
+ *  l'événement est absente/invalide, ou si le calcul tombe déjà dans le passé
+ *  (inscription trop proche ou après le live), rien n'est planifié : on préfère
+ *  ne pas envoyer un rappel plutôt que d'en envoyer un après coup. NON bloquant. */
+async function scheduleBeforeEventWorkflows(
+  admin: SupabaseClient,
+  userId: string,
+  ctx: WorkflowEventContext,
+): Promise<void> {
+  if (!ctx.funnelId || !BEFORE_EVENT_ENTRY_EVENTS.includes(ctx.event)) return;
+
+  let candidates: Awaited<ReturnType<typeof getActiveWorkflowsForEvent>>;
+  try {
+    candidates = await getActiveWorkflowsForEvent(admin, userId, "time.before_event");
+  } catch (e) {
+    console.warn("[workflows] chargement time.before_event échoué (non bloquant):", e);
+    return;
+  }
+  const matching = candidates.filter((wf) => wf.trigger.funnelId === ctx.funnelId);
+  if (matching.length === 0) return;
+
+  let eventDateTime: string | null = null;
+  try {
+    const { data } = await admin
+      .from("funnels")
+      .select("published_content")
+      .eq("id", ctx.funnelId)
+      .maybeSingle();
+    const content = data?.published_content as { header?: { eventDateTime?: string } } | null;
+    eventDateTime = content?.header?.eventDateTime ?? null;
+  } catch (e) {
+    console.warn("[workflows] lecture eventDateTime échouée (non bloquant):", e);
+    return;
+  }
+  if (!eventDateTime) return;
+  const eventMs = new Date(eventDateTime).getTime();
+  if (!Number.isFinite(eventMs)) return;
+
+  for (const wf of matching) {
+    const offsetMs =
+      ((Number(wf.trigger.delayDays) || 0) * 24 + (Number(wf.trigger.delayHours) || 0)) *
+      60 *
+      60 *
+      1000;
+    const runAt = eventMs - offsetMs;
+    if (runAt <= Date.now()) continue; // trop tard : on n'envoie jamais après coup
+    try {
+      const { error } = await admin.from("workflow_pending_runs").insert({
+        workflow_id: wf.id,
+        user_id: userId,
+        lead_id: ctx.lead.id,
+        lead_email: ctx.lead.email,
+        lead_name: ctx.lead.name ?? null,
+        run_at: new Date(runAt).toISOString(),
+      });
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      console.warn(`[workflows] planification "${wf.name}" (time.before_event) échouée (non bloquant):`, e);
+    }
+  }
+}
+
 /** 🆕 Moteur générique : exécute les workflows actifs dont le trigger correspond
  *  à l'événement + son filtre. NON bloquant (toute erreur est avalée). */
 export async function runWorkflowsForEvent(
@@ -149,6 +222,8 @@ export async function runWorkflowsForEvent(
 
   // 🆕 LOT 2 — Greffe des déclencheurs `time.elapsed` référençant CET événement.
   await scheduleTimeElapsedWorkflows(admin, userId, ctx);
+  // 🆕 Greffe des déclencheurs `time.before_event` pour ce tunnel (webinaires live).
+  await scheduleBeforeEventWorkflows(admin, userId, ctx);
 }
 
 /**
@@ -245,9 +320,12 @@ export async function executeActions(
         case "enroll_in_sequence": {
           // Pont Workflows → Emails : le contenu vit dans la séquence (onglet
           // Emails), source unique. enrollContact programme tous ses emails dans
-          // `scheduled_emails` selon leurs propres délais. Le `wait` du workflow
-          // n'est pas répercuté ici (la cadence de la séquence fait foi).
-          await enrollContact(admin, userId, action.sequenceId, lead.id);
+          // `scheduled_emails` selon leurs propres délais internes. 🆕 CORRECTIF :
+          // le délai accumulé par les "wait" placés AVANT cette action dans le
+          // workflow est désormais répercuté sur le DÉPART de la séquence (tous
+          // ses emails sont décalés d'autant) — avant, il était silencieusement
+          // ignoré et la séquence démarrait toujours immédiatement.
+          await enrollContact(admin, userId, action.sequenceId, lead.id, delayMs);
           break;
         }
         case "notify_owner": {
@@ -375,6 +453,26 @@ async function evaluateConditionTest(
             "created_at",
             new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
           );
+        }
+        // 🆕 Filtre optionnel sur la séquence d'origine — sans lui, le test
+        // reste « n'importe quel email envoyé » (comportement historique).
+        if (test.sequenceId) {
+          query = query.eq("sequence_id", test.sequenceId);
+        }
+        // 🆕 Filtre optionnel sur L'EMAIL PRÉCIS dans cette séquence — sans
+        // lui, le test reste « n'importe quel email de la séquence » (ex.
+        // distinguer « a ouvert le rappel H-2 » de « a ouvert un email
+        // quelconque de la séquence du webinaire »). Sans effet si sequenceId
+        // n'est pas renseigné (cohérent avec l'UI, qui ne l'affiche qu'après
+        // le choix d'une séquence).
+        if (test.sequenceEmailId) {
+          query = query.eq("sequence_email_id", test.sequenceEmailId);
+        }
+        // 🆕 Filtre optionnel sur l'URL cliquée (kind='click' uniquement) —
+        // permet de distinguer « a cliqué CE lien précis » de « a cliqué un
+        // lien quelconque ». Comparaison insensible à la casse, substring.
+        if (test.type === "has_clicked_email" && test.urlContains?.trim()) {
+          query = query.ilike("url", `%${test.urlContains.trim()}%`);
         }
         const { count } = await query;
         return (count ?? 0) > 0;

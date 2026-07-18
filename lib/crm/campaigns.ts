@@ -22,10 +22,11 @@ export type CampaignInput = {
   content?: string;
 };
 
-/** Public de destinataires : tous, par statut, ou sélection d'ids. */
+/** Public de destinataires : tous, par statut, par tag, ou sélection d'ids. */
 export type Audience =
   | { type: "all" }
   | { type: "status"; status: LeadStatus }
+  | { type: "tag"; tagId: string }
   | { type: "ids"; ids: string[] };
 
 type Recipient = { id: string | null; email: string; name: string | null };
@@ -105,6 +106,28 @@ async function resolveRecipients(
   userId: string,
   audience: Audience,
 ): Promise<Recipient[]> {
+  // 🆕 Ciblage par tag : résolu à part via une jointure sur crm_contact_tags
+  // (nécessaire pour retrouver les ids de contacts portant ce tag avant de
+  // filtrer la table leads).
+  if (audience.type === "tag") {
+    const { data: links, error: linkErr } = await sb
+      .from("crm_contact_tags")
+      .select("contact_id")
+      .eq("user_id", userId)
+      .eq("tag_id", audience.tagId);
+    if (linkErr) throw new Error(linkErr.message);
+    const ids = Array.from(new Set((links ?? []).map((l) => l.contact_id as string)));
+    if (ids.length === 0) return [];
+    const { data, error } = await sb
+      .from("leads")
+      .select("id, email, name")
+      .eq("user_id", userId)
+      .not("email", "is", null)
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Recipient[]).filter((r) => !!r.email);
+  }
+
   let q = sb
     .from("leads")
     .select("id, email, name")

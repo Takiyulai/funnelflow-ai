@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listCampaigns } from "@/lib/crm/campaigns";
+import { listTags } from "@/lib/crm/tags";
 import { resendConfigured } from "@/lib/crm/email";
 import { EmailsModule } from "@/components/crm/EmailsModule";
 import type { Campaign } from "@/lib/crm/types";
@@ -31,11 +32,13 @@ export default async function EmailsPage({
   let campaigns: Campaign[] = [];
   let contactsCount = 0;
   let publishedFunnels: PublishedFunnelOpt[] = [];
+  // 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes.
+  let tags: { id: string; name: string }[] = [];
   // 🆕 LOT 3 — Ouvertures/clics par campagne (best-effort : {} si la migration
   // db/email-events-schema.sql n'est pas encore passée).
   const campaignStats: Record<string, { opens: number; clicks: number }> = {};
   try {
-    const [campaignsRes, contactsRes, publishedFunnelsRes] = await Promise.all([
+    const [campaignsRes, contactsRes, publishedFunnelsRes, tagsRes] = await Promise.all([
       listCampaigns(sb, user.id),
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       // Tunnels PUBLIÉS de l'utilisateur, pour rattacher une séquence (Étape 4).
@@ -45,12 +48,14 @@ export default async function EmailsPage({
         .eq("user_id", user.id)
         .eq("status", "published")
         .order("updated_at", { ascending: false }),
+      listTags(sb, user.id),
     ]);
     campaigns = campaignsRes;
     contactsCount = contactsRes.count ?? 0;
     publishedFunnels = (publishedFunnelsRes.data ?? []).map(
       (f: { id: string; name: string | null }) => ({ id: f.id, name: f.name || "Tunnel" }),
     );
+    tags = tagsRes.map((t) => ({ id: t.id, name: t.name }));
 
     // 🆕 LOT 3 — Stats open/click des campagnes (RPC SECURITY INVOKER → RLS).
     if (campaigns.length > 0) {
@@ -81,6 +86,7 @@ export default async function EmailsPage({
         initialTab={initialTab}
         publishedFunnels={publishedFunnels}
         campaignStats={campaignStats}
+        tags={tags}
       />
     </AppShell>
   );

@@ -24,9 +24,47 @@ import type {
   WorkflowStatus,
   WorkflowTriggerEvent,
 } from "@/lib/workflows/types";
+import { waitActionMs } from "@/lib/workflows/types";
+
+// 🆕 Aperçu chronologique — délai cumulé, en ms, AVANT que l'action à
+// `index` ne s'exécute (somme des "wait" qui la précèdent dans la même
+// liste). `baseMs` permet de partir d'un délai déjà accumulé (ex. une
+// branche de condition qui démarre après le délai du nœud parent).
+function offsetBeforeIndex(
+  actions: WorkflowActionConfig[],
+  index: number,
+  baseMs = 0,
+): number {
+  let ms = baseMs;
+  for (let j = 0; j < index; j++) {
+    const a = actions[j];
+    if (a.kind === "wait") ms += waitActionMs(a);
+  }
+  return ms;
+}
+
+/** Formate un délai en ms en libellé court (ex. « +3j 2h », « immédiat »). */
+function formatOffset(ms: number): string {
+  if (ms <= 0) return "Se déclenche immédiatement";
+  const totalMinutes = Math.round(ms / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}j`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes && !days) parts.push(`${minutes}min`);
+  return `Se déclenche à +${parts.join(" ")} du déclencheur`;
+}
 
 type FunnelOption = { id: string; name: string };
-type SequenceOption = { id: string; name: string };
+type SequenceOption = {
+  id: string;
+  name: string;
+  // 🆕 Alimente le sélecteur "quel email de cette séquence" dans l'éditeur de
+  // condition (has_opened_email/has_clicked_email + sequenceEmailId).
+  emails: { id: string; subject: string; position: number }[];
+};
 type TagOption = { id: string; name: string };
 
 type Props = {
@@ -63,6 +101,7 @@ const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
   "application.submitted": "Candidature soumise",
   "appointment.booked": "RDV réservé",
   "time.elapsed": "Délai écoulé après un autre événement",
+  "time.before_event": "Avant un événement daté (ex. webinaire live)",
   "email.link_clicked": "Lien cliqué dans un email",
   "page.visited": "Page visitée",
 };
@@ -83,12 +122,14 @@ const TRIGGER_EVENTS: WorkflowTriggerEvent[] = [
   "email.link_clicked",
   "page.visited",
   "time.elapsed",
+  "time.before_event",
 ];
 
-// 🆕 LOT 2 — Événements utilisables comme référence pour `time.elapsed`
-// (tous SAUF time.elapsed lui-même, qui ne peut pas se référencer).
+// 🆕 LOT 2 — Événements utilisables comme référence pour `time.elapsed` (tous
+// SAUF time.elapsed et time.before_event eux-mêmes, qui ne se déclenchent
+// jamais directement et ne peuvent donc pas être référencés).
 const TIME_ELAPSED_BASE_EVENTS: WorkflowTriggerEvent[] = TRIGGER_EVENTS.filter(
-  (e) => e !== "time.elapsed",
+  (e) => e !== "time.elapsed" && e !== "time.before_event",
 );
 
 // Événements dont le filtre principal est "s'applique à ce tunnel".
@@ -188,6 +229,14 @@ function describeTrigger(draft: Draft): string {
         .filter(Boolean)
         .join(" ") || "0h";
       return `${delay} après « ${TRIGGER_LABELS[draft.afterEvent]} ».`;
+    }
+    case "time.before_event": {
+      const delay = [draft.delayDays ? `${draft.delayDays}j` : null, draft.delayHours ? `${draft.delayHours}h` : null]
+        .filter(Boolean)
+        .join(" ") || "0h";
+      return draft.funnelId
+        ? `${delay} avant la date/heure de l'événement de ce tunnel.`
+        : `${delay} avant la date/heure de l'événement — choisis un tunnel ci-dessous.`;
     }
     case "purchase.completed":
       return `Un paiement est confirmé sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
@@ -305,15 +354,28 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
       trigger: {
         event: draft.triggerEvent,
         // On n'envoie que le filtre pertinent pour l'événement choisi.
-        funnelId: FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) ? draft.funnelId : null,
+        // 🆕 time.before_event : funnel OBLIGATOIRE (une date par tunnel), donc
+        // envoyé même si FUNNEL_FILTER_EVENTS ne le liste pas (celui-ci gère le
+        // cas "tous les tunnels", non applicable ici).
+        funnelId:
+          FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) ||
+          draft.triggerEvent === "time.before_event"
+            ? draft.funnelId
+            : null,
         tagId: draft.triggerEvent === "tag.added" ? draft.tagId : null,
         status: draft.triggerEvent === "status.changed" ? draft.triggerStatus : null,
         pageSlug: draft.triggerEvent === "page.visited" ? draft.pageSlug.trim() || null : null,
         linkLabel:
           draft.triggerEvent === "email.link_clicked" ? draft.linkLabel.trim() || null : null,
         afterEvent: draft.triggerEvent === "time.elapsed" ? draft.afterEvent : null,
-        delayDays: draft.triggerEvent === "time.elapsed" ? draft.delayDays : undefined,
-        delayHours: draft.triggerEvent === "time.elapsed" ? draft.delayHours : undefined,
+        delayDays:
+          draft.triggerEvent === "time.elapsed" || draft.triggerEvent === "time.before_event"
+            ? draft.delayDays
+            : undefined,
+        delayHours:
+          draft.triggerEvent === "time.elapsed" || draft.triggerEvent === "time.before_event"
+            ? draft.delayHours
+            : undefined,
       },
       actions: draft.actions,
     };
@@ -478,6 +540,12 @@ function WorkflowList({
       const delay = [d ? `${d}j` : null, h ? `${h}h` : null].filter(Boolean).join(" ") || "0h";
       const ref = wf.trigger.afterEvent ? TRIGGER_LABELS[wf.trigger.afterEvent] : "un événement";
       return `${label} · ${delay} après « ${ref} »`;
+    }
+    if (wf.trigger.event === "time.before_event") {
+      const d = wf.trigger.delayDays ?? 0;
+      const h = wf.trigger.delayHours ?? 0;
+      const delay = [d ? `${d}j` : null, h ? `${h}h` : null].filter(Boolean).join(" ") || "0h";
+      return `${label} · ${delay} avant · ${funnelName(wf.trigger.funnelId)}`;
     }
     if (FUNNEL_FILTER_EVENTS.includes(wf.trigger.event))
       return `${label} · ${funnelName(wf.trigger.funnelId)}`;
@@ -754,6 +822,81 @@ function WorkflowEditor({
           </div>
         )}
 
+        {/* 🆕 time.before_event — tunnel OBLIGATOIRE (pas de "tous les tunnels" :
+            l'heure de l'événement est propre à CE tunnel) + délai avant cette date. */}
+        {draft.triggerEvent === "time.before_event" && (
+          <div className="grid gap-3">
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">
+                Tunnel (obligatoire)
+              </span>
+              <select
+                value={draft.funnelId ?? ""}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, funnelId: e.target.value || null }))
+                }
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+              >
+                <option value="">— Choisir le tunnel —</option>
+                {funnels.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              {!draft.funnelId && (
+                <p className="mt-1 text-xs text-red-500">
+                  Sans tunnel choisi, ce déclencheur ne programmera jamais rien.
+                </p>
+              )}
+              <p className="mt-1 text-[11px] text-muted">
+                Utilise la date/heure du webinaire renseignée sur ce tunnel (mode
+                Live). Le rappel est programmé dès l'inscription — si quelqu'un
+                s'inscrit après ce point (trop proche ou après le live), aucun
+                rappel n'est envoyé pour lui.
+              </p>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">Délai avant l'événement</span>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={draft.delayDays}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      delayDays: Math.min(365, Math.max(0, Number(e.target.value) || 0)),
+                    }))
+                  }
+                  className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                  aria-label="Jours"
+                />
+                j
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={draft.delayHours}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      delayHours: Math.min(23, Math.max(0, Number(e.target.value) || 0)),
+                    }))
+                  }
+                  className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                  aria-label="Heures"
+                />
+                h
+              </div>
+              {draft.delayDays + draft.delayHours <= 0 && (
+                <p className="mt-1 text-xs text-red-500">Le délai doit être d’au moins 1 heure.</p>
+              )}
+            </label>
+          </div>
+        )}
+
         {draft.triggerEvent === "tag.added" && (
           <label className="block">
             <span className="text-xs font-bold uppercase text-muted">
@@ -832,6 +975,8 @@ function WorkflowEditor({
           {draft.actions.map((action, i) => {
             const Meta = ACTION_META[action.kind];
             const Icon = Meta.icon;
+            // 🆕 Aperçu chronologique : délai cumulé depuis le déclencheur.
+            const offsetMs = offsetBeforeIndex(draft.actions, i);
             return (
               <TimelineNode
                 key={i}
@@ -842,6 +987,7 @@ function WorkflowEditor({
                     <Icon size={14} /> {Meta.label}
                   </span>
                 }
+                subtitle={formatOffset(offsetMs)}
                 hasNext
                 onMoveUp={i > 0 ? () => onMoveAction(i, -1) : undefined}
                 onMoveDown={
@@ -853,6 +999,7 @@ function WorkflowEditor({
                   action={action}
                   sequences={sequences}
                   tags={tags}
+                  baseOffsetMs={offsetMs}
                   onChange={(next) => onUpdateAction(i, next)}
                 />
               </TimelineNode>
@@ -1008,11 +1155,14 @@ function ActionConfigFields({
   sequences,
   tags,
   onChange,
+  baseOffsetMs = 0,
 }: {
   action: WorkflowActionConfig;
   sequences: SequenceOption[];
   tags: TagOption[];
   onChange: (next: WorkflowActionConfig) => void;
+  /** 🆕 Délai déjà accumulé jusqu'à ce nœud (aperçu chronologique). */
+  baseOffsetMs?: number;
 }) {
   return (
     <div className="mt-3">
@@ -1056,20 +1206,26 @@ function ActionConfigFields({
               <strong>Emails</strong>, puis revenez l’ajouter ici.
             </p>
           ) : (
-            <select
-              value={action.sequenceId}
-              onChange={(e) =>
-                onChange({ kind: "enroll_in_sequence", sequenceId: e.target.value })
-              }
-              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
-            >
-              <option value="">— Choisir une séquence —</option>
-              {sequences.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <div className="grid gap-1.5">
+              <select
+                value={action.sequenceId}
+                onChange={(e) =>
+                  onChange({ kind: "enroll_in_sequence", sequenceId: e.target.value })
+                }
+                className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+              >
+                <option value="">— Choisir une séquence —</option>
+                {sequences.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted">
+                Respecte les « Attendre » placés avant : tous les emails de la
+                séquence démarrent décalés d'autant.
+              </p>
+            </div>
           ))}
 
         {action.kind === "notify_owner" && (
@@ -1187,6 +1343,7 @@ function ActionConfigFields({
             sequences={sequences}
             tags={tags}
             onChange={onChange}
+            baseOffsetMs={baseOffsetMs}
           />
         )}
       </div>
@@ -1205,11 +1362,13 @@ function ConditionFields({
   sequences,
   tags,
   onChange,
+  baseOffsetMs = 0,
 }: {
   action: ConditionAction;
   sequences: SequenceOption[];
   tags: TagOption[];
   onChange: (next: WorkflowActionConfig) => void;
+  baseOffsetMs?: number;
 }) {
   const test = action.test;
 
@@ -1314,7 +1473,7 @@ function ConditionFields({
               value={test.sinceDays ?? 0}
               onChange={(e) => {
                 const n = Math.min(365, Math.max(0, Number(e.target.value) || 0));
-                setTest({ type: test.type, sinceDays: n > 0 ? n : undefined });
+                setTest({ ...test, sinceDays: n > 0 ? n : undefined });
               }}
               className="w-20 rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
               aria-label="Jours"
@@ -1323,6 +1482,81 @@ function ConditionFields({
           </label>
         )}
       </div>
+
+      {/* 🆕 Précision du test : par défaut « n'importe quel email envoyé » —
+          ce qui rend « a ouvert/cliqué » assez approximatif pour des relances
+          ciblées. On peut restreindre à UNE séquence précise, et pour un clic,
+          à une URL précise (ex. le lien de la page de vente). */}
+      {(test.type === "has_opened_email" || test.type === "has_clicked_email") && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-xs text-muted">Limiter à une séquence (optionnel)</span>
+            <select
+              value={test.sequenceId ?? ""}
+              onChange={(e) =>
+                // 🆕 On efface sequenceEmailId au changement de séquence : un
+                // id d'email pointant vers l'ancienne séquence n'aurait plus
+                // de sens (ni de correspondance) pour la nouvelle.
+                setTest({
+                  ...test,
+                  sequenceId: e.target.value || undefined,
+                  sequenceEmailId: undefined,
+                })
+              }
+              className="mt-1 w-full rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+            >
+              <option value="">N'importe quel email</option>
+              {sequences.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {test.type === "has_clicked_email" && (
+            <label className="block">
+              <span className="text-xs text-muted">Le lien contient (optionnel)</span>
+              <input
+                value={test.urlContains ?? ""}
+                onChange={(e) => setTest({ ...test, urlContains: e.target.value || undefined })}
+                placeholder="Ex. /checkout ou le nom de domaine de paiement"
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+              />
+            </label>
+          )}
+          {/* 🆕 Une fois une séquence choisie, on peut cibler UN email précis
+              de cette séquence (ex. le rappel H-2) plutôt que « n'importe
+              lequel de ses emails ». */}
+          {test.sequenceId && (
+            <label className="block sm:col-span-2">
+              <span className="text-xs text-muted">Limiter à un email précis de cette séquence (optionnel)</span>
+              <select
+                value={test.sequenceEmailId ?? ""}
+                onChange={(e) => setTest({ ...test, sequenceEmailId: e.target.value || undefined })}
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+              >
+                <option value="">N'importe quel email de la séquence</option>
+                {(sequences.find((s) => s.id === test.sequenceId)?.emails ?? []).map((em) => (
+                  <option key={em.id} value={em.id}>
+                    Email {em.position + 1} — {em.subject}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
+      {test.type === "has_clicked_email" && (
+        <p className="rounded-lg bg-canvas px-3 py-2 text-[11px] text-muted">
+          Sans précision, « a cliqué un email » et « a cliqué le lien
+          d'achat » ne sont pas différenciables. Pour un webinaire, il
+          n'existe pas encore de vrai suivi de présence au live : le
+          contournement le plus fiable est de filtrer ici sur le lien «
+          Rejoindre le live » envoyé dans ton rappel (ex. « Le lien contient »
+          → un bout d'URL unique à ce lien).
+        </p>
+      )}
 
       <label className="flex items-center gap-2 text-xs text-muted">
         <input
@@ -1340,13 +1574,14 @@ function ConditionFields({
         respectent les « Attendre » placés avant la condition.
       </p>
 
-      {/* Branches */}
+      {/* Branches — héritent du délai déjà accumulé jusqu'à cette condition. */}
       <ConditionBranch
         label="SI OUI"
         tone="green"
         actions={action.then}
         sequences={sequences}
         tags={tags}
+        baseOffsetMs={baseOffsetMs}
         onChange={(a) => setBranch("then", a)}
       />
       <ConditionBranch
@@ -1355,6 +1590,7 @@ function ConditionFields({
         actions={action.otherwise}
         sequences={sequences}
         tags={tags}
+        baseOffsetMs={baseOffsetMs}
         onChange={(a) => setBranch("otherwise", a)}
       />
     </div>
@@ -1368,6 +1604,7 @@ function ConditionBranch({
   sequences,
   tags,
   onChange,
+  baseOffsetMs = 0,
 }: {
   label: string;
   tone: "green" | "red";
@@ -1375,6 +1612,8 @@ function ConditionBranch({
   sequences: SequenceOption[];
   tags: TagOption[];
   onChange: (actions: WorkflowActionConfig[]) => void;
+  /** 🆕 Délai déjà accumulé jusqu'à la condition qui contient cette branche. */
+  baseOffsetMs?: number;
 }) {
   const toneCls =
     tone === "green"
@@ -1399,6 +1638,9 @@ function ConditionBranch({
         {actions.map((a, i) => {
           const Meta = ACTION_META[a.kind];
           const Icon = Meta.icon;
+          // 🆕 Aperçu chronologique : part du délai déjà accumulé par le
+          // parent (la condition), plus les "wait" précédents DANS la branche.
+          const offsetMs = offsetBeforeIndex(actions, i, baseOffsetMs);
           return (
             <div key={i} className="rounded-lg border border-line bg-surface p-3">
               <div className="flex items-center justify-between gap-2">
@@ -1414,10 +1656,12 @@ function ConditionBranch({
                   <Trash2 size={12} />
                 </button>
               </div>
+              <p className="mt-0.5 text-[10px] text-muted">{formatOffset(offsetMs)}</p>
               <ActionConfigFields
                 action={a}
                 sequences={sequences}
                 tags={tags}
+                baseOffsetMs={offsetMs}
                 onChange={(next) => onChange(actions.map((x, j) => (j === i ? next : x)))}
               />
             </div>

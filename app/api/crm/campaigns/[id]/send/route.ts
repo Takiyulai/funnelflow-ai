@@ -1,6 +1,6 @@
 // app/api/crm/campaigns/[id]/send/route.ts
 // POST → envoie la campagne via Resend. Body : { audience }.
-//   audience = { type:"all" } | { type:"status", status } | { type:"ids", ids:[] }
+//   audience = { type:"all" } | { type:"status", status } | { type:"tag", tagId } | { type:"ids", ids:[] }
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";

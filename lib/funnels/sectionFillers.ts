@@ -464,11 +464,14 @@ export function tryFillSectionFromBrief(
       return true;
 
     case "about": {
+      // 🆕 Le nom de la personne (si saisi dans le wizard) prime sur le nom
+      // de marque pour le titre de la section "à propos" — plus personnel.
+      const aboutSubject = brief.authorName?.trim() || brief.brandName;
       const aboutTitle = lang === "fr"
-        ? `À propos de ${brief.brandName}`
+        ? `À propos de ${aboutSubject}`
         : lang === "es"
-          ? `Acerca de ${brief.brandName}`
-          : `About ${brief.brandName}`;
+          ? `Acerca de ${aboutSubject}`
+          : `About ${aboutSubject}`;
 
       // 🆕 Priorité 0 : si l'IA a DÉJÀ rédigé un corps (version enrichie via le
       // bloc « à propos » du prompt), on le GARDE — on ne l'écrase plus avec le
@@ -499,11 +502,7 @@ export function tryFillSectionFromBrief(
           : `${brief.brandName} helps ${brief.targetAudience || "its clients"} ${brief.promise || "reach their goals"}. Our approach combines a proven method with personalized support for concrete, lasting results.`;
       section.body = generated;
       if (!section.headline?.trim()) {
-        section.headline = lang === "fr"
-          ? `À propos de ${brief.brandName}`
-          : lang === "es"
-            ? `Acerca de ${brief.brandName}`
-            : `About ${brief.brandName}`;
+        section.headline = aboutTitle;
       }
       return true;
     }
@@ -531,6 +530,25 @@ export function tryFillSectionFromBrief(
     case "program":
     case "benefits":
     case "process": {
+      // 🆕 Cas 0 : bénéfices clés saisis manuellement dans le wizard (liste
+      // dynamique +/-) → priment TOUJOURS sur la génération générique, même
+      // si des items existent déjà (l'utilisateur a explicitement remplacé
+      // le contenu par défaut).
+      if (section.type === "benefits" && brief.keyBenefits && brief.keyBenefits.length > 0) {
+        const custom = brief.keyBenefits
+          .map((b) => b.trim())
+          .filter((b) => b.length > 0);
+        if (custom.length > 0) {
+          section.items = custom.map((title) => ({
+            kind: "bonus" as const,
+            data: { title },
+          }));
+          if (!section.headline?.trim()) {
+            section.headline = defaultSectionHeadline(section.type, lang);
+          }
+          return true;
+        }
+      }
       // Cas 1 : items existent mais pauvres → enrichir
       if (Array.isArray(section.items) && section.items.length > 0) {
         const enriched = enrichPoorItems(section, brief);
@@ -561,6 +579,33 @@ export function tryFillSectionFromBrief(
     }
 
     case "guarantee": {
+      // 🆕 Garantie saisie manuellement dans le wizard → prime sur la
+      // génération générique (au moins un des 3 champs doit être rempli).
+      if (brief.guaranteeTitle?.trim() || brief.guaranteeDescription?.trim()) {
+        const fallbackTitle = lang === "fr"
+          ? "Satisfait ou remboursé"
+          : lang === "es"
+            ? "Satisfacción garantizada"
+            : "Money-back guarantee";
+        section.items = [
+          {
+            kind: "guarantee" as const,
+            data: {
+              title: brief.guaranteeTitle?.trim() || fallbackTitle,
+              description: brief.guaranteeDescription?.trim() || undefined,
+              duration: brief.guaranteeDuration?.trim() || undefined,
+            },
+          } as SectionItem,
+        ];
+        if (!section.headline?.trim()) {
+          section.headline = lang === "fr"
+            ? "Notre garantie"
+            : lang === "es"
+              ? "Nuestra garantía"
+              : "Our guarantee";
+        }
+        return true;
+      }
       // Si items existent mais pauvres → enrichir
       if (Array.isArray(section.items) && section.items.length > 0) {
         const enriched = enrichPoorItems(section, brief);
@@ -652,6 +697,21 @@ export function tryFillSectionFromBrief(
 
     // 🆕 Sous-étape C : urgence / rareté légitime avant le CTA final
     case "urgency": {
+      // 🆕 Urgence saisie manuellement dans le wizard → prime sur le texte
+      // générique (sauf si l'IA a déjà rédigé un corps substantiel — cf.
+      // même logique que "about" ci-dessus).
+      if (
+        brief.urgencyText?.trim() &&
+        (!section.body?.trim() || section.body.trim().length < 30)
+      ) {
+        section.body = brief.urgencyText.trim();
+        if (!section.headline?.trim()) {
+          section.headline = lang === "fr"
+            ? "L'offre ne durera pas"
+            : lang === "es" ? "La oferta no durará" : "This offer won't last";
+        }
+        return true;
+      }
       if (!section.body?.trim()) {
         section.body = lang === "fr"
           ? "Cette offre n'est pas éternelle : les places et les conditions actuelles sont limitées. Agissez maintenant pour ne pas repartir les mains vides."

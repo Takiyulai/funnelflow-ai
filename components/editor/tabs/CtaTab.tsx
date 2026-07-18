@@ -66,9 +66,25 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
     }
   };
 
+  // 🆕 FIX bug "action commune figée" : `funnel.defaultCta` n'était copié
+  // qu'au moment où la case "Appliquer à tous les CTA" était cochée. Toute
+  // modification ultérieure du bouton (changement de mode, suppression de
+  // l'URL de redirection, retour au popup interne…) ne se répercutait JAMAIS
+  // sur `defaultCta` : tous les CTA de la page restaient donc bloqués sur la
+  // DERNIÈRE valeur enregistrée (ex : une redirection externe qu'on croyait
+  // pourtant avoir supprimée). `applyCta` est désormais le SEUL chemin qui
+  // modifie l'action d'un bouton ; tant que l'action commune est active pour
+  // CE bouton, elle resynchronise `defaultCta` à chaque changement.
+  const applyCta = (nextCta: CtaConfig) => {
+    onChange({ cta: nextCta });
+    if (funnel.meta?.applyDefaultCtaToAll === true && !nextCta.ignoreGlobalCta) {
+      onFunnelChange({ defaultCta: { ...nextCta } });
+    }
+  };
+
   const updateCta = (patch: Partial<CtaConfig>) => {
     if (!cta) return;
-    onChange({ cta: { ...cta, ...patch } });
+    applyCta({ ...cta, ...patch });
   };
 
   const updateSpacing = (patch: Partial<CtaSpacing>) => {
@@ -87,7 +103,7 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
 
   const setPopupFields = (fields: FormFieldItem[]) => {
     if (!cta) return;
-    onChange({ cta: { ...cta, popupFields: fields } });
+    applyCta({ ...cta, popupFields: fields });
   };
 
   const addPopupField = () => {
@@ -121,40 +137,35 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
       label: cta.label,
       icon: cta.icon,
       spacing: cta.spacing,
+      ignoreGlobalCta: cta.ignoreGlobalCta,
     };
     if (mode === "redirect") {
-      onChange({
-        cta: {
-          ...preserved,
-          mode: "redirect",
-          url: cta.url ?? "",
-          target: cta.target ?? "_blank",
-        },
+      applyCta({
+        ...preserved,
+        mode: "redirect",
+        url: cta.url ?? "",
+        target: cta.target ?? "_blank",
       });
     } else if (mode === "anchor") {
-      onChange({
-        cta: {
-          ...preserved,
-          mode: "anchor",
-          anchorId: cta.anchorId ?? "lead-form",
-          target: "_self",
-        },
+      applyCta({
+        ...preserved,
+        mode: "anchor",
+        anchorId: cta.anchorId ?? "lead-form",
+        target: "_self",
       });
     } else if (mode === "popup") {
-      onChange({
-        cta: {
-          ...preserved,
-          mode: "popup",
-          popupProvider: cta.popupProvider ?? "internal",
-          popupId: cta.popupId ?? `popup-${section.id}`,
-          popupTitle: cta.popupTitle ?? "Recevez votre accès",
-          popupBody:
-            cta.popupBody ??
-            "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
-          popupEmbedHtml: cta.popupEmbedHtml ?? "",
-          systemePopupId: cta.systemePopupId ?? "",
-          popupFields: cta.popupFields,
-        },
+      applyCta({
+        ...preserved,
+        mode: "popup",
+        popupProvider: cta.popupProvider ?? "internal",
+        popupId: cta.popupId ?? `popup-${section.id}`,
+        popupTitle: cta.popupTitle ?? "Recevez votre accès",
+        popupBody:
+          cta.popupBody ??
+          "Laissez vos coordonnées, l'accès vous est envoyé immédiatement.",
+        popupEmbedHtml: cta.popupEmbedHtml ?? "",
+        systemePopupId: cta.systemePopupId ?? "",
+        popupFields: cta.popupFields,
       });
     }
   };

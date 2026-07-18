@@ -40,6 +40,9 @@ type DueRow = {
   source_type: string | null;
   campaign_id: string | null;
   sequence_id: string | null;
+  // 🆕 Email précis dans la séquence (permet aux conditions workflow de
+  // cibler "cet email" plutôt que "un email quelconque de la séquence").
+  sequence_email_id: string | null;
 };
 
 function authorized(request: Request): boolean {
@@ -56,7 +59,7 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
   const { data, error } = await sb
     .from("scheduled_emails")
     .select(
-      "id, user_id, funnel_id, contact_id, recipient_email, subject, content, source_type, campaign_id, sequence_id",
+      "id, user_id, funnel_id, contact_id, recipient_email, subject, content, source_type, campaign_id, sequence_id, sequence_email_id",
     )
     .eq("status", "pending")
     .lte("scheduled_at", nowIso)
@@ -104,6 +107,7 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
       sourceType: row.source_type,
       campaignId: row.campaign_id,
       sequenceId: row.sequence_id,
+      sequenceEmailId: row.sequence_email_id,
     };
     const html = appendOpenTrackingPixel(
       wrapEmailLinksForTracking(row.content || "", tracking),

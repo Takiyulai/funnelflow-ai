@@ -1,7 +1,7 @@
 // app/api/crm/campaigns/[id]/schedule/route.ts
 // POST → PROGRAMME l'envoi d'une newsletter (ne l'envoie pas tout de suite).
 //   Body : { audience, scheduledAt }
-//   audience = { type:"all" } | { type:"status", status } | { type:"ids", ids:[] }
+//   audience = { type:"all" } | { type:"status", status } | { type:"tag", tagId } | { type:"ids", ids:[] }
 //   scheduledAt = ISO string (date/heure future)
 // Les emails concrets sont écrits dans `scheduled_emails` ; le cron les enverra.
 

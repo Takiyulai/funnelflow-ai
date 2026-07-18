@@ -16,6 +16,9 @@ export const dynamic = "force-dynamic";
 const emailSchema = z.object({
   position: z.coerce.number().int().min(0).default(0),
   delay_days: z.coerce.number().int().min(0).max(365).default(0),
+  // 🆕 Voir app/api/crm/sequences/route.ts — même piège de schéma qui retire
+  // silencieusement tout champ non listé ici avant l'enregistrement.
+  delay_hours: z.coerce.number().int().min(0).max(23).default(0),
   subject: z.string().default(""),
   content: z.string().default(""),
 });

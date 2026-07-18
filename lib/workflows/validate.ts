@@ -19,10 +19,19 @@ const conditionTestSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("has_opened_email"),
     sinceDays: z.number().int().min(1).max(365).optional(),
+    // 🆕 Sans cette entrée, sequenceId serait silencieusement retiré par ce
+    // schéma (z.object non-strict) avant d'atteindre la base — même piège que
+    // briefSchema (cf. autofunnel-zod-brief-schema-gap).
+    sequenceId: z.string().uuid().optional(),
+    // 🆕 Même piège pour sequenceEmailId (email précis dans la séquence).
+    sequenceEmailId: z.string().uuid().optional(),
   }),
   z.object({
     type: z.literal("has_clicked_email"),
     sinceDays: z.number().int().min(1).max(365).optional(),
+    sequenceId: z.string().uuid().optional(),
+    sequenceEmailId: z.string().uuid().optional(),
+    urlContains: z.string().trim().min(1).max(500).optional(),
   }),
 ]);
 
@@ -106,6 +115,7 @@ const triggerEventEnum = z.enum([
   "application.submitted",
   "appointment.booked",
   "time.elapsed",
+  "time.before_event",
   "email.link_clicked",
   "page.visited",
 ]);
@@ -137,6 +147,23 @@ export const workflowInputSchema = z.object({
             code: z.ZodIssueCode.custom,
             path: ["afterEvent"],
             message: "Choisis l'événement de référence.",
+          });
+        }
+        if ((t.delayDays ?? 0) + (t.delayHours ?? 0) <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["delayDays"],
+            message: "Le délai doit être d'au moins 1 heure.",
+          });
+        }
+      }
+      // 🆕 time.before_event : funnel obligatoire (une date par tunnel) + délai > 0.
+      if (t.event === "time.before_event") {
+        if (!t.funnelId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["funnelId"],
+            message: "Choisis le tunnel dont l'événement daté doit être utilisé.",
           });
         }
         if ((t.delayDays ?? 0) + (t.delayHours ?? 0) <= 0) {

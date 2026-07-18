@@ -169,6 +169,26 @@ export function TemplateThemeProvider({
 
   // ─── Variables CSS injectées au root ─────────────────────────────────────
   const inlineVars: Record<string, string> = {};
+  // 🆕 FIX contraste (diagnostic navigateur, capture à l'appui — "Événement
+  // Dark" affichait un texte bleu-nuit illisible sur son hero, alors que la
+  // section "problem" juste en dessous était correcte) : `app/globals.css`
+  // définit `--ff-brand-ink: #080E1A` au `:root` du DASHBOARD (couleur de
+  // marque AutoFunnel AI pour l'UI de l'app — sidebar, boutons…), SANS
+  // rapport avec la marque du TUNNEL. Le skin factory (factory.tsx,
+  // `brandAware()`) consomme `var(--ff-brand-ink, <ink du template>)` en
+  // supposant cette variable ABSENTE tant qu'aucune marque de tunnel n'est
+  // active — mais comme le :root du dashboard la définit TOUJOURS, le
+  // fallback `<ink du template>` ne se déclenche jamais : chaque section
+  // pilotée par le skin factory (hero, cartes, témoignages, pricing, faq,
+  // cta) héritait de ce bleu-nuit du dashboard au lieu de l'encre du
+  // template. Invisible sur les templates clairs (bleu-nuit ≈ lisible sur
+  // fond blanc, coïncidence), mais illisible sur les templates sombres
+  // (bleu-nuit sur fond sombre : story-sell, etc.). On neutralise donc CETTE
+  // fuite ICI, à la racine du tunnel : `initial` réinitialise la variable
+  // pour tout le sous-arbre du tunnel, ce qui réactive le fallback du skin
+  // factory. Le bloc plus bas (`if (overrides?.bg)`) reprend la main dessus
+  // avec la VRAIE couleur de marque du tunnel quand elle est active.
+  inlineVars["--ff-brand-ink"] = "initial";
   if (overrides?.primary) inlineVars["--ff-primary"] = overrides.primary;
   if (overrides?.accent) {
     inlineVars["--ff-accent"] = overrides.accent;

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, CheckCircle2, Download, Globe2, Sparkles, Upload,
   Clock, Smartphone, Shield, Mail, Users, Briefcase, Palette,
   MessageCircle, Star, Eye, Layers, ChevronDown, Rocket, BarChart3,
   Target, Wand2, FileCode2, Gauge, MousePointerClick, Settings2,
-  Send, LineChart, Menu, X,
+  Send, LineChart, Menu, X, Search, PenTool, Handshake,
 } from "lucide-react";
 
 
@@ -71,7 +71,7 @@ const translations = {
       titleMid: "qui transforme votre offre en",
       titleEnd: "machine de vente",
       desc: "Tunnel, CRM, emails, automatisations, import intelligent, scoring leads et optimisation conversion : une équipe d'agents IA spécialisés construit toute ta machine de vente, à partir d'une simple description de ton offre.",
-      ctaPrimary: "Lancer mes agents IA",
+      ctaPrimary: "Créer mon tunnel",
       ctaSecondary: "Voir comment ça marche",
       proofBar: ["Tunnel premium généré", "CRM + scoring leads intégrés", "Emails & automatisations", "Tout dans l'app, export en bonus"],
       footnote: "Tout vit dans AutoFunnel AI : création, publication, leads, CRM et relances. L'export systeme.io reste un bonus de sortie.",
@@ -130,6 +130,20 @@ const translations = {
         { step: "02", title: "Choisissez votre angle", desc: "Ton, positionnement et type de tunnel adaptés à votre marché." },
         { step: "03", title: "Laissez l'IA structurer", desc: "Pages, sections, copywriting et séquence email générés en cohérence." },
         { step: "04", title: "Ajustez et publiez", desc: "Modifiez ce qui doit l'être, exportez vers systeme.io ou en HTML." },
+      ],
+    },
+
+    // 🆕 Équipe IA — met en scène les expertises qui travaillent le tunnel,
+    // avec un nom propre à chacune (pas de répétition du mot "agent").
+    team: {
+      tag: "Derrière le tunnel",
+      title: "Une équipe IA, pas un simple générateur.",
+      desc: "Chaque tunnel passe entre plusieurs expertises IA, chacune concentrée sur sa mission.",
+      members: [
+        { name: "L'Analyste", role: "Stratégie", desc: "Étudie votre offre et votre audience, puis choisit la structure de tunnel la plus adaptée à votre marché." },
+        { name: "Le Rédacteur", role: "Copywriting", desc: "Rédige accroches, bénéfices et appels à l'action selon les principes du copywriting qui convertit." },
+        { name: "Le Designer", role: "Mise en page", desc: "Habille le tunnel dans un rendu mobile-first, sobre et cohérent avec votre marque." },
+        { name: "Le Closer", role: "Conversion & suivi", desc: "Branche la capture de leads, le CRM et les relances automatiques : le travail ne s'arrête pas à la page publiée." },
       ],
     },
 
@@ -302,7 +316,7 @@ const translations = {
       titleMid: "that turns your offer into a",
       titleEnd: "sales machine",
       desc: "Funnel, CRM, emails, automations, smart import, lead scoring and conversion optimization: a team of specialized AI agents builds your entire sales machine from a simple description of your offer.",
-      ctaPrimary: "Launch my AI agents",
+      ctaPrimary: "Build my funnel",
       ctaSecondary: "See how it works",
       proofBar: ["Premium funnel generated", "Built-in CRM + lead scoring", "Emails & automations", "All in-app, export as a bonus"],
       footnote: "Everything lives inside AutoFunnel AI: creation, publishing, leads, CRM and follow-ups. The systeme.io export stays a bonus.",
@@ -357,6 +371,18 @@ const translations = {
         { step: "02", title: "Choose your angle", desc: "Tone, positioning and funnel type that fit your market." },
         { step: "03", title: "Let the AI structure", desc: "Pages, sections, copy and email sequence generated coherently." },
         { step: "04", title: "Adjust and publish", desc: "Edit what needs to be edited, export to systeme.io or as HTML." },
+      ],
+    },
+
+    team: {
+      tag: "Behind the funnel",
+      title: "A team of AI specialists, not just a generator.",
+      desc: "Every funnel passes through several AI specialists, each focused on a single mission.",
+      members: [
+        { name: "The Analyst", role: "Strategy", desc: "Studies your offer and audience, then picks the funnel structure best suited to your market." },
+        { name: "The Writer", role: "Copywriting", desc: "Writes hooks, benefits and CTAs based on copy that's built to convert, not to fill space." },
+        { name: "The Designer", role: "Layout", desc: "Dresses the funnel in a mobile-first, clean layout aligned with your brand." },
+        { name: "The Closer", role: "Conversion & follow-up", desc: "Wires up lead capture, CRM and automated follow-ups: the work doesn't stop at the published page." },
       ],
     },
 
@@ -514,7 +540,7 @@ const translations = {
       titleMid: "que convierte tu oferta en una",
       titleEnd: "máquina de ventas",
       desc: "Embudo, CRM, emails, automatizaciones, importación inteligente, scoring de leads y optimización de conversión: un equipo de agentes IA especializados construye toda tu máquina de ventas a partir de una simple descripción de tu oferta.",
-      ctaPrimary: "Lanzar mis agentes IA",
+      ctaPrimary: "Crear mi embudo",
       ctaSecondary: "Ver cómo funciona",
       proofBar: ["Embudo premium generado", "CRM + scoring de leads", "Emails y automatizaciones", "Todo en la app, exportar es un extra"],
       footnote: "Todo vive dentro de AutoFunnel AI: creación, publicación, leads, CRM y seguimientos. La exportación a systeme.io es un extra.",
@@ -569,6 +595,18 @@ const translations = {
         { step: "02", title: "Elige tu ángulo", desc: "Tono, posicionamiento y tipo de embudo adaptados a tu mercado." },
         { step: "03", title: "Deja que la IA estructure", desc: "Páginas, secciones, copy y secuencia de emails generados con coherencia." },
         { step: "04", title: "Ajusta y publica", desc: "Modifica lo necesario y exporta a systeme.io o en HTML." },
+      ],
+    },
+
+    team: {
+      tag: "Detrás del embudo",
+      title: "Un equipo de IA, no un simple generador.",
+      desc: "Cada embudo pasa por varias especialidades de IA, cada una centrada en su misión.",
+      members: [
+        { name: "El Analista", role: "Estrategia", desc: "Estudia tu oferta y tu audiencia, y elige la estructura de embudo más adecuada para tu mercado." },
+        { name: "El Redactor", role: "Copywriting", desc: "Redacta ganchos, beneficios y CTAs siguiendo los principios del copy que convierte." },
+        { name: "El Diseñador", role: "Maquetación", desc: "Viste el embudo con un acabado mobile-first, sobrio y coherente con tu marca." },
+        { name: "El Closer", role: "Conversión y seguimiento", desc: "Conecta la captura de leads, el CRM y los seguimientos automáticos: el trabajo no termina en la página publicada." },
       ],
     },
 
@@ -717,6 +755,7 @@ const translations = {
 const PROBLEM_ICONS = [Clock, Smartphone, Target, Settings2];
 const PILLAR_ICONS = [Gauge, Target, MousePointerClick, FileCode2, Smartphone];
 const STEP_ICONS = [Wand2, Palette, Sparkles, Send];
+const TEAM_ICONS = [Search, PenTool, Palette, Handshake];
 const FEATURE_GROUP_ICONS = [Wand2, Send, LineChart];
 const TEMPLATE_ICONS = [Mail, Download, Users, Briefcase, Layers];
 const ACCENT = ["#08498D", "#31845C", "#C7A436"];
@@ -726,6 +765,134 @@ const PRICING_COLORS = ["#08498D", "#31845C", "#C7A436"];
 // ─────────────────────────────────────────────────────────────────────────────
 // Small UI atoms
 // ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Compteur animé (count-up) déclenché à l'entrée en vue.
+function CountUp({ to, duration = 1500, suffix = "" }: { to: number; duration?: number; suffix?: string }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    if (to <= 0) { setN(0); return; }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setN(Math.round(to * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, to, duration]);
+  return <span ref={ref}>{n.toLocaleString("fr-FR")}{suffix}</span>;
+}
+
+// 🆕 Bande de PREUVE SOCIALE : compteurs réels (tunnels générés, leads
+// capturés) + faits produit différenciants (< 5 min, 0 outil externe).
+function StatsBand({ lang }: { lang: "fr" | "en" | "es" }) {
+  const [stats, setStats] = useState<{ funnels: number; leads: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/stats/public")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d) setStats({ funnels: d.funnels ?? 0, leads: d.leads ?? 0 });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const L = {
+    fr: { funnels: "Tunnels générés", leads: "Leads capturés", fast: "Pour un tunnel complet", ext: "Outil externe requis" },
+    en: { funnels: "Funnels generated", leads: "Leads captured", fast: "For a full funnel", ext: "External tool needed" },
+    es: { funnels: "Embudos generados", leads: "Leads capturados", fast: "Para un embudo completo", ext: "Herramienta externa" },
+  }[lang];
+  const cell = (big: React.ReactNode, label: string, key: React.Key) => (
+    <div key={key} className="flex flex-col items-center px-4 py-1">
+      <span className="ff-title" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", fontWeight: 700, color: "#fff", lineHeight: 1 }}>{big}</span>
+      <span className="ff-body mt-2" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", textAlign: "center" }}>{label}</span>
+    </div>
+  );
+  return (
+    <section style={{ background: "#080E1A", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-9">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 divide-y-0 md:divide-x" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+          {cell(<><CountUp to={stats?.funnels ?? 0} />{stats && stats.funnels > 0 ? "+" : ""}</>, L.funnels, "f")}
+          {cell(<><CountUp to={stats?.leads ?? 0} />{stats && stats.leads > 0 ? "+" : ""}</>, L.leads, "l")}
+          {cell(<span style={{ color: "#C7A436" }}>&lt; 5 min</span>, L.fast, "t")}
+          {cell(<span style={{ color: "#31845C" }}>0</span>, L.ext, "e")}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// 🆕 Comparatif « AutoFunnel AI vs générateurs de pages seuls » — argument
+// massue : ce qu'ils N'ONT PAS (CRM, emails, automatisations, publication).
+function ComparisonTable({ lang }: { lang: "fr" | "en" | "es" }) {
+  const L = {
+    fr: {
+      title: "AutoFunnel AI vs générateurs de pages seuls",
+      us: "AutoFunnel AI", them: "Générateurs de pages",
+      rows: [
+        { f: "Génération IA du tunnel", them: true },
+        { f: "Copywriting orienté conversion", them: true },
+        { f: "Rendu mobile-first + export propre", them: true },
+        { f: "Édition & publication dans l'app", them: false },
+        { f: "Capture de leads + CRM + scoring", them: false },
+        { f: "Séquences email & automatisations", them: false },
+        { f: "Export systeme.io / HTML", them: true },
+      ],
+    },
+    en: {
+      title: "AutoFunnel AI vs page-only generators",
+      us: "AutoFunnel AI", them: "Page generators",
+      rows: [
+        { f: "AI funnel generation", them: true },
+        { f: "Conversion-focused copywriting", them: true },
+        { f: "Mobile-first render + clean export", them: true },
+        { f: "Edit & publish inside the app", them: false },
+        { f: "Lead capture + CRM + scoring", them: false },
+        { f: "Email sequences & automations", them: false },
+        { f: "systeme.io / HTML export", them: true },
+      ],
+    },
+    es: {
+      title: "AutoFunnel AI vs generadores de páginas",
+      us: "AutoFunnel AI", them: "Generadores de páginas",
+      rows: [
+        { f: "Generación IA del embudo", them: true },
+        { f: "Copywriting orientado a conversión", them: true },
+        { f: "Render mobile-first + export limpio", them: true },
+        { f: "Editar y publicar en la app", them: false },
+        { f: "Captura de leads + CRM + scoring", them: false },
+        { f: "Secuencias de email y automatizaciones", them: false },
+        { f: "Exportar a systeme.io / HTML", them: true },
+      ],
+    },
+  }[lang];
+  return (
+    <div className="mx-auto mt-14 max-w-3xl rounded-2xl overflow-hidden" style={{ background: "#0C1524", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <h3 className="ff-title text-center px-5 pt-6 pb-4" style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{L.title}</h3>
+      <div className="grid" style={{ gridTemplateColumns: "1.6fr 1fr 1fr" }}>
+        <div className="px-4 py-2.5 ff-body" style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }} />
+        <div className="px-3 py-2.5 text-center ff-title" style={{ fontSize: 13, fontWeight: 700, color: "#31845C", background: "rgba(49,132,92,0.08)" }}>{L.us}</div>
+        <div className="px-3 py-2.5 text-center ff-body" style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>{L.them}</div>
+        {L.rows.map((row, i) => (
+          <div key={i} className="contents">
+            <div className="px-4 py-3 ff-body" style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>{row.f}</div>
+            <div className="px-3 py-3 flex items-center justify-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(49,132,92,0.05)" }}>
+              <CheckCircle2 size={17} style={{ color: "#31845C" }} />
+            </div>
+            <div className="px-3 py-3 flex items-center justify-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              {row.them ? <CheckCircle2 size={16} style={{ color: "rgba(255,255,255,0.3)" }} /> : <X size={16} style={{ color: "rgba(239,68,68,0.75)" }} />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionTag({ children, color = "#31845C" }: { children: React.ReactNode; color?: string }) {
   return (
     <div className="ff-body inline-flex items-center justify-center gap-2"
@@ -752,7 +919,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden">
-            <p className="pb-5 leading-relaxed" style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>{a}</p>
+            <p className="pb-5 leading-relaxed" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.6)" }}>{a}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -989,6 +1156,19 @@ export default function LandingPage() {
                 <Sparkles size={10} /> {t.hero.label}
               </div>
 
+              {/* 🆕 Badges différenciants : rapidité, mobile-first, tout-en-un */}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[
+                  { icon: <Gauge size={13} />, label: ({ fr: "Ultra-rapide", en: "Ultra-fast", es: "Ultrarrápido" } as const)[lang] },
+                  { icon: <Smartphone size={13} />, label: "Mobile-first" },
+                  { icon: <Layers size={13} />, label: ({ fr: "Tout dans l'app", en: "All in the app", es: "Todo en la app" } as const)[lang] },
+                ].map((b, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 ff-body" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>
+                    <span style={{ color: "#31845C" }}>{b.icon}</span>{b.label}
+                  </span>
+                ))}
+              </div>
+
               {/* Promesse principale — hook direct, statique (plus de cycle de mots) */}
               <h1 className="ff-title hero-title mt-5 leading-[1.04] text-white" style={{ fontSize: "clamp(2.1rem,4.7vw,3.6rem)", fontWeight: 700 }}>
                 {t.hero.titleStart}{" "}
@@ -1010,7 +1190,7 @@ export default function LandingPage() {
               </div>
 
               {/* Proof bar */}
-              <div className="hero-proof mt-8 flex flex-wrap items-center gap-x-5 gap-y-2" style={{ fontSize: 13, color: MUTED2 }}>
+              <div className="hero-proof mt-8 flex flex-wrap items-center gap-x-5 gap-y-2" style={{ fontSize: 15.5, color: MUTED2 }}>
                 {t.hero.proofBar.map((p, i) => (
                   <span key={i} className="inline-flex items-center gap-1.5 ff-body">
                     <CheckCircle2 size={14} style={{ color: "#31845C" }} />
@@ -1019,7 +1199,7 @@ export default function LandingPage() {
                 ))}
               </div>
 
-              <p className="mt-5 ff-body" style={{ fontSize: 12, color: "#6b7890", lineHeight: 1.6 }}>
+              <p className="mt-5 ff-body" style={{ fontSize: 15, color: "#6b7890", lineHeight: 1.6 }}>
                 {t.hero.footnote}
               </p>
             </motion.div>
@@ -1109,6 +1289,9 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* 🆕 PREUVE SOCIALE CHIFFRÉE — compteurs réels + faits différenciants */}
+      <StatsBand lang={lang} />
+
       {/* PROBLEM */}
       <section className="py-20" style={{ background: BG }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
@@ -1130,7 +1313,7 @@ export default function LandingPage() {
                     <Icon size={20} style={{ color: "#C7A436" }} />
                   </div>
                   <h3 className="ff-body font-bold mb-2" style={{ fontSize: 15, color: "#fff" }}>{p.title}</h3>
-                  <p className="ff-body leading-relaxed" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>{p.desc}</p>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.55)" }}>{p.desc}</p>
                 </div>
               </FadeInWhenVisible>
             );
@@ -1162,7 +1345,43 @@ export default function LandingPage() {
                     <Icon size={18} style={{ color: "#31845C" }} />
                   </div>
                   <h3 className="ff-body font-bold mb-1.5" style={{ fontSize: 14, color: "#fff" }}>{p.title}</h3>
-                  <p className="ff-body leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{p.desc}</p>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 15, color: "rgba(255,255,255,0.5)" }}>{p.desc}</p>
+                </div>
+              </FadeInWhenVisible>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* TEAM — met en scène les expertises IA, chacune avec son propre nom
+          (pas de répétition du mot "agent" à chaque mention). */}
+      <section className="py-20" style={{ background: BG }}>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+          <FadeInWhenVisible direction="up">
+            <SectionTag color="#C7A436"><Users size={11} /> {t.team.tag}</SectionTag>
+            <h2 className="ff-title section-title mt-4" style={{ fontSize: "clamp(1.9rem,4.6vw,3.2rem)", color: "#fff" }}>
+              {t.team.title}
+            </h2>
+            <AccentLine />
+            <p className="ff-body mt-4 max-w-2xl mx-auto" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.5)" }}>
+              {t.team.desc}
+            </p>
+          </FadeInWhenVisible>
+        </div>
+        <div className="mx-auto mt-12 max-w-6xl px-4 sm:px-6 lg:px-8 problems-grid grid gap-5" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+          {t.team.members.map((m, i) => {
+            const Icon = TEAM_ICONS[i] ?? Users;
+            return (
+              <FadeInWhenVisible key={i} direction="up" delay={i * 0.08}>
+                <div className="card-hover rounded-2xl p-6 h-full" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "rgba(199,164,54,0.10)" }}>
+                    <Icon size={20} style={{ color: "#C7A436" }} />
+                  </div>
+                  <p className="ff-body" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#31845C", marginBottom: 6 }}>
+                    {m.role}
+                  </p>
+                  <h3 className="ff-body font-bold mb-2" style={{ fontSize: 16, color: "#fff" }}>{m.name}</h3>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>{m.desc}</p>
                 </div>
               </FadeInWhenVisible>
             );
@@ -1192,7 +1411,7 @@ export default function LandingPage() {
                   </div>
                   <p className="ff-title" style={{ fontSize: 13, color: "rgba(199,164,54,0.6)", letterSpacing: "0.05em" }}>{s.step}</p>
                   <h3 className="ff-body font-bold mt-1" style={{ fontSize: 15, color: "#fff" }}>{s.title}</h3>
-                  <p className="ff-body mt-2 leading-relaxed" style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{s.desc}</p>
+                  <p className="ff-body mt-2 leading-relaxed" style={{ fontSize: 15, color: "rgba(255,255,255,0.5)" }}>{s.desc}</p>
                 </div>
               </FadeInWhenVisible>
             );
@@ -1241,7 +1460,7 @@ export default function LandingPage() {
                               </span>
                             )}
                           </p>
-                          <p className="ff-body leading-relaxed mt-0.5" style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                          <p className="ff-body leading-relaxed mt-0.5" style={{ fontSize: 15, color: "rgba(255,255,255,0.5)" }}>
                             {item.desc}
                           </p>
                         </div>
@@ -1264,7 +1483,7 @@ export default function LandingPage() {
               {t.templates.title}
             </h2>
             <AccentLine />
-            <p className="ff-body mt-4 max-w-xl mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
+            <p className="ff-body mt-4 max-w-xl mx-auto" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.5)" }}>
               {t.templates.desc}
             </p>
           </FadeInWhenVisible>
@@ -1281,7 +1500,7 @@ export default function LandingPage() {
                     <Icon size={18} style={{ color: "#5aa0e6" }} />
                   </div>
                   <h3 className="ff-title mb-1.5" style={{ fontSize: 17, fontWeight: 600, color: "#fff" }}>{c.name}</h3>
-                  <p className="ff-body leading-relaxed" style={{ fontSize: 14, color: MUTED }}>{c.desc}</p>
+                  <p className="ff-body leading-relaxed" style={{ fontSize: 15.5, color: MUTED }}>{c.desc}</p>
                 </div>
               </FadeInWhenVisible>
             );
@@ -1289,8 +1508,8 @@ export default function LandingPage() {
           <FadeInWhenVisible direction="up" delay={t.templates.cases.length * 0.06}>
             <div className="rounded-2xl p-6 h-full flex flex-col justify-center" style={{ background: "linear-gradient(150deg,rgba(49,132,92,0.16),rgba(8,73,141,0.10))", border: "1px solid rgba(49,132,92,0.30)" }}>
               <h3 className="ff-title" style={{ fontSize: 17, fontWeight: 600, color: "#fff" }}>{({ fr: "Et le tien ?", en: "And yours?", es: "¿Y el tuyo?" } as const)[lang]}</h3>
-              <p className="ff-body mt-2 mb-3.5 leading-relaxed" style={{ fontSize: 14, color: "#b9c6d6" }}>{({ fr: "Décris ton offre, l'IA s'adapte au reste.", en: "Describe your offer, the AI handles the rest.", es: "Describe tu oferta, la IA se encarga del resto." } as const)[lang]}</p>
-              <a href="#pricing" className="ff-title self-start" style={{ fontSize: 13.5, fontWeight: 600, color: "#C7A436", textDecoration: "none" }}>{({ fr: "Commencer →", en: "Get started →", es: "Empezar →" } as const)[lang]}</a>
+              <p className="ff-body mt-2 mb-3.5 leading-relaxed" style={{ fontSize: 15.5, color: "#b9c6d6" }}>{({ fr: "Décris ton offre, l'IA s'adapte au reste.", en: "Describe your offer, the AI handles the rest.", es: "Describe tu oferta, la IA se encarga del resto." } as const)[lang]}</p>
+              <a href="#pricing" className="ff-title self-start" style={{ fontSize: 15, fontWeight: 600, color: "#C7A436", textDecoration: "none" }}>{({ fr: "Commencer →", en: "Get started →", es: "Empezar →" } as const)[lang]}</a>
             </div>
           </FadeInWhenVisible>
         </div>
@@ -1315,7 +1534,7 @@ export default function LandingPage() {
                 <div className="flex gap-0.5 mb-4">
                   {[...Array(5)].map((_, k) => <Star key={k} size={13} fill="#C7A436" style={{ color: "#C7A436" }} />)}
                 </div>
-                <p className="ff-body leading-relaxed mb-5 flex-1" style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+                <p className="ff-body leading-relaxed mb-5 flex-1" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.7)" }}>
                   "{testimonial.quote}"
                 </p>
                 <div>
@@ -1337,7 +1556,7 @@ export default function LandingPage() {
               {t.pricing.title}
             </h2>
             <AccentLine />
-            <p className="ff-body mt-4 max-w-md mx-auto" style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>{t.pricing.desc}</p>
+            <p className="ff-body mt-4 max-w-md mx-auto" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.5)" }}>{t.pricing.desc}</p>
           </FadeInWhenVisible>
         </div>
 
@@ -1360,13 +1579,13 @@ export default function LandingPage() {
                           <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
                           <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.4)" }}>{plan.period}</span>
                         </div>
-                        <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{plan.desc}</p>
+                        <p className="ff-body mb-6" style={{ fontSize: 15, color: "rgba(255,255,255,0.5)" }}>{plan.desc}</p>
                         <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.08)" }} />
                         <ul className="space-y-3 flex-1 mb-8">
                           {plan.features.map((f, idx) => (
                             <li key={idx} className="flex items-start gap-2.5">
                               <CheckCircle2 size={14} style={{ color: "#31845C" }} className="mt-0.5 shrink-0" />
-                              <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.78)" }}>{f}</span>
+                              <span className="ff-body" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.78)" }}>{f}</span>
                             </li>
                           ))}
                         </ul>
@@ -1381,13 +1600,13 @@ export default function LandingPage() {
                           <span className="ff-title leading-none" style={{ fontSize: 40, color: "#fff" }}>{plan.price}</span>
                           <span className="ff-body mb-1.5" style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>{plan.period}</span>
                         </div>
-                        <p className="ff-body mb-6" style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{plan.desc}</p>
+                        <p className="ff-body mb-6" style={{ fontSize: 15, color: "rgba(255,255,255,0.4)" }}>{plan.desc}</p>
                         <div className="h-px mb-6" style={{ background: "rgba(255,255,255,0.06)" }} />
                         <ul className="space-y-3 flex-1 mb-8">
                           {plan.features.map((f, idx) => (
                             <li key={idx} className="flex items-start gap-2.5">
                               <CheckCircle2 size={14} style={{ color }} className="mt-0.5 shrink-0" />
-                              <span className="ff-body" style={{ fontSize: 13, color: "rgba(255,255,255,0.62)" }}>{f}</span>
+                              <span className="ff-body" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.62)" }}>{f}</span>
                             </li>
                           ))}
                         </ul>
@@ -1402,10 +1621,17 @@ export default function LandingPage() {
         </div>
 
         <FadeInWhenVisible direction="up" delay={0.3}>
-          <p className="ff-body mt-7 flex items-center justify-center gap-2 text-center" style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+          <p className="ff-body mt-7 flex items-center justify-center gap-2 text-center" style={{ fontSize: 15, color: "rgba(255,255,255,0.35)" }}>
             <Shield size={12} /> {t.pricing.guarantee}
           </p>
         </FadeInWhenVisible>
+
+        {/* 🆕 Comparatif « nous vs générateurs de pages seuls » (argument massue) */}
+        <div className="px-4 sm:px-6 lg:px-8">
+          <FadeInWhenVisible direction="up" delay={0.15}>
+            <ComparisonTable lang={lang} />
+          </FadeInWhenVisible>
+        </div>
       </section>
 
       {/* FAQ */}
@@ -1457,7 +1683,7 @@ export default function LandingPage() {
                 {t.finalCta.secondary}
               </a>
             </div>
-            <div className="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 ff-body" style={{ fontSize: 13, color: MUTED2 }}>
+            <div className="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 ff-body" style={{ fontSize: 15.5, color: MUTED2 }}>
               {t.finalCta.points.map((p, i) => (
                 <span key={i} className="flex items-center gap-1.5"><CheckCircle2 size={13} style={{ color: "#31845C" }} /> {p}</span>
               ))}

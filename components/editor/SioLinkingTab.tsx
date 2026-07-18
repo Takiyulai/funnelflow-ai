@@ -30,6 +30,7 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
   const integrations = funnel.integrations ?? {};
   const scriptValue = integrations.systemeIoScriptId ?? "";
   const pageUrls = integrations.sioPageUrls ?? {};
+  const extraUrls = integrations.sioExtraUrls ?? [];
   const [copied, setCopied] = useState(false);
 
   const pages = useMemo(() => funnel.pages ?? [], [funnel.pages]);
@@ -48,6 +49,28 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
     if (url.trim()) next[pageId] = url.trim();
     else delete next[pageId];
     updateIntegrations({ sioPageUrls: next });
+  };
+
+  // 🆕 Liens SIO supplémentaires, sans limite — pour les tunnels qui ont plus
+  // d'étapes côté Systeme.io que de pages AutoFunnel (ex : webinaire avec
+  // plusieurs relances de replay, upsell, etc.).
+  const addExtraUrl = () => {
+    updateIntegrations({
+      sioExtraUrls: [
+        ...extraUrls,
+        { id: `extra-${Date.now()}-${extraUrls.length}`, label: "", url: "" },
+      ],
+    });
+  };
+
+  const updateExtraUrl = (id: string, patch: Partial<{ label: string; url: string }>) => {
+    updateIntegrations({
+      sioExtraUrls: extraUrls.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    });
+  };
+
+  const removeExtraUrl = (id: string) => {
+    updateIntegrations({ sioExtraUrls: extraUrls.filter((e) => e.id !== id) });
   };
 
   const copyScript = async () => {
@@ -165,6 +188,66 @@ export default function SioLinkingTab({ funnel, onChange, onClose }: Props) {
                       placeholder="https://monsite.systeme.io/ma-page"
                       className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* 2bis. Liens SIO supplémentaires — sans limite, pour les étapes qui
+              n'ont pas de page AutoFunnel correspondante (ex : plus de pages
+              côté Systeme.io que dans ce tunnel). */}
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">
+                2bis. Autres liens Systeme.io (optionnel)
+              </h3>
+              <button
+                type="button"
+                onClick={addExtraUrl}
+                className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                + Ajouter un lien
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-gray-600">
+              Pour les étapes qui existent côté Systeme.io mais n'ont pas de
+              page correspondante dans ce tunnel (ex : plus de 4 pages, relance
+              replay, upsell…). Purement pour ta référence — contrairement à la
+              section 2, ces liens ne sont pas résolus automatiquement dans les
+              CTA du tunnel.
+            </p>
+            {extraUrls.length === 0 ? (
+              <p className="text-xs italic text-gray-500">Aucun lien ajouté.</p>
+            ) : (
+              <div className="space-y-2">
+                {extraUrls.map((e) => (
+                  <div
+                    key={e.id}
+                    className="grid grid-cols-[1fr_2fr_auto] items-center gap-2 rounded-lg border border-gray-200 px-3 py-2"
+                  >
+                    <input
+                      type="text"
+                      value={e.label}
+                      onChange={(ev) => updateExtraUrl(e.id, { label: ev.target.value })}
+                      placeholder="Ex. Relance replay J+2"
+                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input
+                      type="url"
+                      value={e.url}
+                      onChange={(ev) => updateExtraUrl(e.id, { url: ev.target.value })}
+                      placeholder="https://monsite.systeme.io/ma-page"
+                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeExtraUrl(e.id)}
+                      aria-label="Supprimer ce lien"
+                      className="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-500 hover:border-red-300 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
               </div>

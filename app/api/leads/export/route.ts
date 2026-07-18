@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+// 🆕 FIX affichage Excel : le séparateur CSV standard "," n'est PAS celui
+// attendu par Excel en locale FR (où "," est le séparateur décimal — Excel FR
+// attend ";"). Sans ça, un utilisateur francophone qui double-clique le .csv
+// voit tout le contenu d'une ligne entassé dans la colonne A (ce n'est PAS un
+// bug de contenu : le CSV est valide, seul le délimiteur ne correspond pas à
+// la locale). Cible du produit = solopreneurs/freelances francophones (cf.
+// CLAUDE.md) → on aligne sur ";" par défaut.
+const CSV_DELIMITER = ";";
+
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = String(v);
-  if (/[",\n\r]/.test(s)) {
+  if (new RegExp(`["${CSV_DELIMITER}\\n\\r]`).test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
@@ -71,8 +80,8 @@ export async function GET(request: Request) {
   });
 
   const csv = [
-    headers.join(","),
-    ...rows.map((r) => r.map(csvEscape).join(",")),
+    headers.join(CSV_DELIMITER),
+    ...rows.map((r) => r.map(csvEscape).join(CSV_DELIMITER)),
   ].join("\n");
 
   // BOM UTF-8 pour Excel

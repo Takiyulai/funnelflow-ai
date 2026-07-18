@@ -154,7 +154,19 @@ const briefSchema = z.object({
   brandColors: z.array(z.string()).max(4).optional(),
   logoUrl: z.string().optional(),
   videoUrl: z.string().optional(),
+  // 🆕 Sans cette entrée, authorName serait silencieusement retiré du brief
+  // par ce schéma avant d'atteindre generateMultiPageFunnelWithAI (même piège
+  // que brandColors/brandColorsEnabled ci-dessus — cf. mémoire projet).
+  authorName: z.string().optional(),
   aboutText: z.string().optional(),
+  // 🆕 Bénéfices/urgence/garantie saisis manuellement dans le wizard — sans
+  // ces entrées, zod les retirerait silencieusement du brief (même piège que
+  // brandColors/authorName ci-dessus).
+  keyBenefits: z.array(z.string()).max(12).optional(),
+  urgencyText: z.string().optional(),
+  guaranteeTitle: z.string().optional(),
+  guaranteeDescription: z.string().optional(),
+  guaranteeDuration: z.string().optional(),
   // 🆕 Palier 1 paiement : lien de paiement externe de l'offre.
   paymentUrl: z.string().optional(),
 

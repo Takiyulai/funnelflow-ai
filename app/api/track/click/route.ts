@@ -31,6 +31,7 @@ export async function GET(request: Request) {
   const messageId = uuidOrNull(searchParams.get("m"));
   const campaignId = uuidOrNull(searchParams.get("g"));
   const sequenceId = uuidOrNull(searchParams.get("s"));
+  const sequenceEmailId = uuidOrNull(searchParams.get("se"));
   const rawType = searchParams.get("t");
   const sourceType = rawType && SOURCE_TYPES.has(rawType) ? rawType : null;
 
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
         source_type: sourceType,
         campaign_id: campaignId,
         sequence_id: sequenceId,
+        sequence_email_id: sequenceEmailId,
         message_id: messageId,
         contact_id: contactId,
         url: dest.slice(0, 2000),

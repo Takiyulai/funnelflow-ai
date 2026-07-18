@@ -8,7 +8,14 @@ import type { Workflow } from "@/lib/workflows/types";
 export const dynamic = "force-dynamic";
 
 type FunnelOption = { id: string; name: string };
-type SequenceOption = { id: string; name: string };
+// 🆕 emails[] : nécessaire pour que l'éditeur de condition workflow puisse
+// proposer "quel email de cette séquence" (has_opened_email/has_clicked_email
+// + sequenceEmailId), pas juste "quelle séquence".
+type SequenceOption = {
+  id: string;
+  name: string;
+  emails: { id: string; subject: string; position: number }[];
+};
 type TagOption = { id: string; name: string };
 
 export default async function WorkflowsPage() {
@@ -34,7 +41,32 @@ export default async function WorkflowsPage() {
       name: (f.name as string) ?? "Tunnel",
     }));
     const seqs = await listSequences(sb, user.id).catch(() => []);
-    sequences = seqs.map((s) => ({ id: s.id, name: s.name }));
+    // 🆕 Emails de TOUTES les séquences en une seule requête (plutôt que N+1),
+    // groupés par sequence_id — alimente le sélecteur "quel email de cette
+    // séquence" dans l'éditeur de condition workflow.
+    const { data: seqEmailRows } = await sb
+      .from("crm_sequence_emails")
+      .select("id, sequence_id, subject, position")
+      .eq("user_id", user.id)
+      .order("position", { ascending: true });
+    const emailsBySequence = new Map<
+      string,
+      { id: string; subject: string; position: number }[]
+    >();
+    for (const row of seqEmailRows ?? []) {
+      const list = emailsBySequence.get(row.sequence_id as string) ?? [];
+      list.push({
+        id: row.id as string,
+        subject: (row.subject as string) || "(sans objet)",
+        position: row.position as number,
+      });
+      emailsBySequence.set(row.sequence_id as string, list);
+    }
+    sequences = seqs.map((s) => ({
+      id: s.id,
+      name: s.name,
+      emails: emailsBySequence.get(s.id) ?? [],
+    }));
     // 🆕 Tags pour le filtre du déclencheur « tag ajouté ».
     const { data: tagData } = await sb
       .from("crm_tags")

@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "lib/workflows/types.ts",
+    "lib/workflows/engine.ts",
+    "lib/workflows/repository.ts",
+    "lib/workflows/validate.ts",
+    "lib/crm/campaigns.ts",
+    "lib/crm/sequences.ts",
+    "lib/crm/types.ts",
+    "components/crm/CampaignsClient.tsx",
+    "components/crm/EmailsModule.tsx",
+    "components/crm/SequencesClient.tsx",
+    "app/(app)/emails/page.tsx",
+    "app/api/crm/sequences/route.ts",
+    "app/api/crm/sequences/[id]/route.ts",
+    "components/workflows/WorkflowsClient.tsx"
+  ]
+}

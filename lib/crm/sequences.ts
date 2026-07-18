@@ -15,7 +15,7 @@ import { renderSequenceEmailHtml } from "./emailRender";
 const SEQ_COLS =
   "id, user_id, name, type, roles, context, language, funnel_id, status, created_at, updated_at";
 const SEQ_EMAIL_COLS =
-  "id, sequence_id, user_id, position, delay_days, subject, content, created_at, updated_at";
+  "id, sequence_id, user_id, position, delay_days, delay_hours, subject, content, created_at, updated_at";
 
 export async function listSequences(
   sb: SupabaseClient,
@@ -74,6 +74,7 @@ async function replaceEmails(
     user_id: userId,
     position: i,
     delay_days: Math.max(0, Math.round(e.delay_days) || 0),
+    delay_hours: Math.min(23, Math.max(0, Math.round(e.delay_hours ?? 0) || 0)),
     subject: e.subject ?? "",
     content: e.content ?? "",
   }));
@@ -179,6 +180,12 @@ export async function enrollContact(
   userId: string,
   sequenceId: string,
   contactId: string,
+  /** 🆕 Délai supplémentaire (ms) avant le PREMIER email — reporté sur TOUS les
+   *  emails de la séquence. Permet à un workflow "Attendre" placé avant
+   *  "Inscrire dans une séquence" de réellement décaler l'inscription au lieu
+   *  d'être silencieusement ignoré (l'inscription démarrait toujours selon le
+   *  calendrier propre de la séquence, jamais après le wait du workflow). */
+  extraDelayMs = 0,
 ): Promise<{ scheduled: number }> {
   const seq = await getSequenceWithEmails(sb, userId, sequenceId);
   if (!seq) throw new Error("sequence_not_found");
@@ -195,6 +202,8 @@ export async function enrollContact(
 
   const now = Date.now();
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const HOUR_MS = 60 * 60 * 1000;
+  const startAt = now + Math.max(0, extraDelayMs);
   const recipient = { name: contact.name as string | null, email: contact.email as string };
 
   const rows = seq.emails.map((em) => ({
@@ -207,7 +216,9 @@ export async function enrollContact(
     recipient_email: contact.email,
     subject: em.subject,
     content: renderSequenceEmailHtml(em.content, recipient), // snapshot perso
-    scheduled_at: new Date(now + Math.max(0, em.delay_days) * DAY_MS).toISOString(),
+    scheduled_at: new Date(
+      startAt + Math.max(0, em.delay_days) * DAY_MS + Math.max(0, em.delay_hours ?? 0) * HOUR_MS,
+    ).toISOString(),
     status: "pending",
   }));
 

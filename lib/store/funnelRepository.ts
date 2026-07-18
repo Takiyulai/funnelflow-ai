@@ -260,17 +260,43 @@ function formatPgError(
 const LIST_COLS =
   "id, slug, json_content, brief, created_at, updated_at, published_at, published_slug";
 
+/**
+ * 🆕 FIX « tunnels disparus » (bis) : le plan gratuit Supabase fait des cold
+ * starts (~15s) qui déclenchent un "TypeError: Failed to fetch" (le fetch
+ * réseau lève AVANT même de renvoyer {data,error}). Sans retry, useFunnelList
+ * capturait cette exception dans un simple console.warn et n'affichait plus
+ * JAMAIS la liste distante (le cache local, seul repli, peut lui-même être
+ * vide — nouvel appareil, cache purgé au changement de compte...) : le
+ * dashboard restait bloqué sur "0 tunnel" jusqu'au rechargement manuel de la
+ * page. On retente donc 3 fois (backoff court) avant d'abandonner, comme déjà
+ * fait pour saveRemote/publishRemote.
+ */
 export async function listRemote(): Promise<StoredFunnel[]> {
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("funnels")
-    .select(LIST_COLS)
-    .order("updated_at", { ascending: false });
-  if (error) {
-    console.warn(formatPgError("[funnelRepository] listRemote", error));
-    return [];
+  let lastErr: unknown = null;
+  const ATTEMPTS = 4;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    try {
+      const { data, error } = await supabase
+        .from("funnels")
+        .select(LIST_COLS)
+        .order("updated_at", { ascending: false });
+      if (error) {
+        console.warn(formatPgError("[funnelRepository] listRemote", error));
+        return [];
+      }
+      return (data as FunnelRow[]).map(rowToStored);
+    } catch (e) {
+      lastErr = e;
+      if (attempt < ATTEMPTS - 1) {
+        // Backoff croissant (800ms, 1600ms, 2400ms) : couvre un vrai cold
+        // start Supabase (~15s cumulés) sans bloquer indéfiniment l'UI.
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
   }
-  return (data as FunnelRow[]).map(rowToStored);
+  console.warn(`[funnelRepository] listRemote échoué après ${ATTEMPTS} tentatives:`, lastErr);
+  return [];
 }
 
 export async function loadRemote(id: string): Promise<StoredFunnel | null> {

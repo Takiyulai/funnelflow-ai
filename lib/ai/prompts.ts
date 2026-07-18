@@ -1504,13 +1504,86 @@ export function authorAboutBlock(brief?: FunnelBrief): string {
   const txt = brief?.aboutText?.trim();
   if (!txt) return "";
   const lang: Language = brief?.language ?? "fr";
+  const name = brief?.authorName?.trim();
   const intro =
     lang === "en"
       ? 'AUTHOR / "ABOUT ME" TEXT provided by the user — you MUST use it to write the "about" section (Presentation/Authority), placed AFTER the benefits. Rephrase it as persuasive copy that builds authority (who they are, experience, why they do it, who they help). Never ignore it and never invent a different identity. If an author photo is provided, the "about" section carries it.'
       : lang === "es"
         ? 'TEXTO DEL AUTOR / "SOBRE MÍ" proporcionado por el usuario — DEBES usarlo para redactar la sección "about" (Presentación/Autoridad), ubicada DESPUÉS de los beneficios. Reformúlalo como copy persuasivo que construya autoridad (quién es, experiencia, por qué lo hace, a quién ayuda). Nunca lo ignores ni inventes otra identidad. Si hay una foto del autor, la sección "about" la lleva.'
         : "TEXTE AUTEUR / « À PROPOS DE MOI » fourni par l'utilisateur — tu DOIS l'utiliser pour rédiger la section \"about\" (Présentation/Autorité), placée APRÈS les bénéfices. Reformule-le en copywriting persuasif qui installe l'autorité (qui il est, son expérience, pourquoi il le fait, qui il aide). Ne l'ignore JAMAIS et n'invente pas une autre identité. Si une photo de l'auteur est fournie, la section \"about\" la porte.";
-  return `\n\n## À propos (source utilisateur — à exploiter)\n${intro}\n"""\n${txt}\n"""\n`;
+  // 🆕 Nom et prénom saisis séparément dans le wizard : on le transmet pour
+  // que l'IA utilise le VRAI nom dans le titre/texte de la section, au lieu
+  // de retomber sur le nom de marque ou d'en inventer un.
+  const nameLine = name
+    ? lang === "en"
+      ? `\nThe author's real name is "${name}" — use it (e.g. as the section headline), never invent another name.`
+      : lang === "es"
+        ? `\nEl nombre real del autor es "${name}" — úsalo (p. ej. como título de la sección), nunca inventes otro nombre.`
+        : `\nLe vrai nom de l'auteur est « ${name} » — utilise-le (par ex. comme titre de la section), n'invente jamais un autre nom.`
+    : "";
+  return `\n\n## À propos (source utilisateur — à exploiter)\n${intro}${nameLine}\n"""\n${txt}\n"""\n`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 Bénéfices clés / urgence / garantie saisis manuellement dans le wizard
+// (Bloc "Bénéfices, urgence & garantie" de l'étape "Ton offre") — mêmes
+// principes que authorAboutBlock : si l'utilisateur a rempli ces champs,
+// l'IA DOIT les exploiter tels quels plutôt que d'inventer un contenu
+// générique. Chaque bloc est vide (pas de section injectée) si le brief ne
+// contient rien pour lui — rétro-compatible avec les tunnels existants.
+// ─────────────────────────────────────────────────────────────────────────────
+export function keyContentBlocks(brief?: FunnelBrief): string {
+  if (!brief) return "";
+  const lang: Language = brief.language ?? "fr";
+  const parts: string[] = [];
+
+  const benefits = (brief.keyBenefits ?? []).map((b) => b.trim()).filter(Boolean);
+  if (benefits.length > 0) {
+    const label = tr(
+      {
+        fr: 'BÉNÉFICES CLÉS fournis par l\'utilisateur — utilise-les TELS QUELS (reformulation légère autorisée) comme items de la section "benefits", au lieu d\'en inventer d\'autres :',
+        en: 'KEY BENEFITS provided by the user — use them AS-IS (light rephrasing allowed) as the "benefits" section items, instead of inventing others:',
+        es: 'BENEFICIOS CLAVE proporcionados por el usuario — úsalos TAL CUAL (se permite una reformulación ligera) como items de la sección "benefits", en lugar de inventar otros:',
+      },
+      lang,
+    );
+    parts.push(`\n\n## Bénéfices clés (source utilisateur)\n${label}\n${benefits.map((b) => `- ${b}`).join("\n")}\n`);
+  }
+
+  const urgency = brief.urgencyText?.trim();
+  if (urgency) {
+    const label = tr(
+      {
+        fr: 'RAISON D\'URGENCE fournie par l\'utilisateur — tu DOIS l\'utiliser (reformulée en copy persuasif) pour le corps de la section "urgency". N\'invente jamais une autre raison (stock, délai...) :',
+        en: 'URGENCY REASON provided by the user — you MUST use it (rephrased as persuasive copy) for the "urgency" section body. Never invent a different reason:',
+        es: 'RAZÓN DE URGENCIA proporcionada por el usuario — DEBES usarla (reformulada como copy persuasivo) para el cuerpo de la sección "urgency". Nunca inventes otra razón:',
+      },
+      lang,
+    );
+    parts.push(`\n\n## Urgence (source utilisateur)\n${label}\n"""\n${urgency}\n"""\n`);
+  }
+
+  const gTitle = brief.guaranteeTitle?.trim();
+  const gDesc = brief.guaranteeDescription?.trim();
+  const gDuration = brief.guaranteeDuration?.trim();
+  if (gTitle || gDesc) {
+    const label = tr(
+      {
+        fr: 'GARANTIE fournie par l\'utilisateur — utilise EXACTEMENT ces informations pour l\'unique item de la section "guarantee" (data.title/description/duration). N\'invente pas d\'autres conditions :',
+        en: 'GUARANTEE provided by the user — use EXACTLY this information for the single "guarantee" section item (data.title/description/duration). Do not invent other terms:',
+        es: 'GARANTÍA proporcionada por el usuario — usa EXACTAMENTE esta información para el único item de la sección "guarantee" (data.title/description/duration). No inventes otras condiciones:',
+      },
+      lang,
+    );
+    const lines = [
+      gTitle ? `- title: ${gTitle}` : null,
+      gDesc ? `- description: ${gDesc}` : null,
+      gDuration ? `- duration: ${gDuration}` : null,
+    ].filter(Boolean);
+    parts.push(`\n\n## Garantie (source utilisateur)\n${label}\n${lines.join("\n")}\n`);
+  }
+
+  return parts.join("");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1573,6 +1646,7 @@ ${briefVideoBlock(args.videoUrl, lang, false)}
 
 ${briefDrivenBlocks}
 ${authorAboutBlock(args.brief)}
+${keyContentBlocks(args.brief)}
 
 ## Règle de titre
 Le titre du hero doit être une **promesse claire et spécifique** orientée résultat pour l'audience. Pas de slogan vague. Maximum 12 mots.

@@ -6,6 +6,66 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500;1,9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* ───────── Pages de remerciement : confettis + barre de progression ─────────
+   🆕 "Wow" sur thankyou/confirmation/delivery (composants ajoutés dans
+   FunnelPreview.tsx : SuccessConfetti / SuccessProgressBar, rendus dans le
+   badge du hero de succès). Confettis = particules positionnées via
+   --fc-dx/--fc-dy (déplacement précalculé en JS, cos/sin non fiables en CSS
+   cross-browser) ; barre = simple animation de width, aucune dépendance JS
+   pour tourner (le composant React ne fait que la monter/démonter). */
+.ff-success-badge-wrap { position: relative; }
+.ff-success-icon { overflow: visible; }
+
+.ff-confetti-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.ff-confetti-piece {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  animation-name: ff-confetti-fly;
+  animation-timing-function: cubic-bezier(0.15, 0.7, 0.3, 1);
+  animation-fill-mode: forwards;
+  animation-duration: var(--fc-duration, 1.2s);
+  animation-delay: var(--fc-delay, 0s);
+  will-change: transform, opacity;
+}
+@keyframes ff-confetti-fly {
+  0% { transform: translate(-50%, -50%) translate(0, 0) rotate(0deg); opacity: 1; }
+  65% { opacity: 1; }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--fc-dx), var(--fc-dy)) rotate(var(--fc-rotate));
+    opacity: 0;
+  }
+}
+
+.ff-success-progress {
+  max-width: 260px;
+  margin: 14px auto 0;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ff-ink) 12%, transparent);
+  overflow: hidden;
+}
+.ff-success-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--ff-btn-bg, var(--ff-accent, #22C55E));
+  animation: ff-success-progress-fill 1.8s cubic-bezier(0.22, 0.9, 0.32, 1) 0.2s forwards;
+}
+.ff-success-progress-fill--static { width: 100%; animation: none; }
+@keyframes ff-success-progress-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-success-progress-fill { animation: none; width: 100%; }
+}
+
 /* ───────── 1. Wrapper ───────── */
 .ff-template-root {
   width: 100%;
@@ -2657,6 +2717,24 @@
   border: 1px solid color-mix(in srgb, #e5484d 24%, transparent) !important;
   box-shadow: none !important;
 }
+/* 🆕 FIX contraste (diagnostic navigateur, capture à l'appui) : sur
+   bold-energy/sharp-launch/lead-snap, une règle plus haut force TOUT le texte
+   des cartes .ff-bullets--grid li à var(--ff-accent-ink) !important (pensée
+   pour les cartes PLEINES couleur-accent de ces templates). Cette règle
+   "problème/agitation" ci-dessus écrase leur FOND par un fond pâle
+   teinté rouge (color-mix(#e5484d 7%, --ff-card-bg)) mais ne touchait pas la
+   couleur du texte → le texte restait forcé en --ff-accent-ink (blanc sur
+   bold-energy) sur un fond redevenu clair : quasi invisible. On reprend la
+   main ici sur la couleur, avec !important + sélecteur plus spécifique
+   (gagne sur la règle générique quel que soit le template). */
+[data-ff-template] .ff-section[data-ff-section="problem"]:not([data-ff-pattern]) .ff-bullets--grid > li,
+[data-ff-template] .ff-section[data-ff-section="problem"]:not([data-ff-pattern]) .ff-bullets--grid > li *,
+[data-ff-template] .ff-section[data-ff-section="agitation"]:not([data-ff-pattern]) .ff-bullets--grid > li,
+[data-ff-template] .ff-section[data-ff-section="agitation"]:not([data-ff-pattern]) .ff-bullets--grid > li *,
+[data-ff-template] .ff-section[data-ff-pattern="problem-checklist"] .ff-bullets--grid > li,
+[data-ff-template] .ff-section[data-ff-pattern="problem-checklist"] .ff-bullets--grid > li * {
+  color: var(--ff-ink) !important;
+}
 [data-ff-template] .ff-section[data-ff-section="problem"]:not([data-ff-pattern]) .ff-bullets--grid > li .ff-bullet-ic,
 [data-ff-template] .ff-section[data-ff-section="agitation"]:not([data-ff-pattern]) .ff-bullets--grid > li .ff-bullet-ic,
 [data-ff-template] .ff-section[data-ff-pattern="problem-checklist"] .ff-bullets--grid > li .ff-bullet-ic {
@@ -3257,6 +3335,30 @@
 }
 [data-ff-template="story-sell"]::before { background: radial-gradient(circle, rgba(255,0,127,0.42), transparent 70%); }
 [data-ff-template="story-sell"]::after  { background: radial-gradient(circle, rgba(124,58,237,0.30), transparent 70%); }
+
+/* 🆕 FIX contraste : cartes de la section « Problème / Agitation » sur
+   bold-energy et story-sell. Ces 2 templates sont pilotés par la SKIN
+   FACTORY (T7/T3, components/funnel/templates/skins/factory.tsx), mais la
+   factory ne mappe PAS de composant pour les sections "problem"/"agitation"
+   (son objet `sections` ne liste que hero/urgency/qualification/solution/
+   benefits/process/program/testimonials/offer/pricing/faq/cta). Ces
+   sections retombent donc sur le composant générique partagé
+   (ProblemPatterns.tsx), qui lit UNIQUEMENT var(--ff-ink) — jamais les
+   tokens t.ink du skin factory — pour le texte ET le fond des cartes
+   (color-mix(--ff-ink N%, transparent)). Verrou explicite ici pour
+   garantir le bon sens de contraste sur ces 2 templates quel que soit l'état
+   amont de --ff-ink (signalé par captures d'écran : texte blanc invisible
+   sur bold-energy — fond clair —, texte noir invisible sur story-sell —
+   fond sombre). NE PAS retirer sans revoir factory.tsx pour ajouter un
+   mapping "problem"/"agitation" dédié qui consommerait t.ink correctement. */
+[data-ff-template="bold-energy"] .ff-section[data-ff-section="problem"],
+[data-ff-template="bold-energy"] .ff-section[data-ff-section="agitation"] {
+  --ff-ink: #000000 !important;
+}
+[data-ff-template="story-sell"] .ff-section[data-ff-section="problem"],
+[data-ff-template="story-sell"] .ff-section[data-ff-section="agitation"] {
+  --ff-ink: #F5EFE6 !important;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    SKINS DE TEMPLATES — rendu bespoke DATA-DRIVEN (zip Claude Design)

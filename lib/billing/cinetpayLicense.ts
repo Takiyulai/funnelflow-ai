@@ -48,14 +48,16 @@ async function getAccessToken(): Promise<string> {
     throw new Error("CINETPAY_API_KEY / CINETPAY_API_PASSWORD manquants");
   }
 
+  // 🆕 CONFIRMÉ par test curl réel (IP whitelistée) : le corps attendu est
+  // du JSON (pas x-www-form-urlencoded comme initialement supposé), et la
+  // réponse renvoie access_token/token_type/expires_in À LA RACINE :
+  //   {"code":200,"status":"OK","access_token":"...","token_type":"bearer","expires_in":86400}
   const res = await fetch(`${baseUrl()}/v1/oauth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ api_key: apiKey, api_password: apiPassword }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey, api_password: apiPassword }),
   });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  // Réponse observée en sandbox à confirmer avant mise en prod : on lit
-  // plusieurs formes plausibles (racine ou sous `data`) pour rester tolérant.
   const nested = (data.data ?? {}) as Record<string, unknown>;
   const token =
     (typeof data.access_token === "string" && data.access_token) ||

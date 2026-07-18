@@ -439,7 +439,7 @@ function buildShowcaseSections(brief: FunnelBrief): FunnelSection[] {
       id: "preview-about",
       type: "about",
       eyebrow: "À propos",
-      headline: brief.brandName,
+      headline: brief.authorName || brief.brandName,
       body: brief.aboutText,
       image: { mode: "none" },
       visible: true,
@@ -1335,6 +1335,22 @@ function ObjectiveStep({ value, onSelect }: { value: string; onSelect: (v: strin
   );
 }
 
+// 🆕 Sous-onglets de l'étape "Ton offre" — avant, les 4 blocs (Marque / Offre
+// / Bénéfices-urgence-garantie / À propos) s'empilaient en une seule colonne
+// très haute, obligeant à défiler énormément pour trouver un champ (signalé
+// par l'utilisateur, capture à l'appui). On garde UN SEUL step dans le
+// stepper global (ALL_STEPS, navigation "Suivant/Retour" inchangée), mais on
+// segmente le CONTENU du step en sous-onglets internes : un seul bloc visible
+// à la fois, scroll interne réduit au strict nécessaire. Les données restent
+// dans le même `brief` (rien ne change côté state/validation).
+const OFFER_SUBTABS = [
+  { id: "marque", label: "Marque", icon: Building2 },
+  { id: "offre", label: "Offre", icon: Package },
+  { id: "benefices", label: "Bénéfices & garantie", icon: CheckCircle2 },
+  { id: "apropos", label: "À propos", icon: User },
+] as const;
+type OfferSubTab = (typeof OFFER_SUBTABS)[number]["id"];
+
 // ─── ÉTAPE FUSIONNÉE : Marque + Offre + À propos ───
 function OfferStep({
   brief, update, logoPreview, setLogo,
@@ -1344,8 +1360,22 @@ function OfferStep({
   logoPreview: string;
   setLogo: (dataUrl: string | undefined) => void;
 }) {
+  const [subTab, setSubTab] = useState<OfferSubTab>("marque");
+
+  // 🆕 Liste dynamique des bénéfices clés (boutons + / ✕).
+  const benefits = brief.keyBenefits ?? [];
+  function addBenefit() {
+    update("keyBenefits", [...benefits, ""]);
+  }
+  function updateBenefit(idx: number, val: string) {
+    update("keyBenefits", benefits.map((b, i) => (i === idx ? val : b)));
+  }
+  function removeBenefit(idx: number) {
+    update("keyBenefits", benefits.filter((_, i) => i !== idx));
+  }
+
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       <div>
         <h2 className="text-xl font-black text-ink">Ton offre</h2>
         <p className="mt-1 text-xs text-muted">
@@ -1353,7 +1383,31 @@ function OfferStep({
         </p>
       </div>
 
+      {/* 🆕 Barre de sous-onglets : un bloc à la fois → fini le scroll géant. */}
+      <div className="-mx-0.5 flex gap-1 overflow-x-auto p-0.5 sm:flex-wrap">
+        {OFFER_SUBTABS.map((tab) => {
+          const Icon = tab.icon;
+          const active = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSubTab(tab.id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                active
+                  ? "border-[#08498D] bg-[#08498D] text-white shadow-sm"
+                  : "border-line bg-white text-ink/70 hover:border-[#08498D]/40 hover:text-ink"
+              }`}
+            >
+              <Icon size={13} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Bloc 1 : Marque ── */}
+      {subTab === "marque" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
@@ -1382,9 +1436,10 @@ function OfferStep({
           </Select>
         </Field>
       </section>
+      )}
 
       {/* ── Bloc 2 : Offre (générique, tous types SAUF webinaire) ── */}
-      {brief.funnelKind !== "webinar" && (
+      {subTab === "offre" && brief.funnelKind !== "webinar" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
@@ -1468,7 +1523,7 @@ function OfferStep({
               titre + promesse + prix, généralement "Gratuit") → page
               d'inscription ; (b) l'offre vendue APRÈS le webinaire
               (postWebinarOfferName/Price/Promise) → page de vente. */}
-      {brief.funnelKind === "webinar" && (
+      {subTab === "offre" && brief.funnelKind === "webinar" && (
         <>
           <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
             <div className="flex items-center gap-2">
@@ -1581,7 +1636,95 @@ function OfferStep({
         </>
       )}
 
+      {/* ── Bloc 2ter : Bénéfices clés, urgence & garantie (commun à tous les types) ── */}
+      {subTab === "benefices" && (
+      <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#31845C]/10 text-[#31845C]">
+            <CheckCircle2 size={14} />
+          </span>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Bénéfices, urgence & garantie</h3>
+        </div>
+        <p className="-mt-1 text-xs text-muted">
+          Facultatif : si tu remplis ces champs, l'IA utilise TON contenu au lieu d'en générer un générique.
+        </p>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-bold text-ink">Bénéfices clés</p>
+            <button
+              type="button"
+              onClick={addBenefit}
+              className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink/70 hover:bg-canvas"
+            >
+              + Ajouter un bénéfice
+            </button>
+          </div>
+          {benefits.length === 0 ? (
+            <p className="text-xs italic text-muted">
+              Aucun bénéfice saisi — l&apos;IA en générera automatiquement.
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {benefits.map((b, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <Input
+                    value={b}
+                    onChange={(e) => updateBenefit(idx, e.target.value)}
+                    placeholder="Ex. Gagnez 5h par semaine dès la 1ère utilisation"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeBenefit(idx)}
+                    aria-label="Retirer ce bénéfice"
+                    className="shrink-0 rounded-lg border border-line px-2 py-1.5 text-xs text-muted hover:bg-canvas hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Field label="Urgence (optionnel)" hint="La raison concrète d'agir maintenant : places limitées, prix qui augmente, bonus qui expire...">
+          <Textarea
+            rows={2}
+            value={brief.urgencyText ?? ""}
+            onChange={(e) => update("urgencyText", e.target.value)}
+            placeholder="Ex. Cette offre de lancement se termine dans 48h, ensuite le prix repasse à 97€"
+          />
+        </Field>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
+          <Field label="Garantie — titre (optionnel)">
+            <Input
+              value={brief.guaranteeTitle ?? ""}
+              onChange={(e) => update("guaranteeTitle", e.target.value)}
+              placeholder="Satisfait ou remboursé"
+            />
+          </Field>
+          <Field label="Durée">
+            <Input
+              value={brief.guaranteeDuration ?? ""}
+              onChange={(e) => update("guaranteeDuration", e.target.value)}
+              placeholder="30 jours"
+            />
+          </Field>
+        </div>
+        <Field label="Garantie — description (optionnel)">
+          <Textarea
+            rows={2}
+            value={brief.guaranteeDescription ?? ""}
+            onChange={(e) => update("guaranteeDescription", e.target.value)}
+            placeholder="Décris précisément les conditions du remboursement"
+          />
+        </Field>
+      </section>
+      )}
+
       {/* ── Bloc 3 : À propos ── */}
+      {subTab === "apropos" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#31845C]/10 text-[#31845C]">
@@ -1590,7 +1733,15 @@ function OfferStep({
           <h3 className="text-sm font-black uppercase tracking-wider text-ink">À propos de toi</h3>
         </div>
 
-        <Field label="Présente-toi en quelques lignes (optionnel)">
+        <Field label="Nom et prénom (optionnel)">
+          <Input
+            value={brief.authorName ?? ""}
+            placeholder="Ex. Marie Dubois"
+            onChange={(e) => update("authorName", e.target.value)}
+          />
+        </Field>
+
+        <Field label="Biographie (optionnel)">
           <Textarea
             rows={5}
             value={brief.aboutText ?? ""}
@@ -1603,6 +1754,7 @@ function OfferStep({
           💡 Astuce : 3 à 5 lignes suffisent. Mentionne ton métier, ton expérience et un résultat marquant.
         </p>
       </section>
+      )}
     </div>
   );
 }

@@ -195,6 +195,95 @@ function getRoleIconColors(role: PageRole | undefined): {
   }
 }
 
+// 🆕 Effets "wow" des pages de remerciement (thankyou/confirmation/delivery) :
+// une barre qui charge de 0 à 100% sous le badge, et une salve de confettis
+// façon célébration de but au moment où la page apparaît. CSS-only pour la
+// barre (fiable, rejouable sans JS) ; confettis = particules générées UNE
+// fois au montage (positions/couleurs figées via un lazy initializer, jamais
+// recalculées au re-render) animées en pur CSS. Respecte
+// prefers-reduced-motion : rien n'est rendu si l'utilisateur l'a demandé.
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+  }, []);
+  return reduced;
+}
+
+const CONFETTI_COLORS = ["#EF4444", "#F59E0B", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899"];
+
+type ConfettiPiece = {
+  id: number;
+  dx: number;
+  dy: number;
+  delay: number;
+  duration: number;
+  size: number;
+  color: string;
+  rotate: number;
+  round: boolean;
+};
+
+function makeConfettiPieces(count: number): ConfettiPiece[] {
+  return Array.from({ length: count }, (_, i) => {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 64 + Math.random() * 96;
+    return {
+      id: i,
+      dx: Math.round(Math.cos(angle) * distance),
+      dy: Math.round(Math.sin(angle) * distance),
+      delay: Math.round(Math.random() * 220) / 1000,
+      duration: 0.9 + Math.random() * 0.6,
+      size: 5 + Math.random() * 6,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      rotate: Math.round(Math.random() * 720 - 360),
+      round: i % 3 === 0,
+    };
+  });
+}
+
+/** Salve de confettis centrée sur son conteneur (le badge de succès). */
+function SuccessConfetti() {
+  const reduced = useReducedMotion();
+  const [particles] = useState(() => makeConfettiPieces(26));
+  if (reduced) return null;
+  return (
+    <div aria-hidden className="ff-confetti-burst">
+      {particles.map((p) => (
+        <span
+          key={p.id}
+          className="ff-confetti-piece"
+          style={{
+            ["--fc-dx" as string]: `${p.dx}px`,
+            ["--fc-dy" as string]: `${p.dy}px`,
+            ["--fc-delay" as string]: `${p.delay}s`,
+            ["--fc-duration" as string]: `${p.duration}s`,
+            ["--fc-rotate" as string]: `${p.rotate}deg`,
+            width: p.size,
+            height: p.size,
+            background: p.color,
+            borderRadius: p.round ? "50%" : "2px",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Barre fine sous le badge de succès, qui charge de 0 à 100% à l'affichage. */
+function SuccessProgressBar() {
+  const reduced = useReducedMotion();
+  return (
+    <div className="ff-success-progress" aria-hidden>
+      <div
+        className={`ff-success-progress-fill${reduced ? " ff-success-progress-fill--static" : ""}`}
+      />
+    </div>
+  );
+}
+
 function animOf(
   animations: SectionAnimations | undefined,
   target: keyof SectionAnimations,
@@ -1616,27 +1705,31 @@ function HeroBlock({
 
       <div className={`relative ${sectionInner}`} style={{ zIndex: 1 }}>
         {RoleIcon && roleIconColors && (
-          <div data-ff-anim="zoom-in" className="mb-2 flex justify-center">
-            <div
-              className="ff-success-icon inline-flex items-center justify-center rounded-full"
-              style={{
-                width: compact ? 64 : 80,
-                height: compact ? 64 : 80,
-                background: roleIconColors.bg,
-                boxShadow: `0 0 0 6px ${roleIconColors.ring}`,
-              }}
-            >
-              <RoleIcon
-                strokeWidth={2.2}
-                className="ff-success-icon-svg"
+          <>
+            <div data-ff-anim="zoom-in" className="ff-success-badge-wrap mb-2 flex justify-center">
+              <div
+                className="ff-success-icon relative inline-flex items-center justify-center rounded-full"
                 style={{
-                  color: roleIconColors.fg,
-                  width: compact ? 32 : 40,
-                  height: compact ? 32 : 40,
+                  width: compact ? 64 : 80,
+                  height: compact ? 64 : 80,
+                  background: roleIconColors.bg,
+                  boxShadow: `0 0 0 6px ${roleIconColors.ring}`,
                 }}
-              />
+              >
+                <SuccessConfetti />
+                <RoleIcon
+                  strokeWidth={2.2}
+                  className="ff-success-icon-svg"
+                  style={{
+                    color: roleIconColors.fg,
+                    width: compact ? 32 : 40,
+                    height: compact ? 32 : 40,
+                  }}
+                />
+              </div>
             </div>
-          </div>
+            <SuccessProgressBar />
+          </>
         )}
 
         {section.eyebrow && (

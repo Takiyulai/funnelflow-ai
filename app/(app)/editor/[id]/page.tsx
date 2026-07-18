@@ -29,7 +29,6 @@ import {
 } from "@/lib/store/funnelStore";
 import type { Funnel, FunnelPage, FunnelSection } from "@/lib/funnels/types";
 import SioLinkingTab from "@/components/editor/SioLinkingTab";
-import DeliveryEmailTab from "@/components/editor/DeliveryEmailTab";
 import TrackingPixelsTab from "@/components/editor/TrackingPixelsTab";
 import CustomCodeTab from "@/components/editor/CustomCodeTab";
 import { InlineColorToolbar } from "@/components/editor/InlineColorToolbar";
@@ -94,7 +93,6 @@ export default function EditorPage() {
 
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
   const [sioLinkingOpen, setSioLinkingOpen] = useState(false);
-  const [deliveryEmailOpen, setDeliveryEmailOpen] = useState(false);
   // 🆕 LOT 4 — Panneau « Pixels publicitaires ».
   const [trackingOpen, setTrackingOpen] = useState(false);
   // 🆕 VAGUE CUSTOM-CODE — Panneau « Code personnalisé » (Agency).
@@ -992,10 +990,8 @@ export default function EditorPage() {
             onOpenGlobalStyle={() => setShowGlobalStyle(true)}
             onOpenHeader={() => setHeaderOpen(true)}
             onOpenSioLinking={() => setSioLinkingOpen(true)}
-            onOpenDeliveryEmail={() => setDeliveryEmailOpen(true)}
             onOpenTracking={() => setTrackingOpen(true)}
             onOpenCustomCode={() => setCustomCodeOpen(true)}
-            deliveryEmailEnabled={!!funnel.meta?.deliveryEmail?.enabled}
           />
         </div>
 
@@ -1059,13 +1055,6 @@ export default function EditorPage() {
         />
       )}
 
-      {deliveryEmailOpen && (
-        <DeliveryEmailTab
-          funnel={funnel}
-          onChange={updateFunnelMeta}
-          onClose={() => setDeliveryEmailOpen(false)}
-        />
-      )}
 
       {trackingOpen && (
         <TrackingPixelsTab

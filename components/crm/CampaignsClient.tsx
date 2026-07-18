@@ -74,6 +74,9 @@ type Props = {
   resendReady: boolean;
   /** 🆕 LOT 3 — Ouvertures/clics par campagne (messages distincts). */
   campaignStats?: Record<string, { opens: number; clicks: number }>;
+  /** 🆕 Tags CRM, pour cibler l'audience d'une campagne par tag (ex. « inscrits
+   *  webinaire X ») plutôt que seulement par statut ou par « tous ». */
+  tags?: { id: string; name: string }[];
 };
 
 export function CampaignsClient({
@@ -81,6 +84,7 @@ export function CampaignsClient({
   contactsCount,
   resendReady,
   campaignStats = {},
+  tags = [],
 }: Props) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -126,9 +130,11 @@ export function CampaignsClient({
   }
 
   function audiencePayload() {
-    return audience === "all"
-      ? { type: "all" as const }
-      : { type: "status" as const, status: audience as LeadStatus };
+    if (audience === "all") return { type: "all" as const };
+    if (audience.startsWith("tag:")) {
+      return { type: "tag" as const, tagId: audience.slice(4) };
+    }
+    return { type: "status" as const, status: audience as LeadStatus };
   }
 
   // 🆕 Programme la campagne à la date choisie (file scheduled_emails + cron).
@@ -218,14 +224,10 @@ export function CampaignsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const aud =
-        audience === "all"
-          ? { type: "all" }
-          : { type: "status", status: audience as LeadStatus };
       const res = await fetch(`/api/crm/campaigns/${editing.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audience: aud }),
+        body: JSON.stringify({ audience: audiencePayload() }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
@@ -425,6 +427,15 @@ export function CampaignsClient({
                   {AUDIENCES.map((a) => (
                     <option key={a.value} value={a.value}>{a.label}</option>
                   ))}
+                  {tags.length > 0 && (
+                    <optgroup label="Par tag">
+                      {tags.map((t) => (
+                        <option key={t.id} value={`tag:${t.id}`}>
+                          Tag : {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </label>
 

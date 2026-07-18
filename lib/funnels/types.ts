@@ -609,6 +609,10 @@ export interface FunnelIntegrations {
   systemeIoScriptId?: string;
   /** Map pageId → URL publiée sur Systeme.io (pour résolution auto des liens inter‑pages). */
   sioPageUrls?: Record<string, string>;
+  /** 🆕 Liens Systeme.io supplémentaires, SANS page AutoFunnel correspondante
+   *  (ex : étape créée uniquement côté SIO). Purement informatif — non résolus
+   *  automatiquement dans les CTA (contrairement à `sioPageUrls`). Nombre illimité. */
+  sioExtraUrls?: { id: string; label: string; url: string }[];
 }
 
 
@@ -1081,7 +1085,24 @@ export type FunnelBrief = {
   brandColors?: string[];
   logoUrl?: string;
   videoUrl?: string;
+  /** 🆕 Nom et prénom de la personne présentée dans la section "à propos"
+   *  (distinct de aboutText = la biographie). Optionnel : si vide, la section
+   *  about retombe sur brandName comme avant (rétro-compatible). */
+  authorName?: string;
   aboutText?: string;
+  /** 🆕 Bénéfices clés saisis manuellement dans le wizard (liste dynamique,
+   *  boutons +/-). Si non vide, prime sur la génération automatique de la
+   *  section "benefits" (l'IA/le template les utilisent verbatim). */
+  keyBenefits?: string[];
+  /** 🆕 Texte d'urgence/rareté saisi manuellement (raison concrète d'agir
+   *  maintenant : places limitées, prix qui augmente, bonus qui expire...).
+   *  Si vide, retombe sur le texte générique existant (rétro-compatible). */
+  urgencyText?: string;
+  /** 🆕 Garantie saisie manuellement (titre/description/durée). Si tous
+   *  vides, retombe sur la garantie générique existante. */
+  guaranteeTitle?: string;
+  guaranteeDescription?: string;
+  guaranteeDuration?: string;
   ctaUrl?: string;
   ctaLabel?: string;
   ctaTarget?: "_self" | "_blank";

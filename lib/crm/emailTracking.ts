@@ -20,6 +20,11 @@ export type EmailTrackingParams = {
   sourceType?: string | null;
   campaignId?: string | null;
   sequenceId?: string | null;
+  /** 🆕 Identifiant du MAIL précis dans la séquence (crm_sequence_emails.id).
+   *  Sans lui, une condition workflow ne peut cibler que « un email
+   *  quelconque de cette séquence » — avec lui, elle peut cibler « CET email
+   *  précis » (ex. le rappel H-2 plutôt que n'importe quel email envoyé). */
+  sequenceEmailId?: string | null;
 };
 
 function trackingQuery(opts: EmailTrackingParams): string {
@@ -30,6 +35,7 @@ function trackingQuery(opts: EmailTrackingParams): string {
   if (opts.sourceType) q.set("t", opts.sourceType);
   if (opts.campaignId) q.set("g", opts.campaignId);
   if (opts.sequenceId) q.set("s", opts.sequenceId);
+  if (opts.sequenceEmailId) q.set("se", opts.sequenceEmailId);
   return q.toString();
 }
 

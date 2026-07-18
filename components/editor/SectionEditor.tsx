@@ -14,7 +14,6 @@ import { MediaTab } from "@/components/editor/tabs/MediaTab";
 import { CtaTab } from "@/components/editor/tabs/CtaTab";
 import { StyleTab } from "@/components/editor/tabs/StyleTab";
 import { BackgroundTab } from "@/components/editor/tabs/BackgroundTab";
-import { DecorativeIconsPanel } from "@/components/editor/tabs/DecorativeIconsPanel";
 import { RawHtmlContentTab } from "@/components/editor/tabs/RawHtmlContentTab";
 import { SectionRegenPanel } from "@/components/editor/SectionRegenPanel";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
@@ -186,12 +185,6 @@ export function SectionEditor({ section, language, funnel, onChange, onFunnelCha
         )}
         {safeActiveTab === "background" && !isRawHtml && (
           <BackgroundTab section={section} onChange={onChange} />
-        )}
-
-        {/* DecorativeIconsPanel : uniquement pour les sections natives.
-            Les sections raw-html gèrent leurs icônes via le HTML cloné. */}
-        {!isRawHtml && (
-          <DecorativeIconsPanel section={section} onChange={onChange} />
         )}
       </div>
     </div>
