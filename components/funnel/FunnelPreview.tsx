@@ -202,16 +202,10 @@ function getRoleIconColors(role: PageRole | undefined): {
 // fois au montage (positions/couleurs figées via un lazy initializer, jamais
 // recalculées au re-render) animées en pur CSS. Respecte
 // prefers-reduced-motion : rien n'est rendu si l'utilisateur l'a demandé.
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-  }, []);
-  return reduced;
-}
-
+// 🆕 Effets "wow" volontairement DÉCOUPLÉS de prefers-reduced-motion : ce sont
+// des effets opt-in choisis par le créateur (menu « Effet d'arrivée »). Beaucoup
+// d'appareils (mode économie d'énergie Android, « réduire les animations »)
+// activent reduced-motion et masquaient alors totalement l'effet.
 const CONFETTI_COLORS = ["#EF4444", "#F59E0B", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899"];
 
 type ConfettiPiece = {
@@ -229,7 +223,8 @@ type ConfettiPiece = {
 function makeConfettiPieces(count: number): ConfettiPiece[] {
   return Array.from({ length: count }, (_, i) => {
     const angle = Math.random() * Math.PI * 2;
-    const distance = 64 + Math.random() * 96;
+    // Rayon réduit → les confettis restent DANS la section (overflow:hidden).
+    const distance = 40 + Math.random() * 56;
     return {
       id: i,
       dx: Math.round(Math.cos(angle) * distance),
@@ -246,9 +241,7 @@ function makeConfettiPieces(count: number): ConfettiPiece[] {
 
 /** Salve de confettis centrée sur son conteneur (le badge de succès). */
 function SuccessConfetti() {
-  const reduced = useReducedMotion();
-  const [particles] = useState(() => makeConfettiPieces(26));
-  if (reduced) return null;
+  const [particles] = useState(() => makeConfettiPieces(30));
   return (
     <div aria-hidden className="ff-confetti-burst">
       {particles.map((p) => (
@@ -272,14 +265,25 @@ function SuccessConfetti() {
   );
 }
 
-/** Barre fine sous le badge de succès, qui charge de 0 à 100% à l'affichage. */
+/** Barre fine sous le badge de succès, qui charge de 0 à 100% à l'affichage.
+ *  🆕 Pilotée en JS (requestAnimationFrame) : elle REPART de 0 à chaque montage
+ *  et anime réellement jusqu'à 100% — l'ancienne version CSS « one-shot »
+ *  laissait la barre pleine dès qu'un utilisateur arrivait après la fin. */
 function SuccessProgressBar() {
-  const reduced = useReducedMotion();
+  // 🆕 Animation 100 % CSS (fiable, insensible aux re-render du preview qui
+  // annulaient le requestAnimationFrame). Le remplissage 0 → 100 % est piloté par
+  // le keyframe `ff-success-progress-fill` (voir funnel-theme.css), ralenti à
+  // 5,5 s et en vert.
   return (
-    <div className="ff-success-progress" aria-hidden>
-      <div
-        className={`ff-success-progress-fill${reduced ? " ff-success-progress-fill--static" : ""}`}
-      />
+    <div className="ff-success-progress-wrap" aria-hidden>
+      <div className="ff-success-progress">
+        <div className="ff-success-progress-fill" />
+      </div>
+      {/* Repères 0% / 100% aux extrémités uniquement. */}
+      <div className="ff-success-progress-labels">
+        <span>0%</span>
+        <span>100%</span>
+      </div>
     </div>
   );
 }
@@ -1716,7 +1720,10 @@ function HeroBlock({
                   boxShadow: `0 0 0 6px ${roleIconColors.ring}`,
                 }}
               >
-                <SuccessConfetti />
+                {/* 🆕 Confettis affichés seulement si l'effet le prévoit
+                    (funnel.meta.successEffect : both/confetti). */}
+                {funnel.meta?.successEffect !== "progress" &&
+                  funnel.meta?.successEffect !== "none" && <SuccessConfetti />}
                 <RoleIcon
                   strokeWidth={2.2}
                   className="ff-success-icon-svg"
@@ -1728,7 +1735,10 @@ function HeroBlock({
                 />
               </div>
             </div>
-            <SuccessProgressBar />
+            {/* 🆕 Barre de progression seulement si l'effet le prévoit
+                (funnel.meta.successEffect : both/progress). */}
+            {funnel.meta?.successEffect !== "confetti" &&
+              funnel.meta?.successEffect !== "none" && <SuccessProgressBar />}
           </>
         )}
 

@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 // 🆕 Baseline de LANCEMENT (ajustable par toi) : ajoutée aux compteurs réels
 // pour un affichage crédible tant que le volume réel est faible. Mets 0 pour un
 // affichage 100 % réel. C'est une décision marketing — à toi de l'assumer.
-const BASELINE = { funnels: 0, leads: 0 };
+// Réglée pour que les deux compteurs dépassent confortablement 100.
+const BASELINE = { funnels: 100, leads: 90 };
 
 export async function GET() {
   try {

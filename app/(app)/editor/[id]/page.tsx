@@ -13,6 +13,7 @@ import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { EditorSidebar } from "@/components/editor/EditorSidebar";
 import { PageSelector } from "@/components/editor/PageSelector";
 import { PageRegenPanel } from "@/components/editor/PageRegenPanel";
+import { ShareTemplateButton } from "@/components/editor/ShareTemplateButton";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { GlobalStylePanel } from "@/components/editor/GlobalStylePanel";
 import { SectionEditorDrawer } from "@/components/editor/SectionEditorDrawer";
@@ -977,6 +978,15 @@ export default function EditorPage() {
               onApply={handleRegeneratePageApply}
             />
           )}
+
+          {/* 🆕 Partager ce tunnel dans la Galerie communautaire */}
+          <div className="flex justify-end">
+            <ShareTemplateButton
+              funnelId={funnelId}
+              defaultName={funnel.funnelName}
+              defaultOwner={funnel.header?.brandName}
+            />
+          </div>
 
           <EditorSidebar
             sections={activeSections}

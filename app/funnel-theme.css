@@ -42,28 +42,48 @@
   }
 }
 
+/* 🆕 Conteneur : air AU-DESSUS (sous l'icône) ET EN DESSOUS (avant l'eyebrow). */
+.ff-success-progress-wrap {
+  max-width: 300px;
+  margin: 30px auto 34px;
+}
 .ff-success-progress {
-  max-width: 260px;
-  margin: 14px auto 0;
-  height: 6px;
+  max-width: 100%;
+  margin: 0 auto;
+  height: 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ff-ink) 12%, transparent);
   overflow: hidden;
+}
+/* Repères 0 / valeur / 100 % sous la barre. */
+.ff-success-progress-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ff-ink) 45%, transparent);
+}
+.ff-success-progress-value {
+  color: #22C55E;
+  font-variant-numeric: tabular-nums;
 }
 .ff-success-progress-fill {
   height: 100%;
   width: 0%;
   border-radius: 999px;
+  /* 🆕 Couleur EN COHÉRENCE avec le CTA du template (logique d'origine). */
   background: var(--ff-btn-bg, var(--ff-accent, #22C55E));
-  animation: ff-success-progress-fill 1.8s cubic-bezier(0.22, 0.9, 0.32, 1) 0.2s forwards;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ff-accent, #22C55E) 45%, transparent);
+  /* 🆕 Vitesse « juste milieu » (4,2 s) ; reste plein à la fin (forwards).
+     PLUS gated par prefers-reduced-motion (effet opt-in choisi par le créateur). */
+  animation: ff-success-progress-fill 4.2s cubic-bezier(0.45, 0.05, 0.35, 1) 0.25s forwards;
 }
-.ff-success-progress-fill--static { width: 100%; animation: none; }
 @keyframes ff-success-progress-fill {
   from { width: 0%; }
   to { width: 100%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ff-success-progress-fill { animation: none; width: 100%; }
 }
 
 /* ───────── 1. Wrapper ───────── */

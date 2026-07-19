@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  BarChart3, GitBranch, LayoutDashboard,
+  BarChart3, GitBranch, LayoutDashboard, LayoutGrid,
   PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun, CreditCard, LifeBuoy,
 } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import { clearFunnelCache } from "@/lib/store/funnelStore";
 const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/create", label: "Créer un tunnel", icon: PlusCircle, primary: true },
+  { href: "/galerie", label: "Galerie", icon: LayoutGrid },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/emails", label: "Emails", icon: Mail },
   // Export systeme.io retiré du menu : la logique est intégrée à l'éditeur

@@ -576,6 +576,10 @@ function buildShowcaseSections(brief: FunnelBrief): FunnelSection[] {
 export function CreateFunnelWizard() {
   const [step, setStep] = useState(0);
   const [mobileTab, setMobileTab] = useState<"form" | "preview">("form");
+  // 🆕 Sous-onglet actif + message de validation de l'étape « Ton offre » (levés
+  // ici pour pouvoir sauter sur l'onglet incomplet quand on bloque « Suivant »).
+  const [offerSubTab, setOfferSubTab] = useState<OfferSubTab>("marque");
+  const [offerStepError, setOfferStepError] = useState("");
   const stepperRef = useRef<HTMLDivElement>(null);
   const [brief, setBrief] = useState<FunnelBrief>(initialBrief);
   const [logoPreview, setLogoPreview] = useState<string>("");
@@ -887,6 +891,24 @@ export function CreateFunnelWizard() {
 
   const stepLabel = steps[step];
 
+  // 🆕 Passage à l'étape suivante AVEC garde de validation sur « Ton offre » :
+  // si un champ obligatoire (nom de marque, nom de l'offre) est vide, on NE passe
+  // PAS, on affiche un message et on saute sur le sous-onglet incomplet.
+  const goNext = () => {
+    if (stepLabel === "Ton offre") {
+      const missing = getOfferMissingRequired(brief);
+      if (missing.length > 0) {
+        setOfferSubTab(missing[0].tab);
+        setOfferStepError(
+          `Il manque ${missing.map((m) => m.label).join(" et ")} avant de continuer.`,
+        );
+        return;
+      }
+      setOfferStepError("");
+    }
+    setStep((v) => Math.min(steps.length - 1, v + 1));
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // Écran de choix initial (Part B) — n'altère PAS la machine d'étapes classique.
   // ─────────────────────────────────────────────────────────────────────────
@@ -1092,7 +1114,7 @@ export function CreateFunnelWizard() {
             step={step}
             total={steps.length}
             onPrev={() => setStep((v) => Math.max(0, v - 1))}
-            onNext={() => setStep((v) => Math.min(steps.length - 1, v + 1))}
+            onNext={goNext}
           />
 
           <div className="mt-5 animate-[slideIn_0.25s_ease-out] min-w-0" key={`${step}-${stepLabel}`}>
@@ -1155,6 +1177,13 @@ export function CreateFunnelWizard() {
                 update={update}
                 logoPreview={logoPreview}
                 setLogo={setLogo}
+                subTab={offerSubTab}
+                setSubTab={setOfferSubTab}
+                error={
+                  offerStepError && getOfferMissingRequired(brief).length > 0
+                    ? offerStepError
+                    : ""
+                }
               />
             )}
             {stepLabel === "Audience" && <AudienceStep brief={brief} update={update} />}
@@ -1225,7 +1254,7 @@ export function CreateFunnelWizard() {
               step={step}
               total={steps.length}
               onPrev={() => setStep((v) => Math.max(0, v - 1))}
-              onNext={() => setStep((v) => Math.min(steps.length - 1, v + 1))}
+              onNext={goNext}
             />
           </div>
         </Card>
@@ -1351,16 +1380,48 @@ const OFFER_SUBTABS = [
 ] as const;
 type OfferSubTab = (typeof OFFER_SUBTABS)[number]["id"];
 
+// 🆕 Complétude de chaque sous-onglet « Ton offre ».
+//  - required : true si un champ OBLIGATOIRE de l'onglet est vide (bloque « Suivant »).
+//  - filled   : true si l'onglet a du contenu (indicateur ✓ vert / point ambre).
+// Obligatoires : marque = nom de marque, offre = nom de l'offre. Le reste est
+// recommandé (l'IA peut compléter) → indiqué mais non bloquant.
+function getOfferTabStatus(
+  brief: FunnelBrief,
+): Record<OfferSubTab, { required: boolean; filled: boolean }> {
+  const benefits = (brief.keyBenefits ?? []).filter((b) => b.trim());
+  const brand = !!brief.brandName?.trim();
+  const offer = !!brief.offerName?.trim();
+  return {
+    marque: { required: !brand, filled: brand },
+    offre: { required: !offer, filled: offer },
+    benefices: { required: false, filled: benefits.length > 0 },
+    apropos: { required: false, filled: !!(brief.aboutText?.trim() || brief.authorName?.trim()) },
+  };
+}
+
+/** 🆕 Champs OBLIGATOIRES manquants de l'étape « Ton offre » (pour bloquer Suivant). */
+function getOfferMissingRequired(
+  brief: FunnelBrief,
+): { tab: OfferSubTab; label: string }[] {
+  const miss: { tab: OfferSubTab; label: string }[] = [];
+  if (!brief.brandName?.trim()) miss.push({ tab: "marque", label: "le nom de marque" });
+  if (!brief.offerName?.trim()) miss.push({ tab: "offre", label: "le nom de l'offre/produit" });
+  return miss;
+}
+
 // ─── ÉTAPE FUSIONNÉE : Marque + Offre + À propos ───
 function OfferStep({
-  brief, update, logoPreview, setLogo,
+  brief, update, logoPreview, setLogo, subTab, setSubTab, error,
 }: {
   brief: FunnelBrief;
   update: <K extends keyof FunnelBrief>(k: K, v: FunnelBrief[K]) => void;
   logoPreview: string;
   setLogo: (dataUrl: string | undefined) => void;
+  subTab: OfferSubTab;
+  setSubTab: (t: OfferSubTab) => void;
+  error?: string;
 }) {
-  const [subTab, setSubTab] = useState<OfferSubTab>("marque");
+  const status = getOfferTabStatus(brief);
 
   // 🆕 Liste dynamique des bénéfices clés (boutons + / ✕).
   const benefits = brief.keyBenefits ?? [];
@@ -1383,28 +1444,56 @@ function OfferStep({
         </p>
       </div>
 
-      {/* 🆕 Barre de sous-onglets : un bloc à la fois → fini le scroll géant. */}
+      {/* 🆕 Barre de sous-onglets avec INDICATEUR de complétude par onglet :
+          point rouge = champ obligatoire manquant · ✓ vert = rempli · point
+          ambre = recommandé/vide. L'utilisateur voit d'un coup d'œil ce qui
+          reste à remplir avant de cliquer « Suivant ». */}
       <div className="-mx-0.5 flex gap-1 overflow-x-auto p-0.5 sm:flex-wrap">
         {OFFER_SUBTABS.map((tab) => {
           const Icon = tab.icon;
           const active = subTab === tab.id;
+          const st = status[tab.id];
           return (
             <button
               key={tab.id}
               type="button"
               onClick={() => setSubTab(tab.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+              className={`relative flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
                 active
                   ? "border-[#08498D] bg-[#08498D] text-white shadow-sm"
-                  : "border-line bg-white text-ink/70 hover:border-[#08498D]/40 hover:text-ink"
+                  : st.required
+                    ? "border-red-400/60 bg-white text-ink/70 hover:text-ink"
+                    : "border-line bg-white text-ink/70 hover:border-[#08498D]/40 hover:text-ink"
               }`}
             >
               <Icon size={13} />
               {tab.label}
+              {/* Pastille d'état */}
+              <span
+                aria-hidden
+                className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-black"
+                style={
+                  st.required
+                    ? { background: "#EF4444", color: "#fff" }
+                    : st.filled
+                      ? { background: "#22C55E", color: "#fff" }
+                      : { background: "rgba(199,164,54,0.25)", color: "#A9821E" }
+                }
+              >
+                {st.required ? "!" : st.filled ? "✓" : "•"}
+              </span>
             </button>
           );
         })}
       </div>
+
+      {/* 🆕 Message si l'utilisateur a cliqué « Suivant » avec un champ obligatoire vide. */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600">
+          <span aria-hidden>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* ── Bloc 1 : Marque ── */}
       {subTab === "marque" && (

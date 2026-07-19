@@ -354,6 +354,32 @@ export function GlobalStylePanel({ funnel, onChange, onClose }: Props) {
             WhatsApp / Telegram&nbsp;» + un bouton optionnel vers une autre
             destination. Laissez vide pour ne rien afficher.
           </p>
+
+          {/* 🆕 Choix de l'effet « wow » de ces pages (barre / confettis). */}
+          <Field
+            label="Effet d'arrivée"
+            hint="Animation jouée quand le visiteur arrive sur la page merci/confirmation/livraison."
+          >
+            <select
+              className={inputClass}
+              value={funnel.meta?.successEffect ?? "both"}
+              onChange={(e) =>
+                onChange({
+                  meta: {
+                    ...(funnel.meta ?? {}),
+                    successEffect: e.target
+                      .value as NonNullable<Funnel["meta"]>["successEffect"],
+                  },
+                })
+              }
+            >
+              <option value="both">Barre de progression + confettis</option>
+              <option value="progress">Barre de progression seule</option>
+              <option value="confetti">Confettis seuls</option>
+              <option value="none">Aucun effet</option>
+            </select>
+          </Field>
+
           <Field label="Lien canal WhatsApp" hint="Ex : https://chat.whatsapp.com/…">
             <input
               type="url"

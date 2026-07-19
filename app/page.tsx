@@ -5,7 +5,7 @@ import { motion, useInView, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, CheckCircle2, Download, Globe2, Sparkles, Upload,
   Clock, Smartphone, Shield, Mail, Users, Briefcase, Palette,
-  MessageCircle, Star, Eye, Layers, ChevronDown, Rocket, BarChart3,
+  MessageCircle, Star, Eye, Layers, Rocket, BarChart3,
   Target, Wand2, FileCode2, Gauge, MousePointerClick, Settings2,
   Send, LineChart, Menu, X, Search, PenTool, Handshake,
 } from "lucide-react";
@@ -806,20 +806,28 @@ function StatsBand({ lang }: { lang: "fr" | "en" | "es" }) {
     en: { funnels: "Funnels generated", leads: "Leads captured", fast: "For a full funnel", ext: "External tool needed" },
     es: { funnels: "Embudos generados", leads: "Leads capturados", fast: "Para un embudo completo", ext: "Herramienta externa" },
   }[lang];
-  const cell = (big: React.ReactNode, label: string, key: React.Key) => (
-    <div key={key} className="flex flex-col items-center px-4 py-1">
-      <span className="ff-title" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", fontWeight: 700, color: "#fff", lineHeight: 1 }}>{big}</span>
-      <span className="ff-body mt-2" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", textAlign: "center" }}>{label}</span>
-    </div>
-  );
+  const items: { icon: React.ReactNode; node: React.ReactNode; label: string; c1: string; c2: string }[] = [
+    { icon: <Rocket size={20} style={{ color: "#fff" }} />, node: <><CountUp to={stats?.funnels ?? 0} />{stats && stats.funnels > 0 ? "+" : ""}</>, label: L.funnels, c1: "#1E6644", c2: "#22C55E" },
+    { icon: <Users size={20} style={{ color: "#fff" }} />, node: <><CountUp to={stats?.leads ?? 0} />{stats && stats.leads > 0 ? "+" : ""}</>, label: L.leads, c1: "#08498D", c2: "#3B82F6" },
+    { icon: <Gauge size={20} style={{ color: "#fff" }} />, node: <>&lt; 5 min</>, label: L.fast, c1: "#A9821E", c2: "#E3C563" },
+    { icon: <Shield size={20} style={{ color: "#fff" }} />, node: <>0</>, label: L.ext, c1: "#1E6644", c2: "#22C55E" },
+  ];
   return (
-    <section style={{ background: "#080E1A", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-9">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 divide-y-0 md:divide-x" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-          {cell(<><CountUp to={stats?.funnels ?? 0} />{stats && stats.funnels > 0 ? "+" : ""}</>, L.funnels, "f")}
-          {cell(<><CountUp to={stats?.leads ?? 0} />{stats && stats.leads > 0 ? "+" : ""}</>, L.leads, "l")}
-          {cell(<span style={{ color: "#C7A436" }}>&lt; 5 min</span>, L.fast, "t")}
-          {cell(<span style={{ color: "#31845C" }}>0</span>, L.ext, "e")}
+    <section style={{ position: "relative", overflow: "hidden", background: "#080E1A", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      {/* Halo animé pour donner de la vie à la bande */}
+      <motion.div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(600px 240px at 50% 0%, rgba(49,132,92,0.16), transparent 70%)" }}
+        animate={{ opacity: [0.55, 1, 0.55] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-12 relative">
+        <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-4">
+          {items.map((it, i) => (
+            <motion.div key={i} className="rounded-2xl px-4 py-6 text-center"
+              style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.09)", boxShadow: `0 20px 50px -30px ${it.c2}` }}
+              whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <div className="mx-auto mb-3.5 flex items-center justify-center rounded-2xl" style={{ width: 46, height: 46, background: `linear-gradient(135deg, ${it.c1}, ${it.c2})`, boxShadow: `0 8px 22px -6px ${it.c2}` }}>{it.icon}</div>
+              <div className="ff-title" style={{ fontSize: "clamp(2rem,5.5vw,3.1rem)", fontWeight: 800, lineHeight: 1, backgroundImage: `linear-gradient(135deg, ${it.c2}, #ffffff)`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>{it.node}</div>
+              <div className="ff-body mt-2.5" style={{ fontSize: 13, color: "rgba(255,255,255,0.62)" }}>{it.label}</div>
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>
@@ -893,6 +901,52 @@ function ComparisonTable({ lang }: { lang: "fr" | "en" | "es" }) {
   );
 }
 
+// 🆕 Photos réelles pour les témoignages (portraits libres randomuser.me),
+// mappées par index (les noms sont identiques dans les 3 langues).
+const TESTIMONIAL_AVATARS = [
+  "https://randomuser.me/api/portraits/women/68.jpg", // Camille
+  "https://randomuser.me/api/portraits/men/32.jpg",   // Julien
+  "https://randomuser.me/api/portraits/women/44.jpg", // Inès
+  "https://randomuser.me/api/portraits/men/46.jpg",   // Marc
+  "https://randomuser.me/api/portraits/women/65.jpg", // Sara
+  "https://randomuser.me/api/portraits/men/75.jpg",   // Antoine
+];
+
+// 🆕 Carrousel de témoignages « hors du commun » : marquee INFINI (défilement
+// continu), pause au survol, cartes qui se soulèvent, dégradés de bord, photos
+// réelles. La liste est dupliquée pour une boucle sans couture (-50%).
+function TestimonialsCarousel({ items }: { items: readonly { quote: string; name: string; role: string }[] }) {
+  const loop = [...items, ...items];
+  return (
+    <div className="testi-marquee">
+      <div className="testi-marquee__track">
+        {loop.map((tItem, i) => (
+          <article key={i} className="testi-card">
+            <div className="testi-card__stars">
+              {[...Array(5)].map((_, k) => <Star key={k} size={13} fill="#C7A436" style={{ color: "#C7A436" }} />)}
+            </div>
+            <p className="testi-card__quote">“{tItem.quote}”</p>
+            <div className="testi-card__author">
+              <img
+                src={TESTIMONIAL_AVATARS[i % items.length]}
+                alt={tItem.name}
+                className="testi-card__avatar"
+                loading="lazy"
+                width={46}
+                height={46}
+              />
+              <div style={{ textAlign: "left" }}>
+                <div className="ff-body" style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{tItem.name}</div>
+                <div className="ff-body" style={{ fontSize: 11.5, color: "rgba(255,255,255,0.45)" }}>{tItem.role}</div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionTag({ children, color = "#31845C" }: { children: React.ReactNode; color?: string }) {
   return (
     <div className="ff-body inline-flex items-center justify-center gap-2"
@@ -909,17 +963,37 @@ function AccentLine() {
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div onClick={() => setOpen(!open)} className="cursor-pointer border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+    <div
+      onClick={() => setOpen(!open)}
+      className="cursor-pointer rounded-xl px-3 transition-colors"
+      style={{
+        // 🆕 Le conteneur change de couleur une fois ouvert.
+        background: open ? "rgba(199,164,54,0.09)" : "transparent",
+        borderBottom: open ? "1px solid rgba(199,164,54,0.28)" : "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
       <div className="flex items-center justify-between gap-4 py-5">
-        <p style={{ fontSize: 15, fontWeight: 600, color: "#fff", lineHeight: 1.4 }}>{q}</p>
-        <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.22 }} className="shrink-0">
-          <ChevronDown size={17} style={{ color: "#C7A436" }} />
+        <p style={{ fontSize: 15, fontWeight: 600, color: open ? "#E3C563" : "#fff", lineHeight: 1.4 }}>{q}</p>
+        {/* 🆕 Symbole + qui pivote en × à l'ouverture */}
+        <motion.div
+          animate={{ rotate: open ? 45 : 0 }}
+          transition={{ duration: 0.22 }}
+          className="shrink-0 flex items-center justify-center rounded-full"
+          style={{
+            width: 26, height: 26,
+            background: open ? "#C7A436" : "rgba(199,164,54,0.14)",
+            color: open ? "#08111F" : "#C7A436",
+            fontSize: 22, fontWeight: 400, lineHeight: 1,
+          }}
+          aria-hidden
+        >
+          <span style={{ marginTop: -2 }}>+</span>
         </motion.div>
       </div>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden">
-            <p className="pb-5 leading-relaxed" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.6)" }}>{a}</p>
+            <p className="pb-5 leading-relaxed" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.68)" }}>{a}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1001,7 +1075,7 @@ export default function LandingPage() {
           .preview-btn { font-size: 11px !important; padding: 6px 10px !important; }
           .section-title { font-size:clamp(1.7rem,6.5vw,2.5rem) !important; }
           .pricing-grid { grid-template-columns:1fr !important; }
-          .steps-grid { grid-template-columns:1fr 1fr !important; }
+          .steps-grid { grid-template-columns:1fr !important; }
           .pillars-grid { grid-template-columns:1fr !important; }
           .features-grid { grid-template-columns:1fr !important; }
           .templates-grid { grid-template-columns:1fr !important; }
@@ -1012,6 +1086,12 @@ export default function LandingPage() {
         /* Petits écrans : checklist du hero alignée verticalement (puces alignées) */
         @media (max-width:640px){
           .hero-proof { display:grid !important; grid-template-columns:1fr; gap:8px !important; justify-items:start; width:max-content; max-width:100%; margin-left:auto; margin-right:auto; text-align:left; }
+          /* 🆕 Badges du hero : plus compacts pour tenir sur une seule ligne */
+          .hero-badges { gap:6px !important; }
+          .hero-badges > span { font-size:11px !important; padding:3px 8px !important; gap:5px !important; }
+        }
+        @media (max-width:380px){
+          .hero-badges > span { font-size:10px !important; padding:3px 7px !important; }
         }
 
         /* Tablettes : 2–3 colonnes au lieu de 4–5 (sinon ça paraît "desktop" et serré) */
@@ -1024,14 +1104,41 @@ export default function LandingPage() {
           .testi-grid { grid-template-columns:repeat(2,1fr) !important; }
           .steps-grid { grid-template-columns:repeat(2,1fr) !important; }
         }
+
+        /* 🆕 Effets hover du header */
+        .nav-link { position:relative; }
+        .nav-link::after { content:''; position:absolute; left:0; right:0; bottom:-5px; height:2px; border-radius:2px; background:linear-gradient(90deg,#31845C,#C7A436); transform:scaleX(0); transform-origin:left center; transition:transform .26s cubic-bezier(0.4,0,0.2,1); }
+        .nav-link:hover::after { transform:scaleX(1); }
+        .header-logo { transition:transform .25s ease; }
+        .header-logo:hover { transform:translateY(-1px); }
+        .header-logo .logo-badge { transition:box-shadow .25s ease, transform .25s ease; }
+        .header-logo:hover .logo-badge { box-shadow:0 0 0 3px rgba(199,164,54,0.28); transform:rotate(-4deg) scale(1.05); }
+        .header-cta { transition:transform .2s ease, box-shadow .25s ease, filter .2s ease; }
+        .header-cta:hover { transform:translateY(-2px); box-shadow:0 10px 24px -8px rgba(199,164,54,0.55); filter:brightness(1.05); }
+        .header-lang { transition:transform .2s ease, background .2s ease; }
+        .header-lang:hover { transform:translateY(-1px); background:rgba(199,164,54,0.2) !important; }
+
+        /* 🆕 Carrousel témoignages — marquee infini premium, pause au survol */
+        .testi-marquee { position:relative; overflow:hidden; padding:34px 0; -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
+        .testi-marquee__track { display:flex; gap:20px; width:max-content; animation:testi-scroll 48s linear infinite; will-change:transform; }
+        .testi-marquee:hover .testi-marquee__track { animation-play-state:paused; }
+        @keyframes testi-scroll { from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+        .testi-card { position:relative; flex:0 0 340px; width:340px; background:#0C1524; border:1px solid rgba(255,255,255,0.09); border-radius:20px; padding:24px 24px 22px; display:flex; flex-direction:column; box-shadow:0 30px 60px -42px rgba(0,0,0,0.85); transition:transform .35s cubic-bezier(0.2,0.8,0.2,1), border-color .3s ease, box-shadow .3s ease; overflow:hidden; }
+        .testi-card::before { content:''; position:absolute; left:0; right:0; top:0; height:3px; background:linear-gradient(90deg,#31845C,#C7A436); opacity:0.65; }
+        .testi-card:hover { transform:translateY(-10px) scale(1.025); border-color:rgba(199,164,54,0.45); box-shadow:0 46px 80px -34px rgba(199,164,54,0.28); }
+        .testi-card__stars { display:flex; gap:2px; margin-bottom:14px; }
+        .testi-card__quote { font-size:15px; line-height:1.6; color:rgba(255,255,255,0.78); margin:0 0 18px; flex:1; }
+        .testi-card__author { display:flex; align-items:center; gap:12px; }
+        .testi-card__avatar { width:46px; height:46px; border-radius:50%; object-fit:cover; border:2px solid rgba(199,164,54,0.55); box-shadow:0 6px 16px -6px rgba(199,164,54,0.5); }
+        @media (max-width:640px){ .testi-card { flex-basis:280px; width:280px; } .testi-marquee__track { animation-duration:36s; } }
       `}</style>
 
       {/* HEADER */}
       <header style={{ background: "rgba(8,14,26,0.78)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: `1px solid ${BORDER}` }} className="sticky top-0 z-50">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-3 py-3 sm:px-6 lg:px-8" style={{ gap: 8 }}>
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2 ff-body shrink-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg ff-title" style={{ background: "linear-gradient(135deg,#31845C,#08498D)", fontSize: 12, color: "#fff", letterSpacing: 0, minWidth: 28 }}>
+          <a href="/" className="header-logo flex items-center gap-2 ff-body shrink-0">
+            <div className="logo-badge flex h-7 w-7 items-center justify-center rounded-lg ff-title" style={{ background: "linear-gradient(135deg,#31845C,#08498D)", fontSize: 12, color: "#fff", letterSpacing: 0, minWidth: 28 }}>
               AF
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: "#fff", fontFamily: "DM Sans, sans-serif" }}>
@@ -1048,7 +1155,7 @@ export default function LandingPage() {
               ["#faq", t.nav.faq],
               ["/login", t.nav.login],
             ].map(([href, label]) => (
-              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.6)" }} className="hover:text-white transition-colors ff-body whitespace-nowrap">
+              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.6)" }} className="nav-link hover:text-white transition-colors ff-body whitespace-nowrap">
                 {label}
               </a>
             ))}
@@ -1057,14 +1164,14 @@ export default function LandingPage() {
           {/* Right actions */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Language switcher — toujours visible */}
-            <button onClick={cycleLang} className="flex items-center gap-1 rounded-full px-2.5 py-1.5 ff-body transition hover:opacity-80" style={{ background: "rgba(199,164,54,0.12)", border: "1px solid rgba(199,164,54,0.25)", color: "#C7A436", fontSize: 11, fontWeight: 700 }}>
+            <button onClick={cycleLang} className="header-lang flex items-center gap-1 rounded-full px-2.5 py-1.5 ff-body" style={{ background: "rgba(199,164,54,0.12)", border: "1px solid rgba(199,164,54,0.25)", color: "#C7A436", fontSize: 11, fontWeight: 700 }}>
               <Globe2 size={12} /> {lang.toUpperCase()}
             </button>
 
             {/* Desktop CTA */}
             <a
               href="#pricing"
-              className="hidden md:inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 ff-body font-bold text-white transition hover:opacity-90 active:scale-95"
+              className="header-cta hidden md:inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 ff-body font-bold text-white active:scale-95"
               style={{ background: "linear-gradient(135deg,#31845C,#08498D)", fontSize: 12 }}
             >
               {t.ctaHeader}
@@ -1157,13 +1264,13 @@ export default function LandingPage() {
               </div>
 
               {/* 🆕 Badges différenciants : rapidité, mobile-first, tout-en-un */}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="hero-badges mt-4 flex flex-wrap gap-2">
                 {[
                   { icon: <Gauge size={13} />, label: ({ fr: "Ultra-rapide", en: "Ultra-fast", es: "Ultrarrápido" } as const)[lang] },
                   { icon: <Smartphone size={13} />, label: "Mobile-first" },
                   { icon: <Layers size={13} />, label: ({ fr: "Tout dans l'app", en: "All in the app", es: "Todo en la app" } as const)[lang] },
                 ].map((b, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 ff-body" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 ff-body whitespace-nowrap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>
                     <span style={{ color: "#31845C" }}>{b.icon}</span>{b.label}
                   </span>
                 ))}
@@ -1505,13 +1612,6 @@ export default function LandingPage() {
               </FadeInWhenVisible>
             );
           })}
-          <FadeInWhenVisible direction="up" delay={t.templates.cases.length * 0.06}>
-            <div className="rounded-2xl p-6 h-full flex flex-col justify-center" style={{ background: "linear-gradient(150deg,rgba(49,132,92,0.16),rgba(8,73,141,0.10))", border: "1px solid rgba(49,132,92,0.30)" }}>
-              <h3 className="ff-title" style={{ fontSize: 17, fontWeight: 600, color: "#fff" }}>{({ fr: "Et le tien ?", en: "And yours?", es: "¿Y el tuyo?" } as const)[lang]}</h3>
-              <p className="ff-body mt-2 mb-3.5 leading-relaxed" style={{ fontSize: 15.5, color: "#b9c6d6" }}>{({ fr: "Décris ton offre, l'IA s'adapte au reste.", en: "Describe your offer, the AI handles the rest.", es: "Describe tu oferta, la IA se encarga del resto." } as const)[lang]}</p>
-              <a href="#pricing" className="ff-title self-start" style={{ fontSize: 15, fontWeight: 600, color: "#C7A436", textDecoration: "none" }}>{({ fr: "Commencer →", en: "Get started →", es: "Empezar →" } as const)[lang]}</a>
-            </div>
-          </FadeInWhenVisible>
         </div>
 
       </section>
@@ -1527,24 +1627,7 @@ export default function LandingPage() {
             <AccentLine />
           </FadeInWhenVisible>
         </div>
-        <div className="mx-auto mt-12 max-w-6xl px-4 sm:px-6 lg:px-8 testi-grid grid gap-5" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
-          {t.testimonials.items.map((testimonial, i) => (
-            <FadeInWhenVisible key={i} direction="up" delay={(i % 3) * 0.1}>
-              <div className="card-hover rounded-2xl p-6 h-full flex flex-col" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
-                <div className="flex gap-0.5 mb-4">
-                  {[...Array(5)].map((_, k) => <Star key={k} size={13} fill="#C7A436" style={{ color: "#C7A436" }} />)}
-                </div>
-                <p className="ff-body leading-relaxed mb-5 flex-1" style={{ fontSize: 15.5, color: "rgba(255,255,255,0.7)" }}>
-                  "{testimonial.quote}"
-                </p>
-                <div>
-                  <p className="ff-body font-bold" style={{ fontSize: 14, color: "#fff" }}>{testimonial.name}</p>
-                  <p className="ff-body mt-0.5" style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{testimonial.role}</p>
-                </div>
-              </div>
-            </FadeInWhenVisible>
-          ))}
-        </div>
+        <TestimonialsCarousel items={t.testimonials.items} />
       </section>
 
       {/* PRICING */}

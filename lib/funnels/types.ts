@@ -890,6 +890,12 @@ export type Funnel = {
      * (canaux WhatsApp, etc.) ne sont pas affectés. Voir resolveCtaWithGlobal().
      */
     applyDefaultCtaToAll?: boolean;
+    /**
+     * 🆕 Effet "wow" des pages de remerciement/confirmation/livraison :
+     * "both" (barre + confettis, défaut), "progress" (barre seule),
+     * "confetti" (confettis seuls), "none" (aucun effet).
+     */
+    successEffect?: "both" | "progress" | "confetti" | "none";
   };
 };
 
