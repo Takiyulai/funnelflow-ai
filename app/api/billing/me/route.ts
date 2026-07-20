@@ -3,6 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getProfile, getAccess } from "@/lib/billing/subscription";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PLANS } from "@/lib/billing/plans";
@@ -48,6 +49,33 @@ export async function GET() {
   // (ex : publication) qui ne passent pas par une route API gardée.
   const access = await getAccess(user.id);
 
+  // 🆕 Jours restants avant expiration de la licence (table user_licenses,
+  // intégration CinetPay). On prend la licence ACTIVE dont l'expiration est la
+  // plus LOINTAINE (max expires_at). Un jour entamé compte comme restant
+  // (Math.ceil). Best-effort : indisponible → daysRemaining/expiresAt = null,
+  // l'UI retombe alors sur l'affichage simple « Abonnement actif ».
+  let expiresAt: string | null = null;
+  let daysRemaining: number | null = null;
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: lic } = await admin
+      .from("user_licenses")
+      .select("expires_at")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .not("expires_at", "is", null)
+      .order("expires_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lic?.expires_at) {
+      expiresAt = lic.expires_at as string;
+      const diffMs = new Date(expiresAt).getTime() - Date.now();
+      daysRemaining = Math.ceil(diffMs / 86_400_000);
+    }
+  } catch (e) {
+    console.error("[billing/me] lecture user_licenses échouée", e);
+  }
+
   return NextResponse.json({
     ok: true,
     planId,
@@ -55,5 +83,7 @@ export async function GET() {
     status,
     active,
     hasAccess: access.hasAccess,
+    expiresAt,
+    daysRemaining,
   });
 }

@@ -962,7 +962,7 @@ function wrapHtmlDocument(
           // Fallback heuristique
           if (!answerSpotId) {
             var qText = (spot.textContent || '').trim();
-            var looksLikeQuestion = qText.length > 4 && qText.length < 200 && /\?\s*$/.test(qText);
+            var looksLikeQuestion = qText.length > 4 && qText.length < 200 && /\\?\\s*$/.test(qText);
             if (looksLikeQuestion) {
               // Conteneur d'item FAQ : ancêtre proche au "look" FAQ, sinon parent.
               var container = spot.closest('[class*="faq" i],[class*="accordion" i],[class*="question" i],[class*="toggle" i],[class*="collaps" i],[class*="item" i]') || spot.parentElement;

@@ -5,8 +5,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Menu, X, Moon, Sun } from "lucide-react";
 import { Sidebar } from "./Sidebar";
-import { TawkToWidget } from "@/components/support/TawkToWidget";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ChatWidget } from "@/components/chatbot/ChatWidget";
 
 const THEME_KEY = "ff:theme";
 type Theme = "light" | "dark";
@@ -14,23 +13,6 @@ type Theme = "light" | "dark";
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
-  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
-
-  // Email de l'utilisateur connecté → pré-rempli dans Tawk.to (savoir qui écrit).
-  useEffect(() => {
-    let active = true;
-    try {
-      const supabase = createSupabaseBrowserClient();
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (active) setUserEmail(session?.user?.email ?? undefined);
-      });
-    } catch {
-      /* Supabase indisponible : widget standard sans pré-remplissage */
-    }
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Lecture du thème persistant au montage (évite le flash : on n'applique la
   // classe qu'au niveau du wrapper AppShell, pas sur <html>).
@@ -116,9 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {/* Widget support Tawk.to — UNIQUEMENT dans l'espace connecté (jamais sur
-          les tunnels publics, qui n'utilisent pas AppShell). */}
-      <TawkToWidget visitorEmail={userEmail} />
+      {/* 🆕 Chatbot IA maison (bas-droite) — UNIQUEMENT dans l'espace connecté
+          (jamais sur les tunnels publics, qui n'utilisent pas AppShell).
+          Répond automatiquement à partir de la base de connaissances. */}
+      <ChatWidget />
     </div>
   );
 }

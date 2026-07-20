@@ -2,6 +2,12 @@ import { withSentryConfig } from '@sentry/nextjs';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: false,
+  // 🆕 Chatbot IA : garantit que les fichiers Markdown de la base de
+  // connaissances (lus au runtime par la route /api/chat) sont bien inclus
+  // dans le bundle serverless déployé sur Vercel.
+  outputFileTracingIncludes: {
+    '/api/chat': ['./lib/chatbot/knowledge/**/*.md'],
+  },
 };
 
 export default withSentryConfig(nextConfig, {

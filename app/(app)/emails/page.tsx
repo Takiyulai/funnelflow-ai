@@ -7,6 +7,7 @@ import { listCampaigns } from "@/lib/crm/campaigns";
 import { listTags } from "@/lib/crm/tags";
 import { resendConfigured } from "@/lib/crm/email";
 import { EmailsModule } from "@/components/crm/EmailsModule";
+import { getEmailStats, EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
 import type { Campaign } from "@/lib/crm/types";
 
 type PublishedFunnelOpt = { id: string; name: string };
@@ -37,8 +38,10 @@ export default async function EmailsPage({
   // 🆕 LOT 3 — Ouvertures/clics par campagne (best-effort : {} si la migration
   // db/email-events-schema.sql n'est pas encore passée).
   const campaignStats: Record<string, { opens: number; clicks: number }> = {};
+  // 🆕 Bandeau de stats agrégées (total/actives/envoyés/ouverture/clic/séquences).
+  let emailStats: EmailStats = { ...EMPTY_EMAIL_STATS };
   try {
-    const [campaignsRes, contactsRes, publishedFunnelsRes, tagsRes] = await Promise.all([
+    const [campaignsRes, contactsRes, publishedFunnelsRes, tagsRes, statsRes] = await Promise.all([
       listCampaigns(sb, user.id),
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       // Tunnels PUBLIÉS de l'utilisateur, pour rattacher une séquence (Étape 4).
@@ -49,9 +52,11 @@ export default async function EmailsPage({
         .eq("status", "published")
         .order("updated_at", { ascending: false }),
       listTags(sb, user.id),
+      getEmailStats(sb, user.id),
     ]);
     campaigns = campaignsRes;
     contactsCount = contactsRes.count ?? 0;
+    emailStats = statsRes;
     publishedFunnels = (publishedFunnelsRes.data ?? []).map(
       (f: { id: string; name: string | null }) => ({ id: f.id, name: f.name || "Tunnel" }),
     );
@@ -87,6 +92,7 @@ export default async function EmailsPage({
         publishedFunnels={publishedFunnels}
         campaignStats={campaignStats}
         tags={tags}
+        emailStats={emailStats}
       />
     </AppShell>
   );

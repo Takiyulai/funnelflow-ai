@@ -40,14 +40,23 @@ export function Sidebar({
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [planInfo, setPlanInfo] = useState<{ planName: string | null; status: string } | null>(null);
+  const [planInfo, setPlanInfo] = useState<{
+    planName: string | null;
+    status: string;
+    daysRemaining: number | null;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
     fetch("/api/billing/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (active && d?.ok) setPlanInfo({ planName: d.planName ?? null, status: d.status });
+        if (active && d?.ok)
+          setPlanInfo({
+            planName: d.planName ?? null,
+            status: d.status,
+            daysRemaining: typeof d.daysRemaining === "number" ? d.daysRemaining : null,
+          });
       })
       .catch(() => {});
     return () => {
@@ -237,19 +246,50 @@ export function Sidebar({
               {planInfo?.planName ? `Plan ${planInfo.planName}` : "Abonnement"}
             </p>
           </div>
-          <p className="text-xs leading-relaxed text-white/65">
-            {planInfo
-              ? planInfo.status === "active" || planInfo.status === "trialing"
-                ? "Abonnement actif"
-                : "Aucun abonnement actif"
-              : "Chargement…"}
-          </p>
+          {(() => {
+            if (!planInfo) {
+              return <p className="text-xs leading-relaxed text-white/65">Chargement…</p>;
+            }
+            const isActive =
+              planInfo.status === "active" || planInfo.status === "trialing";
+            const days = planInfo.daysRemaining;
+            const expired = days !== null && days <= 0;
+            const soon = days !== null && days > 0 && days <= 5;
+
+            if (!isActive || expired) {
+              return (
+                <p
+                  className="text-xs font-semibold leading-relaxed"
+                  style={{ color: "#F87171" }}
+                >
+                  {expired ? "Abonnement expiré" : "Aucun abonnement actif"}
+                </p>
+              );
+            }
+
+            const daysLabel =
+              days !== null
+                ? ` · ${days} jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}`
+                : "";
+            return (
+              <p
+                className="text-xs font-medium leading-relaxed"
+                style={{ color: soon ? "#FBBF24" : "rgba(255,255,255,0.7)" }}
+              >
+                Abonnement actif{daysLabel}
+              </p>
+            );
+          })()}
           <Link
             href="/abonnement"
             className="mt-2 inline-block text-[11px] font-semibold underline"
             style={{ color: "#C7A436" }}
           >
-            Gérer mon abonnement
+            {planInfo &&
+            planInfo.daysRemaining !== null &&
+            planInfo.daysRemaining <= 0
+              ? "Renouveler mon abonnement"
+              : "Gérer mon abonnement"}
           </Link>
         </div>
 

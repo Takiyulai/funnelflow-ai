@@ -6,7 +6,10 @@ import {
   Download, FileText, Globe2, Users,
   Sparkles,
   CreditCard, Wallet, UserCheck, Percent,
+  Megaphone, Send, MailOpen, Workflow, ArrowRight,
 } from "lucide-react";
+import Link from "next/link";
+import type { EmailStats } from "@/lib/crm/emailStats";
 import { getExportCount, EXPORTS_CHANGED_EVENT } from "@/lib/store/statsStore";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
@@ -71,8 +74,17 @@ export default function DashboardPage() {
     conversionRate: number;
   } | null>(null);
 
+  // 🆕 Stats email agrégées (carte KPI + lien vers /emails).
+  const [emailStats, setEmailStats] = useState<EmailStats | null>(null);
+
   useEffect(() => {
     let active = true;
+    fetch("/api/crm/email-stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.ok && d.stats) setEmailStats(d.stats as EmailStats);
+      })
+      .catch(() => {});
     fetch("/api/crm/contacts?limit=1")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -245,6 +257,43 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* 🆕 KPI Emails — calculés automatiquement ; détail complet dans /emails. */}
+      <div className="mt-6 flex items-center justify-between">
+        <h2 className="text-lg font-black text-ink">Emails</h2>
+        <Link
+          href="/emails"
+          className="inline-flex items-center gap-1 text-xs font-bold text-gold hover:underline"
+        >
+          Voir les emails <ArrowRight size={13} />
+        </Link>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <DashboardCard
+          label="Campagnes"
+          value={emailStats === null ? "…" : String(emailStats.totalCampaigns)}
+          icon={<Megaphone size={18} />}
+          accent="blue"
+        />
+        <DashboardCard
+          label="Emails envoyés"
+          value={emailStats === null ? "…" : emailStats.emailsSent.toLocaleString("fr-FR")}
+          icon={<Send size={18} />}
+          accent="green"
+        />
+        <DashboardCard
+          label="Taux d'ouverture"
+          value={emailStats === null ? "…" : `${emailStats.openRate}%`}
+          icon={<MailOpen size={18} />}
+          accent="gold"
+        />
+        <DashboardCard
+          label="Séquences actives"
+          value={emailStats === null ? "…" : String(emailStats.activeSequences)}
+          icon={<Workflow size={18} />}
+          accent="blue"
+        />
+      </div>
+
       {/* Contenu */}
       <div className="mt-6">
         {/* Liste tunnels */}
@@ -304,7 +353,7 @@ function FunnelRow({
   const pageLabel = pages.length > 1 ? `${pages.length} pages · ` : "";
 
   return (
-    <div className="ff-card-hover flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 sm:p-3.5">
+    <div className="ff-card-hover flex min-w-0 items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 sm:p-3.5">
       <a href={`/editor/${id}`} className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-ink">{funnel.funnelName}</p>
         <p className="mt-0.5 truncate text-xs text-muted">

@@ -13,7 +13,9 @@ import { useState } from "react";
 import { Mail, Workflow } from "lucide-react";
 import { CampaignsClient } from "@/components/crm/CampaignsClient";
 import { SequencesClient } from "@/components/crm/SequencesClient";
+import { EmailStatsBand } from "@/components/crm/EmailStatsBand";
 import type { Campaign } from "@/lib/crm/types";
+import { EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
 
 type Tab = "newsletter" | "sequences";
 
@@ -27,6 +29,7 @@ export function EmailsModule({
   publishedFunnels = [],
   campaignStats = {},
   tags = [],
+  emailStats = EMPTY_EMAIL_STATS,
 }: {
   initialCampaigns: Campaign[];
   contactsCount: number;
@@ -37,6 +40,8 @@ export function EmailsModule({
   campaignStats?: Record<string, { opens: number; clicks: number }>;
   /** 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes. */
   tags?: { id: string; name: string }[];
+  /** 🆕 Stats email agrégées (bandeau en haut du module). */
+  emailStats?: EmailStats;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -63,6 +68,9 @@ export function EmailsModule({
           Vos diffusions ponctuelles (newsletters) et vos séquences automatisées.
         </p>
       </div>
+
+      {/* 🆕 Bandeau de statistiques (calculées automatiquement). */}
+      <EmailStatsBand stats={emailStats} />
 
       <div className="inline-flex w-fit gap-1 rounded-xl border border-line/60 bg-white/50 p-1">
         {tabBtn("newsletter", "Newsletter / Diffusions", Mail)}

@@ -17,7 +17,7 @@
 
 /** Clés (insensibles à la casse) dont la VALEUR est toujours remplacée. */
 const SENSITIVE_KEY_PATTERN =
-  /(authorization|cookie|set-cookie|token|secret|api[-_]?key|apikey|password|passwd|service[-_]?role|stripe[-_]?signature|x-api-key|webhook)/i;
+  /(authorization|cookie|set-cookie|token|secret|api[-_]?key|apikey|password|passwd|service[-_]?role|stripe[-_]?signature|x-api-key|webhook|openrouter)/i;
 
 /**
  * Chemins d'API dont le corps de requête ENTIER est retiré (paiement /
@@ -26,7 +26,7 @@ const SENSITIVE_KEY_PATTERN =
  * pour se fier à un filtrage partiel.
  */
 const SENSITIVE_ROUTE_PATTERN =
-  /\/api\/(checkout|stripe\/webhook|cinetpay\/(notify|connect)|webhooks\/(chariow|cinetpay)|billing\/(portal|cinetpay\/init)|license\/validate|subscribe|connect\/onboard)/i;
+  /\/api\/(chat|checkout|stripe\/webhook|cinetpay\/(notify|connect)|webhooks\/(chariow|cinetpay)|billing\/(portal|cinetpay\/init)|license\/validate|subscribe|connect\/onboard)/i;
 
 const EMAIL_PATTERN = /([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
 
