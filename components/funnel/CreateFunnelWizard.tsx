@@ -818,7 +818,7 @@ export function CreateFunnelWizard() {
           emoji: "✨",
           title: "Ton premier tunnel est né !",
           message:
-            "L'IA vient de te générer un tunnel complet. Personnalise-le à ton goût, puis publie-le pour le mettre en ligne.",
+            "Nos agents IA viennent de te générer un tunnel complet. Personnalise-le à ton goût, puis publie-le pour le mettre en ligne.",
         });
         setTimeout(() => {
           router.push(`/editor/${stored.id}`);

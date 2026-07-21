@@ -214,7 +214,11 @@ function CelebrationModal({ modal, onClose }: { modal: NonNullable<ModalState>; 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-xs font-semibold text-muted transition hover:text-ink"
+            className={
+              modal.cta
+                ? "rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-canvas"
+                : "inline-flex items-center justify-center rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-zinc-950 transition hover:opacity-90"
+            }
           >
             Continuer
           </button>

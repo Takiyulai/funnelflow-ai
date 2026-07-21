@@ -3541,10 +3541,11 @@
 [data-ff-skin] .sk-h2 .ff-hl { text-shadow: none; }
 .sk-cta {
   display: inline-flex; align-items: center; gap: 10px;
-  padding: 16px 32px; border-radius: var(--sk-btn-radius, 10px);
+  /* 🆕 Épaisseur augmentée (demande UX) : boutons plus « présents ». */
+  padding: 19px 40px; border-radius: var(--sk-btn-radius, 10px);
   background: var(--ff-btn-bg, #111); color: var(--ff-btn-ink, #fff);
-  font-weight: 700; font-size: 16.5px; line-height: 1.2; text-decoration: none;
-  box-shadow: var(--ff-btn-shadow, 0 10px 26px rgba(0,0,0,.2));
+  font-weight: 800; font-size: 17px; line-height: 1.2; text-decoration: none;
+  box-shadow: var(--ff-btn-shadow, 0 12px 30px rgba(0,0,0,.22));
   text-transform: var(--sk-btn-tt, none); letter-spacing: .02em;
   border: none; cursor: pointer; font-family: inherit;
 }

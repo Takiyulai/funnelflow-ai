@@ -156,26 +156,6 @@ function FaqSandwichDoubleCta({ section, faqs, mode }: FaqPatternProps) {
           <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
-      {section.cta && (
-        <div
-          data-ff-anim="fade-up"
-          style={{
-            margin: "26px 0",
-            background: "color-mix(in srgb, var(--ff-accent) 12%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--ff-accent) 30%, transparent)",
-            borderRadius: 16,
-            padding: "20px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 18,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ fontWeight: 600, fontSize: 17 }}>Déjà convaincu ?</div>
-          <CtaButton cta={section.cta} disabled={mode === "preview"} />
-        </div>
-      )}
       {second.length > 0 && (
         <div data-ff-anim="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {second.map((f, i) => (
