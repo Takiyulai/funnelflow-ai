@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Users2, Flag, Loader2, ArrowRight, ExternalLink, Heart } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { handlePlanGate } from "@/lib/billing/planGate";
+import { queueCelebration } from "@/components/ui/Celebration";
 
 type Template = {
   id: string;
@@ -164,6 +165,11 @@ export default function GaleriePage() {
         setNotice(json.message || json.error || "Impossible d'utiliser ce modèle.");
         return;
       }
+      queueCelebration({
+        level: "m",
+        title: "Modèle ajouté à ton compte ✨",
+        message: "Il est prêt à être personnalisé. À toi de jouer !",
+      });
       router.push(`/editor/${json.funnelId}`);
     } catch {
       setNotice("Connexion impossible. Réessaie.");

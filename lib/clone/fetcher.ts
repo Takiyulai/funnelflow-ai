@@ -193,6 +193,26 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
           }
         }
 
+        // 🆕 FIX FOND — le VRAI fond (dégradé/couleur) est souvent sur un wrapper
+        // INTERNE de section (div#section-XXX) via un CSS SCOPÉ (#preview-container,
+        // #__nuxt…). Extrait en iframe sans cet ancêtre, la règle ne matche plus →
+        // fond blanc. On inline donc le fond PROPRE (calculé) des div de section.
+        var dv = document.querySelectorAll('body section div');
+        for (var d = 0; d < dv.length; d++) {
+          var de = dv[d];
+          if (de.getAttribute('data-ff-bg-captured')) continue;
+          if ((de.getAttribute('style') || '').toLowerCase().indexOf('background') !== -1) continue;
+          var dcs = window.getComputedStyle(de);
+          if (!dcs) continue;
+          if (dcs.backgroundImage && dcs.backgroundImage !== 'none') {
+            de.style.backgroundImage = dcs.backgroundImage;
+            de.setAttribute('data-ff-bg-captured', 'img2');
+          } else if (!isTransparent(dcs.backgroundColor)) {
+            de.style.backgroundColor = dcs.backgroundColor;
+            de.setAttribute('data-ff-bg-captured', 'col2');
+          }
+        }
+
         // ── FOND DE PAGE (html/body) — cause racine principale ──────────────
         // Le parser fait $("body").html() : le <body style> est jeté, et le
         // reset du <head> forçait 'background: transparent'. Le vrai fond de la

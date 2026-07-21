@@ -38,6 +38,7 @@ import {
 } from "@/lib/store/funnelStore";
 import { MediasStep } from "@/components/funnel/wizard/MediasStep";
 import { CopywritingStep } from "@/components/funnel/wizard/CopywritingStep";
+import { queueCelebration } from "@/components/ui/Celebration";
 
 // 11 étapes (fusion Marque + Offre + À propos = "Ton offre")
 const ALL_STEPS = [
@@ -809,6 +810,16 @@ export function CreateFunnelWizard() {
       try {
         const stored = createFunnelFromAi(enrichedFunnel, brief);
         setSuccessMessage("Tunnel généré : redirection vers l'éditeur...");
+        // 🆕 Micro-victoire : 1er tunnel généré (déclenchée après l'arrivée sur
+        // l'éditeur — la modale se perdrait sinon à la navigation).
+        queueCelebration({
+          level: "l",
+          once: "first_funnel",
+          emoji: "✨",
+          title: "Ton premier tunnel est né !",
+          message:
+            "L'IA vient de te générer un tunnel complet. Personnalise-le à ton goût, puis publie-le pour le mettre en ligne.",
+        });
         setTimeout(() => {
           router.push(`/editor/${stored.id}`);
         }, 600);

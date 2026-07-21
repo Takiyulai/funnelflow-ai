@@ -58,16 +58,35 @@ export function RawHtmlRenderer({
 
     let observer: ResizeObserver | null = null;
 
+    // 🆕 FIX « espaces vides » (bandes vides entre sections / sous le footer) :
+    // on NE mesure PLUS avec documentElement.scrollHeight — il est GONFLÉ soit
+    // par la hauteur du viewport de l'iframe (feedback : l'iframe fait 400px →
+    // documentElement lit 400px même si le contenu ne fait que 191px), soit par
+    // des éléments hors-flux rattachés en fin de page (orphelins overlay). On
+    // mesure la hauteur RÉELLE du contenu = body.scrollHeight, complétée par le
+    // bas des enfants directs réellement dans le flux (on IGNORE le conteneur
+    // d'overlays hors-flux `data-ff-overlays`, sinon un popup/script positionné
+    // loin regonfle la hauteur → grande bande vide).
+    const measureContentHeight = (doc: Document): number => {
+      const body = doc.body;
+      if (!body) return 0;
+      let h = body.scrollHeight;
+      const children = body.children;
+      for (let i = 0; i < children.length; i++) {
+        const el = children[i] as HTMLElement;
+        if (el.hasAttribute("data-ff-overlays")) continue; // hors-flux : ignoré
+        const rect = el.getBoundingClientRect();
+        if (rect.height > 0) h = Math.max(h, Math.ceil(rect.bottom));
+      }
+      return h;
+    };
+
     const updateHeight = () => {
       try {
         const doc = iframe.contentDocument;
         if (!doc) return;
-        const h = Math.max(
-          doc.documentElement.scrollHeight,
-          doc.body?.scrollHeight ?? 0,
-        );
-        // Phase 1A : plafond relevé 12000 → 60000 px pour les longs tunnels
-        // (VSL / sales pages) qui étaient coupés en bas.
+        // Plafond 60000 px pour les longs tunnels (VSL / sales pages).
+        const h = measureContentHeight(doc);
         if (h > 0) setIframeHeight(Math.min(60000, h));
       } catch {
         // CORS

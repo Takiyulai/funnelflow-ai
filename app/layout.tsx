@@ -15,6 +15,7 @@ import "./globals.css";
 import "./funnel-theme.css";
 import "../styles/funnel-animations.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { CelebrationProvider } from "@/components/ui/Celebration";
 
 const inter = Inter({ subsets: ["latin"], variable: "--ff-font-inter", display: "swap" });
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--ff-font-playfair", display: "swap" });
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   className={`${inter.className} font-sans antialiased`}
   suppressHydrationWarning
 >
-  <ToastProvider>{children}</ToastProvider>
+  <ToastProvider>
+    <CelebrationProvider>{children}</CelebrationProvider>
+  </ToastProvider>
 </body>
 
     </html>

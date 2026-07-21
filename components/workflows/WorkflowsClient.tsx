@@ -13,6 +13,8 @@ import {
   Trash2,
   UserCheck,
   Zap,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type {
@@ -1164,6 +1166,41 @@ function ActionConfigFields({
   /** 🆕 Délai déjà accumulé jusqu'à ce nœud (aperçu chronologique). */
   baseOffsetMs?: number;
 }) {
+  // 🆕 Génération IA du contenu de l'email d'action (« Envoyer un email »).
+  const [genPrompt, setGenPrompt] = useState("");
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  async function generateWorkflowEmail() {
+    if (action.kind !== "send_email" || genLoading) return;
+    setGenLoading(true);
+    setGenError(null);
+    try {
+      const res = await fetch("/api/crm/workflow-email/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: genPrompt }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (handlePlanGate(res.status, data, (m) => setGenError(`${m.title}. ${m.description}`))) {
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setGenError(data.message || "Génération impossible. Réessaie.");
+        return;
+      }
+      onChange({
+        kind: "send_email",
+        subject: typeof data.subject === "string" ? data.subject : "",
+        content: typeof data.content === "string" ? data.content : "",
+      });
+    } catch {
+      setGenError("Connexion impossible. Réessaie.");
+    } finally {
+      setGenLoading(false);
+    }
+  }
+
   return (
     <div className="mt-3">
         {action.kind === "add_tag" && (
@@ -1312,6 +1349,34 @@ function ActionConfigFields({
         {/* 🆕 VAGUE 1 / LOT 5 — Email direct au contact */}
         {action.kind === "send_email" && (
           <div className="grid gap-2">
+            {/* 🆕 Génération IA à volonté de l'objet + du contenu */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={genPrompt}
+                  onChange={(e) => setGenPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      generateWorkflowEmail();
+                    }
+                  }}
+                  disabled={genLoading}
+                  placeholder="De quoi parle cet email ? (optionnel) — ex. relance panier abandonné"
+                  className="min-w-0 flex-1 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-ink focus-ring disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={generateWorkflowEmail}
+                  disabled={genLoading}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gold px-3 py-1.5 text-xs font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {genLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  {genLoading ? "Génération…" : "Générer avec l'IA"}
+                </button>
+              </div>
+              {genError && <p className="mt-1.5 text-[11px] text-red-600">{genError}</p>}
+            </div>
             <input
               value={action.subject}
               onChange={(e) =>

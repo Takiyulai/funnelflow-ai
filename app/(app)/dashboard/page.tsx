@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { EmailStats } from "@/lib/crm/emailStats";
+import { useCelebrate } from "@/components/ui/Celebration";
+import { reachedThreshold, LEAD_THRESHOLDS, SALE_THRESHOLDS } from "@/lib/ux/milestones";
 import { getExportCount, EXPORTS_CHANGED_EVENT } from "@/lib/store/statsStore";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
@@ -32,6 +34,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function DashboardPage() {
   const stored = useFunnelList();
+  const { celebrate } = useCelebrate();
+
+  // 🆕 Liste tunnels : on n'affiche que les 3 plus récents par défaut, le reste
+  // se déplie via « Voir plus ».
+  const [showAllFunnels, setShowAllFunnels] = useState(false);
+  const RECENT_LIMIT = 3;
 
   // 🆕 Total de leads réel (CRM) + compteur d'exports.
   const [leadsCount, setLeadsCount] = useState<number | null>(null);
@@ -88,7 +96,27 @@ export default function DashboardPage() {
     fetch("/api/crm/contacts?limit=1")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (active && d?.ok && typeof d.total === "number") setLeadsCount(d.total);
+        if (active && d?.ok && typeof d.total === "number") {
+          setLeadsCount(d.total);
+          // 🆕 Micro-victoire : 1er lead (jalon) + paliers (étape).
+          const t = reachedThreshold("leads", d.total, LEAD_THRESHOLDS);
+          if (t === 1) {
+            celebrate({
+              level: "l",
+              emoji: "🎯",
+              title: "Ton tout premier lead !",
+              message:
+                "Quelqu'un vient d'entrer dans ton tunnel. La machine est lancée — garde le cap.",
+              cta: { label: "Voir mes leads", href: "/leads" },
+            });
+          } else if (t) {
+            celebrate({
+              level: "m",
+              title: `${t} leads collectés 🚀`,
+              message: "Ta base grandit. Pense à les relancer par email.",
+            });
+          }
+        }
       })
       .catch(() => {});
     fetch("/api/stats/payments")
@@ -102,6 +130,24 @@ export default function DashboardPage() {
             clients: d.clients ?? 0,
             conversionRate: d.conversionRate ?? 0,
           });
+          // 🆕 Micro-victoire : 1re vente (jalon) + paliers de ventes (étape).
+          const t = reachedThreshold("sales", d.payments ?? 0, SALE_THRESHOLDS);
+          if (t === 1) {
+            celebrate({
+              level: "l",
+              emoji: "💰",
+              title: "Ta première vente !",
+              message:
+                "Un client vient de payer. C'est LA preuve que ton tunnel convertit. Bravo — maintenant, envoie plus de trafic.",
+              cta: { label: "Voir mes paiements", href: "/paiements" },
+            });
+          } else if (t) {
+            celebrate({
+              level: "m",
+              title: `${t} ventes 🔥`,
+              message: "Ton tunnel tourne. Continue sur ta lancée.",
+            });
+          }
         }
       })
       .catch(() => {});
@@ -183,12 +229,6 @@ export default function DashboardPage() {
             {account.name ? `Bonjour, ${account.name}` : "Tableau de bord"}
           </h1>
           <p className="mt-1.5 text-sm text-muted">
-            {account.email ? (
-              <>
-                <span className="font-medium text-ink/70">{account.email}</span>
-                {" · "}
-              </>
-            ) : null}
             Vue claire de vos tunnels, exports et leads
           </p>
         </div>
@@ -304,7 +344,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-2">
-            {stored.map((item) => (
+            {(showAllFunnels ? stored : stored.slice(0, RECENT_LIMIT)).map((item) => (
               <FunnelRow
                 key={item.id}
                 stored={item}
@@ -319,6 +359,20 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
+
+          {stored.length > RECENT_LIMIT && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAllFunnels((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-4 py-2 text-xs font-semibold text-ink transition hover:bg-canvas"
+              >
+                {showAllFunnels
+                  ? "Voir moins"
+                  : `Voir plus (${stored.length - RECENT_LIMIT})`}
+              </button>
+            </div>
+          )}
         </Card>
       </div>
     </AppShell>

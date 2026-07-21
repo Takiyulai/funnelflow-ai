@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createFunnelFromAi } from "@/lib/store/funnelStore";
 import { handlePlanGate } from "@/lib/billing/planGate";
+import { queueCelebration } from "@/components/ui/Celebration";
 import type { Funnel, FunnelBrief, Language } from "@/lib/funnels/types";
 
 /** Brief synthétique minimal exigé par createFunnelFromAi pour un clone. */
@@ -93,6 +94,14 @@ export default function ImportPage() {
       const funnel = data.funnel as Funnel;
       const brief = buildCloneBrief(funnel, trimmed, language);
       const stored = createFunnelFromAi(funnel, brief);
+      queueCelebration({
+        level: "l",
+        once: "first_import",
+        emoji: "📥",
+        title: "Tunnel importé !",
+        message:
+          "Ta page a été clonée dans ton compte. Retouche-la à ta sauce, puis publie-la.",
+      });
       router.push(`/editor/${stored.id}`);
     } catch (err) {
       clearTimeout(t1);

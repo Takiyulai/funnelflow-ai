@@ -13,6 +13,8 @@ import { Card } from "@/components/ui/Card";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
+import { useCelebrate } from "@/components/ui/Celebration";
+import { hasMilestone } from "@/lib/ux/milestones";
 import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
 
 type PublishedFunnel = { id: string; name: string };
@@ -54,6 +56,7 @@ function textToHtml(text: string): string {
 }
 
 export function SequencesClient({ publishedFunnels }: { publishedFunnels: PublishedFunnel[] }) {
+  const { celebrate } = useCelebrate();
   // 🆕 LOT 1 : liste ORDONNÉE de rôles (remplace "type" unique + "nombre de
   // mails" — 1 rôle ajouté = 1 mail généré, dans l'ordre de la liste).
   const [roles, setRoles] = useState<SequenceRole[]>([{ id: "bienvenue" }]);
@@ -200,6 +203,17 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; subject: string; content: string }>)
         .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, subject: e.subject, body: e.content })));
       setNotice("Séquence enregistrée.");
+      // 🆕 Micro-victoire : 1re séquence créée = jalon (confettis), une seule fois.
+      if (!hasMilestone("first_sequence")) {
+        celebrate({
+          level: "l",
+          once: "first_sequence",
+          emoji: "⚙️",
+          title: "Ta première automatisation est prête !",
+          message:
+            "Tes emails partiront tout seuls au bon moment. L'automatisation travaille pour toi, même quand tu dors.",
+        });
+      }
       refreshList();
     } catch { setError("Connexion impossible. Réessayez."); }
     finally { setSaving(false); }

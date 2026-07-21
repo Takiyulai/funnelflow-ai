@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Share2, Loader2, Check, X } from "lucide-react";
 import { handlePlanGate } from "@/lib/billing/planGate";
+import { useCelebrate } from "@/components/ui/Celebration";
 
 export function ShareTemplateButton({
   funnelId,
@@ -26,6 +27,7 @@ export function ShareTemplateButton({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const { celebrate } = useCelebrate();
 
   async function submit() {
     if (busy) return;
@@ -57,6 +59,15 @@ export function ShareTemplateButton({
         return;
       }
       setDone(true);
+      // 🆕 Micro-victoire : 1er partage communautaire = jalon (confettis).
+      celebrate({
+        level: "l",
+        once: "first_share",
+        emoji: "🤝",
+        title: "Merci de contribuer !",
+        message:
+          "Ton modèle est désormais dans la galerie communautaire. Chaque utilisation le mettra en avant.",
+      });
     } catch {
       setMsg("Connexion impossible. Réessaie.");
     } finally {

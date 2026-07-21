@@ -20,6 +20,7 @@ import { SectionEditorDrawer } from "@/components/editor/SectionEditorDrawer";
 import { SystemeIoExportMenu } from "@/components/editor/SystemeIoExportMenu";
 import { HeaderTab } from "@/components/editor/tabs/HeaderTab";
 import { useToast } from "@/components/ui/Toast";
+import { useCelebrate } from "@/components/ui/Celebration";
 import {
   useFunnelWithStatus,
   saveFunnel,
@@ -73,6 +74,7 @@ export default function EditorPage() {
 
   const { stored, status } = useFunnelWithStatus(funnelId);
   const loading = status === "loading";
+  const { celebrate } = useCelebrate();
 
   const [history, setHistory] = useState<HistoryState>({
     past: [],
@@ -526,6 +528,17 @@ export default function EditorPage() {
           title: "Tunnel publié",
           description: `Disponible sur /tunnel/${publicSlug}`,
           variant: "success",
+        });
+        // 🆕 Micro-victoire : 1re publication = grand jalon (confettis) ; ensuite
+        // simple étape à chaque republication.
+        celebrate({
+          level: "l",
+          once: "first_publish",
+          emoji: "🚀",
+          title: "Ton tunnel est en ligne !",
+          message:
+            "Il est désormais accessible à tes prospects. Partage le lien et regarde les premiers leads arriver.",
+          cta: { label: "Voir mon tunnel en ligne", href: `/tunnel/${publicSlug}` },
         });
       } else {
         // ⚠️ La page publique se sert UNIQUEMENT du snapshot Supabase : si le
