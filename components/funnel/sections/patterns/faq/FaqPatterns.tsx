@@ -163,11 +163,7 @@ function FaqSandwichDoubleCta({ section, faqs, mode }: FaqPatternProps) {
           ))}
         </div>
       )}
-      {section.cta && (
-        <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ textAlign: "center", marginTop: 30 }}>
-          <CtaButton cta={section.cta} disabled={mode === "preview"} />
-        </div>
-      )}
+      {/* 🆕 CTA de bas de FAQ retiré (redondant avec le CTA de la section suivante). */}
     </SectionShell>
   );
 }

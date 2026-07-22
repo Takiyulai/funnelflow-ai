@@ -157,41 +157,49 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
           alignItems: "stretch",
         }}
       >
+        {/* 🆕 Répartition verticale : le titre reste EN HAUT, le CTA + preuves
+            sont poussés EN BAS (alignés sur le bas de l'image). Fini l'eyebrow/
+            hook qui « descendent » quand l'image est haute (avant : tout était
+            centré verticalement). */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
-            gap: "clamp(16px, 3.2vw, 34px)",
+            justifyContent: "space-between",
+            gap: "clamp(20px, 3vw, 36px)",
           }}
         >
-          {section.eyebrow && (
-            <RichText as="span" className="ff-eyebrow" text={section.eyebrow} dataAnim="fade-up" />
-          )}
-          {section.headline && (
-            <RichText as="h1" className="ff-headline ff-hero-headline" text={section.headline} dataAnim="fade-up" />
-          )}
-          {section.subheadline && (
-            <RichText as="p" className="ff-subheadline" text={section.subheadline} dataAnim="fade-up" />
-          )}
-          {section.cta && (
-            <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ marginTop: 30, justifyContent: "flex-start", display: "flex" }}>
-              <CtaButton cta={section.cta} disabled={mode === "preview"} />
-            </div>
-          )}
-          {bullets.length >= 2 && (
-            <div
-              data-ff-anim="fade-up"
-              style={{ display: "flex", alignItems: "stretch", gap: 26, marginTop: 40, flexWrap: "wrap" }}
-            >
-              {bullets.map((b, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 26 }}>
-                  {i > 0 && <div style={{ width: 1, alignSelf: "stretch", background: "color-mix(in srgb, var(--ff-ink) 14%, transparent)" }} />}
-                  <div style={{ fontWeight: 600, fontSize: 15, color: "color-mix(in srgb, var(--ff-ink) 78%, transparent)", maxWidth: 180 }}>{b}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "clamp(14px, 2.6vw, 28px)" }}>
+            {section.eyebrow && (
+              <RichText as="span" className="ff-eyebrow" text={section.eyebrow} dataAnim="fade-up" />
+            )}
+            {section.headline && (
+              <RichText as="h1" className="ff-headline ff-hero-headline" text={section.headline} dataAnim="fade-up" />
+            )}
+            {section.subheadline && (
+              <RichText as="p" className="ff-subheadline" text={section.subheadline} dataAnim="fade-up" />
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {section.cta && (
+              <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ justifyContent: "flex-start", display: "flex" }}>
+                <CtaButton cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
+              </div>
+            )}
+            {bullets.length >= 2 && (
+              <div
+                data-ff-anim="fade-up"
+                style={{ display: "flex", alignItems: "stretch", gap: 26, flexWrap: "wrap" }}
+              >
+                {bullets.map((b, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 26 }}>
+                    {i > 0 && <div style={{ width: 1, alignSelf: "stretch", background: "color-mix(in srgb, var(--ff-ink) 14%, transparent)" }} />}
+                    <div style={{ fontWeight: 600, fontSize: 15, color: "color-mix(in srgb, var(--ff-ink) 78%, transparent)", maxWidth: 180 }}>{b}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="ff-hero-media" data-ff-anim="fade-up" style={{ position: "relative" }}>

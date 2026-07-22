@@ -110,7 +110,7 @@ export function HeroCenteredNavGlow({ section, mode = "public" }: Props) {
         )}
         {section.cta && (
           <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ marginTop: 34 }}>
-            <CtaButton cta={section.cta} disabled={mode === "preview"} />
+            <CtaButton cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
           </div>
         )}
       </div>

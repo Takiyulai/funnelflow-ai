@@ -7,6 +7,18 @@
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* 🆕 CTA « agitation » : légère secousse d'attention toutes les ~4,5 s. */
+@keyframes ffCtaAttn {
+  0%, 90%, 100% { transform: translateX(0); }
+  92% { transform: translateX(-3px); }
+  94% { transform: translateX(3px); }
+  96% { transform: translateX(-2px); }
+  98% { transform: translateX(2px); }
+}
+.ff-cta-attn { animation: ffCtaAttn 4.5s ease-in-out infinite; }
+.ff-cta-attn:hover { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .ff-cta-attn { animation: none; } }
+
 @keyframes af-shine {
   0% { transform: translateX(-160%) skewX(-18deg); }
   55%, 100% { transform: translateX(360%) skewX(-18deg); }
