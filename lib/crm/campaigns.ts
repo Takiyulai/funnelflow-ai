@@ -9,6 +9,7 @@ import {
   wrapEmailLinksForTracking,
   appendOpenTrackingPixel,
 } from "./emailTracking";
+import { appendUnsubscribeFooter } from "./unsubscribe";
 import { getUserMarketingSender } from "@/lib/email/userSender";
 import { getAccess } from "@/lib/billing/subscription";
 import { consumeQuota } from "@/lib/billing/usage";
@@ -123,6 +124,7 @@ async function resolveRecipients(
       .select("id, email, name")
       .eq("user_id", userId)
       .not("email", "is", null)
+      .is("unsubscribed_at", null) // 🆕 RGPD : jamais aux désinscrits
       .in("id", ids);
     if (error) throw new Error(error.message);
     return ((data ?? []) as Recipient[]).filter((r) => !!r.email);
@@ -132,7 +134,8 @@ async function resolveRecipients(
     .from("leads")
     .select("id, email, name")
     .eq("user_id", userId)
-    .not("email", "is", null);
+    .not("email", "is", null)
+    .is("unsubscribed_at", null); // 🆕 RGPD : jamais aux désinscrits
 
   if (audience.type === "status") q = q.eq("status", audience.status);
   if (audience.type === "ids") q = q.in("id", audience.ids);
@@ -242,9 +245,14 @@ export async function sendCampaign(
       sourceType: "newsletter",
       campaignId: id,
     };
-    const html = appendOpenTrackingPixel(
-      wrapEmailLinksForTracking(renderEmailHtml(campaign.content, r), tracking),
-      tracking,
+    // 🆕 RGPD : pied de page « Se désinscrire » ajouté APRÈS le wrapping de
+    // tracking (sinon le proxy de clic réécrirait le lien de désinscription).
+    const html = appendUnsubscribeFooter(
+      appendOpenTrackingPixel(
+        wrapEmailLinksForTracking(renderEmailHtml(campaign.content, r), tracking),
+        tracking,
+      ),
+      r.id,
     );
     const result = await sendEmail({
       to: r.email,

@@ -2620,7 +2620,25 @@ type AiCallArgs = {
   temperature?: number;
 };
 
+/**
+ * 🆕 SÉCURITÉ COÛTS (audit #3) — Kill-switch global de la génération IA PAYANTE.
+ * Permet de couper d'un coup TOUTE génération (bug/boucle, abus, budget dépassé)
+ * en posant la variable d'env `AI_KILL_SWITCH=1` (aucun redéploiement de code —
+ * juste la variable sur Vercel). Ne concerne PAS le chatbot (modèles gratuits,
+ * chemin séparé).
+ */
+export function isAiKillSwitchOn(): boolean {
+  const v = (process.env.AI_KILL_SWITCH ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on" || v === "yes";
+}
+
 export async function callAI(args: AiCallArgs): Promise<string> {
+  if (isAiKillSwitchOn()) {
+    throw new AiGenerationError(
+      "insufficient-quota",
+      "La génération IA est temporairement indisponible. Réessaie dans un moment.",
+    );
+  }
   const provider = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
   if (provider === "anthropic" || provider === "claude") {
     return callAnthropic(args);

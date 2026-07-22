@@ -20,6 +20,7 @@ import {
   wrapEmailLinksForTracking,
   appendOpenTrackingPixel,
 } from "@/lib/crm/emailTracking";
+import { appendUnsubscribeFooter } from "@/lib/crm/unsubscribe";
 import { executeActions } from "@/lib/workflows/engine";
 import { getWorkflow } from "@/lib/workflows/repository";
 
@@ -71,6 +72,27 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
   let sent = 0;
   let failed = 0;
 
+  // 🆕 RGPD : ensemble des contacts DÉSINSCRITS parmi ce lot (un seul lookup).
+  // On n'envoie PAS d'email MARKETING à un désinscrit — même s'il l'était
+  // programmé avant sa désinscription. Les emails 'delivery' (transactionnels,
+  // demandés par le contact) ne sont PAS concernés.
+  const marketingContactIds = Array.from(
+    new Set(
+      rows
+        .filter((r) => r.source_type !== "delivery" && r.contact_id)
+        .map((r) => r.contact_id as string),
+    ),
+  );
+  const unsubscribed = new Set<string>();
+  if (marketingContactIds.length > 0) {
+    const { data: unsubRows } = await sb
+      .from("leads")
+      .select("id")
+      .in("id", marketingContactIds)
+      .not("unsubscribed_at", "is", null);
+    for (const u of unsubRows ?? []) unsubscribed.add((u as { id: string }).id);
+  }
+
   // 🆕 Expéditeur MARKETING résolu PAR (utilisateur, tunnel) : le FROM affiche
   // le businessName du TUNNEL (published_content.meta.businessName), sans
   // « via AutoFunnel ». Cache sur la durée du run pour limiter les lookups.
@@ -93,6 +115,16 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
       failed++;
       continue;
     }
+    // 🆕 RGPD : ne pas envoyer d'email marketing à un désinscrit.
+    const isMarketing = row.source_type !== "delivery";
+    if (isMarketing && row.contact_id && unsubscribed.has(row.contact_id)) {
+      await sb
+        .from("scheduled_emails")
+        .update({ status: "failed", error: "recipient_unsubscribed", sent_at: new Date().toISOString() })
+        .eq("id", row.id);
+      failed++;
+      continue;
+    }
     const sender = await senderFor(row.user_id, row.funnel_id);
     // LOT 2 — Réécrit les liens pour le tracking de clic (déclencheur
     // Workflow `email.link_clicked`).
@@ -109,10 +141,14 @@ async function processDue(): Promise<{ processed: number; sent: number; failed: 
       sequenceId: row.sequence_id,
       sequenceEmailId: row.sequence_email_id,
     };
-    const html = appendOpenTrackingPixel(
+    let html = appendOpenTrackingPixel(
       wrapEmailLinksForTracking(row.content || "", tracking),
       tracking,
     );
+    // 🆕 RGPD : pied de page « Se désinscrire » sur les emails MARKETING (pas
+    // sur les emails transactionnels 'delivery'). Ajouté APRÈS le tracking pour
+    // que le lien de désinscription ne soit pas réécrit par le proxy de clic.
+    if (isMarketing) html = appendUnsubscribeFooter(html, row.contact_id);
     const result = await sendEmail({
       to: row.recipient_email,
       subject: row.subject || "(sans objet)",

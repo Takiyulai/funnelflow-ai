@@ -10,6 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/billing/subscription";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PlanPicker } from "@/components/billing/PlanPicker";
+import { DeleteAccountSection } from "@/components/account/DeleteAccountSection";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,9 @@ export default async function AbonnementPage({
           initialPlan={initialPlan}
         />
       </div>
+
+      {/* 🆕 RGPD — Zone de danger : suppression définitive du compte. */}
+      <DeleteAccountSection />
     </AppShell>
   );
 }
