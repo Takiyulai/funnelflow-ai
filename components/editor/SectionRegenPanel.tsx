@@ -136,7 +136,7 @@ export function SectionRegenPanel({
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-amber-200"
       >
         <Sparkles className="h-4 w-4" />
-        Régénérer avec l&apos;IA
+        Régénérer cette section avec l&apos;IA
         <span className="ml-auto text-[10px] font-normal text-white/40">
           {open ? "Réduire" : "Ouvrir"}
         </span>

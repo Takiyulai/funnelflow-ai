@@ -65,9 +65,24 @@ type SequenceOption = {
   name: string;
   // 🆕 Alimente le sélecteur "quel email de cette séquence" dans l'éditeur de
   // condition (has_opened_email/has_clicked_email + sequenceEmailId).
-  emails: { id: string; subject: string; position: number }[];
+  emails: { id: string; subject: string; position: number; content: string }[];
 };
 type TagOption = { id: string; name: string };
+
+// 🆕 Le corps d'un email de séquence est stocké en HTML ; l'action « Envoyer un
+// email » d'un workflow utilise un simple textarea. On convertit en texte
+// lisible (les sauts de paragraphe/ligne deviennent des retours à la ligne) au
+// moment de « Reprendre un email de séquence ».
+function seqHtmlToPlain(html: string): string {
+  return html
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 type Props = {
   initialWorkflows: Workflow[];
@@ -1377,6 +1392,44 @@ function ActionConfigFields({
               </div>
               {genError && <p className="mt-1.5 text-[11px] text-red-600">{genError}</p>}
             </div>
+            {/* 🆕 Reprendre un email déjà écrit dans une séquence : pré-remplit
+                l'objet + le contenu (que l'on peut ensuite ajuster). Évite de
+                réécrire un email dont le contexte existe déjà (ex. le cadeau). */}
+            {sequences.some((s) => s.emails.length > 0) && (
+              <label className="grid gap-1">
+                <span className="text-[11px] text-muted">
+                  Ou reprendre un email d&apos;une séquence (pré-remplit objet + contenu)
+                </span>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) return;
+                    for (const s of sequences) {
+                      const em = s.emails.find((x) => x.id === id);
+                      if (em) {
+                        onChange({ ...action, subject: em.subject, content: seqHtmlToPlain(em.content) });
+                        break;
+                      }
+                    }
+                  }}
+                  className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+                >
+                  <option value="">— Reprendre un email existant —</option>
+                  {sequences
+                    .filter((s) => s.emails.length > 0)
+                    .map((s) => (
+                      <optgroup key={s.id} label={s.name}>
+                        {s.emails.map((em) => (
+                          <option key={em.id} value={em.id}>
+                            Email {em.position + 1} — {em.subject}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                </select>
+              </label>
+            )}
             <input
               value={action.subject}
               onChange={(e) =>

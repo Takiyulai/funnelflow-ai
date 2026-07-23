@@ -167,15 +167,19 @@ function CelebrationModal({ modal, onClose }: { modal: NonNullable<ModalState>; 
       aria-modal="true"
     >
       <div
-        className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-line bg-white p-6 text-center shadow-2xl"
-        style={{ animation: "ffCelebPop 0.28s cubic-bezier(0.34,1.56,0.64,1)" }}
+        className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-gold/25 p-6 text-center shadow-2xl"
+        style={{
+          animation: "ffCelebPop 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+          background:
+            "radial-gradient(120% 90% at 50% 0%, rgba(199,164,54,0.16), transparent 60%), #0D1628",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Fermer"
-          className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-canvas hover:text-ink"
+          className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-white/50 transition hover:bg-white/10 hover:text-white"
         >
           <X size={15} />
         </button>
@@ -183,11 +187,11 @@ function CelebrationModal({ modal, onClose }: { modal: NonNullable<ModalState>; 
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gold/15 text-3xl">
           <span aria-hidden>{modal.emoji}</span>
         </div>
-        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-gold">
           <PartyPopper size={12} /> Victoire débloquée
         </div>
-        <h2 className="mt-2 text-xl font-black text-ink">{modal.title}</h2>
-        {modal.message && <p className="mt-1.5 text-sm text-muted">{modal.message}</p>}
+        <h2 className="mt-2 text-xl font-black text-white">{modal.title}</h2>
+        {modal.message && <p className="mt-1.5 text-sm text-white/70">{modal.message}</p>}
 
         <div className="mt-5 flex flex-col gap-2">
           {modal.cta &&
@@ -216,7 +220,7 @@ function CelebrationModal({ modal, onClose }: { modal: NonNullable<ModalState>; 
             onClick={onClose}
             className={
               modal.cta
-                ? "rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-canvas"
+                ? "rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
                 : "inline-flex items-center justify-center rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-zinc-950 transition hover:opacity-90"
             }
           >

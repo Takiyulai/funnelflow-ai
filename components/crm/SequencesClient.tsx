@@ -82,6 +82,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   const [contacts, setContacts] = useState<ContactLite[]>([]);
   const [enrollId, setEnrollId] = useState("");
   const [enrolling, setEnrolling] = useState(false);
+  // 🆕 Index de l'email en cours de régénération individuelle (null = aucun).
+  const [regenIdx, setRegenIdx] = useState<number | null>(null);
 
   const hasFunnels = publishedFunnels.length > 0;
   const reindex = (list: EditableEmail[]) => list.map((e, i) => ({ ...e, position: i }));
@@ -166,6 +168,43 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     finally { setLoading(false); }
   }
 
+  // 🆕 Régénère UN SEUL email (celui qui ne convient pas) sans toucher aux
+  // autres. Réutilise la route de génération avec le rôle de cet email ; on ne
+  // remplace que l'objet + le corps (délais, position et id conservés).
+  async function regenerateEmail(i: number) {
+    if (regenIdx !== null || !emails) return;
+    const role = roles[i] ?? roles[roles.length - 1] ?? ({ id: "autre" } as SequenceRole);
+    setRegenIdx(i); setError(null); setNotice(null);
+    try {
+      const res = await fetch("/api/crm/sequences/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roles: [role], context, language, funnelId: funnelId || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
+      if (!res.ok || !json.ok || !Array.isArray(json.emails) || json.emails.length === 0) {
+        setError(json.message || json.error || "Régénération impossible."); return;
+      }
+      const fresh = json.emails[0] as { subject: string; body: string };
+      updateEmail(i, { subject: fresh.subject, body: fresh.body });
+      setNotice(`Email ${i + 1} régénéré.`);
+    } catch { setError("Connexion impossible. Réessayez."); }
+    finally { setRegenIdx(null); }
+  }
+
+  // 🆕 Rédaction MANUELLE : ouvre l'éditeur avec un email vide par type choisi,
+  // sans appeler l'IA (pour qui veut écrire ses emails soi-même).
+  function startManual() {
+    setError(null); setNotice(null);
+    setEmails(roles.map((_, i) => ({ position: i, delayDays: i * 2, delayHours: 0, subject: "", body: "" })));
+    if (!name.trim()) {
+      const label = roleLabel(roles[0]) || "Séquence";
+      const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
+      const raw = fn ? `${label} — ${fn}` : label;
+      setName(raw.length > 160 ? `${raw.slice(0, 159).trimEnd()}…` : raw);
+    }
+  }
+
   async function save() {
     if (saving || !emails || emails.length === 0) return;
     if (!name.trim()) { setError("Donne un nom à la séquence avant d'enregistrer."); return; }
@@ -208,10 +247,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         celebrate({
           level: "l",
           once: "first_sequence",
-          emoji: "⚙️",
-          title: "Ta première automatisation est prête !",
+          emoji: "✉️",
+          title: "Ta première séquence email est prête !",
           message:
-            "Tes emails partiront tout seuls au bon moment. L'automatisation travaille pour toi, même quand tu dors.",
+            "Tes emails partiront automatiquement, dans l'ordre et au bon moment. Il ne te reste qu'à y inscrire tes contacts.",
         });
       }
       refreshList();
@@ -429,8 +468,14 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button onClick={generate} disabled={loading}>
             {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-            {loading ? "Génération…" : emails ? "Régénérer" : "Générer avec l'IA"}
+            {loading ? "Génération…" : emails ? "Tout régénérer" : "Générer avec l'IA"}
           </Button>
+          {!emails && (
+            <button type="button" onClick={startManual}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-black/5">
+              <FilePlus2 size={15} /> Rédiger moi-même
+            </button>
+          )}
           {selectedFunnelName && (<span className="text-xs text-muted">Rattaché à : <strong className="text-ink">{selectedFunnelName}</strong></span>)}
         </div>
       </Card>
@@ -457,6 +502,12 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <span className="inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-xs font-bold text-ink">Email {i + 1}</span>
                   <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => regenerateEmail(i)} disabled={regenIdx !== null}
+                      title="Régénérer uniquement cet email avec l'IA"
+                      className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:bg-black/5 disabled:opacity-40">
+                      {regenIdx === i ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      {regenIdx === i ? "…" : "Régénérer"}
+                    </button>
                     {em.id && (
                       <button type="button" onClick={() => testSend(em.id!)} title="Envoyer un test"
                         className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:bg-black/5">

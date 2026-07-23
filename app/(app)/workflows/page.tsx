@@ -14,7 +14,7 @@ type FunnelOption = { id: string; name: string };
 type SequenceOption = {
   id: string;
   name: string;
-  emails: { id: string; subject: string; position: number }[];
+  emails: { id: string; subject: string; position: number; content: string }[];
 };
 type TagOption = { id: string; name: string };
 
@@ -46,12 +46,12 @@ export default async function WorkflowsPage() {
     // séquence" dans l'éditeur de condition workflow.
     const { data: seqEmailRows } = await sb
       .from("crm_sequence_emails")
-      .select("id, sequence_id, subject, position")
+      .select("id, sequence_id, subject, position, content")
       .eq("user_id", user.id)
       .order("position", { ascending: true });
     const emailsBySequence = new Map<
       string,
-      { id: string; subject: string; position: number }[]
+      { id: string; subject: string; position: number; content: string }[]
     >();
     for (const row of seqEmailRows ?? []) {
       const list = emailsBySequence.get(row.sequence_id as string) ?? [];
@@ -59,6 +59,7 @@ export default async function WorkflowsPage() {
         id: row.id as string,
         subject: (row.subject as string) || "(sans objet)",
         position: row.position as number,
+        content: (row.content as string) ?? "",
       });
       emailsBySequence.set(row.sequence_id as string, list);
     }
