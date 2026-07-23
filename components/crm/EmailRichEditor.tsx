@@ -117,6 +117,10 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
     }
 
     if (hadSelection) {
+      // 🆕 On DÉLIE d'abord la sélection : sans ça, modifier un lien existant ne
+      // remplaçait pas toujours la destination (href) — le texte changeait mais
+      // le lien pointait encore vers l'ancienne URL (ex. l'ancien PDF cadeau).
+      document.execCommand("unlink");
       document.execCommand("createLink", false, url);
     } else {
       // Aucun texte sélectionné → on insère un lien cliquable (libellé = URL).

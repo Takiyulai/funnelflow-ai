@@ -8,7 +8,20 @@
 
 import { createHmac } from "node:crypto";
 
-const APP_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+// 🆕 Même résolution d'URL que le tracking : à défaut de NEXT_PUBLIC_SITE_URL,
+// on retombe sur les variables Vercel, pour que le lien « Se désinscrire »
+// apparaisse même si la variable a été oubliée.
+function resolveAppUrl(): string {
+  const explicit = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const prodDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodDomain) return `https://${prodDomain.replace(/\/+$/, "")}`;
+  const deployUrl = process.env.VERCEL_URL;
+  if (deployUrl) return `https://${deployUrl.replace(/\/+$/, "")}`;
+  return "";
+}
+
+const APP_URL = resolveAppUrl();
 
 /** Signature courte, liée au contactId, non devinable sans le secret serveur. */
 function unsubSig(contactId: string): string {
