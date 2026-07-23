@@ -93,6 +93,10 @@ export default function EditorPage() {
   // l'utilisateur (sinon « Enregistré ✓ » ment → 404 à la publication).
   const [syncError, setSyncError] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 🆕 État de publication : sans lui, le bouton ne donnait AUCUN retour pendant
+  // les 15-30 s d'écriture distante (cold start Supabase + retry) → l'utilisateur
+  // croyait qu'il ne se passait rien.
+  const [publishing, setPublishing] = useState(false);
 
   const [mobileTab, setMobileTab] = useState<"sections" | "preview">("sections");
   const [sioLinkingOpen, setSioLinkingOpen] = useState(false);
@@ -481,7 +485,16 @@ export default function EditorPage() {
   );
 
   const handlePublish = useCallback(async () => {
-    if (!funnel || !stored) return;
+    if (!funnel || !stored || publishing) return;
+    setPublishing(true);
+    // 🆕 Retour IMMÉDIAT : la publication distante peut prendre 15-30 s (cold
+    // start Supabase). Sans ce toast, l'utilisateur ne voyait rien pendant tout
+    // ce temps et croyait l'action bloquée.
+    toast.show({
+      title: "Publication en cours…",
+      description: "Enregistrement sur le serveur, cela peut prendre quelques secondes.",
+      variant: "info",
+    });
 
     // 🆕 Gating : publier est une action importante qui, contrairement à la
     // génération, écrit en direct dans Supabase (hors route API gardée). On
@@ -501,6 +514,7 @@ export default function EditorPage() {
         setTimeout(() => {
           window.location.href = "/abonnement";
         }, 1300);
+        setPublishing(false);
         return;
       }
     } catch {
@@ -557,8 +571,10 @@ export default function EditorPage() {
         description: e instanceof Error ? e.message : undefined,
         variant: "error",
       });
+    } finally {
+      setPublishing(false);
     }
-  }, [funnel, stored, toast]);
+  }, [funnel, stored, toast, celebrate, publishing]);
 
   const handleCopyLink = useCallback(() => {
     if (!stored) return;
@@ -899,11 +915,19 @@ export default function EditorPage() {
 
             <button
               onClick={handlePublish}
-              className="flex h-8 items-center gap-1 sm:gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-2.5 sm:px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition"
+              disabled={publishing}
+              aria-busy={publishing}
+              className="flex h-8 items-center gap-1 sm:gap-1.5 rounded-md bg-gradient-to-b from-indigo-500 to-indigo-600 px-2.5 sm:px-3.5 text-xs font-semibold text-white shadow-sm shadow-indigo-900/40 hover:from-indigo-400 hover:to-indigo-500 transition disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isPublished ? <Globe className="h-3.5 w-3.5" /> : <Rocket className="h-3.5 w-3.5" />}
+              {publishing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isPublished ? (
+                <Globe className="h-3.5 w-3.5" />
+              ) : (
+                <Rocket className="h-3.5 w-3.5" />
+              )}
               <span className="hidden xs:inline sm:inline">
-                {isPublished ? "Republier" : "Publier"}
+                {publishing ? "Publication…" : isPublished ? "Republier" : "Publier"}
               </span>
             </button>
           </div>

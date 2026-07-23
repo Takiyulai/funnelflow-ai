@@ -18,6 +18,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
 import type {
   LeadStatus,
   Workflow,
@@ -76,19 +77,17 @@ type SequenceOption = {
 };
 type TagOption = { id: string; name: string };
 
-// 🆕 Le corps d'un email de séquence est stocké en HTML ; l'action « Envoyer un
-// email » d'un workflow utilise un simple textarea. On convertit en texte
-// lisible (les sauts de paragraphe/ligne deviennent des retours à la ligne) au
-// moment de « Reprendre un email de séquence ».
-function seqHtmlToPlain(html: string): string {
-  return html
-    .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+// 🆕 L'action « Envoyer un email » utilise désormais l'éditeur riche (HTML). Le
+// contenu peut venir d'une saisie manuelle plate, de l'IA, ou d'un email de
+// séquence (déjà en HTML). On enveloppe le texte brut en paragraphes ; on laisse
+// le HTML tel quel (détecté par la présence d'une balise) pour ne pas double-emballer.
+function emailContentToHtml(content: string): string {
+  if (!content) return "";
+  if (/<[a-z][\s\S]*>/i.test(content)) return content;
+  return content
+    .split(/\n{2,}/)
+    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
 // 🆕 ISO (UTC) ↔ valeur d'un <input type="datetime-local"> (heure LOCALE du
@@ -1469,7 +1468,9 @@ function ActionConfigFields({
                     for (const s of sequences) {
                       const em = s.emails.find((x) => x.id === id);
                       if (em) {
-                        onChange({ ...action, subject: em.subject, content: seqHtmlToPlain(em.content) });
+                        // Le contenu de séquence est déjà du HTML : on le reprend
+                        // tel quel dans l'éditeur riche (mise en forme conservée).
+                        onChange({ ...action, subject: em.subject, content: em.content });
                         break;
                       }
                     }
@@ -1499,18 +1500,18 @@ function ActionConfigFields({
               placeholder="Objet — ex. Bienvenue {{prenom}} !"
               className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
             />
-            <textarea
-              value={action.content}
-              onChange={(e) =>
-                onChange({ ...action, content: e.target.value })
-              }
-              rows={4}
-              placeholder={"Contenu de l'email…\nVariables : {{prenom}}, {{email}}"}
-              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            {/* 🆕 Éditeur de texte riche (même composant que les séquences) —
+                gras, listes, liens… au lieu d'un simple textarea. */}
+            <EmailRichEditor
+              value={emailContentToHtml(action.content)}
+              onChange={(html) => onChange({ ...action, content: html })}
+              placeholder="Contenu de l'email…"
             />
             <p className="text-[11px] text-muted">
-              Envoyé au contact (mise en forme automatique, même gabarit que les
-              séquences). Respecte les « Attendre » placés avant.
+              Envoyé au contact (mise en forme conservée). Variables :
+              {" "}
+              <code>{"{{prenom}}"}</code>, <code>{"{{email}}"}</code>. Respecte les
+              « Attendre » placés avant.
             </p>
           </div>
         )}

@@ -18,7 +18,10 @@ const emailSchema = z.object({
   delay_hours: z.coerce.number().int().min(0).max(23).default(0),
   // 🆕 Date/heure absolue d'envoi (ISO). Même piège de schéma que delay_hours :
   // sans cette entrée, send_at serait retiré avant d'atteindre la base.
-  send_at: z.string().datetime().nullish(),
+  // ⚠️ offset:true — Postgres/PostgREST renvoie les timestamptz avec un décalage
+  // (« …+00:00 »), pas un « Z ». Sans offset:true, re-sauvegarder une séquence
+  // rechargée (dont le send_at vient de la base) échouait en « invalid_input ».
+  send_at: z.string().datetime({ offset: true }).nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
 });

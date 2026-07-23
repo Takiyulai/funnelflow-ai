@@ -20,7 +20,9 @@ const emailSchema = z.object({
   // silencieusement tout champ non listé ici avant l'enregistrement.
   delay_hours: z.coerce.number().int().min(0).max(23).default(0),
   // 🆕 Date/heure absolue d'envoi (ISO) — voir route.ts (même piège de schéma).
-  send_at: z.string().datetime().nullish(),
+  // offset:true accepte le format Postgres « …+00:00 » (sinon la re-sauvegarde
+  // d'une séquence rechargée échouait en « invalid_input »).
+  send_at: z.string().datetime({ offset: true }).nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
 });
