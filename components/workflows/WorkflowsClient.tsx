@@ -5,6 +5,7 @@ import { handlePlanGate } from "@/lib/billing/planGate";
 import {
   Bell,
   Clock,
+  CalendarClock,
   GitBranch,
   Mail,
   Send,
@@ -41,6 +42,12 @@ function offsetBeforeIndex(
   for (let j = 0; j < index; j++) {
     const a = actions[j];
     if (a.kind === "wait") ms += waitActionMs(a);
+    // 🆕 wait_until : ancre l'horloge à une date absolue → l'offset repart de
+    // l'écart d'ici cette date (approximatif dans l'aperçu, exact à l'exécution).
+    else if (a.kind === "wait_until" && a.dateTime) {
+      const t = new Date(a.dateTime).getTime();
+      if (Number.isFinite(t)) ms = Math.max(0, t - Date.now());
+    }
   }
   return ms;
 }
@@ -82,6 +89,23 @@ function seqHtmlToPlain(html: string): string {
     .replace(/&amp;/gi, "&")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+// 🆕 ISO (UTC) ↔ valeur d'un <input type="datetime-local"> (heure LOCALE du
+// navigateur). On stocke un instant absolu ; on l'édite/affiche en heure locale
+// pour que l'utilisateur voie l'heure qu'il a choisie, quel que soit le fuseau
+// du serveur.
+function isoToLocalInput(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function localInputToIso(v: string): string {
+  if (!v) return "";
+  const d = new Date(v); // interprété en heure LOCALE du navigateur
+  return Number.isFinite(d.getTime()) ? d.toISOString() : "";
 }
 
 type Props = {
@@ -170,6 +194,8 @@ const ACTION_META: Record<
   enroll_in_sequence: { label: "Inscrire dans une séquence", icon: Send },
   notify_owner: { label: "Me notifier", icon: Bell },
   wait: { label: "Attendre", icon: Clock },
+  // 🆕 Attente jusqu'à une date/heure fixe (instant absolu).
+  wait_until: { label: "Attendre une date fixe", icon: CalendarClock },
   // 🆕 VAGUE 1 / LOT 5
   send_email: { label: "Envoyer un email", icon: Mail },
   condition: { label: "Condition (si / alors)", icon: GitBranch },
@@ -196,6 +222,7 @@ const BRANCH_ACTION_KINDS: WorkflowActionKind[] = [
   "send_email",
   "notify_owner",
   "wait",
+  "wait_until",
 ];
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -285,6 +312,9 @@ function defaultActionConfig(kind: WorkflowActionKind): WorkflowActionConfig {
       return { kind, subject: "", message: "" };
     case "wait":
       return { kind, days: 1 };
+    // 🆕 Attente jusqu'à une date fixe (vide au départ : l'utilisateur choisit).
+    case "wait_until":
+      return { kind, dateTime: "" };
     // 🆕 VAGUE 1 / LOT 5
     case "send_email":
       return { kind, subject: "", content: "" };
@@ -675,6 +705,7 @@ function WorkflowEditor({
     "send_email",
     "notify_owner",
     "wait",
+    "wait_until",
     "condition",
   ];
 
@@ -1356,6 +1387,36 @@ function ActionConfigFields({
             {(action.days ?? 0) + (action.hours ?? 0) + (action.minutes ?? 0) <= 0 && (
               <p className="mt-1 text-xs text-red-500">
                 L'attente doit être d'au moins 1 minute.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 🆕 Attendre jusqu'à une DATE/HEURE FIXE (instant absolu). */}
+        {action.kind === "wait_until" && (
+          <div className="text-sm text-ink">
+            <div className="flex flex-wrap items-center gap-2">
+              Attendre jusqu&apos;au
+              <input
+                type="datetime-local"
+                value={isoToLocalInput(action.dateTime)}
+                onChange={(e) =>
+                  onChange({ kind: "wait_until", dateTime: localInputToIso(e.target.value) })
+                }
+                className="rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus-ring"
+                aria-label="Date et heure"
+              />
+            </div>
+            {!action.dateTime ? (
+              <p className="mt-1 text-xs text-red-500">Choisis une date et une heure.</p>
+            ) : new Date(action.dateTime).getTime() <= Date.now() ? (
+              <p className="mt-1 text-xs text-amber-600">
+                Cette date est déjà passée : à l&apos;exécution, l&apos;action suivante partira
+                immédiatement.
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-muted">
+                Les actions suivantes partiront à cette date/heure précise (ton fuseau).
               </p>
             )}
           </div>

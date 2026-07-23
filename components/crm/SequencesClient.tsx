@@ -20,8 +20,31 @@ import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
 type PublishedFunnel = { id: string; name: string };
 type Lang = "fr" | "en" | "es";
 type ContactLite = { id: string; email: string; name: string | null };
-/** Email édité : porte l'id quand la séquence est enregistrée (pour l'envoi test). */
-type EditableEmail = { id?: string; position: number; delayDays: number; delayHours: number; subject: string; body: string };
+/** Email édité : porte l'id quand la séquence est enregistrée (pour l'envoi test).
+ *  🆕 sendAt : si non-null (ISO), l'email part à cette date/heure FIXE au lieu du
+ *  délai relatif (delayDays/delayHours). */
+type EditableEmail = { id?: string; position: number; delayDays: number; delayHours: number; sendAt: string | null; subject: string; body: string };
+
+// 🆕 ISO (UTC) ↔ valeur d'un <input type="datetime-local"> (heure locale).
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function localInputToIso(v: string): string | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+// 🆕 Date fixe par défaut proposée quand on bascule en mode "Date fixe" : demain 9h.
+function defaultFixedIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.toISOString();
+}
 
 // 🆕 LOT 1 : rôles proposés dans le constructeur de séquence (+ "autre" en
 // saisie libre). Remplace l'ancien champ "type" unique + "nombre de mails".
@@ -155,7 +178,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!res.ok || !json.ok) { setError(json.message || json.error || "Génération impossible."); return; }
       setEmails((json.emails as Array<{ position: number; delayDays: number; delayHours?: number; subject: string; body: string }>)
-        .map((e, i) => ({ position: i, delayDays: e.delayDays, delayHours: e.delayHours ?? 0, subject: e.subject, body: e.body })));
+        .map((e, i) => ({ position: i, delayDays: e.delayDays, delayHours: e.delayHours ?? 0, sendAt: null, subject: e.subject, body: e.body })));
       if (!name.trim()) {
         const label = roleLabel(roles[0]) || "Séquence";
         const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
@@ -196,7 +219,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   // sans appeler l'IA (pour qui veut écrire ses emails soi-même).
   function startManual() {
     setError(null); setNotice(null);
-    setEmails(roles.map((_, i) => ({ position: i, delayDays: i * 2, delayHours: 0, subject: "", body: "" })));
+    setEmails(roles.map((_, i) => ({ position: i, delayDays: i * 2, delayHours: 0, sendAt: null, subject: "", body: "" })));
     if (!name.trim()) {
       const label = roleLabel(roles[0]) || "Séquence";
       const fn = publishedFunnels.find((f) => f.id === funnelId)?.name;
@@ -215,7 +238,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       type: roles[0]?.id ?? "autre",
       roles,
       context: context || null, language, funnel_id: funnelId || null,
-      emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, delay_hours: e.delayHours, subject: e.subject, content: e.body })),
+      emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, delay_hours: e.delayHours, send_at: e.sendAt, subject: e.subject, content: e.body })),
     };
     try {
       const res = await fetch(editingId ? `/api/crm/sequences/${editingId}` : "/api/crm/sequences", {
@@ -239,8 +262,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       const s = json.sequence;
       setEditingId(s.id);
       // On récupère les ids d'emails (nécessaires pour l'envoi test).
-      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content })));
       setNotice("Séquence enregistrée.");
       // 🆕 Micro-victoire : 1re séquence créée = jalon (confettis), une seule fois.
       if (!hasMilestone("first_sequence")) {
@@ -271,8 +294,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       setRoles(Array.isArray(s.roles) && s.roles.length > 0 ? s.roles : [{ id: s.type }]);
       setContext(s.context ?? "");
       setLanguage(s.language as Lang); setFunnelId(s.funnel_id ?? "");
-      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content })));
     } catch { setError("Connexion impossible."); }
   }
 
@@ -332,7 +355,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     setEmails((cur) => {
       const list = cur ?? [];
       const lastDelay = list.length ? list[list.length - 1].delayDays : -2;
-      return reindex([...list, { position: list.length, delayDays: lastDelay + 2, delayHours: 0, subject: "", body: "" }]);
+      return reindex([...list, { position: list.length, delayDays: lastDelay + 2, delayHours: 0, sendAt: null, subject: "", body: "" }]);
     });
   }
 
@@ -523,21 +546,51 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-[1fr_100px_100px]">
-                  <label className="grid gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Objet</span>
-                    <input className={inputCls} value={em.subject} onChange={(e) => updateEmail(i, { subject: e.target.value })} placeholder="Objet de l'email" />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Délai (jours)</span>
-                    <input type="number" min={0} max={365} className={inputCls} value={em.delayDays}
-                      onChange={(e) => updateEmail(i, { delayDays: Math.max(0, Number(e.target.value) || 0) })} />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">+ heures</span>
-                    <input type="number" min={0} max={23} className={inputCls} value={em.delayHours}
-                      onChange={(e) => updateEmail(i, { delayHours: Math.min(23, Math.max(0, Number(e.target.value) || 0)) })} />
-                  </label>
+                <label className="grid gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Objet</span>
+                  <input className={inputCls} value={em.subject} onChange={(e) => updateEmail(i, { subject: e.target.value })} placeholder="Objet de l'email" />
+                </label>
+
+                {/* 🆕 Planification : délai relatif à l'inscription OU date/heure fixe */}
+                <div className="mt-3 grid gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Quand l&apos;envoyer</span>
+                  <div className="inline-flex w-fit rounded-lg border border-line bg-[#F8F9FB] p-0.5 text-xs font-semibold">
+                    <button type="button" onClick={() => updateEmail(i, { sendAt: null })}
+                      className={`rounded-md px-3 py-1.5 ${em.sendAt === null ? "bg-white text-ink shadow-sm" : "text-muted"}`}>
+                      Délai relatif
+                    </button>
+                    <button type="button" onClick={() => updateEmail(i, { sendAt: em.sendAt ?? defaultFixedIso() })}
+                      className={`rounded-md px-3 py-1.5 ${em.sendAt !== null ? "bg-white text-ink shadow-sm" : "text-muted"}`}>
+                      Date fixe
+                    </button>
+                  </div>
+
+                  {em.sendAt === null ? (
+                    <div className="grid gap-3 sm:grid-cols-[130px_130px]">
+                      <label className="grid gap-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Délai (jours)</span>
+                        <input type="number" min={0} max={365} className={inputCls} value={em.delayDays}
+                          onChange={(e) => updateEmail(i, { delayDays: Math.max(0, Number(e.target.value) || 0) })} />
+                      </label>
+                      <label className="grid gap-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">+ heures</span>
+                        <input type="number" min={0} max={23} className={inputCls} value={em.delayHours}
+                          onChange={(e) => updateEmail(i, { delayHours: Math.min(23, Math.max(0, Number(e.target.value) || 0)) })} />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="grid gap-1">
+                      <input type="datetime-local" className={`${inputCls} w-fit`}
+                        value={isoToLocalInput(em.sendAt)}
+                        onChange={(e) => updateEmail(i, { sendAt: localInputToIso(e.target.value) })} />
+                      <span className="text-[11px] text-muted">
+                        Part à cette date/heure précise (ton fuseau), quel que soit le moment d&apos;inscription.
+                        {em.sendAt && new Date(em.sendAt).getTime() <= Date.now() && (
+                          <span className="text-amber-600"> Cette date est passée : un contact inscrit maintenant ne recevra pas cet email.</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 grid gap-1.5">

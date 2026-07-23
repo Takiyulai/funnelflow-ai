@@ -233,6 +233,9 @@ export type SequenceEmail = {
   /** 🆕 Heures supplémentaires (0-23), cumulées avec delay_days — harmonise
    *  avec la granularité jours/heures/minutes des "Attendre" de workflow. */
   delay_hours: number;
+  /** 🆕 Si défini (ISO), date/heure ABSOLUE d'envoi — prioritaire sur
+   *  delay_days/delay_hours. NULL/absent = délai relatif à l'inscription. */
+  send_at?: string | null;
   subject: string;
   content: string;
   created_at: string;
@@ -256,6 +259,8 @@ export type SequenceInput = {
     delay_days: number;
     /** 🆕 Optionnel pour compat ascendante — défaut 0 côté service. */
     delay_hours?: number;
+    /** 🆕 Date/heure absolue d'envoi (ISO) ou null pour le mode relatif. */
+    send_at?: string | null;
     subject: string;
     content: string;
   }>;

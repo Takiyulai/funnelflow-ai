@@ -94,6 +94,7 @@ export type WorkflowActionKind =
   | "enroll_in_sequence"
   | "notify_owner"
   | "wait"
+  | "wait_until"
   | "send_email"
   | "condition";
 
@@ -114,6 +115,7 @@ export const WORKFLOW_ACTION_KINDS: readonly WorkflowActionKind[] = [
   "enroll_in_sequence",
   "notify_owner",
   "wait",
+  "wait_until",
   "send_email",
   "condition",
 ] as const;
@@ -194,6 +196,11 @@ export type WorkflowActionConfig =
   /** 🆕 Attente en jours ET/OU heures ET/OU minutes (rétro-compat : les
    *  anciennes étapes n'ont que `days`). */
   | { kind: "wait"; days?: number; hours?: number; minutes?: number }
+  /** 🆕 Attente jusqu'à une DATE/HEURE FIXE (instant absolu, ISO UTC). Ancre
+   *  l'horloge du workflow à cette date : les emails suivants partent à ce
+   *  moment précis (et non « X jours après l'entrée »). Si la date est déjà
+   *  passée au moment de l'exécution, on n'attend pas (envoi immédiat). */
+  | { kind: "wait_until"; dateTime: string }
   /** 🆕 LOT 5 — Email direct au contact, sans passer par une séquence.
    *  Personnalisation {{prenom}}/{{nom}}/{{email}} comme les séquences. */
   | { kind: "send_email"; subject: string; content: string }

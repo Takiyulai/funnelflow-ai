@@ -15,7 +15,7 @@ import { renderSequenceEmailHtml } from "./emailRender";
 const SEQ_COLS =
   "id, user_id, name, type, roles, context, language, funnel_id, status, created_at, updated_at";
 const SEQ_EMAIL_COLS =
-  "id, sequence_id, user_id, position, delay_days, delay_hours, subject, content, created_at, updated_at";
+  "id, sequence_id, user_id, position, delay_days, delay_hours, send_at, subject, content, created_at, updated_at";
 
 export async function listSequences(
   sb: SupabaseClient,
@@ -69,15 +69,22 @@ async function replaceEmails(
     .eq("sequence_id", sequenceId);
 
   if (emails.length === 0) return;
-  const rows = emails.map((e, i) => ({
-    sequence_id: sequenceId,
-    user_id: userId,
-    position: i,
-    delay_days: Math.max(0, Math.round(e.delay_days) || 0),
-    delay_hours: Math.min(23, Math.max(0, Math.round(e.delay_hours ?? 0) || 0)),
-    subject: e.subject ?? "",
-    content: e.content ?? "",
-  }));
+  const rows = emails.map((e, i) => {
+    // 🆕 Date fixe : on ne conserve un send_at que s'il est parseable ; sinon
+    // null (mode relatif). Les délais restent stockés (fallback / affichage).
+    const sendAtMs = e.send_at ? new Date(e.send_at).getTime() : NaN;
+    const send_at = Number.isFinite(sendAtMs) ? new Date(sendAtMs).toISOString() : null;
+    return {
+      sequence_id: sequenceId,
+      user_id: userId,
+      position: i,
+      delay_days: Math.max(0, Math.round(e.delay_days) || 0),
+      delay_hours: Math.min(23, Math.max(0, Math.round(e.delay_hours ?? 0) || 0)),
+      send_at,
+      subject: e.subject ?? "",
+      content: e.content ?? "",
+    };
+  });
   const { error } = await sb.from("crm_sequence_emails").insert(rows);
   if (error) throw new Error(error.message);
 }
@@ -206,22 +213,41 @@ export async function enrollContact(
   const startAt = now + Math.max(0, extraDelayMs);
   const recipient = { name: contact.name as string | null, email: contact.email as string };
 
-  const rows = seq.emails.map((em) => ({
-    user_id: userId,
-    source_type: "sequence",
-    campaign_id: null,
-    sequence_id: sequenceId,
-    sequence_email_id: em.id,
-    contact_id: contact.id,
-    recipient_email: contact.email,
-    subject: em.subject,
-    content: renderSequenceEmailHtml(em.content, recipient), // snapshot perso
-    scheduled_at: new Date(
-      startAt + Math.max(0, em.delay_days) * DAY_MS + Math.max(0, em.delay_hours ?? 0) * HOUR_MS,
-    ).toISOString(),
-    status: "pending",
-  }));
+  const rows = seq.emails
+    .map((em) => {
+      // 🆕 DATE FIXE : si l'email porte un send_at, il part à cet instant absolu
+      // (indépendant de l'heure d'inscription). Si cette date est DÉJÀ PASSÉE au
+      // moment de l'inscription, on n'envoie pas ce rappel (retour null → filtré)
+      // — on préfère l'omettre plutôt que d'envoyer un rappel après coup.
+      const fixedMs = em.send_at ? new Date(em.send_at).getTime() : NaN;
+      let scheduledMs: number | null;
+      if (Number.isFinite(fixedMs)) {
+        scheduledMs = fixedMs <= now ? null : fixedMs;
+      } else {
+        // Mode relatif historique : inscription + délai.
+        scheduledMs =
+          startAt +
+          Math.max(0, em.delay_days) * DAY_MS +
+          Math.max(0, em.delay_hours ?? 0) * HOUR_MS;
+      }
+      if (scheduledMs === null) return null;
+      return {
+        user_id: userId,
+        source_type: "sequence",
+        campaign_id: null,
+        sequence_id: sequenceId,
+        sequence_email_id: em.id,
+        contact_id: contact.id,
+        recipient_email: contact.email,
+        subject: em.subject,
+        content: renderSequenceEmailHtml(em.content, recipient), // snapshot perso
+        scheduled_at: new Date(scheduledMs).toISOString(),
+        status: "pending",
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
+  if (rows.length === 0) return { scheduled: 0 };
   const { error } = await sb.from("scheduled_emails").insert(rows);
   if (error) throw new Error(error.message);
   return { scheduled: rows.length };

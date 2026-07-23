@@ -16,6 +16,9 @@ const emailSchema = z.object({
   // autofunnel-zod-brief-schema-gap) : le champ existe côté type/UI/DB mais
   // n'arrive jamais en base tant qu'il n'est pas aussi listé ici.
   delay_hours: z.coerce.number().int().min(0).max(23).default(0),
+  // 🆕 Date/heure absolue d'envoi (ISO). Même piège de schéma que delay_hours :
+  // sans cette entrée, send_at serait retiré avant d'atteindre la base.
+  send_at: z.string().datetime().nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
 });

@@ -19,6 +19,8 @@ const emailSchema = z.object({
   // 🆕 Voir app/api/crm/sequences/route.ts — même piège de schéma qui retire
   // silencieusement tout champ non listé ici avant l'enregistrement.
   delay_hours: z.coerce.number().int().min(0).max(23).default(0),
+  // 🆕 Date/heure absolue d'envoi (ISO) — voir route.ts (même piège de schéma).
+  send_at: z.string().datetime().nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
 });

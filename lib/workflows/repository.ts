@@ -120,6 +120,12 @@ function parseActionConfig(config: Record<string, unknown>): WorkflowActionConfi
         ...(minutes ? { minutes } : {}),
       };
     }
+    // 🆕 Attente jusqu'à une date/heure fixe (instant absolu ISO).
+    case "wait_until": {
+      const dateTime = typeof config.dateTime === "string" ? config.dateTime.trim() : "";
+      if (!dateTime || !Number.isFinite(new Date(dateTime).getTime())) return null;
+      return { kind: "wait_until", dateTime };
+    }
     // 🆕 VAGUE 1 / LOT 5 — Email direct au contact.
     case "send_email": {
       const subject = typeof config.subject === "string" ? config.subject.trim() : "";

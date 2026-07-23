@@ -69,6 +69,12 @@ const baseActionSchemas = [
     hours: z.number().int().min(0).max(23).optional(),
     minutes: z.number().int().min(0).max(59).optional(),
   }),
+  // 🆕 Attente jusqu'à une date/heure fixe (instant absolu, converti en ISO UTC
+  // côté client). `datetime()` exige un ISO complet avec fuseau (…Z).
+  z.object({
+    kind: z.literal("wait_until"),
+    dateTime: z.string().datetime(),
+  }),
   // 🆕 LOT 5 — Email direct au contact.
   z.object({
     kind: z.literal("send_email"),

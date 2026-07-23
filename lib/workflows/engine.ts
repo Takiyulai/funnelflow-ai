@@ -297,6 +297,17 @@ export async function executeActions(
           delayMs += waitActionMs(action);
           break;
         }
+        // 🆕 Attente jusqu'à une DATE/HEURE FIXE (instant absolu ISO). On ancre
+        // l'horloge à cette date : `delayMs` devient l'écart d'ici là. Si la
+        // date est déjà passée, on n'attend pas (delayMs plancher à 0). Les
+        // "wait" placés APRÈS s'ajoutent à cette date fixe.
+        case "wait_until": {
+          const target = new Date(action.dateTime).getTime();
+          if (Number.isFinite(target)) {
+            delayMs = Math.max(0, target - Date.now());
+          }
+          break;
+        }
         case "add_tag": {
           const tags = await getOrCreateTagsByName(admin, userId, action.tags);
           if (tags.length > 0) {
