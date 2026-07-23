@@ -90,6 +90,50 @@ function emailContentToHtml(content: string): string {
     .join("");
 }
 
+// 🆕 Repère la PREMIÈRE action incomplète (y compris dans les branches d'une
+// condition) et renvoie un message CLAIR indiquant quoi corriger. Sinon null.
+// Évite le message serveur générique « un nom et au moins une action valide sont
+// requis » qui ne dit pas QUELLE action pose problème (typiquement un « Envoyer
+// un email » sans objet/contenu, ou une « Attendre une date fixe » sans date).
+// On ne signale QUE ce que le serveur rejette aussi (aucun faux positif).
+function firstActionProblem(actions: WorkflowActionConfig[], where = ""): string | null {
+  const loc = where ? ` (branche ${where})` : "";
+  for (const a of actions) {
+    switch (a.kind) {
+      case "send_email":
+        if (!a.subject?.trim()) return `Une action « Envoyer un email »${loc} n'a pas d'objet.`;
+        if (!a.content?.trim()) return `Une action « Envoyer un email »${loc} n'a pas de contenu.`;
+        break;
+      case "wait_until":
+        if (!a.dateTime || !Number.isFinite(new Date(a.dateTime).getTime()))
+          return `Une action « Attendre une date fixe »${loc} n'a pas de date choisie.`;
+        break;
+      case "wait":
+        if ((a.days ?? 0) + (a.hours ?? 0) + (a.minutes ?? 0) <= 0)
+          return `Une action « Attendre »${loc} doit durer au moins 1 minute.`;
+        break;
+      case "enroll_in_sequence":
+        if (!a.sequenceId)
+          return `Une action « Inscrire dans une séquence »${loc} n'a pas de séquence choisie.`;
+        break;
+      case "add_tag":
+        if (!a.tags || a.tags.filter((t) => t.trim()).length === 0)
+          return `Une action « Ajouter un tag »${loc} n'a aucun tag.`;
+        break;
+      case "condition": {
+        if (a.test.type === "has_tag" && !a.test.tagId)
+          return `Une condition${loc} « a le tag » n'a pas de tag choisi.`;
+        const inThen = firstActionProblem(a.then, where ? `${where} → SI OUI` : "SI OUI");
+        if (inThen) return inThen;
+        const inElse = firstActionProblem(a.otherwise, where ? `${where} → SINON` : "SINON");
+        if (inElse) return inElse;
+        break;
+      }
+    }
+  }
+  return null;
+}
+
 // 🆕 ISO (UTC) ↔ valeur d'un <input type="datetime-local"> (heure LOCALE du
 // navigateur). On stocke un instant absolu ; on l'édite/affiche en heure locale
 // pour que l'utilisateur voie l'heure qu'il a choisie, quel que soit le fuseau
@@ -392,6 +436,17 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
   }
 
   async function save() {
+    // 🆕 Validation CLIENT : message précis AVANT l'appel serveur (sinon on
+    // renvoyait un générique « au moins une action valide » sans dire laquelle).
+    if (!draft.name.trim()) {
+      setError("Donne un nom à ton workflow avant d'enregistrer.");
+      return;
+    }
+    const problem = firstActionProblem(draft.actions);
+    if (problem) {
+      setError(`${problem} Complète-la (ou retire-la), puis réessaie.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload = {

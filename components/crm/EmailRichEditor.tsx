@@ -43,6 +43,15 @@ function escapeHtml(s: string): string {
 function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, "&quot;");
 }
+// 🆕 Normalise une URL saisie : vide → null ; schéma déjà présent (http, https,
+// mailto, tel, ancre, chemin relatif) → inchangé ; sinon on préfixe « https:// ».
+// Évite le doublon « https://https://… » causé par un champ prérempli.
+function normalizeUrl(input: string | null): string | null {
+  const v = (input ?? "").trim();
+  if (!v) return null;
+  if (/^(https?:\/\/|mailto:|tel:|#|\/)/i.test(v)) return v;
+  return `https://${v}`;
+}
 
 export function EmailRichEditor({ value, onChange, placeholder }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -91,11 +100,14 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
       sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
     const hadSelection = !!savedRange && !savedRange.collapsed;
 
-    const url = window.prompt(
-      "URL du lien (page, fichier à télécharger, etc.) :",
-      "https://",
+    // 🆕 Champ VIDE par défaut (plus de « https:// » prérempli) : coller une URL
+    // complète produisait « https://https://… ». On normalise ensuite le schéma.
+    const raw = window.prompt(
+      "URL du lien (ex. https://exemple.com/page) :",
+      "",
     );
-    if (!url || url === "https://") return;
+    const url = normalizeUrl(raw);
+    if (!url) return;
 
     // On RESTAURE la sélection perdue à l'ouverture du prompt.
     el.focus();
@@ -123,7 +135,7 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
   };
 
   const addImage = () => {
-    const url = window.prompt("URL de l'image (lien public hébergé) :", "https://");
+    const url = normalizeUrl(window.prompt("URL de l'image (ex. https://exemple.com/img.jpg) :", ""));
     if (!url) return;
     cmd("insertImage", url);
     const el = ref.current;

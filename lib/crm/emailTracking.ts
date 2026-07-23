@@ -9,7 +9,22 @@
 // Appelé juste avant l'envoi (cron + campagne immédiate) — le contenu stocké
 // en base (scheduled_emails, aperçu, envoi test) reste inchangé.
 
-const APP_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+// 🆕 URL publique de l'app pour les liens trackés + le pixel d'ouverture.
+// Priorité à NEXT_PUBLIC_SITE_URL ; à défaut on retombe sur les variables
+// fournies AUTOMATIQUEMENT par Vercel (domaine de prod, puis URL du déploiement)
+// pour que le tracking fonctionne même si NEXT_PUBLIC_SITE_URL a été oublié —
+// c'était la cause de « taux d'ouverture 0 % » (aucun pixel injecté).
+function resolveAppUrl(): string {
+  const explicit = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const prodDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodDomain) return `https://${prodDomain.replace(/\/+$/, "")}`;
+  const deployUrl = process.env.VERCEL_URL;
+  if (deployUrl) return `https://${deployUrl.replace(/\/+$/, "")}`;
+  return "";
+}
+
+const APP_URL = resolveAppUrl();
 
 export type EmailTrackingParams = {
   userId: string;
