@@ -73,6 +73,13 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // 🆕 MODULE 4 — Enregistre la date de dernière connexion (visible dans le
+  // dashboard admin). Fire-and-forget : ne doit jamais bloquer/casser le
+  // chargement du dashboard si ça échoue.
+  useEffect(() => {
+    fetch("/api/auth/stamp-login", { method: "POST" }).catch(() => {});
+  }, []);
+
   // 🆕 Stats de paiement (commandes payées).
   const [payStats, setPayStats] = useState<{
     payments: number;

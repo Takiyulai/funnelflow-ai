@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, GitBranch, LayoutDashboard, LayoutGrid,
   PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun, CreditCard, LifeBuoy,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -45,6 +46,28 @@ export function Sidebar({
     status: string;
     daysRemaining: number | null;
   } | null>(null);
+
+  // 🆕 MODULE 4 — Raccourci « Administration », visible UNIQUEMENT pour les
+  // admins. Le check réel (allowlist ADMIN_EMAILS) est fait côté serveur dans
+  // /api/admin/is-admin (lib/admin/auth.ts) — ce composant client ne fait
+  // qu'afficher/masquer le lien selon la réponse, il ne décide de rien. La
+  // route /admin elle-même revérifie indépendamment (requireAdminPage), donc
+  // même si ce fetch était contourné, un utilisateur normal serait de toute
+  // façon redirigé en tapant l'URL directement.
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/is-admin")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.ok) setIsAdmin(!!d.isAdmin);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -227,6 +250,25 @@ export function Sidebar({
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             {theme === "dark" ? "Mode clair" : "Mode sombre"}
           </button>
+        )}
+
+        {/* 🆕 MODULE 4 — Raccourci Administration, VISIBLE UNIQUEMENT pour les
+            admins (voir isAdmin ci-dessus). Séparé visuellement des liens
+            normaux (bordure dédiée + teinte distincte) pour qu'il ne soit
+            jamais confondu avec un lien produit standard. */}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            onClick={onClose}
+            className="mt-3 flex min-h-10 items-center gap-2.5 rounded-lg border px-3 text-sm font-semibold transition hover:bg-white/5"
+            style={{
+              borderColor: "rgba(199,164,54,0.3)",
+              color: "#C7A436",
+            }}
+          >
+            <ShieldCheck size={15} />
+            Administration
+          </Link>
         )}
 
         {/* Carte plan */}

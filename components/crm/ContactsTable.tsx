@@ -3,12 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Trash2, Eye, X, Download } from "lucide-react";
+import { Plus, Search, Trash2, Eye, X, Download, Upload, Settings2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { waMeLink } from "@/lib/crm/phone";
 import { CountrySelect } from "@/components/crm/CountrySelect";
 import { WhatsAppIcon } from "@/components/crm/WhatsAppIcon";
+import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
+import { CustomFieldsSettings } from "@/components/leads/CustomFieldsSettings";
 import type { ContactWithTags, Tag, LeadStatus } from "@/lib/crm/types";
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
@@ -42,6 +44,9 @@ export function ContactsTable({
   const [newTag, setNewTag] = useState("");
   const [creatingTag, setCreatingTag] = useState(false);
   const [creating, setCreating] = useState(false);
+  // 🆕 MODULE 3 — Import de leads (CSV/Excel) + gestion des champs personnalisés.
+  const [importing, setImporting] = useState(false);
+  const [managingFields, setManagingFields] = useState(false);
 
   function toggle(id: string) {
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -144,6 +149,14 @@ export function ContactsTable({
           <p className="mt-2 text-sm text-muted">{total} contact{total > 1 ? "s" : ""} dans votre CRM</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setManagingFields(true)} title="Champs personnalisés">
+            <Settings2 className="h-4 w-4" />
+            Champs personnalisés
+          </Button>
+          <Button variant="secondary" onClick={() => setImporting(true)}>
+            <Upload className="h-4 w-4" />
+            Importer
+          </Button>
           {exportHref && (
             <Button href={exportHref} variant="secondary">
               <Download className="h-4 w-4" />
@@ -456,6 +469,18 @@ export function ContactsTable({
           </div>
         </div>
       )}
+
+      {/* 🆕 MODULE 3 — Import de leads (CSV/Excel) */}
+      {importing && (
+        <ImportLeadsModal
+          funnels={funnels}
+          onClose={() => setImporting(false)}
+          onImported={() => router.refresh()}
+        />
+      )}
+
+      {/* 🆕 MODULE 3 — Gestion des champs personnalisés */}
+      {managingFields && <CustomFieldsSettings onClose={() => setManagingFields(false)} />}
     </div>
   );
 }

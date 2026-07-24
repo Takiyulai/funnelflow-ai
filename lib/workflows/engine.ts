@@ -26,6 +26,14 @@ type LeadContext = {
   id: string;
   email: string;
   name?: string | null;
+  // 🆕 MODULE 3 — optionnels : alimentent le moteur de templating {{...}}
+  // (lib/crm/emailRender.ts) quand l'appelant les fournit (ex. enrollContact).
+  // Absents ici (ex. capture d'un lead tout juste créé), personalize() retombe
+  // simplement sur `name`/valeur vide — comportement inchangé.
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  customFields?: Record<string, unknown> | null;
 };
 
 /** Contexte d'un événement déclencheur. Le `lead` (contact concerné) est commun
@@ -214,7 +222,16 @@ export async function runWorkflowsForEvent(
   for (const wf of workflows) {
     if (!triggerFilterMatches(wf.trigger, ctx)) continue;
     try {
-      await executeActions(admin, userId, ctx.lead, wf.actions.map((a) => a.config));
+      await executeActions(
+        admin,
+        userId,
+        ctx.lead,
+        wf.actions.map((a) => a.config),
+        0,
+        0,
+        wf.trigger.funnelId ?? ctx.funnelId ?? null,
+        wf.id,
+      );
     } catch (e) {
       console.warn(`[workflows] exécution "${wf.name}" échouée (non bloquant):`, e);
     }
@@ -280,6 +297,14 @@ export async function executeActions(
   actions: WorkflowActionConfig[],
   initialDelayMs = 0,
   depth = 0,
+  // 🆕 Tunnel du workflow (trigger.funnelId) : propagé aux emails envoyés pour
+  // que l'EXPÉDITEUR affiché soit le nom de branding du tunnel.
+  funnelId: string | null = null,
+  // 🔒 CORRECTIF — id du workflow, nécessaire pour DIFFÉRER une "condition"
+  // rencontrée après un "wait"/"wait_until" (voir le cas "condition" plus bas).
+  // Sans lui, le report est impossible et l'ancien comportement (évaluation
+  // immédiate) s'applique — jamais bloquant pour les appelants existants.
+  workflowId: string | null = null,
 ): Promise<void> {
   // 🆕 Accumulateur de délai en MILLISECONDES : le "wait" accepte désormais
   // jours + heures + minutes (rétro-compat : anciennes étapes { days }).
@@ -356,23 +381,28 @@ export async function executeActions(
         }
         // 🆕 LOT 5 — Email direct AU CONTACT, sans séquence. Respecte les
         // "wait" accumulés (déposé dans la file scheduled_emails → cron).
+        // 🆕 MODULE 3 — personalize()/renderSequenceEmailHtml() piochent aussi
+        // dans firstName/lastName/phone/customFields quand `lead` les porte.
         case "send_email": {
           const subject = action.subject?.trim();
           const content = action.content?.trim();
           if (!subject || !content) break; // config incomplète : ignorée
+          const recipient = {
+            name: lead.name ?? null,
+            email: lead.email,
+            firstName: lead.firstName ?? null,
+            lastName: lead.lastName ?? null,
+            phone: lead.phone ?? null,
+            customFields: lead.customFields ?? null,
+          };
           await scheduleEmail(admin, {
             userId,
             contactId: lead.id,
             recipient: lead.email,
-            subject: personalize(subject, {
-              name: lead.name ?? null,
-              email: lead.email,
-            }),
-            content: renderSequenceEmailHtml(content, {
-              name: lead.name ?? null,
-              email: lead.email,
-            }),
+            subject: personalize(subject, recipient),
+            content: renderSequenceEmailHtml(content, recipient),
             delayMs,
+            funnelId, // 🆕 expéditeur = branding du tunnel du workflow
           });
           break;
         }
@@ -385,12 +415,46 @@ export async function executeActions(
             console.warn("[workflows] condition ignorée (profondeur max atteinte)");
             break;
           }
+          // 🔒 CORRECTIF — un "wait"/"wait_until" placé AVANT cette condition
+          // n'a fait qu'accumuler `delayMs` : jusqu'ici, la condition était
+          // évaluée TOUT DE SUITE (au moment du trigger), pas après le délai.
+          // Pour un test comme has_opened_email/has_clicked_email, c'est
+          // TOUJOURS faux à cet instant (l'email vient d'être programmé, pas
+          // encore reçu) → la branche "otherwise" partait systématiquement,
+          // et une relance conditionnée à "pas ouvert après 6h" ne pouvait
+          // jamais fonctionner. On DIFFÈRE donc cette condition (et tout ce
+          // qui suit dans cette liste) à l'heure voulue, via
+          // `workflow_pending_runs` (même mécanisme que le trigger time.elapsed,
+          // déjà traité par le cron). Si `workflowId` est absent (appelant non
+          // mis à jour), on garde l'ancien comportement par précaution.
+          if (delayMs > 0 && workflowId) {
+            const idx = actions.indexOf(action);
+            const remaining = idx >= 0 ? actions.slice(idx) : [action];
+            try {
+              const { error } = await admin.from("workflow_pending_runs").insert({
+                workflow_id: workflowId,
+                user_id: userId,
+                lead_id: lead.id,
+                lead_email: lead.email,
+                lead_name: lead.name ?? null,
+                run_at: new Date(Date.now() + delayMs).toISOString(),
+                remaining_actions: remaining,
+                funnel_id: funnelId,
+              });
+              if (error) throw new Error(error.message);
+            } catch (e) {
+              console.warn("[workflows] report de condition échoué (non bloquant):", e);
+            }
+            // On arrête ICI : le reste de la liste (condition incluse) sera
+            // rejoué par le cron au moment voulu, avec un délai remis à zéro.
+            return;
+          }
           const ok = await evaluateConditionTest(admin, userId, lead, action.test);
           const branch = (action.negate ? !ok : ok)
             ? action.then
             : action.otherwise;
           if (Array.isArray(branch) && branch.length > 0) {
-            await executeActions(admin, userId, lead, branch, delayMs, depth + 1);
+            await executeActions(admin, userId, lead, branch, delayMs, depth + 1, funnelId, workflowId);
           }
           break;
         }
@@ -506,12 +570,15 @@ async function scheduleEmail(
     subject: string;
     content: string;
     delayMs: number;
+    /** 🆕 Tunnel rattaché → le cron l'utilise pour l'expéditeur (branding). */
+    funnelId?: string | null;
   },
 ): Promise<void> {
   const scheduledAt = new Date(Date.now() + args.delayMs).toISOString();
   const { error } = await admin.from("scheduled_emails").insert({
     user_id: args.userId,
     source_type: "workflow",
+    funnel_id: args.funnelId ?? null,
     contact_id: args.contactId,
     recipient_email: args.recipient,
     subject: args.subject,

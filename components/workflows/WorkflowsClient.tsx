@@ -16,6 +16,7 @@ import {
   Zap,
   Sparkles,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
@@ -1793,6 +1794,28 @@ function ConditionFields({
         </p>
       )}
 
+      {/* 🆕 Avertissement ciblé : « a ouvert/cliqué » n'a de sens que si on a
+          laissé du temps au contact. Sans « Attendre » placé AVANT cette
+          condition, elle est vérifiée tout de suite — personne n'a encore pu
+          ouvrir quoi que ce soit à cet instant, donc le test répond presque
+          toujours « non ». C'est l'erreur la plus fréquente sur ce type de
+          condition (ex. « Inscription Webinaire 26 ») : contrairement à « a
+          le tag »/« statut est », où une vérification immédiate est souvent
+          voulue, ici elle ne l'est presque jamais. */}
+      {(test.type === "has_opened_email" || test.type === "has_clicked_email") &&
+        baseOffsetMs <= 0 && (
+          <p className="flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-[11px] font-medium text-ink">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-gold" />
+            <span>
+              Cette condition sera vérifiée <strong>immédiatement</strong>, avant
+              même que le contact ait reçu l&apos;email — le test répondra donc
+              presque toujours « non ». Ajoutez une action « Attendre » (ex. 6h)
+              juste avant cette condition pour laisser le temps au contact
+              d&apos;ouvrir/cliquer.
+            </span>
+          </p>
+        )}
+
       <label className="flex items-center gap-2 text-xs text-muted">
         <input
           type="checkbox"
@@ -1804,9 +1827,13 @@ function ConditionFields({
       </label>
 
       <p className="rounded-lg bg-canvas px-3 py-2 text-[11px] text-muted">
-        La condition est évaluée au moment où le workflow s&apos;exécute, sur les
-        données réelles du contact — instantané, sans IA. Les emails des branches
-        respectent les « Attendre » placés avant la condition.
+        {baseOffsetMs > 0
+          ? // 🆕 Depuis le correctif moteur : une condition précédée d'un
+            // délai accumulé n'est plus évaluée tout de suite — elle est
+            // reportée et vérifiée à ce moment précis (± quelques minutes,
+            // selon la fréquence du cron), sur les données réelles du contact.
+            "Un délai (« Attendre ») a été détecté avant cette condition : elle sera vérifiée à ce moment précis, pas tout de suite — sur les données réelles du contact, instantané, sans IA."
+          : "Aucun délai n'a été détecté avant cette condition : elle est vérifiée immédiatement, sur les données réelles du contact au moment du déclencheur — instantané, sans IA."}
       </p>
 
       {/* Branches — héritent du délai déjà accumulé jusqu'à cette condition. */}

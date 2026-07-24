@@ -8,7 +8,7 @@ import type { Contact, ContactWithTags, Tag, LeadStatus } from "./types";
 import { normalizePhoneE164 } from "./phone";
 
 const CONTACT_COLS =
-  "id, user_id, funnel_id, email, name, phone, phone_country, status, source, consent, language, metadata, created_at";
+  "id, user_id, funnel_id, email, name, first_name, last_name, phone, phone_country, status, source, consent, language, metadata, custom_fields, created_at";
 
 /** Nettoie un terme de recherche pour l'opérateur PostgREST `or(...ilike...)`. */
 function safeSearch(term: string): string {
@@ -27,6 +27,9 @@ export type ListContactsOptions = {
 export type ContactInput = {
   email: string;
   name?: string | null;
+  /** 🆕 MODULE 3 */
+  first_name?: string | null;
+  last_name?: string | null;
   phone?: string | null;
   phone_country?: string | null;
   status?: LeadStatus;
@@ -34,6 +37,8 @@ export type ContactInput = {
   funnel_id?: string | null;
   consent?: boolean;
   metadata?: Record<string, unknown>;
+  /** 🆕 MODULE 3 — Champs libres (voir CustomFieldDef). */
+  custom_fields?: Record<string, unknown>;
 };
 
 async function fetchTagsForContacts(
@@ -142,6 +147,8 @@ export async function createContact(
       user_id: userId,
       email: input.email.toLowerCase().trim(),
       name: input.name?.trim() || null,
+      first_name: input.first_name?.trim() || null,
+      last_name: input.last_name?.trim() || null,
       phone,
       phone_country: input.phone_country || null,
       status: input.status || "nouveau",
@@ -149,6 +156,7 @@ export async function createContact(
       funnel_id: input.funnel_id || null,
       consent: input.consent ?? false,
       metadata: input.metadata ?? {},
+      custom_fields: input.custom_fields ?? {},
     })
     .select(CONTACT_COLS)
     .single();
@@ -165,6 +173,9 @@ export async function updateContact(
   const update: Record<string, unknown> = {};
   if (patch.email !== undefined) update.email = patch.email.toLowerCase().trim();
   if (patch.name !== undefined) update.name = patch.name?.trim() || null;
+  if (patch.first_name !== undefined) update.first_name = patch.first_name?.trim() || null;
+  if (patch.last_name !== undefined) update.last_name = patch.last_name?.trim() || null;
+  if (patch.custom_fields !== undefined) update.custom_fields = patch.custom_fields;
   if (patch.phone !== undefined || patch.phone_country !== undefined) {
     update.phone = normalizePhoneE164(patch.phone ?? null, patch.phone_country ?? null);
     if (patch.phone_country !== undefined) {

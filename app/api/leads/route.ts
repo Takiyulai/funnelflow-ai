@@ -5,10 +5,6 @@ import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 import { runLeadCreatedWorkflows, runWorkflowsForEvent, eventForPageRole } from "@/lib/workflows/engine";
-import {
-  readDeliveryEmailConfig,
-  renderDeliveryEmail,
-} from "@/lib/funnels/deliveryEmail";
 import { rateLimit } from "@/lib/rate-limit";
 
 // ─── Schéma de validation ─────────────────────────────────────────────
@@ -240,31 +236,10 @@ export async function POST(request: Request) {
     console.warn("[api/leads] événement sémantique échoué (non bloquant):", wfErr);
   }
 
-  // 7. 🆕 Email de livraison conditionnel : UNIQUEMENT si le propriétaire l'a
-  //    configuré ET activé pour ce tunnel (lu dans le snapshot publié). Jamais
-  //    d'email générique par défaut. Non bloquant.
-  try {
-    const delivery = readDeliveryEmailConfig(funnel.published_content);
-    if (delivery) {
-      const leadEmail = payload.email.toLowerCase().trim();
-      const { subject, html } = renderDeliveryEmail(delivery, {
-        email: leadEmail,
-        name: payload.name?.trim() || null,
-      });
-      await admin.from("scheduled_emails").insert({
-        user_id: funnel.user_id,
-        source_type: "delivery",
-        contact_id: lead.id,
-        recipient_email: leadEmail,
-        subject,
-        content: html,
-        scheduled_at: new Date().toISOString(),
-        status: "pending",
-      });
-    }
-  } catch (deErr) {
-    console.warn("[api/leads] email de livraison échoué (non bloquant):", deErr);
-  }
+  // 🆕 L'« email de livraison » du tunnel a été RETIRÉ : tout l'emailing est
+  //    désormais centralisé dans l'onglet Emails (séquences / campagnes /
+  //    workflows). Pour livrer un cadeau à l'inscription, on branche un workflow
+  //    « Nouveau lead » → « Inscrire dans une séquence » sur le tunnel concerné.
 
   return NextResponse.json(
     {

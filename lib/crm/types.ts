@@ -14,6 +14,10 @@ export type Contact = {
   funnel_id: string | null;
   email: string;
   name: string | null;
+  /** 🆕 MODULE 3 — Prénom/nom optionnels, en complément de `name` (nom complet
+   *  historique, conservé pour compatibilité ascendante — jamais retiré). */
+  first_name?: string | null;
+  last_name?: string | null;
   /** Téléphone normalisé E.164, ex. "+33612345678". */
   phone: string | null;
   /** Pays ISO 3166-1 alpha-2, ex. "FR". */
@@ -23,6 +27,18 @@ export type Contact = {
   consent: boolean;
   language: string | null;
   metadata: Record<string, unknown>;
+  /** 🆕 MODULE 3 — Champs libres définis par l'utilisateur (voir CustomFieldDef),
+   *  disponibles dans le moteur de templating {{...}}. */
+  custom_fields?: Record<string, unknown>;
+  created_at: string;
+};
+
+/** 🆕 MODULE 3 — Définition d'un champ personnalisé (table lead_custom_field_defs). */
+export type CustomFieldDef = {
+  id: string;
+  user_id: string;
+  field_key: string;
+  label: string;
   created_at: string;
 };
 

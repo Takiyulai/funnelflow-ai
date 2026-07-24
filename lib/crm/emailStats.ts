@@ -4,10 +4,22 @@
 // le bandeau en haut de l'onglet Emails ET par la carte KPI du Dashboard.
 //
 //  - Campagnes : total, actives (programmées + en cours d'envoi), envoyées.
-//  - Emails envoyés : lignes crm_email_sends au statut "sent" (envois réels).
+//  - Emails envoyés : lignes "sent" de DEUX tables — crm_email_sends
+//    (campagnes envoyées immédiatement) ET scheduled_emails (séquences,
+//    workflows, envois programmés via le cron). Les deux espaces d'ID sont
+//    disjoints (un email vit dans une seule des deux tables, jamais les
+//    deux — voir db/email-events-schema.sql), donc additionner les deux
+//    comptes ne fait jamais de double-comptage.
+//    🔧 CORRIGÉ — avant ce correctif, seul crm_email_sends était compté ici
+//    alors que les ouvertures/clics (email_events) proviennent de TOUTES les
+//    sources, y compris séquences/workflows via scheduled_emails. Résultat :
+//    le dénominateur ne comptait quasiment aucun envoi réel dès que
+//    l'utilisateur envoyait surtout via séquences/workflows, ce qui faisait
+//    dépasser 100 % de taux d'ouverture (ex. 7 ouvertures / 4 envois
+//    "comptés" = 175 %, alors que le vrai total envoyé était de 50).
 //  - Taux d'ouverture / de clic : événements email_events (open/click),
 //    dédupliqués par message (1 ouverture unique par email envoyé), rapportés
-//    au nombre d'emails envoyés.
+//    au nombre RÉEL total d'emails envoyés (toutes sources confondues).
 //  - Séquences actives : crm_sequences au statut "active".
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,7 +53,7 @@ export async function getEmailStats(
   userId: string,
 ): Promise<EmailStats> {
   try {
-    const [totalRes, activeRes, sentRes, deliveredRes, seqRes, eventsRes] =
+    const [totalRes, activeRes, sentRes, deliveredRes, scheduledSentRes, seqRes, eventsRes] =
       await Promise.all([
         sb.from("crm_campaigns").select("id", { count: "exact", head: true }).eq("user_id", userId),
         sb
@@ -59,6 +71,13 @@ export async function getEmailStats(
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId)
           .eq("status", "sent"),
+        // 🆕 Envois via séquences/workflows (file cron) — sans cette ligne, le
+        // dénominateur ignorait la quasi-totalité des envois réels.
+        sb
+          .from("scheduled_emails")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", "sent"),
         sb
           .from("crm_sequences")
           .select("id", { count: "exact", head: true })
@@ -71,7 +90,8 @@ export async function getEmailStats(
           .in("kind", ["open", "click"]),
       ]);
 
-    const emailsSent = deliveredRes.count ?? 0;
+    // 🔧 CORRIGÉ — total réel toutes sources (campagnes + séquences/workflows).
+    const emailsSent = (deliveredRes.count ?? 0) + (scheduledSentRes.count ?? 0);
 
     // Dédup : 1 ouverture / clic unique par email (message_id), repli contact.
     const openKeys = new Set<string>();

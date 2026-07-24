@@ -198,9 +198,11 @@ export async function enrollContact(
   if (!seq) throw new Error("sequence_not_found");
   if (seq.emails.length === 0) throw new Error("sequence_empty");
 
+  // 🆕 MODULE 3 — first_name/last_name/phone/custom_fields alimentent le
+  // moteur de templating (voir lib/crm/emailRender.ts::personalize).
   const { data: contact, error: cErr } = await sb
     .from("leads")
-    .select("id, email, name")
+    .select("id, email, name, first_name, last_name, phone, custom_fields")
     .eq("user_id", userId)
     .eq("id", contactId)
     .maybeSingle();
@@ -211,7 +213,14 @@ export async function enrollContact(
   const DAY_MS = 24 * 60 * 60 * 1000;
   const HOUR_MS = 60 * 60 * 1000;
   const startAt = now + Math.max(0, extraDelayMs);
-  const recipient = { name: contact.name as string | null, email: contact.email as string };
+  const recipient = {
+    name: contact.name as string | null,
+    email: contact.email as string,
+    firstName: (contact.first_name as string | null) ?? null,
+    lastName: (contact.last_name as string | null) ?? null,
+    phone: (contact.phone as string | null) ?? null,
+    customFields: (contact.custom_fields as Record<string, unknown> | null) ?? null,
+  };
 
   const rows = seq.emails
     .map((em) => {
@@ -237,6 +246,10 @@ export async function enrollContact(
         campaign_id: null,
         sequence_id: sequenceId,
         sequence_email_id: em.id,
+        // 🆕 On propage le tunnel rattaché à la séquence : le cron s'en sert pour
+        // que l'EXPÉDITEUR affiché soit le nom de branding du tunnel (comme dans
+        // l'envoi test). Sans ça, les emails enrôlés partaient au nom générique.
+        funnel_id: seq.funnel_id ?? null,
         contact_id: contact.id,
         recipient_email: contact.email,
         subject: em.subject,

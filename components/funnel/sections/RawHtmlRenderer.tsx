@@ -56,62 +56,26 @@ export function RawHtmlRenderer({
 
     iframe.srcdoc = wrapHtmlDocument(html, clonedHead, isEditMode, section.id, clonedBody);
 
-    let observer: ResizeObserver | null = null;
-
-    // 🆕 FIX « espaces vides » (bandes vides entre sections / sous le footer) :
-    // on NE mesure PLUS avec documentElement.scrollHeight — il est GONFLÉ soit
-    // par la hauteur du viewport de l'iframe (feedback : l'iframe fait 400px →
-    // documentElement lit 400px même si le contenu ne fait que 191px), soit par
-    // des éléments hors-flux rattachés en fin de page (orphelins overlay). On
-    // mesure la hauteur RÉELLE du contenu = body.scrollHeight, complétée par le
-    // bas des enfants directs réellement dans le flux (on IGNORE le conteneur
-    // d'overlays hors-flux `data-ff-overlays`, sinon un popup/script positionné
-    // loin regonfle la hauteur → grande bande vide).
-    const measureContentHeight = (doc: Document): number => {
-      const body = doc.body;
-      if (!body) return 0;
-      let h = body.scrollHeight;
-      const children = body.children;
-      for (let i = 0; i < children.length; i++) {
-        const el = children[i] as HTMLElement;
-        if (el.hasAttribute("data-ff-overlays")) continue; // hors-flux : ignoré
-        const rect = el.getBoundingClientRect();
-        if (rect.height > 0) h = Math.max(h, Math.ceil(rect.bottom));
-      }
-      return h;
+    // 🔒 Sécurité #1b : l'iframe raw-html n'a plus `allow-same-origin`, donc
+    // `iframe.contentDocument` n'est plus accessible (origine opaque). La
+    // hauteur réelle du contenu est désormais mesurée À L'INTÉRIEUR de
+    // l'iframe (voir wrapHtmlDocument → interactivityScript → reportHeight)
+    // et remontée ici via postMessage. On ne fait plus AUCUNE lecture directe
+    // du DOM de l'iframe depuis le parent.
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframe.contentWindow) return;
+      const data = event.data as { type?: string; sectionId?: string; height?: number } | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type !== "ff-height") return;
+      if (data.sectionId !== section.id) return;
+      const h = Number(data.height);
+      // Plafond 60000 px pour les longs tunnels (VSL / sales pages).
+      if (Number.isFinite(h) && h > 0) setIframeHeight(Math.min(60000, h));
     };
 
-    const updateHeight = () => {
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc) return;
-        // Plafond 60000 px pour les longs tunnels (VSL / sales pages).
-        const h = measureContentHeight(doc);
-        if (h > 0) setIframeHeight(Math.min(60000, h));
-      } catch {
-        // CORS
-      }
-    };
-
-    const handleLoad = () => {
-      updateHeight();
-      setTimeout(updateHeight, 300);
-      setTimeout(updateHeight, 1500);
-
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc?.body) return;
-        observer = new ResizeObserver(updateHeight);
-        observer.observe(doc.body);
-      } catch {
-        // ignore
-      }
-    };
-
-    iframe.addEventListener("load", handleLoad);
+    window.addEventListener("message", handleMessage);
     return () => {
-      iframe.removeEventListener("load", handleLoad);
-      observer?.disconnect();
+      window.removeEventListener("message", handleMessage);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -200,7 +164,7 @@ export function RawHtmlRenderer({
           iframeRef.current = el;
           if (externalIframeRef) externalIframeRef.current = el;
         }}
-        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+        sandbox="allow-scripts allow-popups allow-forms"
         title="Cloned section"
         loading="lazy"
         scrolling="no"
@@ -1082,6 +1046,48 @@ function wrapHtmlDocument(
     }, false);
   }
 
+  // 🔒 Sécurité #1b : l'iframe n'a plus « allow-same-origin » (sandbox
+  // durci), donc le parent ne peut plus lire iframe.contentDocument pour
+  // mesurer la hauteur réelle du contenu. On mesure ICI, à l'intérieur de
+  // l'iframe, et on remonte la valeur au parent via postMessage. Logique
+  // de mesure identique à l'ancienne measureContentHeight() côté parent :
+  // body.scrollHeight complété par le bas des enfants directs réellement
+  // dans le flux (on ignore le conteneur d'overlays hors-flux
+  // data-ff-overlays, sinon un popup positionné loin regonfle la hauteur).
+  function measureContentHeight() {
+    var body = document.body;
+    if (!body) return 0;
+    var h = body.scrollHeight;
+    var children = body.children;
+    for (var i = 0; i < children.length; i++) {
+      var el = children[i];
+      if (el.hasAttribute && el.hasAttribute('data-ff-overlays')) continue;
+      var rect = el.getBoundingClientRect();
+      if (rect.height > 0) h = Math.max(h, Math.ceil(rect.bottom));
+    }
+    return h;
+  }
+
+  var __ffHeightRO = null;
+  function reportHeight() {
+    try {
+      var h = measureContentHeight();
+      if (h > 0) {
+        window.parent.postMessage({ type: 'ff-height', sectionId: SECTION_ID, height: h }, '*');
+      }
+    } catch (e) {}
+  }
+
+  function setupHeightReporting() {
+    reportHeight();
+    if (!__ffHeightRO) {
+      try {
+        __ffHeightRO = new ResizeObserver(function() { reportHeight(); });
+        __ffHeightRO.observe(document.body);
+      } catch (e) {}
+    }
+  }
+
   function init() {
     try { neutralizeHiddenInlineStyles(); } catch(e) {}
     try { setupLinks(); } catch(e) {}
@@ -1090,6 +1096,7 @@ function wrapHtmlDocument(
     try { setupMediaWrapperRelease(); } catch(e) {}
     try { setupClickToEdit(); } catch(e) {}
     try { setupParentMessageListener(); } catch(e) {}
+    try { setupHeightReporting(); } catch(e) {}
   }
 
   if (document.readyState === 'loading') {
@@ -1099,12 +1106,21 @@ function wrapHtmlDocument(
   }
   setTimeout(init, 500);
   setTimeout(init, 2000);
+  setTimeout(reportHeight, 300);
+  setTimeout(reportHeight, 1500);
+
+  window.addEventListener('load', function() {
+    reportHeight();
+    setTimeout(reportHeight, 300);
+    setTimeout(reportHeight, 1500);
+  });
 
   document.addEventListener('load', function(e) {
     var t = e.target;
     if (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO') &&
         (t.hasAttribute('data-ff-spot-id') || t.hasAttribute('data-ff-image-id'))) {
       try { setupMediaWrapperRelease(); } catch (err) {}
+      try { reportHeight(); } catch (err) {}
     }
   }, true);
 })();

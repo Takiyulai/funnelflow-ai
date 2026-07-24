@@ -257,6 +257,13 @@ export type WorkflowPendingRunRow = {
   lead_name: string | null;
   run_at: string;
   status: "pending" | "done" | "failed";
+  /** 🆕 Reprise en cours de workflow (ex. "wait" suivi d'une "condition") :
+   *  actions restantes à exécuter à `run_at`, capturées au moment du report.
+   *  NULL = comportement historique `time.elapsed` (rejoue workflow.actions
+   *  depuis le début). */
+  remaining_actions?: WorkflowActionConfig[] | null;
+  /** 🆕 Tunnel du workflow au moment du report (branding expéditeur à la reprise). */
+  funnel_id?: string | null;
 };
 
 // ─── Vue applicative (parsée/normalisée) ────────────────────────────────────
