@@ -4,7 +4,8 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
-import { runLeadCreatedWorkflows, runWorkflowsForEvent, eventForPageRole } from "@/lib/workflows/engine";
+import { runLeadCreatedWorkflows, runWorkflowsForEvent, semanticEventForSubmission } from "@/lib/workflows/engine";
+import { dispatchDueEmailsNow } from "@/lib/crm/deliverScheduled";
 import { rateLimit } from "@/lib/rate-limit";
 
 // ─── Schéma de validation ─────────────────────────────────────────────
@@ -55,25 +56,9 @@ function hashIp(ip: string): string {
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32);
 }
 
-/**
- * 🆕 LOT 4/7/8 — Résout le RÔLE de la page d'où vient la soumission (pour
- * savoir si un événement workflow SÉMANTIQUE (webinar.registered,
- * appointment.booked, application.submitted) doit être déclenché EN PLUS de
- * lead.created). Best-effort : retourne null si non trouvé (jamais bloquant).
- */
-function resolvePageRole(publishedContent: unknown, pageSlug?: string | null): string | null {
-  if (!pageSlug) return null;
-  const content = publishedContent as
-    | { pages?: Array<{ slug?: string; role?: string }> }
-    | null;
-  if (!content || !Array.isArray(content.pages)) return null;
-  const clean = (s: string) => s.replace(/^\/+/, "").replace(/\/+$/, "");
-  const target = clean(pageSlug);
-  const page = content.pages.find(
-    (p) => typeof p?.slug === "string" && clean(p.slug) === target,
-  );
-  return page?.role ?? null;
-}
+// 🆕 La résolution du rôle de page + événement sémantique vit désormais dans
+// lib/workflows/engine.ts (semanticEventForSubmission), avec le fallback
+// tunnel webinaire — voir le commentaire là-bas.
 
 function getClientIp(req: Request): string {
   const xff = req.headers.get("x-forwarded-for");
@@ -219,8 +204,14 @@ export async function POST(request: Request) {
   //       rôle de la page (inscription webinaire, RDV, candidature coaching).
   //       Best-effort, jamais bloquant pour la capture du lead.
   try {
-    const role = resolvePageRole(funnel.published_content, payload.pageSlug);
-    const semanticEvent = eventForPageRole(role);
+    // 🔒 CORRECTIF — semanticEventForSubmission inclut le FALLBACK webinaire :
+    // une soumission depuis la landing (ou sans pageSlug) d'un tunnel webinaire
+    // déclenche bien `webinar.registered` (avant : jamais déclenché, car le
+    // formulaire est sur la page `landing`, pas sur une page `registration`).
+    const semanticEvent = semanticEventForSubmission(
+      funnel.published_content,
+      payload.pageSlug,
+    );
     if (semanticEvent) {
       await runWorkflowsForEvent(admin, funnel.user_id, {
         event: semanticEvent,
@@ -240,6 +231,14 @@ export async function POST(request: Request) {
   //    désormais centralisé dans l'onglet Emails (séquences / campagnes /
   //    workflows). Pour livrer un cadeau à l'inscription, on branche un workflow
   //    « Nouveau lead » → « Inscrire dans une séquence » sur le tunnel concerné.
+
+  // 7. 🔒 CORRECTIF EMAILS — ENVOI IMMÉDIAT : les workflows ci-dessus viennent
+  //    de déposer les emails « instantanés » (délai 0) dans la file
+  //    `scheduled_emails`. On les envoie TOUT DE SUITE au lieu d'attendre le
+  //    prochain passage du cron (1×/jour sur Vercel Hobby → les emails de
+  //    bienvenue semblaient ne jamais partir). Non bloquant, anti double envoi
+  //    (claim atomique partagé avec le cron).
+  await dispatchDueEmailsNow(funnel.user_id);
 
   return NextResponse.json(
     {

@@ -11,7 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 import { enrollContact } from "@/lib/crm/sequences";
-import { personalize, renderSequenceEmailHtml } from "@/lib/crm/emailRender";
+import { personalize, renderSequenceEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
 import { getActiveWorkflowsForEvent, getActiveWorkflowsWaitingOnEvent } from "./repository";
 import type {
   WorkflowActionConfig,
@@ -266,6 +266,57 @@ export function eventForPageRole(role: string | null | undefined): WorkflowTrigg
   }
 }
 
+type PublishedPages = { pages?: Array<{ slug?: string; role?: string }> } | null;
+
+/**
+ * 🔒 CORRECTIF EMAILS — Résout l'événement sémantique d'une SOUMISSION de
+ * formulaire, avec FALLBACK tunnel webinaire.
+ *
+ * Problème corrigé : sur un tunnel webinaire, le formulaire d'inscription vit
+ * presque toujours sur la page d'ACCUEIL (rôle `landing`, slug "/") — pas sur
+ * une page de rôle `registration`. De plus le formulaire public n'envoie pas
+ * toujours `pageSlug` (null en base sur les captures réelles). Résultat : un
+ * workflow déclenché par « Inscription webinaire » ne se déclenchait JAMAIS,
+ * et plus aucun email de bienvenue ne partait dès que les workflows
+ * `lead.created` étaient mis en pause.
+ *
+ * Règle : (1) si le rôle de la page résout un événement dédié, on le garde ;
+ * (2) sinon, si le tunnel est un tunnel WEBINAIRE (présence d'une page live/
+ * replay/registration) et que la soumission vient de la landing ou d'une page
+ * indéterminée, l'inscription EST une inscription au webinaire →
+ * `webinar.registered`. Les autres types de tunnels sont inchangés.
+ */
+export function semanticEventForSubmission(
+  publishedContent: unknown,
+  pageSlug?: string | null,
+): WorkflowTriggerEvent | null {
+  const content = publishedContent as PublishedPages;
+  const pages = Array.isArray(content?.pages) ? content.pages : [];
+
+  // Résolution du rôle de la page soumise (best-effort, comme /api/leads).
+  let role: string | null = null;
+  if (pageSlug) {
+    const clean = (s: string) => s.replace(/^\/+/, "").replace(/\/+$/, "");
+    const target = clean(pageSlug);
+    role =
+      pages.find((p) => typeof p?.slug === "string" && clean(p.slug) === target)
+        ?.role ?? null;
+  }
+
+  const direct = eventForPageRole(role);
+  if (direct) return direct;
+
+  // Fallback webinaire : soumission depuis la landing (ou page inconnue) d'un
+  // tunnel qui possède une mécanique webinaire.
+  const isWebinarFunnel = pages.some(
+    (p) => p?.role === "live" || p?.role === "replay" || p?.role === "registration",
+  );
+  if (isWebinarFunnel && (!role || role === "landing")) {
+    return "webinar.registered";
+  }
+  return null;
+}
+
 /** Compat : point d'entrée historique de /api/leads (événement lead.created).
  *  Délègue au moteur générique — la capture de leads reste inchangée. */
 export async function runLeadCreatedWorkflows(params: {
@@ -395,12 +446,14 @@ export async function executeActions(
             phone: lead.phone ?? null,
             customFields: lead.customFields ?? null,
           };
+          // 🆕 DESIGN — bannière de marque (businessName du tunnel du workflow).
+          const brandName = await getFunnelBrandName(admin, funnelId);
           await scheduleEmail(admin, {
             userId,
             contactId: lead.id,
             recipient: lead.email,
             subject: personalize(subject, recipient),
-            content: renderSequenceEmailHtml(content, recipient),
+            content: renderSequenceEmailHtml(content, recipient, { brandName }),
             delayMs,
             funnelId, // 🆕 expéditeur = branding du tunnel du workflow
           });

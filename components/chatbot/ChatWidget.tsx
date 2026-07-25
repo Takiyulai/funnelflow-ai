@@ -10,7 +10,7 @@
 // modèles restent 100 % côté serveur).
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Loader2, Sparkles } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Sparkles, Smile } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⚙️ POSITION / APPARENCE — ajuste ici librement.
@@ -28,11 +28,29 @@ const WIDGET_CONFIG = {
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+// 🆕 Emojis proposés dans le picker (grille compacte, pas de dépendance).
+const EMOJIS = [
+  "😀", "😄", "😂", "🥲", "😉", "😊", "😍", "🤔",
+  "👍", "👏", "🙏", "💪", "🤝", "👋", "✌️", "🫶",
+  "🔥", "✨", "🚀", "🎯", "🎉", "💡", "⚡", "❤️",
+  "✅", "❌", "❓", "⏳", "💰", "📈", "📩", "😅",
+] as const;
+
+// 🆕 Suggestions rapides affichées tant que la conversation est vide : un clic
+// envoie directement la question (pattern classique des chatbots support).
+const QUICK_SUGGESTIONS = [
+  "Comment créer mon premier tunnel ?",
+  "Comment publier mon tunnel ?",
+  "Comment voir mes leads ?",
+  "Comment fonctionnent les emails automatiques ?",
+] as const;
+
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -50,10 +68,27 @@ export function ChatWidget() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  async function send() {
-    const text = input.trim();
+  // 🆕 Insère un emoji à la position du curseur dans le champ de saisie.
+  function insertEmoji(emoji: string) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? input.length;
+    const end = el?.selectionEnd ?? input.length;
+    const next = input.slice(0, start) + emoji + input.slice(end);
+    setInput(next);
+    setShowEmoji(false);
+    requestAnimationFrame(() => {
+      el?.focus();
+      const pos = start + emoji.length;
+      el?.setSelectionRange(pos, pos);
+    });
+  }
+
+  // 🆕 `textOverride` permet aux suggestions rapides d'envoyer directement.
+  async function send(textOverride?: string) {
+    const text = (textOverride ?? input).trim();
     if (!text || loading) return;
     setInput("");
+    setShowEmoji(false);
     const nextHistory = [...messages, { role: "user" as const, content: text }];
     setMessages(nextHistory);
     setLoading(true);
@@ -137,32 +172,87 @@ export function ChatWidget() {
             {messages.map((m, i) => (
               <Bubble key={i} role={m.role} content={m.content} />
             ))}
+            {/* 🆕 Suggestions rapides (uniquement conversation vide) */}
+            {messages.length === 0 && !loading && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {QUICK_SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => send(s)}
+                    className="rounded-full border border-line bg-white px-3 py-1.5 text-xs text-ink transition hover:border-gold/60 hover:bg-gold/10"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 🆕 Indicateur de frappe animé (3 points) */}
             {loading && (
-              <div className="flex items-center gap-1.5 px-1 text-xs text-muted">
-                <Loader2 size={13} className="animate-spin" /> L'assistant écrit…
+              <div className="flex justify-start">
+                <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm border border-line bg-white px-3.5 py-2.5">
+                  {[0, 150, 300].map((delay) => (
+                    <span
+                      key={delay}
+                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted"
+                      style={{ animationDelay: `${delay}ms` }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
           {/* Saisie */}
-          <div className="flex items-center gap-2 border-t border-line bg-white p-2.5">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Écris ta question…"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-gold/60"
-            />
-            <button
-              type="button"
-              onClick={send}
-              disabled={loading || !input.trim()}
-              aria-label="Envoyer"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold text-zinc-950 transition hover:opacity-90 disabled:opacity-40"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            </button>
+          <div className="relative border-t border-line bg-white p-2.5">
+            {/* 🆕 Picker d'emojis */}
+            {showEmoji && (
+              <div className="absolute bottom-full left-2 right-2 mb-1 grid grid-cols-8 gap-0.5 rounded-xl border border-line bg-white p-2 shadow-xl">
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => insertEmoji(e)}
+                    aria-label={`Insérer ${e}`}
+                    className="grid h-8 w-8 place-items-center rounded-md text-lg transition hover:bg-canvas"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowEmoji((v) => !v)}
+                aria-label="Ajouter un emoji"
+                aria-expanded={showEmoji}
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
+                  showEmoji
+                    ? "border-gold/60 bg-gold/10 text-ink"
+                    : "border-line text-muted hover:border-gold/60 hover:text-ink"
+                }`}
+              >
+                <Smile size={17} />
+              </button>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Écris ta question…"
+                className="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-gold/60"
+              />
+              <button
+                type="button"
+                onClick={() => send()}
+                disabled={loading || !input.trim()}
+                aria-label="Envoyer"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold text-zinc-950 transition hover:opacity-90 disabled:opacity-40"
+              >
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              </button>
+            </div>
           </div>
         </div>
       )}

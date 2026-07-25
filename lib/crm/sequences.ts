@@ -10,7 +10,7 @@ import type {
   SequenceWithEmails,
   SequenceInput,
 } from "./types";
-import { renderSequenceEmailHtml } from "./emailRender";
+import { renderSequenceEmailHtml, getFunnelBrandName } from "./emailRender";
 
 const SEQ_COLS =
   "id, user_id, name, type, roles, context, language, funnel_id, status, created_at, updated_at";
@@ -213,6 +213,9 @@ export async function enrollContact(
   const DAY_MS = 24 * 60 * 60 * 1000;
   const HOUR_MS = 60 * 60 * 1000;
   const startAt = now + Math.max(0, extraDelayMs);
+  // 🆕 DESIGN — bannière de marque du gabarit : nom du business du tunnel
+  // rattaché à la séquence (best-effort, null si absent).
+  const brandName = await getFunnelBrandName(sb, seq.funnel_id);
   const recipient = {
     name: contact.name as string | null,
     email: contact.email as string,
@@ -253,7 +256,7 @@ export async function enrollContact(
         contact_id: contact.id,
         recipient_email: contact.email,
         subject: em.subject,
-        content: renderSequenceEmailHtml(em.content, recipient), // snapshot perso
+        content: renderSequenceEmailHtml(em.content, recipient, { brandName }), // snapshot perso
         scheduled_at: new Date(scheduledMs).toISOString(),
         status: "pending",
       };

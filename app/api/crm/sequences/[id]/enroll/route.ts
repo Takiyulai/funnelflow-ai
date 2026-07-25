@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { enrollContact } from "@/lib/crm/sequences";
+import { dispatchDueEmailsNow } from "@/lib/crm/deliverScheduled";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const result = await enrollContact(sb, user.id, id, parsed.data.contactId);
+    // 🔒 CORRECTIF EMAILS — envoie immédiatement les emails dus maintenant
+    // (ex. premier email de la séquence à délai 0) sans attendre le cron.
+    await dispatchDueEmailsNow(user.id);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json(

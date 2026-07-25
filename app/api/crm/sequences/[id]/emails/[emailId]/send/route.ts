@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSequenceEmail } from "@/lib/crm/sequences";
 import { sendEmail } from "@/lib/crm/email";
-import { renderSequenceEmailHtml } from "@/lib/crm/emailRender";
+import { renderSequenceEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
 import { getFunnelMarketingSender } from "@/lib/email/userSender";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,6 @@ export async function POST(
     const email = await getSequenceEmail(sb, user.id, id, emailId);
     if (!email) return NextResponse.json({ ok: false, error: "email_not_found" }, { status: 404 });
 
-    const html = renderSequenceEmailHtml(email.content, { email: parsed.data.to });
     // 🆕 Expéditeur MARKETING : businessName du TUNNEL lié à la séquence
     // (sans « via AutoFunnel »), fallback profil si séquence sans tunnel.
     const { data: seq } = await sb
@@ -43,6 +42,9 @@ export async function POST(
       .eq("user_id", user.id)
       .eq("id", id)
       .maybeSingle();
+    // 🆕 DESIGN — même gabarit (bannière de marque) que l'envoi réel.
+    const brandName = await getFunnelBrandName(sb, (seq?.funnel_id as string | null) ?? null);
+    const html = renderSequenceEmailHtml(email.content, { email: parsed.data.to }, { brandName });
     const sender = await getFunnelMarketingSender(
       user.id,
       (seq?.funnel_id as string | null) ?? null,
