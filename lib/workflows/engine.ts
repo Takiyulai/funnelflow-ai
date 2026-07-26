@@ -420,7 +420,13 @@ export async function executeActions(
           if (ownerEmail) {
             await scheduleEmail(admin, {
               userId,
-              contactId: lead.id,
+              // 🔒 ANTI FAUX POSITIFS — la notification est envoyée AU
+              // PROPRIÉTAIRE : on ne l'attribue PLUS au contact. Avant,
+              // contact_id = lead.id → quand le propriétaire ouvrait sa propre
+              // notification, un événement « open » était enregistré SUR LE
+              // CONTACT et pouvait fausser les conditions « a ouvert un email »
+              // (relances jamais envoyées) et les stats d'ouverture.
+              contactId: null,
               recipient: ownerEmail,
               subject:
                 action.subject?.trim() || `Nouveau lead : ${lead.email}`,
@@ -618,7 +624,8 @@ async function scheduleEmail(
   admin: SupabaseClient,
   args: {
     userId: string;
-    contactId: string;
+    /** null = email interne (notif propriétaire) : pas d'attribution contact. */
+    contactId: string | null;
     recipient: string;
     subject: string;
     content: string;

@@ -180,7 +180,9 @@ export function AdminUserDetailModal({
               </label>
             </div>
 
-            <div className="flex items-center justify-between border-t border-line pt-4">
+            {/* 📱 Responsive : colonne sur mobile (le bouton de désactivation +
+                les 2 boutons d'action débordaient), ligne dès sm. */}
+            <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               {detail.user.is_active ? (
                 <button
                   type="button"
@@ -203,7 +205,7 @@ export function AdminUserDetailModal({
                 </button>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 sm:justify-end">
                 <Button variant="secondary" onClick={onClose} disabled={saving}>
                   Fermer
                 </Button>

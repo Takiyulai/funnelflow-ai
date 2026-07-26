@@ -41,6 +41,29 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // 🔒 ANTI FAUX POSITIFS — les scanners antispam (Outlook SafeLinks, etc.)
+  // suivent les liens à la livraison. Comme pour le pixel d'ouverture, un
+  // « clic » dans les 10 s suivant l'envoi réel n'est pas humain : on redirige
+  // sans rien journaliser ni déclencher de workflow.
+  let isBotScan = false;
+  if (userId && messageId) {
+    try {
+      const admin = getSupabaseAdmin();
+      const { data: msg } = await admin
+        .from("scheduled_emails")
+        .select("sent_at")
+        .eq("id", messageId)
+        .maybeSingle();
+      const sentMs = msg?.sent_at ? new Date(msg.sent_at as string).getTime() : NaN;
+      isBotScan = Number.isFinite(sentMs) && Date.now() - sentMs < 10_000;
+    } catch {
+      // best-effort : dans le doute, on journalise normalement
+    }
+  }
+  if (isBotScan) {
+    return NextResponse.redirect(dest);
+  }
+
   // 🆕 LOT 3 — Événement de clic (stats). Indépendant du déclencheur workflow.
   if (userId && (messageId || campaignId || sequenceId)) {
     try {

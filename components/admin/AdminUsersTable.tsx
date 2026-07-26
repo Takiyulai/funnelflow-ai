@@ -66,8 +66,9 @@ export function AdminUsersTable({
   return (
     <>
       <Card className="p-0 overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-line bg-[#F8F9FB] p-4">
-          <div className="relative flex-1 min-w-[220px]">
+        {/* 📱 Responsive : la barre passe en colonne sur mobile, en ligne dès sm. */}
+        <div className="flex flex-col gap-3 border-b border-line bg-[#F8F9FB] p-4 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="text"
@@ -80,17 +81,61 @@ export function AdminUsersTable({
               className="w-full rounded-lg border border-line bg-white py-2 pl-9 pr-3 text-sm focus:border-[#08498D] focus:outline-none"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => search(q)}
-            className="rounded-lg bg-[#08498D] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Rechercher
-          </button>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => search(q)}
+              className="w-full rounded-lg bg-[#08498D] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 sm:w-auto"
+            >
+              Rechercher
+            </button>
+            {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" />}
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* 📱 MOBILE (< md) : liste de cartes empilées — la table à 7 colonnes
+            est illisible sur petit écran, même avec un scroll horizontal. */}
+        <ul className="divide-y divide-line/60 md:hidden">
+          {users.length === 0 && (
+            <li className="px-4 py-10 text-center text-sm text-muted">Aucun utilisateur trouvé.</li>
+          )}
+          {users.map((u) => (
+            <li key={u.id} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{u.full_name || "—"}</p>
+                  <p className="truncate text-xs text-muted">{u.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(u.id)}
+                  title="Voir la fiche"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line hover:bg-canvas"
+                >
+                  <Eye className="h-4 w-4 text-muted" />
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-[11px] font-semibold text-ink">
+                  {u.plan}
+                </span>
+                <Badge tone={licenseBadgeTone(u.license_status)}>
+                  {u.license_status ? LICENSE_LABEL[u.license_status] ?? u.license_status : "Aucune"}
+                </Badge>
+                <Badge tone={u.is_active ? "green" : "red"}>
+                  {u.is_active ? "Actif" : "Désactivé"}
+                </Badge>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 text-xs text-muted">
+                <p>Expiration : <span className="text-ink">{formatDate(u.license_expires_at)}</span></p>
+                <p>Dern. connexion : <span className="text-ink">{formatDate(u.last_login_at)}</span></p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* 🖥️ DESKTOP (≥ md) : table complète. */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-muted">

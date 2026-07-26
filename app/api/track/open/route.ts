@@ -47,6 +47,23 @@ export async function GET(request: Request) {
   if (userId && messageId) {
     try {
       const admin = getSupabaseAdmin();
+      // 🔒 ANTI FAUX POSITIFS — Gmail (et d'autres) préchargent les images via
+      // leur proxy AU MOMENT DE LA LIVRAISON (analyse antispam) : le pixel se
+      // charge ~3 s après l'envoi sans qu'aucun humain n'ait ouvert l'email.
+      // Constaté en prod : « ouverture » enregistrée 3 s après l'envoi d'un
+      // email tombé en SPAM et jamais ouvert → la condition « n'a pas ouvert »
+      // devenait fausse et la relance ne partait jamais. On ignore donc toute
+      // ouverture survenant dans les 10 premières secondes après l'envoi réel
+      // (un humain qui ouvre à +11 s reste compté).
+      const { data: msg } = await admin
+        .from("scheduled_emails")
+        .select("sent_at")
+        .eq("id", messageId)
+        .maybeSingle();
+      const sentMs = msg?.sent_at ? new Date(msg.sent_at as string).getTime() : NaN;
+      if (Number.isFinite(sentMs) && Date.now() - sentMs < 10_000) {
+        return gifResponse(); // préchargement automatique → pas un vrai « open »
+      }
       await admin.from("email_events").insert({
         user_id: userId,
         kind: "open",
