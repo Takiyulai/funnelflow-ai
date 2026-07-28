@@ -1017,6 +1017,15 @@ export type FunnelBrief = {
   /** 🆕 LOT 9 — Nombre de jours du challenge (génère autant de pages
    *  "jour-1"..."jour-N"). Défaut : 5 si non renseigné. */
   challengeDays?: number;
+  /** 🆕 Challenge — OFFRE DE FIN (pitch final). Symétrique de
+   *  `postWebinarOfferName` : `offerName`/`price`/`promise` décrivent LE
+   *  CHALLENGE lui-même (souvent gratuit), pas ce qu'on vend à la clôture.
+   *  Si `challengeOfferName` est VIDE, la page « Pitch final » (role "sales")
+   *  n'est PAS générée — sans offre réelle l'IA fabriquait une page de vente
+   *  factice. Les autres types de tunnel ignorent ces champs. */
+  challengeOfferName?: string;
+  challengeOfferPrice?: string;
+  challengeOfferPromise?: string;
   /** 🆕 Offre de la page OTO/tripwire GÉNÉRIQUE ("oto", cochable dans l'aperçu
    *  du wizard sur TOUS les types de tunnel). Si vide, l'IA invente le nom, le
    *  prix ET la promesse de cette offre — comportement à éviter : renseigner
@@ -1116,6 +1125,13 @@ export type FunnelBrief = {
    *  Link, page de paiement systeme.io, etc.). Si renseigné sur une offre
    *  payante, le CTA de la section pricing redirige vers ce lien. */
   paymentUrl?: string;
+  /** 🆕 Canaux communautaires proposés sur les pages de SUCCÈS (merci /
+   *  confirmation / livraison) : boutons « Rejoindre WhatsApp / Telegram ».
+   *  Saisis dans le wizard, recopiés dans `funnel.meta.socialChannels` par
+   *  applyCommunityChannels() puis rendus par components/funnel/SuccessChannels.
+   *  Vides → aucun bouton (comportement historique). */
+  communityWhatsappUrl?: string;
+  communityTelegramUrl?: string;
   medias?: MediaItem[];
   copywritingPrefs?: CopywritingPrefs;
   /** 🆕 LOT 3 — Rôles des pages OPTIONNELLES cochées par l'utilisateur dans

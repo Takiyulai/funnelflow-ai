@@ -46,6 +46,26 @@ const PRESETS: AnimationPreset[] = [
   "pulse",
 ];
 
+/**
+ * 🆕 Valeurs PAR DÉFAUT réellement appliquées au rendu quand la section ne
+ * porte aucune configuration d'animation (cas de toutes les sections générées
+ * par l'IA). Doit rester aligné avec :
+ *  - components/funnel/FunnelPreview.tsx  → animOf(…, fallback)
+ *  - components/funnel/SectionRenderer.tsx → animOf(key, fallback)
+ *  - lib/export/html.ts                    → anim(section, target, fallback)
+ * Avant, le sélecteur affichait « none » alors que le rendu animait en
+ * fade-up : l'utilisateur croyait les animations désactivées.
+ */
+const ANIM_DEFAULTS: Partial<Record<AnimationTarget, AnimationPreset>> = {
+  eyebrow: "fade-in",
+  image: "fade-in",
+  video: "zoom-in",
+};
+
+function defaultAnimFor(key: AnimationTarget): AnimationPreset {
+  return ANIM_DEFAULTS[key] ?? "fade-up";
+}
+
 const ANIM_TARGETS: { key: AnimationTarget; label: string }[] = [
   { key: "eyebrow", label: "Eyebrow" },
   { key: "headline", label: "Headline" },
@@ -315,7 +335,9 @@ export function StyleTab({ section, onChange }: Props) {
           Animations au scroll
         </h3>
         <p className="mb-3 text-[10px] text-white/40">
-          Une animation par cible. « none » désactive l'animation.
+          Une animation par cible, jouée quand la section entre dans l'écran.
+          « none » désactive l'animation (le titre pilote aussi la section
+          entière). Ignoré si le visiteur a activé « réduire les animations ».
         </p>
         <div className="space-y-1.5">
           {ANIM_TARGETS.map((t) => (
@@ -325,7 +347,7 @@ export function StyleTab({ section, onChange }: Props) {
             >
               <span className="w-20 shrink-0 text-[11px] text-white/60">{t.label}</span>
               <select
-                value={animations[t.key] ?? "none"}
+                value={animations[t.key] ?? defaultAnimFor(t.key)}
                 onChange={(e) => updateAnim(t.key, e.target.value as AnimationPreset)}
                 className="min-w-0 flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-white outline-none focus:border-amber-300/40"
               >

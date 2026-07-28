@@ -475,6 +475,43 @@ function usesSpecializedRenderer(section: FunnelSection): boolean {
   );
 }
 
+/**
+ * 🆕 FIX « titre affiché deux fois ».
+ *
+ * SectionBlock rend l'en-tête générique (eyebrow / titre / sous-titre) PUIS
+ * délègue le contenu à SpecializedContent. Or plusieurs familles de patterns
+ * composent LEUR PROPRE en-tête (mise en page centrée, largeur max, alignement
+ * propres au pattern) : le titre — et le sous-titre quand il existe —
+ * apparaissaient donc EN DOUBLE sur toutes les sections FAQ, bénéfices, CTA
+ * final, pricing, témoignages et stats.
+ *
+ * Cette fonction dit quelles parties de l'en-tête le rendu spécialisé prend
+ * déjà en charge, pour que le bloc générique ne les répète pas. Elle suit
+ * exactement le routage de SpecializedContent : toute évolution de l'un doit
+ * être répercutée sur l'autre.
+ */
+type OwnHeaderParts = { eyebrow: boolean; headline: boolean; subheadline: boolean };
+const NO_OWN_HEADER: OwnHeaderParts = { eyebrow: false, headline: false, subheadline: false };
+const TITLE_ONLY: OwnHeaderParts = { eyebrow: false, headline: true, subheadline: true };
+const FULL_HEADER: OwnHeaderParts = { eyebrow: true, headline: true, subheadline: true };
+
+function specializedOwnHeader(section: FunnelSection): OwnHeaderParts {
+  if (!usesSpecializedRenderer(section)) return NO_OWN_HEADER;
+  const t = section.type as string;
+  // Toujours routés vers un pattern (défaut inclus), tous porteurs d'un en-tête.
+  if (t === "faq" || t === "benefits" || t === "cta") return TITLE_ONLY;
+  // proof + stats : seule famille dont le pattern rend AUSSI l'eyebrow.
+  if (t === "proof" && isStatsPattern(section.pattern)) return FULL_HEADER;
+  // proof + trustbar : contenu seul, aucun en-tête → le générique reste.
+  if (t === "proof" && isTrustbarPattern(section.pattern)) return NO_OWN_HEADER;
+  // Pricing/offer et témoignages : pattern UNIQUEMENT si section.pattern est
+  // renseigné (sinon rendu historique sans en-tête).
+  if (t === "pricing" || t === "offer") return section.pattern ? TITLE_ONLY : NO_OWN_HEADER;
+  if (t === "testimonials" || t === "proof") return section.pattern ? TITLE_ONLY : NO_OWN_HEADER;
+  // bonus, guarantee, problem/agitation, process : contenu seul.
+  return NO_OWN_HEADER;
+}
+
 function hasDecorativeAtEdge(
   icons: DecorativeIcon[] | undefined,
 ): { top: boolean; bottom: boolean } {
@@ -1682,7 +1719,8 @@ function HeroBlock({
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
-      data-ff-anim="fade-up"
+      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
+      data-ff-anim-scope={animOf(section.animations, "headline", "fade-up")}
       className={`ff-section ${padX} ${padY} relative`}
       style={{
         ...(colors.bg ? { backgroundColor: colors.bg } : {}),
@@ -1892,21 +1930,7 @@ function HeroBlock({
   );
 }
 
-function SectionBlock({
-  section,
-  padX,
-  padY,
-  bodySize,
-  compact,
-  sectionInner,
-  mediaLibrary,
-  isSuccess,
-  pageLinks,
-  slugLinks,
-  funnel,
-  activePage,
-  editMode,
-}: {
+type SectionBlockProps = {
   section: FunnelSection;
   padX: string;
   padY: string;
@@ -1920,38 +1944,81 @@ function SectionBlock({
   funnel: Funnel;
   activePage?: FunnelPage;
   editMode?: boolean;
-}) {
-  // 🆕 Early-return pour les sections HTML brutes (clonage de tunnel) :
-  // affichage dans une iframe sandboxée, pas de layout standard.
-  // editMode est propagé pour activer les annotations data-ff-spot-id
-  // permettant le scroll-to depuis le panneau d'édition.
-  if (section.type === "raw-html") {
-    const clonedMeta = funnel.meta as
-      | {
-          clonedHead?: string;
-          clonedBody?: { className?: string; id?: string; style?: string };
-        }
-      | undefined;
-    const clonedHead = clonedMeta?.clonedHead;
-    const clonedBody = clonedMeta?.clonedBody;
+};
+
+/**
+ * Sections HTML brutes (clonage de tunnel) : affichage dans une iframe
+ * sandboxée, pas de layout standard. `editMode` active les annotations
+ * data-ff-spot-id qui permettent le scroll-to depuis le panneau d'édition.
+ */
+function RawHtmlSectionBlock({
+  section,
+  funnel,
+  editMode,
+}: Pick<SectionBlockProps, "section" | "funnel" | "editMode">) {
+  const clonedMeta = funnel.meta as
+    | {
+        clonedHead?: string;
+        clonedBody?: { className?: string; id?: string; style?: string };
+      }
+    | undefined;
+  return (
+    <section
+      id={section.id}
+      data-ff-section="raw-html"
+      data-ff-section-id={section.id}
+      className="ff-section relative"
+      style={{ padding: 0, margin: 0, background: "transparent" }}
+    >
+      <RawHtmlRenderer
+        section={section}
+        clonedHead={clonedMeta?.clonedHead}
+        clonedBody={clonedMeta?.clonedBody}
+        editMode={editMode}
+      />
+    </section>
+  );
+}
+
+/**
+ * 🆕 FIX rules-of-hooks : le cas `raw-html` était traité par un RETURN ANTICIPÉ
+ * à l'intérieur du composant, AVANT l'appel de `useResolvedBackgroundUrl`. Le
+ * hook n'était donc pas appelé sur tous les chemins de rendu : dès qu'une
+ * section changeait de type entre deux rendus (conversion d'une section clonée
+ * dans l'éditeur), l'ordre des hooks de React se décalait — plantage ou état
+ * silencieusement corrompu. Le routage se fait désormais AVANT tout composant
+ * porteur de hooks : `SectionBlock` n'en appelle aucun, et
+ * `StandardSectionBlock` les appelle tous, inconditionnellement.
+ */
+function SectionBlock(props: SectionBlockProps) {
+  if (props.section.type === "raw-html") {
     return (
-      <section
-        id={section.id}
-        data-ff-section="raw-html"
-        data-ff-section-id={section.id}
-        className="ff-section relative"
-        style={{ padding: 0, margin: 0, background: "transparent" }}
-      >
-        <RawHtmlRenderer
-          section={section}
-          clonedHead={clonedHead}
-          clonedBody={clonedBody}
-          editMode={editMode}
-        />
-      </section>
+      <RawHtmlSectionBlock
+        section={props.section}
+        funnel={props.funnel}
+        editMode={props.editMode}
+      />
     );
   }
+  return <StandardSectionBlock {...props} />;
+}
 
+function StandardSectionBlock({
+  section,
+  padX,
+  padY,
+  bodySize,
+  compact,
+  sectionInner,
+  mediaLibrary,
+  isSuccess,
+  pageLinks,
+  slugLinks,
+  funnel,
+  activePage,
+}: SectionBlockProps) {
+  // NB : `editMode` n'est consommé que par la variante raw-html (voir
+  // RawHtmlSectionBlock) — inutile de le déstructurer ici.
   const isForm = section.type === "form";
   const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
   const colors: SectionColors = getSectionColors(section);
@@ -1960,6 +2027,9 @@ function SectionBlock({
   const resolvedBgUrl = useResolvedBackgroundUrl(section.background?.imageUrl);
   const bg = buildBackgroundStyle(section, resolvedBgUrl);
   const useSpecialized = usesSpecializedRenderer(section);
+  // 🆕 Quelles parties de l'en-tête le rendu spécialisé compose-t-il lui-même ?
+  // (évite le titre/sous-titre affiché deux fois — cf. specializedOwnHeader)
+  const ownHeader = specializedOwnHeader(section);
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
 
@@ -2037,6 +2107,7 @@ function SectionBlock({
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
       data-ff-anim={animOf(section.animations, "headline", "fade-up")}
+      data-ff-anim-scope={animOf(section.animations, "headline", "fade-up")}
       className={`ff-section ${padX} ${padY} relative`}
       style={{
         ...(colors.bg ? { backgroundColor: colors.bg } : {}),
@@ -2062,7 +2133,7 @@ function SectionBlock({
       <DecorativeIconsLayer icons={decoIcons} />
 
       <div className={`relative ${sectionInner}`} style={{ zIndex: 1 }}>
-        {section.eyebrow && (
+        {section.eyebrow && !ownHeader.eyebrow && (
           <RichText
             as="span"
             className="ff-eyebrow text-xs"
@@ -2071,7 +2142,7 @@ function SectionBlock({
           />
         )}
 
-        {section.headline && (
+        {section.headline && !ownHeader.headline && (
           <h2
             data-ff-anim={animOf(section.animations, "headline", "fade-up")}
             className="ff-headline ff-headline-scaled"
@@ -2082,7 +2153,7 @@ function SectionBlock({
           </h2>
         )}
 
-        {section.subheadline && (
+        {section.subheadline && !ownHeader.subheadline && (
           <RichText
             as="p"
             className={`ff-subheadline ${bodySize}`}

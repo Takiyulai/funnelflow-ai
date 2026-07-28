@@ -49,12 +49,39 @@ export function RawHtmlRenderer({
     });
   }, [rawHtml, section.rawHtmlPatches, isEditMode]);
 
+  /**
+   * 🆕 FIX « la preview clonée disparaît après un passage en mobile ».
+   *
+   * Le document était injecté IMPÉRATIVEMENT (`iframe.srcdoc = …`) depuis un
+   * effet, sur une iframe marquée `loading="lazy"`. Or basculer desktop↔mobile
+   * démonte un cadre et en monte un autre (DesktopFrame / MobileFrame sont deux
+   * composants distincts) : la NOUVELLE iframe, différée par le lazy-loading et
+   * hors viewport dans le cadre téléphone, ne chargeait jamais le srcdoc — et
+   * l'état restait cassé au retour en desktop, puisque chaque bascule recrée
+   * une iframe dans les mêmes conditions.
+   *
+   * Le document est désormais un PROP React (`srcDoc`) : React le pose à chaque
+   * montage, sans dépendre du moment où l'effet s'exécute. Le lazy-loading est
+   * retiré (le contenu est inline, il n'y a aucune requête réseau à différer).
+   */
+  const srcDoc = useMemo(() => {
+    if (!html) return "";
+    return wrapHtmlDocument(html, clonedHead, isEditMode, section.id, clonedBody);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    html,
+    clonedHead,
+    isEditMode,
+    section.id,
+    clonedBody?.className,
+    clonedBody?.id,
+    clonedBody?.style,
+  ]);
+
   useEffect(() => {
     if (!html) return;
     const iframe = iframeRef.current;
     if (!iframe) return;
-
-    iframe.srcdoc = wrapHtmlDocument(html, clonedHead, isEditMode, section.id, clonedBody);
 
     // 🔒 Sécurité #1b : l'iframe raw-html n'a plus `allow-same-origin`, donc
     // `iframe.contentDocument` n'est plus accessible (origine opaque). La
@@ -166,7 +193,7 @@ export function RawHtmlRenderer({
         }}
         sandbox="allow-scripts allow-popups allow-forms"
         title="Cloned section"
-        loading="lazy"
+        srcDoc={srcDoc}
         scrolling="no"
         className="border-0 block"
         style={iframeStyle}

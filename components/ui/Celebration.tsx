@@ -187,7 +187,7 @@ function CelebrationModal({ modal, onClose }: { modal: NonNullable<ModalState>; 
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gold/15 text-3xl">
           <span aria-hidden>{modal.emoji}</span>
         </div>
-        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-gold">
+        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-accent-ink">
           <PartyPopper size={12} /> Victoire débloquée
         </div>
         <h2 className="mt-2 text-xl font-black text-white">{modal.title}</h2>

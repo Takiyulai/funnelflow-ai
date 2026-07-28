@@ -111,6 +111,12 @@ const briefSchema = z.object({
   postWebinarOfferName: z.string().max(200).optional(),
   postWebinarPrice: z.string().max(40).optional(),
   postWebinarPromise: z.string().max(300).optional(),
+  // 🆕 Challenge — offre vendue à la CLÔTURE du challenge (pitch final).
+  // Symétrique des champs post-webinaire ci-dessus : sans `challengeOfferName`,
+  // la page « Pitch final » n'est pas générée.
+  challengeOfferName: z.string().max(200).optional(),
+  challengeOfferPrice: z.string().max(40).optional(),
+  challengeOfferPromise: z.string().max(300).optional(),
   targetAudience: z.string().min(1),
   mainPain: z.string().min(1),
   promise: z.string().min(1),
@@ -169,6 +175,11 @@ const briefSchema = z.object({
   guaranteeDuration: z.string().optional(),
   // 🆕 Palier 1 paiement : lien de paiement externe de l'offre.
   paymentUrl: z.string().optional(),
+  // 🆕 Canaux communautaires (WhatsApp/Telegram) affichés sur les pages de
+  // succès. Sans ces entrées, zod les retirerait silencieusement du brief
+  // (même piège que brandColors/authorName ci-dessus).
+  communityWhatsappUrl: z.string().optional(),
+  communityTelegramUrl: z.string().optional(),
 
   medias: z.array(mediaItemSchema).optional(),
   copywritingPrefs: copywritingPrefsSchema.optional(),

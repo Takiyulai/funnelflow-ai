@@ -1231,7 +1231,9 @@ export function CreateFunnelWizard() {
               />
             )}
             {stepLabel === "Génération" && (
-              <GenerationStep
+              <div className="grid gap-4">
+                <CommunityChannelsFields brief={brief} update={update} />
+                <GenerationStep
                 templateName={currentPremiumTemplate.name}
                 templateObjective={
                   currentPremiumTemplate.personality[brief.language] ??
@@ -1256,7 +1258,8 @@ export function CreateFunnelWizard() {
                 otoPrice={brief.otoPrice}
                 otoPromise={brief.otoPromise}
                 onOtoOfferChange={(patch) => updateMany(patch)}
-              />
+                />
+              </div>
             )}
           </div>
 
@@ -1736,6 +1739,54 @@ function OfferStep({
         </>
       )}
 
+      {/* ── Bloc 2quater : Challenge — offre vendue à la CLÔTURE ──
+          Symétrique du bloc webinaire : offerName/price/promise décrivent LE
+          CHALLENGE (souvent gratuit) ; ces champs alimentent la page « Pitch
+          final ». Vides → la page n'est PAS générée (sans offre réelle, l'IA
+          fabriquait une page de vente factice). */}
+      {subTab === "offre" && brief.funnelKind === "challenge" && (
+        <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
+              <Package size={14} />
+            </span>
+            <h3 className="text-sm font-black uppercase tracking-wider text-ink">
+              Offre vendue à la fin du challenge
+            </h3>
+          </div>
+          <p className="-mt-1 text-xs text-muted">
+            Ce qui alimente la page « Pitch final », affichée après le dernier jour.
+            Distinct du challenge lui-même. <strong>Laisse vide pour ne pas générer
+            de page de vente.</strong>
+          </p>
+
+          <Field label="Nom du produit ou service">
+            <Input
+              value={brief.challengeOfferName ?? ""}
+              onChange={(e) => update("challengeOfferName", e.target.value)}
+              placeholder="Ex. Programme d'accompagnement 90 jours"
+            />
+          </Field>
+
+          <Field label="Prix">
+            <Input
+              value={brief.challengeOfferPrice ?? ""}
+              onChange={(e) => update("challengeOfferPrice", e.target.value)}
+              placeholder="497€..."
+            />
+          </Field>
+
+          <Field label="Promesse de l'offre">
+            <Textarea
+              rows={3}
+              value={brief.challengeOfferPromise ?? ""}
+              onChange={(e) => update("challengeOfferPromise", e.target.value)}
+              placeholder="Le bénéfice n°1 que le participant obtient en achetant cette offre après le challenge"
+            />
+          </Field>
+        </section>
+      )}
+
       {/* ── Bloc 2ter : Bénéfices clés, urgence & garantie (commun à tous les types) ── */}
       {subTab === "benefices" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
@@ -1951,6 +2002,48 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
           </p>
         </div>
       )}
+
+    </div>
+  );
+}
+
+/**
+ * 🆕 Canaux communautaires : boutons « Rejoindre WhatsApp / Telegram » affichés
+ * sur les pages de SUCCÈS (merci / confirmation / livraison). Ces liens
+ * n'étaient jusqu'ici saisissables QUE dans l'éditeur (Style global →
+ * meta.socialChannels) : demandés pendant la création, ils n'apparaissaient
+ * jamais sur le tunnel généré. Affiché à l'étape « Génération », donc présent
+ * dans le parcours guidé ET dans Express IA.
+ */
+function CommunityChannelsFields({ brief, update }: {
+  brief: FunnelBrief;
+  update: <K extends keyof FunnelBrief>(k: K, v: FunnelBrief[K]) => void;
+}) {
+  return (
+    <div className="grid gap-3 rounded-lg border border-line bg-white p-3.5">
+      <div>
+        <h3 className="text-sm font-bold text-ink">Rejoindre la communauté (optionnel)</h3>
+        <p className="mt-0.5 text-xs text-muted">
+          Ajoute un bouton WhatsApp et/ou Telegram sur la page de remerciement.
+          Laisse vide pour ne rien afficher.
+        </p>
+      </div>
+      <Field label="Lien du groupe / canal WhatsApp">
+        <Input
+          type="url"
+          value={brief.communityWhatsappUrl ?? ""}
+          onChange={(e) => update("communityWhatsappUrl", e.target.value)}
+          placeholder="https://chat.whatsapp.com/..."
+        />
+      </Field>
+      <Field label="Lien du groupe / canal Telegram">
+        <Input
+          type="url"
+          value={brief.communityTelegramUrl ?? ""}
+          onChange={(e) => update("communityTelegramUrl", e.target.value)}
+          placeholder="https://t.me/..."
+        />
+      </Field>
     </div>
   );
 }

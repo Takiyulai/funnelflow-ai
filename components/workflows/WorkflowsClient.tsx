@@ -17,9 +17,11 @@ import {
   Sparkles,
   Loader2,
   AlertTriangle,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
+import { WorkflowRunsPanel } from "@/components/workflows/WorkflowRunsPanel";
 import type {
   LeadStatus,
   Workflow,
@@ -604,10 +606,14 @@ function WorkflowList({
   onDelete: (id: string) => void;
   onNew: () => void;
 }) {
+  // 🆕 Un seul historique déplié à la fois : deux panneaux ouverts en parallèle
+  // sondent l'API pour rien et noient la page.
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
+
   if (workflows.length === 0) {
     return (
       <div className="mt-8 rounded-lg border border-dashed border-line bg-surface p-10 text-center">
-        <Zap className="mx-auto text-gold" size={28} />
+        <Zap className="mx-auto text-accent-ink" size={28} />
         <p className="mt-3 font-bold text-ink">Aucun workflow pour l’instant</p>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted">
           Créez votre première automatisation : par exemple « Nouveau lead →
@@ -657,8 +663,8 @@ function WorkflowList({
   return (
     <div className="mt-8 grid gap-4">
       {workflows.map((wf) => (
+        <div key={wf.id} className="grid gap-2">
         <div
-          key={wf.id}
           className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="min-w-0">
@@ -686,6 +692,22 @@ function WorkflowList({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {/* 🆕 Historique : replié par défaut. C'est un outil de diagnostic,
+                consulté quand quelque chose cloche — pas une information de
+                pilotage à afficher en permanence. */}
+            <button
+              type="button"
+              onClick={() => setOpenHistoryId(openHistoryId === wf.id ? null : wf.id)}
+              aria-label="Historique d'exécution"
+              title="Historique d'exécution"
+              className={`grid h-8 w-8 place-items-center rounded-md border transition ${
+                openHistoryId === wf.id
+                  ? "border-ash-950 text-ink"
+                  : "border-line text-muted hover:text-ink"
+              }`}
+            >
+              <History size={15} />
+            </button>
             <Button variant="secondary" size="sm" onClick={() => onEdit(wf)}>
               Modifier
             </Button>
@@ -698,6 +720,12 @@ function WorkflowList({
               <Trash2 size={15} />
             </button>
           </div>
+        </div>
+        {openHistoryId === wf.id && (
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <WorkflowRunsPanel workflowId={wf.id} workflowName={wf.name} />
+          </div>
+        )}
         </div>
       ))}
     </div>
@@ -1053,7 +1081,7 @@ function WorkflowEditor({
         )}
 
         <div className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-xs text-muted">
-          <Zap size={14} className="text-gold" /> Déclencheur : {describeTrigger(draft)}
+          <Zap size={14} className="text-accent-ink" /> Déclencheur : {describeTrigger(draft)}
         </div>
       </div>
 
@@ -1805,7 +1833,8 @@ function ConditionFields({
       {(test.type === "has_opened_email" || test.type === "has_clicked_email") &&
         baseOffsetMs <= 0 && (
           <p className="flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-[11px] font-medium text-ink">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-gold" />
+            {/* Sémantique : un avertissement se dit en `warning`, pas en accent de marque. */}
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning-ink" />
             <span>
               Cette condition sera vérifiée <strong>immédiatement</strong>, avant
               même que le contact ait reçu l&apos;email — le test répondra donc

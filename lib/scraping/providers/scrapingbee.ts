@@ -29,7 +29,17 @@ export const scrapingBeeProvider: ScraperProvider = {
       premium_proxy: options.premiumProxy ? "true" : "false",
       block_resources: "false",
     });
-    if (options.countryCode) params.set("country_code", options.countryCode.toLowerCase());
+    // ⚠️ ScrapingBee réserve le ciblage géographique aux proxies premium :
+    // envoyer `country_code` avec `premium_proxy=false` fait échouer TOUTE la
+    // requête en HTTP 400. On n'ajoute donc le pays que si le premium est actif
+    // (même bug que celui corrigé dans lib/clone/fetcher.ts).
+    if (options.countryCode && options.premiumProxy) {
+      params.set("country_code", options.countryCode.toLowerCase());
+    } else if (options.countryCode) {
+      console.warn(
+        `[scraping] ${NAME} : country_code="${options.countryCode}" ignoré — il exige premium_proxy=true chez ScrapingBee.`,
+      );
+    }
 
     const endpoint = `${ENDPOINT}?${params.toString()}`;
     const { response, networkError, timedOut } = await timedFetch(endpoint, options.timeoutMs);

@@ -78,6 +78,16 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       );
     };
 
+    /** 🆕 Un élément est « atteint » quand il est visible OU déjà dépassé par
+     *  le scroll (au-dessus de la ligne de flottaison). Tout ce qui est
+     *  STRICTEMENT sous la ligne de flottaison ne l'est pas et doit garder son
+     *  animation d'entrée. */
+    const isReached = (el: HTMLElement, scrollRoot: HTMLElement | null) => {
+      const r = el.getBoundingClientRect();
+      const vp = getViewportRect(scrollRoot);
+      return r.top < vp.bottom - 4;
+    };
+
     let observer: IntersectionObserver | null = null;
 
     const buildObserver = (scrollRoot: HTMLElement | null) => {
@@ -124,16 +134,25 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       }
     };
 
-    // 🆕 Filet de sécurité RÉ-ARMABLE : après chaque scan qui laisse des
-    // éléments non actifs, on (re)programme une activation forcée à 1.2s.
+    // 🆕 FIX « tunnels statiques » : le filet de sécurité révélait AUTREFOIS
+    // TOUS les éléments 1,2 s après le montage — y compris ceux situés des
+    // milliers de pixels sous la ligne de flottaison. Résultat : au moment où
+    // l'utilisateur scrollait, tout était déjà révélé et plus rien n'animait.
+    // Le filet ne révèle désormais que ce qui est ATTEINT par le scroll
+    // (visible ou dépassé) : la garantie « jamais d'écran vide » est conservée,
+    // et le contenu sous la ligne de flottaison garde son animation d'entrée.
+    const forceReached = () => {
+      const scrollRoot = getScrollRoot();
+      collect().forEach((el) => {
+        if (el.classList.contains("ff-anim-active")) return;
+        if (isReached(el, scrollRoot)) activate(el);
+      });
+    };
+
     let failsafeTimer: ReturnType<typeof setTimeout> | null = null;
     const armFailsafe = () => {
       if (failsafeTimer) clearTimeout(failsafeTimer);
-      failsafeTimer = setTimeout(() => {
-        collect().forEach((el) => {
-          if (!el.classList.contains("ff-anim-active")) activate(el);
-        });
-      }, 1200);
+      failsafeTimer = setTimeout(forceReached, 1200);
     };
 
     const scan = () => {
@@ -165,17 +184,39 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     timers.push(setTimeout(scan, 250));
     timers.push(setTimeout(scan, 600));
 
-    // 🆕 Filet de sécurité ULTIME : au bout de 1.2s, on force l'activation
-    // de tous les éléments qui sont encore en pending. Cela évite un écran
-    // vide définitif si jamais l'IntersectionObserver ne se déclenche pas.
-    timers.push(
-      setTimeout(() => {
-        collect().forEach((el) => {
-          if (!el.classList.contains("ff-anim-active")) {
-            activate(el);
-          }
-        });
-      }, 1200),
+    // 🆕 Filet de sécurité ULTIME : au bout de 1.2s, on force l'activation des
+    // éléments ATTEINTS par le scroll encore en pending. Cela évite un écran
+    // vide si l'IntersectionObserver ne se déclenche pas, sans sacrifier
+    // l'animation du contenu situé plus bas dans la page.
+    timers.push(setTimeout(forceReached, 1200));
+
+    // 🆕 Doublure au scroll (throttlée) : si l'IntersectionObserver est
+    // indisponible ou muet (iframe exotique, vieux navigateur), le scroll
+    // révèle quand même ce qui devient atteignable. S'auto-désactive dès qu'il
+    // ne reste plus aucun élément en attente.
+    let scrollTick: ReturnType<typeof setTimeout> | null = null;
+    const scrollTargets: EventTarget[] = [window];
+    const initialRoot = getScrollRoot();
+    if (initialRoot) scrollTargets.push(initialRoot);
+
+    const hasPending = () =>
+      collect().some((el) => !el.classList.contains("ff-anim-active"));
+
+    function onScroll() {
+      if (scrollTick) return;
+      scrollTick = setTimeout(() => {
+        scrollTick = null;
+        forceReached();
+        if (!hasPending()) detachScroll();
+      }, 250);
+    }
+
+    function detachScroll() {
+      scrollTargets.forEach((t) => t.removeEventListener("scroll", onScroll));
+    }
+
+    scrollTargets.forEach((t) =>
+      t.addEventListener("scroll", onScroll, { passive: true }),
     );
 
     // 🆕 Re-scan au load complet (images + polices)
@@ -258,6 +299,8 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       timers.forEach((id) => clearTimeout(id));
       if (failsafeTimer) clearTimeout(failsafeTimer);
       if (moScanTimer) clearTimeout(moScanTimer);
+      if (scrollTick) clearTimeout(scrollTick);
+      detachScroll();
       window.removeEventListener("load", onLoad);
       window.removeEventListener("resize", onResize);
     };

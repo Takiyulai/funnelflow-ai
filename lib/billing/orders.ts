@@ -6,6 +6,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { runWorkflowsForEvent } from "@/lib/workflows/engine";
+import { cancelPendingMarketingEmails } from "@/lib/crm/goals";
 
 export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
 
@@ -386,6 +387,14 @@ export async function promoteContactToClient(params: {
       .from("leads")
       .update({ status: "client", metadata: { ...meta, ...purchase } })
       .eq("id", existing.id);
+    // 🆕 CONDITION DE SORTIE — on coupe les relances AVANT de déclencher les
+    // workflows d'achat. L'inverse annulerait la séquence d'accueil post-achat
+    // que ces mêmes workflows viennent d'inscrire.
+    await cancelPendingMarketingEmails(admin, {
+      userId: params.userId,
+      contactId: existing.id as string,
+      reason: "purchase_completed",
+    });
     await firePurchaseCompletedWorkflows({
       userId: params.userId,
       funnelId: params.funnelId,
@@ -410,6 +419,14 @@ export async function promoteContactToClient(params: {
     .maybeSingle();
   const leadId = (inserted?.id as string | undefined) ?? null;
   if (leadId) {
+    // Contact tout juste créé : il n'a en principe aucune relance en attente,
+    // mais l'appel reste fait par cohérence (un lead peut avoir été capturé
+    // sous une casse d'email différente et fusionné ensuite).
+    await cancelPendingMarketingEmails(admin, {
+      userId: params.userId,
+      contactId: leadId,
+      reason: "purchase_completed",
+    });
     await firePurchaseCompletedWorkflows({
       userId: params.userId,
       funnelId: params.funnelId,

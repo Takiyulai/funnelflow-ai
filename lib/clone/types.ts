@@ -43,8 +43,13 @@ export type CloneErrorCode =
   | "invalid-url"
   | "scraping-blocked"
   | "scraping-timeout"
+  // ⚠️ Conservés pour rétrocompatibilité (anciens messages/logs). Le pipeline
+  // émet désormais les codes AGNOSTIQUES ci-dessous, puisque le clonage passe
+  // par plusieurs fournisseurs (Scrapingdog en principal, ScrapingBee en repli).
   | "scrapingbee-quota"
   | "scrapingbee-missing-key"
+  | "scraper-quota"
+  | "scraper-missing-key"
   | "page-too-small"
   | "parsing-failed"
   | "media-upload-failed"

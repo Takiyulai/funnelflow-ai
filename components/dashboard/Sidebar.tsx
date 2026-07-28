@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, GitBranch, LayoutDashboard, LayoutGrid,
   PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun, CreditCard, LifeBuoy,
-  ShieldCheck,
+  ShieldCheck, MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,6 +18,9 @@ const NAV = [
   { href: "/galerie", label: "Galerie", icon: LayoutGrid },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/emails", label: "Emails", icon: Mail },
+  // 🆕 Placée juste après Emails : les deux répondent au même besoin
+  // (communiquer avec ses contacts), l'une en différé, l'autre en direct.
+  { href: "/messagerie", label: "Messagerie", icon: MessageSquare },
   // Export systeme.io retiré du menu : la logique est intégrée à l'éditeur
   // (bouton « Exporter »). On garde la page accessible par URL directe.
   { href: "/import", label: "Import", icon: Upload },

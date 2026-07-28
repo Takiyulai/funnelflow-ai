@@ -32,9 +32,12 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
     },
     emotion: { fr: "Confiance, clarté", en: "Trust, clarity", es: "Confianza, claridad" },
     pages: {
-      fr: "3 pages : Capture → Merci → Livraison",
-      en: "3 pages: Opt-in → Thank you → Delivery",
-      es: "3 páginas: Captura → Gracias → Entrega",
+      // ⚠️ La 3e page « Livraison / Accès » a été retirée : AutoFunnel AI
+      // n'héberge pas de fichiers, la ressource part par email ou via un lien
+      // externe ajouté par l'utilisateur (CTA personnalisé de l'éditeur).
+      fr: "2 pages : Capture → Merci",
+      en: "2 pages: Opt-in → Thank you",
+      es: "2 páginas: Captura → Gracias",
     },
     needsVideo: false,
     suggestedTemplateId: "ebook-lead-magnet",
@@ -49,9 +52,12 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
     },
     emotion: { fr: "Valeur, transformation", en: "Value, transformation", es: "Valor, transformación" },
     pages: {
-      fr: "4 pages : Vente → Paiement → Merci → Accès (+ upsell/downsell si renseignés)",
-      en: "4 pages: Sales → Checkout → Thank you → Access (+ upsell/downsell if provided)",
-      es: "4 páginas: Venta → Pago → Gracias → Acceso (+ upsell/downsell si se indican)",
+      // ⚠️ La page « Accès » a été retirée : AutoFunnel AI n'héberge ni fichier
+      // ni espace membre. Le lien vers le produit se pose sur la page « Merci »
+      // via le CTA personnalisé de l'éditeur.
+      fr: "3 pages : Vente → Paiement → Merci (+ upsell/downsell si renseignés)",
+      en: "3 pages: Sales → Checkout → Thank you (+ upsell/downsell if provided)",
+      es: "3 páginas: Venta → Pago → Gracias (+ upsell/downsell si se indican)",
     },
     needsVideo: true,
     suggestedTemplateId: "premium-ebook",
@@ -117,9 +123,11 @@ export const FUNNEL_KINDS: FunnelKindOption[] = [
     },
     emotion: { fr: "Énergie, urgence, momentum", en: "Energy, urgency, momentum", es: "Energía, urgencia, momento" },
     pages: {
-      fr: "Inscription → Confirmation → Jours 1 à N → Pitch final",
-      en: "Sign-up → Confirmation → Days 1 to N → Final pitch",
-      es: "Inscripción → Confirmación → Días 1 a N → Pitch final",
+      // Le « Pitch final » n'est généré QUE si une offre de clôture est
+      // renseignée dans le wizard (sinon l'IA inventait une offre factice).
+      fr: "Inscription → Confirmation → Jours 1 à N (+ Pitch final si une offre de fin est renseignée)",
+      en: "Sign-up → Confirmation → Days 1 to N (+ Final pitch if a closing offer is provided)",
+      es: "Inscripción → Confirmación → Días 1 a N (+ Pitch final si se indica una oferta de cierre)",
     },
     needsVideo: true,
     suggestedTemplateId: "ebook-lead-magnet",

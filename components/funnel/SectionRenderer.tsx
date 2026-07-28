@@ -41,7 +41,7 @@ type AnimKey =
   | "video"
   | "cta";
 
-type AnimOf = (key: AnimKey) => AnimationPreset;
+type AnimOf = (key: AnimKey, fallback?: AnimationPreset) => AnimationPreset;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section root
@@ -86,13 +86,23 @@ if (section.type === "raw-html") {
 }
 
   const sectionId = section.id || section.type;
-  const animOf: AnimOf = (key) => anims[key] ?? "none";
+  // 🆕 FIX « animations absentes » : le repli était "none", ce qui rendait
+  // data-ff-anim="none" sur TOUTES les sections générées par l'IA (elles ne
+  // portent pas de bloc `animations`) → aucune transition au scroll. On
+  // s'aligne désormais sur FunnelPreview et lib/export/html.ts, qui replient
+  // tous deux sur "fade-up". L'utilisateur peut toujours choisir "Aucune"
+  // explicitement dans l'éditeur (StyleTab) : la valeur "none" est alors
+  // stockée dans section.animations et respectée.
+  const animOf: AnimOf = (key, fallback = DEFAULT_ANIM) =>
+    anims[key] ?? fallback;
 
   return (
     <section
       id={sectionId}
       data-ff-section={section.type}
       data-ff-layout={layout}
+      data-ff-anim={animOf("headline")}
+      data-ff-anim-scope={animOf("headline")}
       className={`ff-section ff-${section.type} ff-layout-${layout}`}
     >
       <div className="ff-section-inner">
@@ -159,7 +169,7 @@ function CenteredLayout({
       <Eyebrow section={section} animOf={animOf} />
       <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
-      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
+      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video", "zoom-in")} />}
       <Body section={section} animOf={animOf} />
       <Bullets section={section} animOf={animOf} />
       <CtaBlock section={section} mode={mode} animOf={animOf} />
@@ -206,7 +216,7 @@ function SplitLayout({
       {TextBlock}
       <div className="ff-split-media">
         {hasVideo ? (
-          <VideoEmbed url={videoEmbedUrl as string} anim={animOf("video")} />
+          <VideoEmbed url={videoEmbedUrl as string} anim={animOf("video", "zoom-in")} />
         ) : (
           <ImageBlock section={section} funnel={funnel} animOf={animOf} />
         )}
@@ -255,7 +265,7 @@ function StackedCardLayout({
       <Eyebrow section={section} animOf={animOf} />
       <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
-      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
+      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video", "zoom-in")} />}
       <Body section={section} animOf={animOf} />
       <Bullets section={section} animOf={animOf} />
       <CtaBlock section={section} mode={mode} animOf={animOf} />
@@ -274,7 +284,7 @@ function WideBannerLayout({
       <Eyebrow section={section} animOf={animOf} />
       <Headline section={section} animOf={animOf} />
       <Subheadline section={section} animOf={animOf} />
-      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video")} />}
+      {videoEmbedUrl && <VideoEmbed url={videoEmbedUrl} anim={animOf("video", "zoom-in")} />}
       <Body section={section} animOf={animOf} />
       <Bullets section={section} animOf={animOf} />
       <CtaBlock section={section} mode={mode} animOf={animOf} />
@@ -420,7 +430,7 @@ function ImageBlock({
   return (
     <figure
       className="ff-image-wrap"
-      data-ff-anim={animOf("image") || "fade-in"}
+      data-ff-anim={animOf("image", "fade-in")}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

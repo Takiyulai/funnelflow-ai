@@ -136,6 +136,8 @@ function mapCodeToStatus(code: CloneErrorCode): number {
       return 400;
     case "scrapingbee-missing-key":
     case "scrapingbee-quota":
+    case "scraper-missing-key":
+    case "scraper-quota":
       return 503;
     case "scraping-blocked":
     case "scraping-timeout":

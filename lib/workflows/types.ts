@@ -186,6 +186,18 @@ export type WorkflowTriggerConfig = {
   delayDays?: number;
   /** 🆕 time.elapsed : délai en heures (cumulé avec delayDays). */
   delayHours?: number;
+  /** 🆕 RÉ-ENTRÉE — un même contact peut-il redéclencher ce workflow ?
+   *
+   *  Absent = valeur par défaut décidée par la NATURE de l'événement
+   *  (cf. `reentryBlockedByDefault` dans ./runs.ts) :
+   *    • événements d'ENTRÉE (inscription, candidature, réservation) →
+   *      bloqué, car les rejouer produit des emails en double ;
+   *    • événements RÉPÉTABLES (achat, tag, statut, page vue, clic) →
+   *      autorisé, car un second achat doit bien redéclencher le workflow.
+   *
+   *  `true` force l'autorisation, `false` force le blocage. Stocké dans le JSON
+   *  du déclencheur : aucune migration de la table `workflows`. */
+  allowReentry?: boolean;
 };
 
 export type WorkflowActionConfig =

@@ -74,6 +74,7 @@ import {
   getCTAConfig,
   getArchetype,
   resolveCTAIntent,
+  OFFER_PRIMARY_LABEL,
   type CTAIntent,
 } from "./cta-matrix";
 
@@ -3091,10 +3092,39 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
       ? page.sections.filter((s) => s.type !== "guarantee")
       : page.sections;
 
+    // 🆕 Ancre de l'offre PROPRE à cette page (tripwire, upsell, downsell,
+    // vente post-webinaire…) : les CTA « offer-primary » y renvoient, au lieu
+    // de repartir vers la page de capture du tunnel.
+    const ownOfferSection = filteredSections.find(
+      (s) => s.type === "pricing" || s.type === "offer",
+    );
+
     const patchedSections: FunnelSection[] = filteredSections.map((section): FunnelSection => {
       const intent: CTAIntent = resolveCTAIntent(config, page.role, section.type);
 
       switch (intent) {
+        // 🆕 Page qui VEND sa propre offre : label d'achat neutre + destination
+        // interne à la page. Avant, ces rôles n'étaient couverts par aucune
+        // règle et retombaient sur "convert-primary" : le bouton d'un tripwire
+        // à 17 € affichait « Télécharger gratuitement » et ramenait le visiteur
+        // sur la page d'inscription.
+        case "offer-primary": {
+          if (!section.cta) return section;
+          const label = (config.offerPrimaryLabel ?? OFFER_PRIMARY_LABEL)[lang];
+          const isOfferSection = ownOfferSection?.id === section.id;
+          const anchorId =
+            !isOfferSection && ownOfferSection?.id ? ownOfferSection.id : "ff-checkout";
+          const nextCta: CtaConfig = {
+            ...section.cta,
+            label,
+            mode: "anchor",
+            anchorId,
+            pageId: undefined,
+            url: undefined,
+          };
+          return { ...section, cta: nextCta };
+        }
+
         case "convert-primary": {
           if (!section.cta) return section;
           const labels = config.primaryLabels[lang];
@@ -3275,7 +3305,8 @@ function copyDirectives(lang: Language): string {
       `- FAQ lifts REAL buying OBJECTIONS (price worth it?, no time, "will it work for me/my case?", fear of failure, guarantee, effort required), each answer reframes toward action. No descriptive feature questions.\n` +
       `- Each section CTA fits its role: hero = main offer; pricing/offer = buy ("Get access", "Order now"); faq = back to the form/CTA; guarantee = reassure then act; proof = lead into the main CTA. Never "Learn more".\n` +
       `- EVERY pricing card has its OWN clickable CTA. Pricing inclusions pair each concrete item with the outcome it unlocks.\n` +
-      `- One message per section, credible promise (no hype), same product name/promise/tone throughout.`
+      `- One message per section, credible promise (no hype), same product name/promise/tone throughout.\n` +
+      `- ONE subheadline per section, and it must add NEW information: never paraphrase its own headline, never repeat the previous section's subheadline. If you have nothing to add, leave it EMPTY.`
     );
   }
   return (
@@ -3285,7 +3316,8 @@ function copyDirectives(lang: Language): string {
     `- LA FAQ lève les VRAIES OBJECTIONS d'achat (le prix en vaut-il la peine ? je n'ai pas le temps, "est-ce que ça marche pour MON cas ?", peur d'échouer, garantie, effort demandé). Chaque réponse rassure et ramène vers l'action. Pas de questions descriptives de features.\n` +
     `- Chaque CTA de section colle à son rôle : hero = offre principale ; pricing/offer = achat ("Je commande", "Obtenir l'accès") ; faq = retour au formulaire/CTA ; garantie = rassurer puis agir ; preuve/témoignages = enchaîner vers le CTA. Jamais "En savoir plus".\n` +
     `- CHAQUE carte de pricing a SON bouton CTA. Dans le pricing, chaque inclusion concrète est reliée au résultat qu'elle débloque (pas une simple liste technique).\n` +
-    `- Un seul message par section, promesse crédible (pas de survente), même nom de produit/promesse/ton partout.`
+    `- Un seul message par section, promesse crédible (pas de survente), même nom de produit/promesse/ton partout.\n` +
+    `- UN SEUL sous-titre par section, et il APPORTE une information NOUVELLE : il ne paraphrase JAMAIS le titre de sa propre section et ne répète JAMAIS le sous-titre de la section précédente. Si tu n'as rien à ajouter, laisse le sous-titre VIDE.`
   );
 }
 
@@ -3486,6 +3518,17 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     brief.postWebinarOfferName && brief.postWebinarOfferName.trim()
   );
   if (normalizedKind === "webinar" && !hasPostWebinarOffer) {
+    secondaryBlueprints = secondaryBlueprints.filter((b) => b.role !== "sales");
+  }
+
+  // 🆕 CHALLENGE — « Pitch final » CONDITIONNEL, exactement comme la page de
+  // vente post-webinaire ci-dessus. `offerName`/`price` décrivent le CHALLENGE
+  // (souvent gratuit) ; sans `challengeOfferName`, l'IA inventait une offre de
+  // clôture de toutes pièces. Pas d'offre → pas de pitch final.
+  const hasChallengeOffer = !!(
+    brief.challengeOfferName && brief.challengeOfferName.trim()
+  );
+  if (normalizedKind === "challenge" && !hasChallengeOffer) {
     secondaryBlueprints = secondaryBlueprints.filter((b) => b.role !== "sales");
   }
 
@@ -3744,20 +3787,48 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
           normalizedKind === "webinar" &&
           bp.role === "sales" &&
           !!(brief.postWebinarOfferName && brief.postWebinarOfferName.trim());
-        const pageBrief: FunnelBrief = isWebinarSalesPage
+        // 🆕 CHALLENGE — même logique de DOUBLE OFFRE : le « pitch final » ne
+        // vend pas le challenge (souvent gratuit) mais l'offre de clôture.
+        const isChallengeSalesPage =
+          normalizedKind === "challenge" &&
+          bp.role === "sales" &&
+          !!(brief.challengeOfferName && brief.challengeOfferName.trim());
+        const secondaryOffer = isWebinarSalesPage
+          ? {
+              name: brief.postWebinarOfferName!.trim(),
+              price: brief.postWebinarPrice,
+              promise: brief.postWebinarPromise,
+              context:
+                "cette page vend un produit DIFFÉRENT du webinaire, qui a déjà eu lieu",
+              avoid:
+                "Ne parle PAS du webinaire comme de l'offre à vendre (il est déjà terminé)",
+            }
+          : isChallengeSalesPage
+            ? {
+                name: brief.challengeOfferName!.trim(),
+                price: brief.challengeOfferPrice,
+                promise: brief.challengeOfferPromise,
+                context:
+                  "cette page vend un produit DIFFÉRENT du challenge, qui se termine",
+                avoid:
+                  "Ne parle PAS du challenge comme de l'offre à vendre (il est terminé) ; capitalise sur les résultats obtenus pendant le challenge",
+              }
+            : null;
+
+        const pageBrief: FunnelBrief = secondaryOffer
           ? {
               ...brief,
-              offerName: brief.postWebinarOfferName!.trim(),
-              price: (brief.postWebinarPrice ?? brief.price ?? "").trim() || brief.price,
-              promise: (brief.postWebinarPromise ?? "").trim() || brief.promise,
+              offerName: secondaryOffer.name,
+              price: (secondaryOffer.price ?? brief.price ?? "").trim() || brief.price,
+              promise: (secondaryOffer.promise ?? "").trim() || brief.promise,
             }
           : brief;
-        const salesOfferOverride = isWebinarSalesPage
-          ? `\n\nOFFRE RÉELLEMENT VENDUE SUR CETTE PAGE (IMPÉRATIF — cette page vend un produit DIFFÉRENT du webinaire, qui a déjà eu lieu) :\n` +
+        const salesOfferOverride = secondaryOffer
+          ? `\n\nOFFRE RÉELLEMENT VENDUE SUR CETTE PAGE (IMPÉRATIF — ${secondaryOffer.context}) :\n` +
             `- Nom du produit/offre : "${pageBrief.offerName}"\n` +
             `- Prix : "${pageBrief.price}"\n` +
             (pageBrief.promise ? `- Promesse principale : "${pageBrief.promise}"\n` : "") +
-            `Ne parle PAS du webinaire comme de l'offre à vendre (il est déjà terminé) : rédige un copywriting de vente complet (problème, solution, bénéfices, preuve, prix, garantie, urgence) pour CE produit.\n`
+            `${secondaryOffer.avoid} : rédige un copywriting de vente complet (problème, solution, bénéfices, preuve, prix, garantie, urgence) pour CE produit.\n`
           : "";
         const promptText =
           secondaryPagesPrompt({
@@ -4087,9 +4158,18 @@ if (shouldInjectPricing) {
   // Doit passer APRÈS l'harmonisation (sinon elle réécrirait le CTA). Si l'offre
   // est payante et qu'un lien de paiement a été fourni, TOUS les boutons des
   // cartes pricing redirigent vers ce lien (Stripe Payment Link, systeme.io…).
-  if (brief.paymentUrl && brief.paymentUrl.trim() && !isFreeOffer(effectivePriceForPaidGate)) {
+  // 🆕 Le déclencheur n'est plus le SEUL prix de l'offre principale : un tunnel
+  // dont l'offre principale est gratuite (lead magnet, webinaire, challenge)
+  // peut parfaitement porter une offre payante sur une AUTRE page (tripwire,
+  // upsell, pitch final). Le checkout n'y était alors jamais câblé.
+  // `funnelHasPaidOffer` inspecte toutes les pages ; `pageHasPaidOffer` garde
+  // ensuite chaque page individuellement, donc rien ne change pour un tunnel
+  // 100 % gratuit.
+  const hasAnyPaidOffer =
+    !isFreeOffer(effectivePriceForPaidGate) || funnelHasPaidOffer(finalFunnel);
+  if (brief.paymentUrl && brief.paymentUrl.trim() && hasAnyPaidOffer) {
     applyPaymentUrlToPricingCtas(finalFunnel, brief.paymentUrl.trim());
-  } else if (!isFreeOffer(effectivePriceForPaidGate)) {
+  } else if (hasAnyPaidOffer) {
     // 🆕 Stripe Connect : pas de lien externe → les boutons d'offre déclenchent
     // le CHECKOUT INTERNE (#ff-checkout → /api/checkout → session sur le compte
     // connecté du créateur). Le bouton « achète » sans config supplémentaire.
@@ -4146,6 +4226,21 @@ if (shouldInjectPricing) {
 
   // ===== ÉTAPE 18 : 🆕 page merci/confirmation CÉLÉBRATOIRE (icône ✓ + message) =====
   ensureCelebratoryThankYou(finalFunnel, brief.language);
+
+  // ===== ÉTAPE 18bis : 🆕 une seule action par page de succès =====
+  // Le hero ET la section "cta" recevaient le MÊME libellé post-action
+  // (« Vérifier ma boîte mail ») → double bouton redondant.
+  dedupeSuccessPageCtas(finalFunnel);
+
+  // ===== ÉTAPE 18ter : 🆕 sous-titres redondants =====
+  // Deux sous-titres quasi identiques à la suite, ou un sous-titre qui
+  // paraphrase le titre de sa propre section.
+  dedupeRedundantSubheadlines(finalFunnel);
+
+  // ===== ÉTAPE 18quater : 🆕 canaux communautaires du wizard =====
+  // WhatsApp/Telegram saisis au wizard → meta.socialChannels, rendu par
+  // SuccessChannels sur les pages de succès (aperçu, publication, export).
+  applyCommunityChannels(finalFunnel, brief);
 
   // ===== ÉTAPE 19 : 🆕 ACCENT COULEUR sur les mots les plus captivants =====
   // Met en valeur prix / pourcentages / chiffres marquants avec la couleur accent
@@ -5064,6 +5159,143 @@ const POST_CONVERSION_ROLES: ReadonlySet<PageRole> = new Set<PageRole>([
   "access",
 ]);
 
+/* ------------------------------------------------------------------ */
+/*  🆕 Dédoublonnage déterministe (CTA + sous-titres)                   */
+/* ------------------------------------------------------------------ */
+
+/** Normalise un texte pour comparaison : minuscules, sans accent ni ponctuation. */
+function normalizeForCompare(s?: string): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    // Retire les diacritiques combinants (U+0300–U+036F) laissés par NFD.
+    .replace(/[̀-ͯ]/g, "")
+    // Retire les marqueurs de surlignage [[...]] posés par applyAccentHighlights.
+    .replace(/\[\[|\]\]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Deux textes sont « quasi identiques » : égaux, inclus l'un dans l'autre,
+ *  ou partageant plus de 80 % de leurs mots significatifs. */
+function isNearDuplicate(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length > 12 && b.length > 12 && (a.includes(b) || b.includes(a))) return true;
+  const wa = new Set(a.split(" ").filter((w) => w.length > 3));
+  const wb = new Set(b.split(" ").filter((w) => w.length > 3));
+  if (wa.size < 3 || wb.size < 3) return false;
+  let common = 0;
+  wa.forEach((w) => {
+    if (wb.has(w)) common += 1;
+  });
+  return common / Math.min(wa.size, wb.size) >= 0.8;
+}
+
+/**
+ * 🆕 Pages de SUCCÈS (merci/confirmation/livraison/accès) : une seule action.
+ * L'IA produit un CTA dans le hero ET une section "cta" ; l'harmonisation leur
+ * donnait ensuite LE MÊME libellé post-action (« Vérifier ma boîte mail »), d'où
+ * deux boutons identiques. On ne garde que le premier de chaque libellé et de
+ * chaque destination ; la section "cta" devenue vide est supprimée.
+ */
+function dedupeSuccessPageCtas(funnel: Funnel): void {
+  funnel.pages?.forEach((page) => {
+    if (!POST_CONVERSION_ROLES.has(page.role) || !Array.isArray(page.sections)) return;
+
+    const seenLabels = new Set<string>();
+    const seenTargets = new Set<string>();
+    const next: FunnelSection[] = [];
+
+    for (const section of page.sections) {
+      const cta = section.cta;
+      if (!cta?.label) {
+        next.push(section);
+        continue;
+      }
+      const label = normalizeForCompare(cta.label);
+      const target = [cta.mode ?? "", cta.url ?? "", cta.pageId ?? "", cta.anchorId ?? ""].join("|");
+      const duplicate = Boolean(
+        (label && seenLabels.has(label)) || seenTargets.has(target),
+      );
+
+      if (!duplicate) {
+        if (label) seenLabels.add(label);
+        seenTargets.add(target);
+        next.push(section);
+        continue;
+      }
+
+      // Section dédiée au bouton → on la retire entièrement (sinon elle
+      // laisserait un titre orphelin sans action). Sur les autres sections, on
+      // ne retire que le bouton.
+      if (section.type === "cta") continue;
+      next.push(stripCta(section));
+    }
+
+    page.sections = next;
+  });
+}
+
+/**
+ * 🆕 Supprime les SOUS-TITRES redondants : l'IA génère régulièrement deux
+ * sous-titres quasi identiques à la suite (ou un sous-titre qui paraphrase le
+ * titre de sa propre section). On garde le premier et on vide les suivants.
+ */
+function dedupeRedundantSubheadlines(funnel: Funnel): void {
+  const apply = (sections?: FunnelSection[]): void => {
+    if (!Array.isArray(sections)) return;
+    let previous = "";
+    for (const s of sections) {
+      const sub = normalizeForCompare(s.subheadline);
+      if (!sub) {
+        previous = "";
+        continue;
+      }
+      // a) paraphrase du titre de la MÊME section
+      if (isNearDuplicate(sub, normalizeForCompare(s.headline))) {
+        s.subheadline = undefined;
+        continue;
+      }
+      // b) quasi identique au sous-titre de la section précédente
+      if (isNearDuplicate(sub, previous)) {
+        s.subheadline = undefined;
+        continue;
+      }
+      previous = sub;
+    }
+  };
+  if (Array.isArray(funnel.sections)) apply(funnel.sections);
+  funnel.pages?.forEach((p) => apply(p.sections));
+}
+
+/**
+ * 🆕 Canaux communautaires saisis dans le wizard (WhatsApp / Telegram) →
+ * `funnel.meta.socialChannels`, lu par SuccessChannels (aperçu + publication)
+ * et par l'export HTML. Avant, ces champs n'existaient QUE dans l'éditeur
+ * (Style global) : les liens demandés au wizard n'apparaissaient jamais sur la
+ * page de remerciement. N'écrase pas une valeur déjà présente.
+ */
+function applyCommunityChannels(funnel: Funnel, brief: FunnelBrief): void {
+  const whatsapp = brief.communityWhatsappUrl?.trim();
+  const telegram = brief.communityTelegramUrl?.trim();
+  if (!whatsapp && !telegram) return;
+  const current = funnel.meta?.socialChannels ?? {};
+  funnel.meta = {
+    ...funnel.meta,
+    socialChannels: {
+      ...current,
+      ...(whatsapp && !current.whatsapp ? { whatsapp } : {}),
+      ...(telegram && !current.telegram ? { telegram } : {}),
+    },
+  };
+  console.log(
+    `[community-channels] canaux appliqués : ${[whatsapp && "whatsapp", telegram && "telegram"]
+      .filter(Boolean)
+      .join(", ")}`,
+  );
+}
+
 function simplifyPostConversionPages(funnel: Funnel): void {
   funnel.pages?.forEach((p) => {
     if (p.isHome || !Array.isArray(p.sections)) return;
@@ -5467,6 +5699,14 @@ function pageHasPaidOffer(sections?: Funnel["sections"]): boolean {
   return false;
 }
 
+/** 🆕 Vrai si AU MOINS UNE page du tunnel porte une offre payante — même si
+ *  l'offre principale est gratuite (lead magnet + tripwire, webinaire + offre
+ *  post-live, challenge + pitch final…). */
+function funnelHasPaidOffer(funnel: Funnel): boolean {
+  if (pageHasPaidOffer(funnel.sections)) return true;
+  return (funnel.pages ?? []).some((p) => pageHasPaidOffer(p.sections));
+}
+
 function applyInternalCheckoutCtas(funnel: Funnel): void {
   // 1) Boutons des cards pricing/offer → #ff-checkout (sur toutes les pages).
   const patchOfferItems = (sections?: Funnel["sections"]) => {
@@ -5497,8 +5737,12 @@ function applyInternalCheckoutCtas(funnel: Funnel): void {
     });
   };
   if (pageHasPaidOffer(funnel.sections)) retargetSectionCtas(funnel.sections);
+  // 🆕 Les pages d'OFFRE SECONDAIRE (tripwire/OTO, upsell, downsell) vendent
+  // elles aussi : sans elles dans cette liste, leurs boutons de section
+  // restaient branchés ailleurs que sur le checkout.
+  const CHECKOUT_PAGE_ROLES: PageRole[] = ["sales", "oto", "upsell", "downsell"];
   funnel.pages?.forEach((p) => {
-    if ((p.isHome || p.role === "sales") && pageHasPaidOffer(p.sections)) {
+    if ((p.isHome || CHECKOUT_PAGE_ROLES.includes(p.role)) && pageHasPaidOffer(p.sections)) {
       retargetSectionCtas(p.sections);
     }
   });

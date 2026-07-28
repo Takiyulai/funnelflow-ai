@@ -430,7 +430,24 @@ function strictSectionRequirementsBlock(lang: Language = "fr"): string {
 // Bloc : règles sémantiques de CTA par rôle de page
 // ─────────────────────────────────────────────────────────────────────────────
 
-function roleSemanticsBlock(roles: string[], lang: Language): string {
+/**
+ * 🆕 Types de tunnels dont la page « merci » suit un ACHAT (et non un opt-in
+ * gratuit). La règle sémantique du rôle `thankyou` doit alors parler de
+ * commande et d'accès produit, jamais de « lead magnet envoyé par email ».
+ */
+const PAID_FUNNEL_KINDS: ReadonlySet<string> = new Set([
+  "digital-product",
+  "coaching-high-ticket",
+  "vsl",
+  "formation",
+  "saas",
+]);
+
+function roleSemanticsBlock(
+  roles: string[],
+  lang: Language,
+  funnelKind?: FunnelKind,
+): string {
   if (roles.length === 0) return "";
 
   const header = tr(
@@ -450,12 +467,14 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
     ],
     thankyou: [
       "Rôle \"thankyou\" : page de remerciement APRÈS opt-in. Le lead magnet est ENVOYÉ PAR EMAIL.",
+      "- C'est la DERNIÈRE page du tunnel : il n'existe AUCUNE page de téléchargement après. La ressource arrive par email (ou via un lien externe ajouté par le créateur).",
       "- INTERDIT ABSOLU : CTA \"Télécharger maintenant\" (le guide arrive par email, pas via la page).",
       "- CTA principal RECOMMANDÉ : { \"label\": \"Ouvrir ma boîte Gmail\", \"mode\": \"redirect\", \"url\": \"https://mail.google.com\", \"target\": \"_blank\" }",
+      "- UN SEUL bouton sur la page : ne répète pas la même action dans le hero ET dans la section CTA.",
       "- Body doit expliquer : (1) l'email arrive dans les 2 minutes, (2) vérifier les spams, (3) ajouter l'expéditeur aux contacts.",
     ],
     delivery: [
-      "Rôle \"delivery\" : page de livraison DIRECTE du produit/ressource.",
+      "Rôle \"delivery\" : page de livraison DIRECTE du produit/ressource (rôle LEGACY, conservé pour les anciens tunnels).",
       "- CTA principal AUTORISÉ : \"Télécharger mon guide\" avec URL réelle du fichier.",
     ],
     confirmation: [
@@ -504,6 +523,20 @@ function roleSemanticsBlock(roles: string[], lang: Language): string {
       "- CTA principal : passer au jour suivant ou découvrir l'offre payante.",
     ],
   };
+
+  // 🆕 Tunnel PAYANT : la page « merci » suit un achat, pas un opt-in gratuit.
+  // Sans cette variante, une vente de produit digital héritait de la règle du
+  // lead magnet (« le lead magnet est ENVOYÉ PAR EMAIL », « Ouvrir ma boîte
+  // Gmail ») — copy incohérent avec une commande payée.
+  if (funnelKind && PAID_FUNNEL_KINDS.has(funnelKind)) {
+    rulesFr.thankyou = [
+      "Rôle \"thankyou\" : page de remerciement APRÈS ACHAT. C'est la DERNIÈRE page du tunnel.",
+      "- Il n'existe AUCUNE page d'accès/téléchargement après : l'accès au produit arrive par email, ou via un lien que le créateur ajoute lui-même sur CETTE page.",
+      "- INTERDIT : reproposer l'achat, reproduire un formulaire de commande, ou promettre une page de téléchargement.",
+      "- Body doit expliquer : (1) la commande est confirmée, (2) l'email d'accès arrive dans les minutes qui suivent, (3) vérifier les spams.",
+      "- UN SEUL bouton sur la page : ne répète pas la même action dans le hero ET dans la section CTA.",
+    ];
+  }
 
   const lines: string[] = [];
   for (const role of roles) {
@@ -1636,7 +1669,7 @@ ${toneAndVocabularyBlock(args.funnelKind, lang)}
 
 ${heroSingleMediaBlock(args.funnelKind, homeRole, lang)}
 
-${roleSemanticsBlock([homeRole], lang)}
+${roleSemanticsBlock([homeRole], lang, args.funnelKind)}
 
 ${mediasBlock(args.medias, lang)}
 
@@ -1722,7 +1755,7 @@ Les **titres de hero** des pages secondaires NE DOIVENT JAMAIS contenir le nom d
 
 Le titre doit être **orienté bénéfice ou état du prospect**, écrit comme un message direct à la 2e personne, sans préfixe de marque.
 
-${roleSemanticsBlock(roles, lang)}
+${roleSemanticsBlock(roles, lang, args.funnelKind)}
 
 ${toneAndVocabularyBlock(args.funnelKind, lang)}
 

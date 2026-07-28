@@ -261,7 +261,19 @@
 
 /* ───────── 4. Animations d'entrée ───────── */
 [data-ff-template] [data-ff-anim] { opacity: 1; will-change: opacity, transform; }
+/* 🆕 PERF : on relâche will-change dès que l'élément est révélé — sinon chaque
+   élément animé garde une couche de compositing à vie (saccades sur mobile). */
+[data-ff-template] [data-ff-anim].ff-anim-active,
+[data-ff-template] [data-ff-anim].ff-in { will-change: auto; }
 [data-ff-template].ff-anim-ready [data-ff-anim]:not(.ff-in):not(.ff-anim-active) { opacity: 0; }
+/* 🆕 « Aucune animation » = toujours visible, jamais masqué en attendant le
+   scroll (avant, l'élément restait en opacity:0 puis apparaissait d'un coup). */
+[data-ff-template] [data-ff-anim="none"],
+[data-ff-template].ff-anim-ready [data-ff-anim="none"]:not(.ff-in):not(.ff-anim-active) {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
 [data-ff-template].ff-anim-ready [data-ff-anim="fade-up"]:not(.ff-in):not(.ff-anim-active) { transform: translateY(30px); }
 [data-ff-template] [data-ff-anim="fade-up"] {
   transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
@@ -281,6 +293,71 @@
 }
 [data-ff-template] [data-ff-anim="zoom-in"].ff-in,
 [data-ff-template] [data-ff-anim="zoom-in"].ff-anim-active { opacity: 1; transform: scale(1); }
+
+/* 🆕 PRÉRÉGLAGES MANQUANTS — l'éditeur proposait fade-down / slide-left /
+   slide-right / zoom-out / pulse, mais AUCUNE règle CSS ne les implémentait
+   côté aperçu/publication : l'élément passait de opacity:0 à opacity:1 sans
+   transition (l'export lib/export/theme-css.ts, lui, les gérait déjà). */
+[data-ff-template].ff-anim-ready [data-ff-anim="fade-down"]:not(.ff-in):not(.ff-anim-active) { transform: translateY(-30px); }
+[data-ff-template].ff-anim-ready [data-ff-anim="slide-left"]:not(.ff-in):not(.ff-anim-active) { transform: translateX(40px); }
+[data-ff-template].ff-anim-ready [data-ff-anim="slide-right"]:not(.ff-in):not(.ff-anim-active) { transform: translateX(-40px); }
+[data-ff-template].ff-anim-ready [data-ff-anim="zoom-out"]:not(.ff-in):not(.ff-anim-active) { transform: scale(1.06); }
+[data-ff-template].ff-anim-ready [data-ff-anim="pulse"]:not(.ff-in):not(.ff-anim-active) { transform: scale(0.92); }
+[data-ff-template] [data-ff-anim="fade-down"],
+[data-ff-template] [data-ff-anim="slide-left"],
+[data-ff-template] [data-ff-anim="slide-right"],
+[data-ff-template] [data-ff-anim="zoom-out"],
+[data-ff-template] [data-ff-anim="pulse"] {
+  transition: opacity var(--ff-anim-duration) var(--ff-anim-easing),
+              transform var(--ff-anim-duration) var(--ff-anim-easing);
+}
+[data-ff-template] [data-ff-anim="fade-down"].ff-in,
+[data-ff-template] [data-ff-anim="fade-down"].ff-anim-active,
+[data-ff-template] [data-ff-anim="slide-left"].ff-in,
+[data-ff-template] [data-ff-anim="slide-left"].ff-anim-active,
+[data-ff-template] [data-ff-anim="slide-right"].ff-in,
+[data-ff-template] [data-ff-anim="slide-right"].ff-anim-active,
+[data-ff-template] [data-ff-anim="zoom-out"].ff-in,
+[data-ff-template] [data-ff-anim="zoom-out"].ff-anim-active,
+[data-ff-template] [data-ff-anim="pulse"].ff-in,
+[data-ff-template] [data-ff-anim="pulse"].ff-anim-active {
+  opacity: 1;
+  transform: none;
+}
+
+/* 🆕 PORTÉE SECTION — [data-ff-anim-scope]
+   Les « patterns » de section (BenefitsPatterns, PricingPatterns, FaqPatterns…)
+   codent data-ff-anim="fade-up" EN DUR sur leurs éléments internes : le
+   préréglage choisi dans l'éditeur (onglet Style → Animations) n'avait donc
+   aucun effet sur ces sections. La section porte désormais son préréglage dans
+   data-ff-anim-scope, qui pilote aussi ses descendants animés. */
+[data-ff-template] [data-ff-anim-scope="none"] [data-ff-anim] {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+[data-ff-template].ff-anim-ready [data-ff-anim-scope="fade-in"] [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
+  transform: none;
+}
+[data-ff-template].ff-anim-ready [data-ff-anim-scope="zoom-in"] [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
+  transform: scale(0.96);
+}
+[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim].ff-in,
+[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim].ff-anim-active {
+  transform: scale(1);
+}
+
+/* 🆕 ACCESSIBILITÉ — prefers-reduced-motion : aucune animation d'entrée, tout
+   le contenu est immédiatement visible (le hook useScrollReveal active déjà
+   tout côté JS, ces règles couvrent le cas sans JS / avant hydratation). */
+@media (prefers-reduced-motion: reduce) {
+  [data-ff-template] [data-ff-anim],
+  [data-ff-template].ff-anim-ready [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
 
 /* ───────── 5. Boutons CTA ───────── */
 [data-ff-template] .ff-btn,
@@ -3716,6 +3793,26 @@
 [data-ff-template] .t1-sec:last-of-type { padding-bottom: 40px; }
 [data-ff-template] .ff-footer { margin-bottom: 0 !important; }
 [data-ff-template] > *:last-child { margin-bottom: 0 !important; }
+
+/* ═══ 🆕 ANTI-BANDE VIDE SOUS LE FOOTER (correctif définitif) ═══
+   La chaîne « sticky footer » ci-dessus (.ff-fill-col + margin-top:auto) ne
+   fonctionne que si TOUS les maillons flex aboutissent : shell 100vh →
+   FunnelPreview → .ff-page → corps → footer. Elle casse dès qu'un conteneur
+   sort de cette chaîne — cadre mobile à hauteur fixe (640px), carte d'aperçu de
+   l'éditeur, page plus courte que l'écran, tunnel cloné sans footer standard…
+   et l'on voyait alors le fond du conteneur (blanc, #1a1a1a ou #0B0F14) sous
+   le footer.
+
+   Correctif indépendant de la chaîne flex : la teinte du footer « déborde »
+   vers le bas via un box-shadow. Un box-shadow est de l'encre pure — il
+   n'occupe AUCUNE place dans le flux et n'agrandit PAS la zone scrollable
+   (contrairement à un ::after en position absolue, qui rallongerait vraiment
+   la page). Quel que soit l'espace résiduel, il prend la couleur du footer.
+   Sans effet dès que la page remplit l'écran. */
+[data-ff-template] .ff-footer {
+  position: relative;
+  box-shadow: 0 50vh 0 50vh var(--ff-footer-bg, #0b0f14);
+}
 
 /* ═══ 🆕 Flèche des CTA (skins) : glisse vers la droite au survol ═══ */
 .sk-cta-arrow {

@@ -8,12 +8,93 @@
    L'export Systeme.io a sa propre source CSS (lib/export/theme-css.ts). */
 
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   SYSTÈME DE JETONS — INTERFACE D'APPLICATION
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠️ PÉRIMÈTRE : ces jetons pilotent UNIQUEMENT l'interface (dashboard,
+   éditeur, admin). Les TUNNELS GÉNÉRÉS gardent leurs propres thèmes
+   (app/funnel-theme.css, lib/export/theme-css.ts) et ne doivent PAS être
+   uniformisés : leur diversité chromatique est le produit que vendent nos
+   utilisateurs.
+
+   TROIS RÈGLES, à respecter dans tout nouveau composant :
+
+   1. LES GRIS FONT LE TRAVAIL. La hiérarchie visuelle se construit avec la
+      rampe `ash` (13 nuances), l'espacement et la typographie — pas avec de
+      la couleur. Une interface d'outil doit s'effacer derrière le travail de
+      l'utilisateur : l'éditeur entoure un aperçu de tunnel volontairement
+      coloré, et deux surfaces bruyantes se disputent l'attention.
+
+   2. UN SEUL ACCENT. L'or (`--ff-accent`) est la seule couleur de marque.
+      Vert / ambre / rouge sont SÉMANTIQUES : ils signalent un état (succès,
+      avertissement, erreur) et ne servent jamais de décoration ni de CTA.
+
+   3. L'OR NE S'ÉCRIT PAS SUR DU BLANC. #C7A436 sur blanc mesure 2,4:1 de
+      contraste, sous le seuil WCAG AA de 4,5:1 — le texte paraît flou plutôt
+      qu'élégant. Utiliser `--ff-accent` en APLAT (fond or, texte encre) ou
+      sur fond sombre, et `--ff-accent-ink` (#8A6F1F, 4,6:1) dès qu'il s'agit
+      de TEXTE sur une surface claire.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --ff-ink: #0F172A;
-  --ff-muted: #64748B;
-  --ff-line: #E2E8F0;
-  --ff-canvas: #F8FAFC;
-  --ff-surface: #FFFFFF;
+  /* ── Rampe de neutres, ancrée sur l'encre de marque #080E1A ────────────
+     13 nuances : c'est ce qui permet de bâtir une hiérarchie sans couleur.
+     Avant, l'interface n'en avait que 4 (ink/muted/line/canvas), d'où le
+     réflexe d'ajouter des couleurs pour créer du contraste. */
+  --ash-0:   #FFFFFF;
+  --ash-25:  #FAFAFB;
+  --ash-50:  #F4F5F7;
+  --ash-100: #EBECEF;
+  --ash-200: #DFE1E6;
+  --ash-300: #C6C9D0;
+  --ash-400: #9BA1AC;
+  --ash-500: #6F7681;
+  --ash-600: #545B66;
+  --ash-700: #3C424B;
+  --ash-800: #262B32;
+  --ash-900: #151920;
+  --ash-950: #080E1A;
+
+  /* ── Accent unique ─────────────────────────────────────────────────────
+     `accent`      : aplats, bordures, éléments actifs, texte sur fond sombre
+     `accent-ink`  : TEXTE sur surface claire (conforme WCAG AA)
+     `accent-soft` : fonds de badges et de zones mises en avant */
+  --ff-accent: #C7A436;
+  --ff-accent-ink: #8A6F1F;
+  --ff-accent-soft: #FAF3D9;
+  --ff-accent-contrast: #080E1A; /* texte posé SUR un aplat d'accent */
+
+  /* ── Couleurs sémantiques — état uniquement, jamais décoratives ────────
+     Chacune a une variante `-ink` conforme pour le texte sur fond clair. */
+  --ff-success: #31845C;
+  --ff-success-ink: #276A4A;
+  --ff-success-soft: #E5F1EB;
+  --ff-warning: #B8860B;
+  --ff-warning-ink: #854F0B;
+  --ff-warning-soft: #FAEEDA;
+  --ff-danger: #DC2626;
+  --ff-danger-ink: #B91C1C;
+  --ff-danger-soft: #FEE9E9;
+  --ff-info: #08498D;
+  --ff-info-ink: #08498D;      /* 9:1 sur blanc — déjà conforme */
+  --ff-info-soft: #E8F1FB;
+
+  /* ── Élévation : DEUX niveaux, pas six ─────────────────────────────────
+     Quatre profondeurs d'ombre dans une interface d'outil, c'est trois de
+     trop : l'œil ne les distingue pas et l'ensemble paraît flou. */
+  --ff-elev-1: 0 1px 2px rgba(8, 14, 26, 0.06);
+  --ff-elev-2: 0 8px 24px rgba(8, 14, 26, 0.10);
+
+  /* ── Jetons historiques, remappés sur la rampe ─────────────────────────
+     Conservés pour ne rien casser : tout le code existant qui utilise
+     text-ink / text-muted / border-line / bg-canvas continue de fonctionner,
+     mais puise désormais dans la rampe unifiée. */
+  --ff-ink: var(--ash-900);
+  --ff-muted: var(--ash-500);
+  --ff-line: var(--ash-200);
+  --ff-canvas: var(--ash-25);
+  --ff-surface: var(--ash-0);
 
   --ff-brand-ink: #080E1A;
   --ff-brand-surface: #0D1628;
@@ -30,11 +111,45 @@
    plus courants (bg-white, bordures, ombres) pour faire flipper les cartes.
    ───────────────────────────────────────────────────────────────────────── */
 .ff-theme-dark {
-  --ff-ink: #E6EDF7;        /* texte principal clair */
-  --ff-muted: #94A3B8;      /* texte secondaire */
-  --ff-line: #243049;       /* bordures discrètes */
-  --ff-canvas: #0B1220;     /* fond profond */
-  --ff-surface: #131C2E;    /* fond cartes */
+  /* 🆕 La rampe s'inverse : un composant écrit avec les jetons `ash-*` bascule
+     tout seul en sombre, sans la moindre règle !important. C'est exactement
+     ce que les dizaines de rattrapages ci-dessous compensaient à la main —
+     ils ne concernent que le code qui code encore ses couleurs en dur, et
+     pourront disparaître au fur et à mesure de la migration. */
+  --ash-0:   #131C2E;   /* surface des cartes */
+  --ash-25:  #0B1220;   /* fond d'application */
+  --ash-50:  #16203A;
+  --ash-100: #1B2743;
+  --ash-200: #243049;
+  --ash-300: #33415F;
+  --ash-400: #64748B;
+  --ash-500: #94A3B8;
+  --ash-600: #B4C0D0;
+  --ash-700: #CBD5E1;
+  --ash-800: #DCE5F0;
+  --ash-900: #E6EDF7;
+  --ash-950: #F5F8FC;
+
+  /* Sur fond sombre, l'or clair EST lisible : `accent-ink` repasse dessus. */
+  --ff-accent-ink: #D8B84A;
+  --ff-accent-soft: rgba(199, 164, 54, 0.14);
+  --ff-success-ink: #5FBE8E;
+  --ff-success-soft: rgba(49, 132, 92, 0.16);
+  --ff-warning-ink: #E0B24D;
+  --ff-warning-soft: rgba(184, 134, 11, 0.16);
+  --ff-danger-ink: #F1817F;
+  --ff-danger-soft: rgba(220, 38, 38, 0.16);
+  --ff-info-ink: #6BA6E8;
+  --ff-info-soft: rgba(8, 73, 141, 0.20);
+
+  --ff-elev-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --ff-elev-2: 0 8px 24px rgba(0, 0, 0, 0.50);
+
+  --ff-ink: var(--ash-900);
+  --ff-muted: var(--ash-500);
+  --ff-line: var(--ash-200);
+  --ff-canvas: var(--ash-25);
+  --ff-surface: var(--ash-0);
 
   color: var(--ff-ink);
   background: var(--ff-canvas);

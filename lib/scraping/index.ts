@@ -11,7 +11,6 @@
 
 import { scrapingBeeProvider } from "./providers/scrapingbee";
 import { scrapingdogProvider } from "./providers/scrapingdog";
-import { scraperApiProvider } from "./providers/scraperapi";
 import {
   AllScrapingProvidersFailedError,
   ScrapeProviderError,
@@ -24,12 +23,16 @@ import {
 
 export * from "./types";
 
-/** Ordre d'essai — ScrapingBee en principal, puis Scrapingdog, puis ScraperAPI.
+/** Ordre d'essai — Scrapingdog en PRINCIPAL, puis ScrapingBee en repli.
+ *  (Aligné sur le clonage de tunnels, cf. lib/clone/fetcher.ts.)
+ *  ScraperAPI a été RETIRÉ de la chaîne : la plateforme ne travaille plus
+ *  qu'avec ces deux fournisseurs. Le connecteur reste disponible dans
+ *  ./providers/scraperapi.ts si on veut le réintroduire un jour — il suffit de
+ *  le réimporter et de l'ajouter ici.
  *  Pour changer la priorité, réordonne simplement ce tableau. */
 export const PROVIDER_ORDER: ScraperProvider[] = [
-  scrapingBeeProvider,
   scrapingdogProvider,
-  scraperApiProvider,
+  scrapingBeeProvider,
 ];
 
 /** 🆕 Suivi de consommation (in-memory, best-effort) : compte les tentatives

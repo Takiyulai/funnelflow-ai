@@ -153,7 +153,11 @@ export default function GaleriePage() {
     }
   }
 
-  async function useTemplate(id: string) {
+  // ⚠️ NE PAS renommer en `useTemplate…` : ce n'est PAS un hook React mais un
+  // gestionnaire de clic. Le préfixe `use` faisait échouer la règle
+  // react-hooks/rules-of-hooks (« hook appelé dans un callback »), qui l'avait
+  // pris pour un hook du fait de son seul nom.
+  async function applyTemplate(id: string) {
     if (busyId) return;
     setBusyId(id);
     setNotice(null);
@@ -265,7 +269,7 @@ export default function GaleriePage() {
                 <div className="mt-4 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => useTemplate(t.id)}
+                    onClick={() => applyTemplate(t.id)}
                     disabled={busyId === t.id}
                     className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gold px-3 py-2 text-xs font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
                   >

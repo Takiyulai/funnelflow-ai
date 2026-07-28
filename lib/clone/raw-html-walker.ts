@@ -140,6 +140,59 @@ function isInvisible(el: Element): boolean {
   return false;
 }
 
+/** Contenus VRAIMENT décoratifs ou dupliqués (lecteurs d'écran) : ils doublent
+ *  un texte déjà visible, les rendre éditables créerait des doublons. */
+const ALWAYS_SKIP_CLASS = /\bsr-only\b|\bvisually-hidden\b|\bscreen-reader\b/i;
+
+/** Conteneurs « repliés mais bien réels » : accordéons, FAQ, onglets,
+ *  disclosures. Masqués au moment de la capture, mais ce sont de vrais
+ *  contenus de la page. */
+const COLLAPSIBLE_HINT =
+  /\b(accordion|collapse|collapsible|faq|answer|panel|tab-pane|disclosure|dropdown-content|toggle-content)\b/i;
+
+/**
+ * 🆕 FIX « seules les questions de FAQ sont éditables ».
+ *
+ * `isInvisible()` confondait deux choses très différentes :
+ *   1. du contenu décoratif ou dupliqué (sr-only, icônes aria-hidden) — à
+ *      exclure de l'édition, à raison ;
+ *   2. du contenu simplement REPLIÉ (réponses d'accordéon, onglets inactifs) —
+ *      qui est du vrai contenu de la page.
+ *
+ * Sur un tunnel cloné, les réponses de FAQ sont repliées au moment du scraping
+ * (`display:none`, `aria-hidden`, `data-state="closed"`…). Le walker les
+ * sautait, donc elles ne recevaient aucun `data-ff-spot-id` : l'éditeur
+ * affichait bien les réponses (RawHtmlRenderer les déplie via #ff-faq-fix)
+ * mais le clic n'ouvrait que la question. Cette fonction rattrape le cas 2.
+ */
+function isCollapsedButReal(el: Element): boolean {
+  const cls = el.getAttribute("class") || "";
+  // Un contenu lecteur d'écran reste exclu, replié ou non.
+  if (ALWAYS_SKIP_CLASS.test(cls)) return false;
+
+  // Radix / Headless UI / shadcn ferment via data-state.
+  if (el.getAttribute("data-state") === "closed") return true;
+
+  // Indice de classe sur l'élément lui-même ou ses 3 premiers ancêtres
+  // (le panneau replié est souvent un enfant du bloc « accordion-item »).
+  let node: Element | null = el;
+  let hops = 0;
+  while (node && hops < 4) {
+    if (COLLAPSIBLE_HINT.test(node.getAttribute("class") || "")) return true;
+    if (node.hasAttribute("aria-expanded")) return true;
+    node = node.parentElement;
+    hops++;
+  }
+
+  // `aria-hidden` posé sur un bloc de TEXTE substantiel : c'est presque
+  // toujours un panneau replié, pas une icône décorative.
+  if (el.getAttribute("aria-hidden") === "true") {
+    return normalize(el.textContent || "").length >= 20;
+  }
+
+  return false;
+}
+
 function getDeepText(el: Element): string {
   return normalize(el.textContent || "");
 }
@@ -261,7 +314,9 @@ export function walkEditable(
     const tag = el.tagName.toLowerCase();
 
     if (SKIP_TAGS.has(tag)) return;
-    if (isInvisible(el)) return;
+    // 🆕 Un élément invisible n'est ignoré que s'il n'est pas un contenu
+    // simplement REPLIÉ (réponse de FAQ, onglet inactif…) — cf. isCollapsedButReal.
+    if (isInvisible(el) && !isCollapsedButReal(el)) return;
 
     // ---- IMAGES & MÉDIAS ----
     if (tag === "img") {

@@ -21,6 +21,14 @@ import type {
   LeadStatus,
 } from "./types";
 import { waitActionMs } from "./types";
+import {
+  startWorkflowRun,
+  finishWorkflowRun,
+  reentryBlockedByDefault,
+  describeAction,
+  type RunStep,
+  type RunStepStatus,
+} from "./runs";
 
 type LeadContext = {
   id: string;
@@ -221,6 +229,29 @@ export async function runWorkflowsForEvent(
 
   for (const wf of workflows) {
     if (!triggerFilterMatches(wf.trigger, ctx)) continue;
+
+    // 🆕 GARDE DE RÉ-ENTRÉE + JOURNAL. `startWorkflowRun` tranche les deux :
+    // il ouvre la trace d'exécution et, si le contact est déjà passé par ce
+    // workflow (et que l'événement n'est pas de nature répétable), l'insertion
+    // est refusée par l'index unique → on n'exécute pas.
+    const allowReentry =
+      wf.trigger.allowReentry === true ||
+      !reentryBlockedByDefault(ctx.event);
+
+    const run = await startWorkflowRun(admin, {
+      workflowId: wf.id,
+      userId,
+      leadId: ctx.lead?.id ?? null,
+      leadEmail: ctx.lead?.email ?? null,
+      triggerEvent: ctx.event,
+      funnelId: wf.trigger.funnelId ?? ctx.funnelId ?? null,
+      actionsTotal: wf.actions.length,
+      allowReentry,
+    });
+
+    if (!run.proceed) continue;
+
+    const steps: RunStep[] = [];
     try {
       await executeActions(
         admin,
@@ -231,9 +262,17 @@ export async function runWorkflowsForEvent(
         0,
         wf.trigger.funnelId ?? ctx.funnelId ?? null,
         wf.id,
+        steps,
       );
+      await finishWorkflowRun(admin, run.runId, { status: "done", steps });
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
       console.warn(`[workflows] exécution "${wf.name}" échouée (non bloquant):`, e);
+      await finishWorkflowRun(admin, run.runId, {
+        status: "failed",
+        steps,
+        error: message,
+      });
     }
   }
 
@@ -356,12 +395,36 @@ export async function executeActions(
   // Sans lui, le report est impossible et l'ancien comportement (évaluation
   // immédiate) s'applique — jamais bloquant pour les appelants existants.
   workflowId: string | null = null,
+  // 🆕 Journal pas à pas (optionnel). Fourni par runWorkflowsForEvent, alimenté
+  // au fil des actions et écrit en base à la clôture. Absent = aucune trace,
+  // comportement historique inchangé pour les appelants existants.
+  steps?: RunStep[],
 ): Promise<void> {
   // 🆕 Accumulateur de délai en MILLISECONDES : le "wait" accepte désormais
   // jours + heures + minutes (rétro-compat : anciennes étapes { days }).
   let delayMs = initialDelayMs;
 
+  // 🆕 Journal : une entrée par action, quel que soit son sort. `position` est
+  // préfixée de la profondeur pour distinguer une action de premier niveau
+  // d'une action située dans une branche de condition.
+  let stepIndex = 0;
+  const logStep = (
+    action: WorkflowActionConfig,
+    status: RunStepStatus,
+    detail?: string,
+  ) => {
+    if (!steps) return;
+    steps.push({
+      position: depth * 100 + stepIndex,
+      kind: action.kind,
+      status,
+      at: new Date().toISOString(),
+      detail: detail ?? describeAction(action),
+    });
+  };
+
   for (const action of actions) {
+    stepIndex++;
     // 🆕 Robustesse : chaque action est isolée. Si l'une échoue (ex. enrôlement
     // d'une séquence introuvable, insert refusé…), on logue et on CONTINUE avec
     // les actions suivantes — un échec ne doit plus interrompre le reste du
@@ -506,19 +569,44 @@ export async function executeActions(
             }
             // On arrête ICI : le reste de la liste (condition incluse) sera
             // rejoué par le cron au moment voulu, avec un délai remis à zéro.
+            logStep(
+              action,
+              "deferred",
+              `condition reportée au ${new Date(Date.now() + delayMs).toISOString()}`,
+            );
             return;
           }
           const ok = await evaluateConditionTest(admin, userId, lead, action.test);
-          const branch = (action.negate ? !ok : ok)
-            ? action.then
-            : action.otherwise;
+          const taken = action.negate ? !ok : ok;
+          const branch = taken ? action.then : action.otherwise;
+          // Trace de la BRANCHE empruntée : c'est l'information qui manquait
+          // pour répondre à « pourquoi ce contact n'a-t-il pas reçu la relance ? ».
+          logStep(
+            action,
+            "done",
+            `${action.test.type} → branche « ${taken ? "alors" : "sinon"} »`,
+          );
           if (Array.isArray(branch) && branch.length > 0) {
-            await executeActions(admin, userId, lead, branch, delayMs, depth + 1, funnelId, workflowId);
+            await executeActions(
+              admin,
+              userId,
+              lead,
+              branch,
+              delayMs,
+              depth + 1,
+              funnelId,
+              workflowId,
+              steps,
+            );
           }
           break;
         }
       }
+      // Les conditions journalisent elles-mêmes (branche empruntée / report).
+      if (action.kind !== "condition") logStep(action, "done");
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      logStep(action, "failed", message);
       console.warn(
         `[workflows] action "${action.kind}" ignorée (échec non bloquant):`,
         e,

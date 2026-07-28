@@ -68,12 +68,46 @@ export function useFunnelAnimations(ref: RefObject<HTMLElement | null>): void {
         reveals.forEach((el) => io.observe(el));
         cleanups.push(() => io.disconnect());
         // Filet de sécurité : si l'observer ne se déclenche pas (conteneur non
-        // scrollé, layout figé), on révèle tout après un court délai pour ne
-        // JAMAIS laisser le contenu invisible.
-        const safety = window.setTimeout(() => {
-          reveals.forEach((el) => el.classList.add("is-in"));
-        }, 900);
+        // scrollé, layout figé), on révèle après un court délai pour ne JAMAIS
+        // laisser du contenu invisible.
+        // 🆕 FIX « aucune animation au scroll » : ce filet révélait AUTREFOIS
+        // la page ENTIÈRE au bout de 900 ms, y compris tout ce qui se trouvait
+        // sous la ligne de flottaison — donc plus rien n'animait au scroll. Il
+        // ne révèle désormais que ce que le scroll a déjà atteint.
+        const viewportBottom = () =>
+          scrollRoot
+            ? scrollRoot.getBoundingClientRect().bottom
+            : window.innerHeight || document.documentElement.clientHeight;
+        const revealReached = () => {
+          const limit = viewportBottom();
+          reveals.forEach((el) => {
+            if (el.classList.contains("is-in")) return;
+            if (el.getBoundingClientRect().top < limit - 4) {
+              el.classList.add("is-in");
+            }
+          });
+        };
+        const safety = window.setTimeout(revealReached, 900);
         cleanups.push(() => window.clearTimeout(safety));
+
+        // Doublure au scroll (throttlée) au cas où l'IntersectionObserver
+        // resterait muet : garantit qu'aucun contenu atteint ne reste caché.
+        const scroller: HTMLElement | Window = scrollRoot || window;
+        let tick = 0;
+        const onScrollSafety = () => {
+          if (tick) return;
+          tick = window.setTimeout(() => {
+            tick = 0;
+            revealReached();
+          }, 250);
+        };
+        scroller.addEventListener("scroll", onScrollSafety, {
+          passive: true,
+        } as AddEventListenerOptions);
+        cleanups.push(() => {
+          scroller.removeEventListener("scroll", onScrollSafety);
+          if (tick) window.clearTimeout(tick);
+        });
       }
 
       // ── Tilt ────────────────────────────────────────────────────────────

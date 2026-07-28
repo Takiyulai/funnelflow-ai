@@ -1752,6 +1752,13 @@ a.ff-brand-cta:hover {
   max-width: 100%;
   margin-top: 0;
   text-align: center;
+  /* 🆕 Anti-bande vide sous le footer : la teinte du footer déborde vers le bas
+     via un box-shadow (encre pure — n'occupe aucune place dans le flux et
+     n'agrandit pas la zone scrollable). Sur une page plus courte que l'écran,
+     ou collée dans une colonne systeme.io, l'espace résiduel prend la couleur
+     du footer au lieu du fond blanc de la page hôte. */
+  position: relative;
+  box-shadow: 0 50vh 0 50vh var(--ff-footer-bg);
   border-top: 1px solid var(--ff-footer-border);
   border-radius: 0;
 }

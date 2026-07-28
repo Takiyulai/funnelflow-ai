@@ -145,6 +145,10 @@ export const workflowInputSchema = z.object({
       afterEvent: triggerEventEnum.nullable().optional(),
       delayDays: z.number().int().min(0).max(365).optional(),
       delayHours: z.number().int().min(0).max(23).optional(),
+      // 🆕 RÉ-ENTRÉE. Sans cette entrée, zod retirerait SILENCIEUSEMENT le champ
+      // du déclencheur (le schéma reconstruit l'objet clé par clé plus bas) —
+      // même piège que brandColors/authorName côté génération de tunnels.
+      allowReentry: z.boolean().optional(),
     })
     .superRefine((t, ctx) => {
       if (t.event === "time.elapsed") {
@@ -236,6 +240,10 @@ export function parseWorkflowInput(body: unknown): WorkflowInput {
       afterEvent: parsed.trigger.afterEvent ?? null,
       delayDays: parsed.trigger.delayDays ?? 0,
       delayHours: parsed.trigger.delayHours ?? 0,
+      // Volontairement PAS de `?? false` : `undefined` signifie « laisse le
+      // moteur décider selon la nature de l'événement » (cf. runs.ts), ce qui
+      // n'est pas la même chose que « bloquer explicitement ».
+      allowReentry: parsed.trigger.allowReentry,
     },
     actions: parsed.actions,
   };

@@ -147,7 +147,7 @@ export function ChatWidget() {
           {/* Header */}
           <div className="flex items-center justify-between gap-2 border-b border-line bg-ink px-4 py-3 text-white">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gold/20 text-gold">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-ink">
                 <Sparkles size={15} />
               </span>
               <div className="min-w-0">

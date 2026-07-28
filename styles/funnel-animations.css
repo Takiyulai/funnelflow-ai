@@ -55,6 +55,17 @@
               transform .7s cubic-bezier(.2,.7,.2,1);
 }
 [data-reveal].is-in { opacity: 1; transform: none; }
+/* 🆕 ACCESSIBILITÉ : « réduire les animations » → contenu immédiatement visible.
+   Couvre aussi le cas sans JS (le hook useFunnelAnimations révèle déjà tout
+   côté script, mais [data-reveal] partait en opacity:0 dans la feuille). */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-reveal].is-in {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 [data-acc-panel] { max-height: 0; overflow: hidden; transition: max-height .4s ease; }
 [data-tilt-inner] { transition: transform .18s ease; }
 .af-cta { position: relative; overflow: hidden; isolation: isolate; will-change: transform; cursor: pointer; }

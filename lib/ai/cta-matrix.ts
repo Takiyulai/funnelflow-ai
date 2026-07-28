@@ -19,6 +19,10 @@ export type CTAArchetype =
  */
 export type CTAIntent =
   | "convert-primary"  // Action principale du tunnel → page de conversion
+  | "offer-primary"    // 🆕 Achat de l'offre DE CETTE PAGE (OTO/tripwire, upsell,
+                       //    downsell, vente post-webinaire, pitch de fin de
+                       //    challenge). Reste sur la page, ne renvoie JAMAIS
+                       //    vers la page de capture du tunnel.
   | "form-scroll"      // Scroll vers le formulaire de la page courante
   | "form-submit"      // Soumettre le formulaire (sur la section "form")
   | "post-action"      // Action après conversion (calendrier, partage…)
@@ -45,9 +49,35 @@ export type ArchetypeCTAConfig = {
   formSubmitLabel: { fr: string; en: string; es: string };
   /** Label CTA post-conversion (null = pas de CTA sur la page de confirmation) */
   postActionLabel: { fr: string; en: string; es: string } | null;
+  /** 🆕 Label des pages qui VENDENT une offre secondaire (OTO/tripwire, upsell,
+   *  downsell, vente post-webinaire…). À défaut : OFFER_PRIMARY_LABEL. */
+  offerPrimaryLabel?: { fr: string; en: string; es: string };
   /** Règles par PageRole */
   rules: Partial<Record<PageRole, PageCTARule>>;
 };
+
+/**
+ * 🆕 Label par défaut d'un CTA d'achat sur une page d'offre secondaire.
+ * Volontairement neutre : il doit rester cohérent aussi bien sur un tripwire
+ * de lead magnet que sur une vente post-webinaire.
+ */
+export const OFFER_PRIMARY_LABEL = {
+  fr: "Je profite de l'offre",
+  en: "Get this offer",
+  es: "Aprovechar la oferta",
+} as const;
+
+/**
+ * 🆕 Rôles de page qui VENDENT une offre propre à la page. Ils reçoivent
+ * l'intention "offer-primary" dans TOUS les archétypes (ajoutée à la fin du
+ * fichier), ce qui corrige deux anomalies :
+ *   - le bouton portait le label principal du tunnel (« Télécharger
+ *     gratuitement » sur un tripwire à 17 €, « Je réserve ma place » sur la
+ *     page de vente post-webinaire) ;
+ *   - il redirigeait vers la page de CAPTURE du tunnel au lieu de l'offre de
+ *     la page courante.
+ */
+const OFFER_ROLES: PageRole[] = ["oto", "upsell", "downsell", "sales"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapping FunnelKind → Archétype
@@ -180,8 +210,12 @@ const PURCHASE_CONFIG: ArchetypeCTAConfig = {
       defaultIntent: "form-scroll",
       bySection: { form: "form-submit" },
     },
-    upsell: { defaultIntent: "convert-primary" },
-    downsell: { defaultIntent: "convert-primary" },
+    // 🆕 L'upsell et le downsell vendent LEUR PROPRE offre, à LEUR prix. En
+    // "convert-primary" leurs boutons repartaient vers la page de commande du
+    // produit PRINCIPAL — en contradiction avec applyUpsellDeclineLinks, qui
+    // documente que « le CTA principal d'achat reste #ff-checkout ».
+    upsell: { defaultIntent: "offer-primary" },
+    downsell: { defaultIntent: "offer-primary" },
     access: {
       defaultIntent: "none",
       bySection: { cta: "post-action" },
@@ -337,12 +371,31 @@ const POST_CONVERSION_CONFIG: ArchetypeCTAConfig = {
   },
 };
 
+/**
+ * 🆕 Complète chaque archétype avec une règle « offer-primary » pour les rôles
+ * qui vendent une offre propre à leur page (OFFER_ROLES), UNIQUEMENT quand
+ * l'archétype n'en définit pas déjà une. Purement additif : aucune règle
+ * existante n'est écrasée (la page `sales` de digital-product, par exemple,
+ * garde son `convert-primary` vers la page de commande).
+ *
+ * Sans cette complétion, `resolveCTAIntent` retombait sur "convert-primary"
+ * pour les rôles non couverts → label du tunnel + redirection vers la page de
+ * capture, sur des pages qui vendent.
+ */
+function withOfferRoleDefaults(config: ArchetypeCTAConfig): ArchetypeCTAConfig {
+  const rules = { ...config.rules };
+  for (const role of OFFER_ROLES) {
+    if (!rules[role]) rules[role] = { defaultIntent: "offer-primary" };
+  }
+  return { ...config, rules };
+}
+
 export const ARCHETYPE_CONFIGS: Record<CTAArchetype, ArchetypeCTAConfig> = {
-  "booking": BOOKING_CONFIG,
-  "purchase": PURCHASE_CONFIG,
-  "registration": REGISTRATION_CONFIG,
-  "download": DOWNLOAD_CONFIG,
-  "post-conversion": POST_CONVERSION_CONFIG,
+  "booking": withOfferRoleDefaults(BOOKING_CONFIG),
+  "purchase": withOfferRoleDefaults(PURCHASE_CONFIG),
+  "registration": withOfferRoleDefaults(REGISTRATION_CONFIG),
+  "download": withOfferRoleDefaults(DOWNLOAD_CONFIG),
+  "post-conversion": withOfferRoleDefaults(POST_CONVERSION_CONFIG),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

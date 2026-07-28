@@ -100,22 +100,14 @@ const LEAD_MAGNET: FunnelBlueprint = {
       minSections: 3,
       publiclyLinked: false,
     },
-    {
-      role: "delivery",
-      slug: "ressource",
-      name: "Page de livraison",
-      // download → offer, next-steps → process
-      defaultSectionTypes: ["hero", "offer", "process", "cta"],
-      allowedSectionTypes: [
-        "hero", "offer", "process", "cta",
-        "about", "video", "thank_you",
-      ],
-      copywritingFramework: "REASSURANCE",
-      secondaryFrameworks: ["NEXT-STEPS"],
-      heroMediaPolicy: "single-only",
-      minSections: 3,
-      publiclyLinked: false,
-    },
+    // ⚠️ La page « Accès » / « Livraison » (role: "delivery") a été RETIRÉE du
+    // blueprint lead-magnet. AutoFunnel AI n'héberge aucun fichier : la
+    // ressource est livrée par email (meta.deliveryEmail) ou via un lien
+    // externe que l'utilisateur ajoute lui-même (CTA personnalisé de
+    // l'éditeur). La page faisait doublon avec « Merci » et produisait un copy
+    // incohérent (« ressource prête à télécharger » + bouton « vérifier ma
+    // boîte mail »). Le rôle "delivery" reste défini partout ailleurs pour la
+    // RÉTROCOMPATIBILITÉ des tunnels déjà générés en 3 pages.
   ],
 };
 
@@ -309,21 +301,13 @@ const DIGITAL_PRODUCT: FunnelBlueprint = {
       minSections: 3,
       publiclyLinked: false,
     },
-    {
-      role: "access",
-      slug: "acces",
-      name: "Page d'accès au produit",
-      defaultSectionTypes: ["hero", "offer", "process", "cta"],
-      allowedSectionTypes: [
-        "hero", "offer", "process", "cta",
-        "about", "video", "faq",
-      ],
-      copywritingFramework: "REASSURANCE",
-      secondaryFrameworks: ["NEXT-STEPS"],
-      heroMediaPolicy: "single-only",
-      minSections: 3,
-      publiclyLinked: false,
-    },
+    // ⚠️ La page « Accès au produit » (role: "access") a été RETIRÉE du
+    // blueprint, pour la même raison que la page « Accès » du lead magnet :
+    // AutoFunnel AI n'héberge aucun fichier ni espace membre. Le lien vers le
+    // produit (Drive, Notion, espace membre externe…) se pose sur la page
+    // « Merci » via le CTA personnalisé de l'éditeur. Le rôle "access" reste
+    // défini partout ailleurs pour la RÉTROCOMPATIBILITÉ des tunnels déjà
+    // générés en 4 pages.
   ],
 };
 
@@ -681,16 +665,17 @@ const RAW_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = {
 };
 
 // 🆕 LOT 6 — Sur le lead magnet, le tripwire (= page "oto") se positionne
-// ENTRE la page de remerciement et la page de livraison (petite offre 7-27€
-// proposée juste après l'inscription, avant de donner accès à la ressource
-// gratuite) — pas en toute fin de tunnel comme pour les autres kinds.
+// juste APRÈS la capture et AVANT la page de remerciement (petite offre 7-27€
+// proposée à chaud) — pas en toute fin de tunnel comme pour les autres kinds.
+// (Avant la suppression de la page « Accès », il s'insérait entre « Merci » et
+// « Livraison » ; sans page de livraison, la place logique est ici.)
 const LEAD_MAGNET_TRIPWIRE_BLUEPRINT: PageBlueprint = {
   ...GENERIC_OTO_BLUEPRINT,
   name: "Tripwire (petite offre 7-27€)",
   toggleLabel: {
-    fr: "Tripwire (petite offre à 7-27€) — proposée juste après l'inscription, avant la livraison",
-    en: "Tripwire (small $7-27 offer) — shown right after opt-in, before delivery",
-    es: "Tripwire (pequeña oferta de 7-27€) — mostrada justo después de la inscripción, antes de la entrega",
+    fr: "Tripwire (petite offre à 7-27€) — proposée juste après l'inscription, avant la page de remerciement",
+    en: "Tripwire (small $7-27 offer) — shown right after opt-in, before the thank-you page",
+    es: "Tripwire (pequeña oferta de 7-27€) — mostrada justo después de la inscripción, antes de la página de gracias",
   },
 };
 
@@ -699,11 +684,11 @@ const LEAD_MAGNET_TRIPWIRE_BLUEPRINT: PageBlueprint = {
 export const FUNNEL_BLUEPRINTS: Record<FunnelKind, FunnelBlueprint> = Object.fromEntries(
   (Object.entries(RAW_BLUEPRINTS) as [FunnelKind, FunnelBlueprint][]).map(([kind, bp]) => {
     if (kind === "lead-magnet") {
-      // Insertion ENTRE "thankyou" et "delivery" plutôt qu'en fin de liste.
-      const deliveryIdx = bp.pages.findIndex((p) => p.role === "delivery");
+      // Insertion AVANT la page de remerciement plutôt qu'en fin de liste.
+      const thankyouIdx = bp.pages.findIndex((p) => p.role === "thankyou");
       const pages = [...bp.pages];
       pages.splice(
-        deliveryIdx >= 0 ? deliveryIdx : pages.length,
+        thankyouIdx >= 0 ? thankyouIdx : pages.length,
         0,
         LEAD_MAGNET_TRIPWIRE_BLUEPRINT,
       );

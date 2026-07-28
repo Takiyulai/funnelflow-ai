@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             AF
           </span>
           <span className="text-sm font-bold text-ink">
-            AutoFunnel <span className="text-gold">AI</span>
+            AutoFunnel <span className="text-accent-ink">AI</span>
           </span>
         </a>
         <div className="flex items-center gap-2">

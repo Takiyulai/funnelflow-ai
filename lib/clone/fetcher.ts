@@ -2,11 +2,24 @@
 /**
  * Fetcher HTTP pour le clonage de funnels.
  *
- * Stratégie :
- * 1. Si SCRAPINGBEE_API_KEY est définie → utilise ScrapingBee (rendu JS, bypass Cloudflare).
- *    Utilise js_scenario pour extraire les CSS runtime (styled-components, emotion, etc.)
- *    et les injecter dans le <head> avant la sérialisation.
- * 2. Sinon → fallback fetch() natif (limité aux pages statiques).
+ * Stratégie (chaîne de repli, dans l'ordre) :
+ * 1. Scrapingdog (PRINCIPAL) — rendu JS via `dynamic=true`, temporisation
+ *    d'hydratation via `wait`.
+ * 2. ScrapingBee (REPLI) — rendu JS + `js_scenario` : extraction des CSS
+ *    runtime (styled-components, emotion…) et capture des fonds calculés,
+ *    injectées dans le DOM avant sérialisation.
+ * 3. fetch() natif (DERNIER RECOURS) — pages statiques uniquement, pas de JS.
+ *
+ * Chaque fournisseur non configuré (clé absente) est simplement sauté ; un
+ * échec bascule sur le suivant. L'ordre est surchargeable sans redéploiement
+ * via `CLONE_SCRAPER_ORDER` (ex. "scrapingbee,scrapingdog").
+ *
+ * ⚠️ ÉCART FONCTIONNEL ASSUMÉ : le `js_scenario` (CSS runtime + capture des
+ * fonds) est propre à ScrapingBee. Scrapingdog n'expose pas d'exécution de
+ * script arbitraire : un clone servi par Scrapingdog garde le HTML hydraté et
+ * les <style>/<link> du document, mais PERD les CSS injectées en mémoire par
+ * styled-components/emotion ainsi que les fonds recalculés. Sur un site bâti
+ * en CSS-in-JS, le repli ScrapingBee reste qualitativement supérieur.
  *
  * Timeout global : 45s (l'extraction CSS runtime ajoute ~3-5s).
  *
@@ -20,8 +33,35 @@
 import type { FetchedPage, CloneErrorCode } from "./types";
 
 const SCRAPINGBEE_ENDPOINT = "https://app.scrapingbee.com/api/v1/";
+const SCRAPINGDOG_ENDPOINT = "https://api.scrapingdog.com/scrape";
 const FETCH_TIMEOUT_MS = 45_000;
 const MIN_HTML_LENGTH = 500;
+
+/** Fournisseurs de scraping utilisables par le clonage. */
+type CloneScraperName = "scrapingdog" | "scrapingbee";
+
+const DEFAULT_SCRAPER_ORDER: CloneScraperName[] = ["scrapingdog", "scrapingbee"];
+
+const SCRAPER_ENV_KEY: Record<CloneScraperName, string> = {
+  scrapingdog: "SCRAPINGDOG_API_KEY",
+  scrapingbee: "SCRAPINGBEE_API_KEY",
+};
+
+/**
+ * Ordre d'essai des fournisseurs. Surchargeable via `CLONE_SCRAPER_ORDER`
+ * (liste séparée par des virgules) pour repasser sur ScrapingBee en principal
+ * sans toucher au code. Toute valeur inconnue est ignorée ; une liste vide ou
+ * invalide retombe sur l'ordre par défaut.
+ */
+function resolveScraperOrder(): CloneScraperName[] {
+  const raw = (process.env.CLONE_SCRAPER_ORDER ?? "").trim().toLowerCase();
+  if (!raw) return DEFAULT_SCRAPER_ORDER;
+  const parsed = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is CloneScraperName => s === "scrapingdog" || s === "scrapingbee");
+  return parsed.length > 0 ? parsed : DEFAULT_SCRAPER_ORDER;
+}
 
 export class CloneFetchError extends Error {
   code: CloneErrorCode;
@@ -52,21 +92,149 @@ export function validateUrl(rawUrl: string): URL {
 }
 
 /**
- * Point d'entrée principal : récupère le HTML rendu d'une URL.
+ * Point d'entrée principal : récupère le HTML rendu d'une URL, en essayant les
+ * fournisseurs dans l'ordre puis, en dernier recours, le fetch natif.
+ *
+ * Une erreur d'URL invalide n'est JAMAIS masquée par la chaîne de repli : elle
+ * est levée avant toute tentative réseau.
  */
 export async function fetchPageHtml(rawUrl: string): Promise<FetchedPage> {
   const url = validateUrl(rawUrl);
-  const apiKey = process.env.SCRAPINGBEE_API_KEY;
+  const order = resolveScraperOrder();
+  const failures: string[] = [];
+  let sawConfiguredProvider = false;
 
   console.log(`[clone-fetcher] Fetching ${url.toString()}`);
-  console.log(
-    `[clone-fetcher] Mode : ${apiKey ? "ScrapingBee (JS rendering + runtime CSS extraction)" : "Native fetch (no JS)"}`
-  );
+  console.log(`[clone-fetcher] Ordre des fournisseurs : ${order.join(" → ")} → natif`);
 
-  if (apiKey) {
-    return await fetchViaScrapingBee(url, apiKey);
+  for (const name of order) {
+    const apiKey = process.env[SCRAPER_ENV_KEY[name]];
+    if (!apiKey) {
+      console.log(`[clone-fetcher] ${name} ignoré (${SCRAPER_ENV_KEY[name]} absente).`);
+      continue;
+    }
+    sawConfiguredProvider = true;
+
+    try {
+      return name === "scrapingdog"
+        ? await fetchViaScrapingdog(url, apiKey)
+        : await fetchViaScrapingBee(url, apiKey);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      failures.push(`${name} → ${message}`);
+      console.warn(`[clone-fetcher] ❌ ${name} a échoué, bascule sur le suivant. ${message}`);
+      continue;
+    }
   }
-  return await fetchViaNative(url);
+
+  // Dernier recours : fetch natif (pages statiques uniquement).
+  try {
+    if (sawConfiguredProvider) {
+      console.warn("[clone-fetcher] ⚠️ Tous les fournisseurs ont échoué → tentative en fetch natif (sans rendu JS).");
+    }
+    return await fetchViaNative(url);
+  } catch (nativeErr) {
+    if (failures.length > 0) {
+      // On remonte le détail de CHAQUE fournisseur : sans ça, l'utilisateur ne
+      // voyait qu'un « HTTP 400 » sec, sans savoir lequel ni pourquoi.
+      throw new CloneFetchError(
+        "scraping-blocked",
+        `Aucun fournisseur n'a pu récupérer la page. ${failures.join(" | ")}`,
+      );
+    }
+    if (!sawConfiguredProvider) {
+      throw new CloneFetchError(
+        "scraper-missing-key",
+        "Aucune clé de scraping configurée (SCRAPINGDOG_API_KEY ou SCRAPINGBEE_API_KEY) et le fetch natif a échoué.",
+      );
+    }
+    throw nativeErr;
+  }
+}
+
+/**
+ * Récupération via Scrapingdog (fournisseur PRINCIPAL).
+ *
+ * `dynamic=true` déclenche le rendu JS (facturé plus cher que le statique) et
+ * `wait` laisse le temps à l'hydratation React de s'achever — l'équivalent du
+ * `{ wait: 3000 }` en tête du js_scenario ScrapingBee.
+ *
+ * ⚠️ Pas d'exécution de script arbitraire côté Scrapingdog : ni extraction des
+ * CSS runtime, ni capture des fonds calculés (voir l'en-tête du fichier).
+ */
+async function fetchViaScrapingdog(url: URL, apiKey: string): Promise<FetchedPage> {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+    url: url.toString(),
+    dynamic: "true",
+    wait: "3000",
+  });
+
+  const endpoint = `${SCRAPINGDOG_ENDPOINT}?${params.toString()}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, { method: "GET", signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new CloneFetchError(
+        "scraping-timeout",
+        `Scrapingdog a dépassé ${FETCH_TIMEOUT_MS / 1000}s pour "${url.toString()}"`,
+      );
+    }
+    throw new CloneFetchError("internal", `Erreur réseau Scrapingdog : ${(err as Error).message}`);
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    // Le corps de la réponse est la SEULE façon de savoir ce que le fournisseur
+    // reproche réellement (paramètre refusé, crédits, domaine bloqué…).
+    console.error(
+      `[clone-fetcher] Scrapingdog HTTP ${response.status} : ${errorBody.slice(0, 300)}`,
+    );
+
+    if (response.status === 401) {
+      throw new CloneFetchError("scraper-missing-key", "Clé Scrapingdog invalide ou expirée");
+    }
+    if (response.status === 403) {
+      // Scrapingdog renvoie parfois 403 pour des crédits épuisés plutôt qu'un
+      // vrai problème d'authentification : on tranche via le corps.
+      const looksLikeQuota = /credit|quota|limit|exhaust/i.test(errorBody);
+      throw new CloneFetchError(
+        looksLikeQuota ? "scraper-quota" : "scraper-missing-key",
+        looksLikeQuota
+          ? "Crédits Scrapingdog épuisés"
+          : "Clé Scrapingdog invalide ou expirée",
+      );
+    }
+    if (response.status === 429) {
+      throw new CloneFetchError("scraper-quota", "Limite de débit Scrapingdog atteinte");
+    }
+    if (response.status >= 500) {
+      throw new CloneFetchError("scraping-blocked", `Scrapingdog indisponible (HTTP ${response.status})`);
+    }
+    throw new CloneFetchError(
+      "scraping-blocked",
+      `Scrapingdog a renvoyé HTTP ${response.status}${errorBody ? ` — ${errorBody.slice(0, 200)}` : ""}`,
+    );
+  }
+
+  const html = await response.text();
+  validateHtmlSize(html, url.toString());
+
+  console.log(`[clone-fetcher] ✅ Scrapingdog : ${html.length} chars (rendu JS, sans extraction CSS runtime)`);
+
+  return {
+    url: url.toString(),
+    finalUrl: response.url || url.toString(),
+    html,
+    renderedWithJs: true,
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -260,6 +428,13 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
     ],
   });
 
+  // 🐛 CAUSE DU « HTTP 400 » : `country_code` était envoyé AVEC
+  // `premium_proxy: "false"`. ScrapingBee réserve le ciblage géographique aux
+  // proxies premium/stealth et rejette la requête avec un 400 dès que
+  // `country_code` est présent sans l'un des deux. Le paramètre n'apportait
+  // rien ici (on clone la page telle qu'elle est servie) : on le retire.
+  // Si un jour un ciblage pays devient nécessaire, il faudra passer
+  // `premium_proxy: "true"` EN MÊME TEMPS — les deux vont de pair.
   const params = new URLSearchParams({
     api_key: apiKey,
     url: url.toString(),
@@ -267,7 +442,6 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
     js_scenario: jsScenario,
     block_resources: "false",
     premium_proxy: "false",
-    country_code: "us",
   });
 
   const endpoint = `${SCRAPINGBEE_ENDPOINT}?${params.toString()}`;
@@ -303,13 +477,13 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
 
     if (response.status === 401 || response.status === 403) {
       throw new CloneFetchError(
-        "scrapingbee-missing-key",
+        "scraper-missing-key",
         "Clé ScrapingBee invalide ou expirée"
       );
     }
     if (response.status === 402 || response.status === 429) {
       throw new CloneFetchError(
-        "scrapingbee-quota",
+        "scraper-quota",
         "Quota ScrapingBee dépassé (1000 crédits/mois gratuit)"
       );
     }
@@ -319,9 +493,13 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
         `Site cible inaccessible (HTTP ${response.status})`
       );
     }
+    // 🆕 Le corps de la réponse est remonté dans le message : un « HTTP 400 »
+    // sec était indébogable côté utilisateur (c'est exactement ce qui a masqué
+    // le conflit country_code / premium_proxy). ScrapingBee y met la raison
+    // exacte du rejet.
     throw new CloneFetchError(
       "scraping-blocked",
-      `ScrapingBee a renvoyé HTTP ${response.status}`
+      `ScrapingBee a renvoyé HTTP ${response.status}${errorBody ? ` — ${errorBody.slice(0, 200)}` : ""}`
     );
   }
 
@@ -390,7 +568,7 @@ async function fetchViaNative(url: URL): Promise<FetchedPage> {
     if (response.status === 403 || response.status === 401) {
       throw new CloneFetchError(
         "scraping-blocked",
-        `Site protégé (HTTP ${response.status}) - configurez SCRAPINGBEE_API_KEY pour bypass`
+        `Site protégé (HTTP ${response.status}) — configurez SCRAPINGDOG_API_KEY (ou SCRAPINGBEE_API_KEY) pour le contourner`
       );
     }
     throw new CloneFetchError(
