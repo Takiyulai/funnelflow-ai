@@ -4,6 +4,7 @@ import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getPageBySlug } from "@/lib/funnels/types";
 import { resolvePublicCustomCode } from "@/lib/funnels/customCode";
 import { CustomCodeBlock } from "@/components/funnel/CustomCodeBlock";
+import { serveAbVariant } from "@/lib/ab/serve";
 import PublishedFunnelView from "../PublishedFunnelView";
 
 // 🆕 CORRECTIF FIABILITÉ PUBLICATION — pages secondaires DYNAMIQUES (lecture
@@ -30,10 +31,18 @@ export default async function PublishedFunnelSubPage({
   // 🆕 VAGUE CUSTOM-CODE — même résolution serveur que la page d'entrée.
   const customCode = await resolvePublicCustomCode(published.funnel, published.ownerId);
 
+  // 🆕 MODULE 3 — Même résolution A/B que la page d'entrée : un test peut
+  // porter sur n'importe quelle page du tunnel, pas seulement la première.
+  const { page: activePage } = await serveAbVariant(
+    published.funnelId,
+    published.ownerId,
+    page,
+  );
+
   return (
     <>
       <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
-      <PublishedFunnelView funnel={published.funnel} activePage={page} />
+      <PublishedFunnelView funnel={published.funnel} activePage={activePage} />
       <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
     </>
   );

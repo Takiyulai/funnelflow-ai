@@ -7,6 +7,7 @@ import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
 import { runLeadCreatedWorkflows, runWorkflowsForEvent, semanticEventForSubmission } from "@/lib/workflows/engine";
 import { dispatchDueEmailsNow } from "@/lib/crm/deliverScheduled";
 import { rateLimit } from "@/lib/rate-limit";
+import { recordAbConversion } from "@/lib/ab/serve";
 
 // ─── Schéma de validation ─────────────────────────────────────────────
 const leadSchema = z.object({
@@ -163,6 +164,28 @@ export async function POST(request: Request) {
   if (insertErr) {
     console.error("[api/leads] insert error", insertErr);
     return NextResponse.json({ ok: false, error: "db_insert_error" }, { status: 500 });
+  }
+
+  // 4bis. 🆕 MODULE 3 — Conversion A/B, si un test tourne sur la page où le
+  //       formulaire a été soumis. Le test est indexé par ID de page, pas par
+  //       slug : on résout donc l'un vers l'autre à partir du contenu publié.
+  //       Non bloquant, comme tout ce qui suit l'insertion du lead.
+  try {
+    const content = funnel.published_content as {
+      pages?: Array<{ id?: string; slug?: string; isHome?: boolean }>;
+    } | null;
+    const pages = content?.pages ?? [];
+    const submittedPage = payload.pageSlug
+      ? pages.find(
+          (p) => p.slug === payload.pageSlug || p.slug === `/${payload.pageSlug}`,
+        )
+      : pages.find((p) => p.isHome) ?? pages[0];
+
+    if (submittedPage?.id) {
+      await recordAbConversion(funnel.id, funnel.user_id, submittedPage.id);
+    }
+  } catch (abErr) {
+    console.warn("[api/leads] mesure A/B échouée (non bloquant):", abErr);
   }
 
   // 5. 🆕 Auto-tag : applique les tags configurés sur le formulaire (non bloquant).

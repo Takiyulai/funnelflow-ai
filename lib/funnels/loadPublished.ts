@@ -8,6 +8,9 @@ export type PublishedFunnel = {
   /** 🆕 VAGUE CUSTOM-CODE — Propriétaire du tunnel, requis pour la vérification
    *  de plan côté serveur avant injection du code personnalisé. */
   ownerId: string;
+  /** 🆕 MODULE 3 — Id du tunnel en base, requis pour retrouver un test A/B en
+   *  cours. Le contenu publié ne le porte pas : il faut la colonne. */
+  funnelId: string;
 };
 
 /**
@@ -32,20 +35,18 @@ export async function getPublishedFunnelBySlug(
   // faux 404 — dès que deux lignes matchent le slug). On exige un contenu publié
   // non nul. Ce chemin ne peut plus renvoyer 404 pour un tunnel réellement
   // publié à cause d'un doublon de slug ou d'un aléa de requête.
-  const lookup = async (
-    column: "published_slug" | "slug",
-  ): Promise<{ name: string; published_content: unknown; user_id: string } | null> => {
+  type Row = { id: string; name: string; published_content: unknown; user_id: string };
+
+  const lookup = async (column: "published_slug" | "slug"): Promise<Row | null> => {
     const { data } = await supabase
       .from("funnels")
-      .select("name, published_content, user_id")
+      .select("id, name, published_content, user_id")
       .eq(column, clean)
       .eq("status", "published")
       .not("published_content", "is", null)
       .order("published_at", { ascending: false })
       .limit(1);
-    return data && data.length > 0
-      ? (data[0] as { name: string; published_content: unknown; user_id: string })
-      : null;
+    return data && data.length > 0 ? (data[0] as Row) : null;
   };
 
   const row = (await lookup("published_slug")) ?? (await lookup("slug"));
@@ -54,5 +55,6 @@ export async function getPublishedFunnelBySlug(
     funnel: normalizeFunnel(row.published_content),
     name: row.name,
     ownerId: row.user_id,
+    funnelId: row.id,
   };
 }

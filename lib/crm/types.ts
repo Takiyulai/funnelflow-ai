@@ -57,6 +57,36 @@ export type ContactTag = {
   created_at: string;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 LISTES DE CONTACTS (db/crm-lists.sql)
+//
+// À ne pas confondre avec un Tag : le tag qualifie le contact (« chaud »,
+// « a demandé un devis »), la liste dit D'OÙ IL VIENT (quel import, quel
+// salon, quelle campagne). C'est ce qui permet de retrouver ensemble un lot
+// de contacts importés sans tunnel associé, au lieu de les voir se noyer
+// parmi les leads capturés par les tunnels.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Provenance d'une liste : fichier importé, ou création manuelle. */
+export type ContactListOrigin = "import" | "manuel";
+
+export type ContactList = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  origin: ContactListOrigin;
+  /** Libellé libre de provenance, recopié dans `leads.source`. */
+  source_label: string | null;
+  color: string;
+  /** Date du dernier import ayant alimenté la liste (null si manuelle). */
+  imported_at: string | null;
+  created_at: string;
+};
+
+/** Liste enrichie de son nombre de contacts (affichage des compteurs). */
+export type ContactListWithCount = ContactList & { contactsCount: number };
+
 /** any = au moins un tag (OU), all = tous les tags (ET). */
 export type SegmentMatch = "any" | "all";
 
@@ -117,8 +147,10 @@ export type EmailSend = {
   created_at: string;
 };
 
-/** Contact enrichi de ses tags (pour l'affichage liste/fiche). */
-export type ContactWithTags = Contact & { tags: Tag[] };
+/** Contact enrichi de ses tags (pour l'affichage liste/fiche).
+ *  🆕 `lists` est OPTIONNEL : tout le code écrit avant les listes continue de
+ *  construire des `ContactWithTags` sans ce champ (compatibilité ascendante). */
+export type ContactWithTags = Contact & { tags: Tag[]; lists?: ContactList[] };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🆕 ÉTAPE 4 — Génération de séquences email par IA (génération seule, en

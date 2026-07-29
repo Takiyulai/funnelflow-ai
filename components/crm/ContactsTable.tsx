@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Trash2, Eye, X, Download, Upload, Settings2 } from "lucide-react";
+import { Plus, Search, Trash2, Eye, X, Download, Upload, Settings2, FolderPlus, Users, List, Columns3 } from "lucide-react";
+import { ContactsKanban } from "@/components/crm/ContactsKanban";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { waMeLink } from "@/lib/crm/phone";
@@ -11,7 +12,7 @@ import { CountrySelect } from "@/components/crm/CountrySelect";
 import { WhatsAppIcon } from "@/components/crm/WhatsAppIcon";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
 import { CustomFieldsSettings } from "@/components/leads/CustomFieldsSettings";
-import type { ContactWithTags, Tag, LeadStatus } from "@/lib/crm/types";
+import type { ContactWithTags, ContactListWithCount, Tag, LeadStatus } from "@/lib/crm/types";
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
   nouveau: "Nouveau",
@@ -25,7 +26,9 @@ type Props = {
   initialContacts: ContactWithTags[];
   total: number;
   tags: Tag[];
-  filters: { q: string; tag: string; status: string; funnel?: string };
+  /** 🆕 Listes de contacts (provenance des lots importés). */
+  lists?: ContactListWithCount[];
+  filters: { q: string; tag: string; list?: string; status: string; funnel?: string };
   funnels?: { id: string; name: string }[];
   exportHref?: string;
 };
@@ -34,6 +37,7 @@ export function ContactsTable({
   initialContacts,
   total,
   tags,
+  lists = [],
   filters,
   funnels = [],
   exportHref,
@@ -41,6 +45,28 @@ export function ContactsTable({
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkTag, setBulkTag] = useState("");
+  // 🆕 Ajout en lot à une liste (symétrique du tag en lot).
+  const [bulkList, setBulkList] = useState("");
+
+  // 🆕 MODULE 2 — Vue courante, mémorisée d'une visite à l'autre. Initialisée à
+  // "liste" puis relue au montage : lire localStorage pendant le premier rendu
+  // provoquerait une divergence entre le HTML du serveur et celui du client.
+  const [view, setView] = useState<"liste" | "pipeline">("liste");
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("ff:leads-view");
+      if (saved === "pipeline" || saved === "liste") setView(saved);
+    } catch {
+      /* stockage indisponible : on reste en liste */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ff:leads-view", view);
+    } catch {
+      /* non bloquant */
+    }
+  }, [view]);
   const [newTag, setNewTag] = useState("");
   const [creatingTag, setCreatingTag] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -70,6 +96,37 @@ export function ContactsTable({
     } else {
       alert("Tagging en masse impossible.");
     }
+  }
+
+  // 🆕 Ajoute les contacts sélectionnés à une liste existante.
+  async function applyBulkList() {
+    if (!bulkList || selected.length === 0) return;
+    const res = await fetch("/api/crm/lists/assign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactIds: selected, listIds: [bulkList], action: "add" }),
+    });
+    if (res.ok) {
+      setSelected([]);
+      setBulkList("");
+      router.refresh();
+    } else {
+      alert("Ajout à la liste impossible.");
+    }
+  }
+
+  // 🆕 Construit un lien de filtre par liste en CONSERVANT les autres filtres
+  // actifs : cliquer sur une liste ne doit pas réinitialiser la recherche ou
+  // le statut déjà sélectionnés.
+  function listHref(listId: string): string {
+    const params = new URLSearchParams();
+    if (filters.q) params.set("q", filters.q);
+    if (filters.tag) params.set("tag", filters.tag);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.funnel) params.set("funnel", filters.funnel);
+    if (listId) params.set("list", listId);
+    const qs = params.toString();
+    return qs ? `/leads?${qs}` : "/leads";
   }
 
   // 🆕 Crée un nouveau tag, puis l'assigne aux contacts sélectionnés.
@@ -143,12 +200,32 @@ export function ContactsTable({
 
   return (
     <div className="animate-[fadeIn_0.4s_ease-out]">
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-ink">Leads &amp; Contacts</h1>
           <p className="mt-2 text-sm text-muted">{total} contact{total > 1 ? "s" : ""} dans votre CRM</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 🆕 MODULE 2 — Bascule Liste / Pipeline. Mêmes données, mêmes
+              filtres : seule la mise en forme change. */}
+          <div className="inline-flex rounded-lg border border-line p-0.5">
+            {([
+              { id: "liste" as const, label: "Liste", Icon: List },
+              { id: "pipeline" as const, label: "Pipeline", Icon: Columns3 },
+            ]).map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setView(id)}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                  view === id ? "bg-inverse text-inverse-ink" : "text-muted hover:text-ink"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
           <Button variant="secondary" onClick={() => setManagingFields(true)} title="Champs personnalisés">
             <Settings2 className="h-4 w-4" />
             Champs personnalisés
@@ -169,6 +246,61 @@ export function ContactsTable({
           </Button>
         </div>
       </div>
+
+      {/* 🆕 BANDEAU DES LISTES — au-dessus du tableau, pas caché dans un menu.
+          C'est la réponse au problème des contacts importés qui se noyaient :
+          on voit d'un coup d'œil quels lots existent et combien ils pèsent,
+          et un clic isole le lot. */}
+      {lists.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+            <Users size={13} /> Listes
+          </span>
+          <Link
+            href={listHref("")}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              !filters.list
+                ? "border-accent bg-accent-soft text-accent-ink"
+                : "border-line text-muted hover:border-accent hover:text-ink"
+            }`}
+          >
+            {/* Le compteur n'est affiché que hors filtre : `total` est le
+                total FILTRÉ, l'afficher à côté de « Tous » pendant qu'une
+                liste est sélectionnée annoncerait un chiffre faux. */}
+            Tous{!filters.list && !filters.tag && !filters.status && !filters.q ? ` (${total})` : ""}
+          </Link>
+          {lists.map((l) => {
+            const active = filters.list === l.id;
+            return (
+              <Link
+                key={l.id}
+                href={listHref(l.id)}
+                title={
+                  l.origin === "import"
+                    ? `Importée${l.imported_at ? ` le ${new Date(l.imported_at).toLocaleDateString("fr-FR")}` : ""}`
+                    : "Liste créée manuellement"
+                }
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  active ? "text-ink" : "text-muted hover:text-ink"
+                }`}
+                style={
+                  active
+                    ? { borderColor: l.color, background: `${l.color}22` }
+                    : { borderColor: `${l.color}55` }
+                }
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: l.color }}
+                  aria-hidden
+                />
+                {l.name}
+                <span className="opacity-60">({l.contactsCount})</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden">
         {/* Filtres (navigation GET native) */}
@@ -195,6 +327,18 @@ export function ContactsTable({
               <option value="">Tous tunnels</option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          )}
+          {lists.length > 0 && (
+            <select
+              name="list"
+              defaultValue={filters.list ?? ""}
+              className="px-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+            >
+              <option value="">Toutes les listes</option>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
               ))}
             </select>
           )}
@@ -226,7 +370,9 @@ export function ContactsTable({
           </button>
         </form>
 
-        {selected.length > 0 && (
+        {/* Barre d'actions en lot : propre à la vue Liste, qui seule permet de
+            cocher des lignes. */}
+        {view === "liste" && selected.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 border-b border-line bg-[#FFF8E6] px-4 py-3">
             <span className="text-sm font-semibold text-ink">{selected.length} sélectionné(s)</span>
             <select
@@ -272,6 +418,31 @@ export function ContactsTable({
               {creatingTag ? "Création…" : "Créer & ajouter"}
             </button>
 
+            {lists.length > 0 && (
+              <>
+                <span className="text-sm text-muted">ou</span>
+                <select
+                  value={bulkList}
+                  onChange={(e) => setBulkList(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+                >
+                  <option value="">Ajouter à une liste…</option>
+                  {lists.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={applyBulkList}
+                  disabled={!bulkList}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#08498D] text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  Ajouter
+                </button>
+              </>
+            )}
+
             <button
               type="button"
               onClick={() => setSelected([])}
@@ -282,6 +453,14 @@ export function ContactsTable({
           </div>
         )}
 
+        {view === "pipeline" ? (
+          <div className="border-t border-line p-4">
+            <ContactsKanban
+              contacts={initialContacts}
+              onChanged={() => router.refresh()}
+            />
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -296,6 +475,7 @@ export function ContactsTable({
                 </th>
                 <th className="px-4 py-3 font-bold">Contact</th>
                 <th className="px-4 py-3 font-bold">Téléphone</th>
+                {lists.length > 0 && <th className="px-4 py-3 font-bold">Liste</th>}
                 <th className="px-4 py-3 font-bold">Tags</th>
                 <th className="px-4 py-3 font-bold">Statut</th>
                 <th className="px-4 py-3 font-bold text-right">Actions</th>
@@ -304,8 +484,10 @@ export function ContactsTable({
             <tbody>
               {initialContacts.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted">
-                    Aucun contact. Créez-en un ou laissez vos tunnels en capturer.
+                  <td colSpan={lists.length > 0 ? 7 : 6} className="px-4 py-10 text-center text-muted">
+                    {filters.list
+                      ? "Aucun contact dans cette liste."
+                      : "Aucun contact. Créez-en un ou laissez vos tunnels en capturer."}
                   </td>
                 </tr>
               )}
@@ -346,6 +528,22 @@ export function ContactsTable({
                         <span className="text-muted">—</span>
                       )}
                     </td>
+                    {lists.length > 0 && (
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {(c.lists ?? []).length === 0 && <span className="text-muted">—</span>}
+                          {(c.lists ?? []).map((l) => (
+                            <span
+                              key={l.id}
+                              className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                              style={{ background: `${l.color}22`, color: l.color }}
+                            >
+                              {l.name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {c.tags.length === 0 && <span className="text-muted">—</span>}
@@ -390,6 +588,7 @@ export function ContactsTable({
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       {/* Modal création */}

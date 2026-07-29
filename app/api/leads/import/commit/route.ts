@@ -7,8 +7,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listCustomFieldDefs } from "@/lib/crm/customFields";
+import { getOrCreateContactList, addContactsToLists } from "@/lib/crm/lists";
 import { buildLeadRows, type TargetField } from "@/lib/import/leadsImport";
 import type { ParsedTable } from "@/lib/import/csv";
+import type { LeadStatus } from "@/lib/crm/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,12 +18,19 @@ export const runtime = "nodejs";
 const INSERT_CHUNK = 500;
 const MAX_ROWS = 20_000;
 
+const VALID_STATUSES: LeadStatus[] = ["nouveau", "contacte", "qualifie", "client", "perdu"];
+
 type Body = {
   headers?: unknown;
   rows?: unknown;
   mapping?: unknown;
   funnelId?: unknown;
   dedupeOn?: unknown;
+  /** 🆕 Classement du lot importé (voir lib/crm/lists.ts). */
+  listId?: unknown;
+  listName?: unknown;
+  sourceLabel?: unknown;
+  defaultStatus?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -47,6 +56,22 @@ export async function POST(request: Request) {
     .map((r) => r.map((v) => (v === null || v === undefined ? "" : String(v))));
   const funnelId = typeof body.funnelId === "string" && body.funnelId ? body.funnelId : null;
   const dedupeOn = body.dedupeOn === "phone" ? "phone" : "email";
+
+  // 🆕 Classement du lot. `listId` cible une liste existante, `listName` en
+  // crée/réutilise une par son nom. Les deux sont facultatifs : un import sans
+  // classement reste possible et se comporte exactement comme avant.
+  const listId = typeof body.listId === "string" && body.listId ? body.listId : null;
+  const listName = typeof body.listName === "string" ? body.listName.trim() : "";
+  const sourceLabel =
+    typeof body.sourceLabel === "string" && body.sourceLabel.trim()
+      ? body.sourceLabel.trim().slice(0, 80)
+      : null;
+  // On ne fait JAMAIS confiance au statut envoyé par le client : une valeur
+  // hors énumération passerait la contrainte applicative et polluerait les
+  // filtres du CRM.
+  const defaultStatus: LeadStatus = VALID_STATUSES.includes(body.defaultStatus as LeadStatus)
+    ? (body.defaultStatus as LeadStatus)
+    : "nouveau";
 
   if (headers.length === 0 || mapping.length !== headers.length) {
     return NextResponse.json({ ok: false, error: "headers_mapping_mismatch" }, { status: 400 });
@@ -120,9 +145,53 @@ export async function POST(request: Request) {
       toInsert.push(row);
     }
 
+    // ── Résolution de la liste de destination ─────────────────────────────
+    // Faite AVANT l'insertion : si le nom de liste est invalide, autant le
+    // savoir avant d'avoir écrit 3 000 contacts qu'on ne saurait plus
+    // regrouper.
+    const insertErrors: string[] = [];
+    let targetListId: string | null = null;
+    let targetListName: string | null = null;
+    if (listId || listName) {
+      try {
+        if (listId) {
+          // La RLS filtre déjà sur le propriétaire : une liste d'un autre
+          // compte ressort simplement introuvable.
+          const { data: owned } = await sb
+            .from("crm_lists")
+            .select("id, name")
+            .eq("id", listId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (owned) {
+            targetListId = (owned as { id: string }).id;
+            targetListName = (owned as { name: string }).name;
+            await sb
+              .from("crm_lists")
+              .update({ imported_at: new Date().toISOString() })
+              .eq("user_id", user.id)
+              .eq("id", targetListId);
+          }
+        } else {
+          const list = await getOrCreateContactList(sb, user.id, listName, {
+            origin: "import",
+            sourceLabel,
+          });
+          targetListId = list.id;
+          targetListName = list.name;
+        }
+      } catch (e) {
+        // Un échec de classement ne doit pas annuler l'import : les contacts
+        // sont la valeur, le rangement se rattrape à la main.
+        insertErrors.push(
+          `Classement dans la liste impossible : ${e instanceof Error ? e.message : "erreur inconnue"}`,
+        );
+      }
+    }
+
     // ── Insertion par lots ────────────────────────────────────────────────
     let imported = 0;
-    const insertErrors: string[] = [];
+    const insertedIds: string[] = [];
     for (let i = 0; i < toInsert.length; i += INSERT_CHUNK) {
       const chunk = toInsert.slice(i, i + INSERT_CHUNK).map((r) => ({
         user_id: user.id,
@@ -132,17 +201,43 @@ export async function POST(request: Request) {
         first_name: r.first_name,
         last_name: r.last_name,
         phone: r.phone,
-        status: r.status || "nouveau",
-        source: r.source || "import",
+        // Le statut du fichier prime ; à défaut, celui choisi dans l'écran
+        // d'import ; à défaut « nouveau ».
+        status: r.status || defaultStatus,
+        // Idem pour la source : la colonne du fichier prime, sinon le libellé
+        // de provenance saisi, sinon « import ».
+        source: r.source || sourceLabel || "import",
         custom_fields: r.custom_fields,
         consent: false,
       }));
-      const { error, count } = await sb.from("leads").insert(chunk, { count: "exact" });
+      // `select("id")` : on a besoin des identifiants pour rattacher les
+      // contacts à la liste juste après.
+      const { data, error } = await sb.from("leads").insert(chunk).select("id");
       if (error) {
         insertErrors.push(error.message);
         continue;
       }
-      imported += count ?? chunk.length;
+      const ids = (data ?? []).map((r: { id: string }) => r.id);
+      insertedIds.push(...ids);
+      imported += ids.length || chunk.length;
+    }
+
+    // ── Rattachement à la liste ───────────────────────────────────────────
+    if (targetListId && insertedIds.length > 0) {
+      try {
+        for (let i = 0; i < insertedIds.length; i += INSERT_CHUNK) {
+          await addContactsToLists(
+            sb,
+            user.id,
+            insertedIds.slice(i, i + INSERT_CHUNK),
+            [targetListId],
+          );
+        }
+      } catch (e) {
+        insertErrors.push(
+          `Contacts importés mais non rattachés à la liste : ${e instanceof Error ? e.message : "erreur inconnue"}`,
+        );
+      }
     }
 
     return NextResponse.json({
@@ -152,6 +247,8 @@ export async function POST(request: Request) {
       errors: [...buildErrors.map((e) => `Ligne ${e.row} : ${e.message}`), ...insertErrors].slice(0, 50),
       totalErrors: buildErrors.length + insertErrors.length,
       totalRows: rows.length,
+      listId: targetListId,
+      listName: targetListName,
     });
   } catch (e) {
     return NextResponse.json(

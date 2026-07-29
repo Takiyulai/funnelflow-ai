@@ -101,6 +101,23 @@
   --ff-brand-green: #31845C;
   --ff-brand-gold: #C7A436;
   --ff-brand-blue: #08498D;
+
+  /* ── Surface INVERSE (aplat plein + son encre) ─────────────────────────
+     Pour les pastilles, bulles et boutons neutres qui doivent trancher sur
+     la page : puce numérotée, bulle de message sortant, bouton d'envoi.
+
+     ⚠️ POURQUOI CE JETON EXISTE. Le réflexe naturel est d'écrire
+     `bg-ash-950 text-white`. Ça marche en clair… et ça casse en sombre : la
+     rampe `ash` s'inverse, `ash-950` devient PRESQUE BLANC, et le
+     `text-white` posé dessus devient invisible. C'est exactement le bug des
+     ronds d'onboarding « blancs au lieu de numérotés » et des boutons au
+     libellé effacé.
+
+     La paire ci-dessous bascule ENSEMBLE : fond et texte restent toujours
+     contrastés, dans les deux thèmes. Utiliser `bg-inverse text-inverse-ink`
+     et JAMAIS `bg-ash-950 text-white`. */
+  --ff-inverse: var(--ash-950);
+  --ff-inverse-ink: var(--ash-0);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -150,6 +167,14 @@
   --ff-line: var(--ash-200);
   --ff-canvas: var(--ash-25);
   --ff-surface: var(--ash-0);
+
+  /* ⚠️ Redéclaration OBLIGATOIRE, et non un oubli de factorisation : une
+     variable CSS est substituée au moment du calcul, sur l'élément qui la
+     déclare. `--ff-inverse: var(--ash-950)` posé sur :root fige la valeur
+     CLAIRE et l'héritage la transmettrait telle quelle ici. C'est la même
+     raison qui impose de redéclarer --ff-ink et ses voisins juste au-dessus. */
+  --ff-inverse: var(--ash-950);
+  --ff-inverse-ink: var(--ash-0);
 
   color: var(--ff-ink);
   background: var(--ff-canvas);

@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listContacts } from "@/lib/crm/contacts";
 import { listTags } from "@/lib/crm/tags";
+import { listContactLists } from "@/lib/crm/lists";
 import { ContactsTable } from "@/components/crm/ContactsTable";
 import type { LeadStatus } from "@/lib/crm/types";
 
@@ -14,6 +15,8 @@ type SearchParams = Promise<{
   funnel?: string;
   q?: string;
   tag?: string;
+  /** 🆕 Filtre par liste de contacts (provenance d'un lot importé). */
+  list?: string;
 }>;
 
 export default async function LeadsPage({
@@ -31,15 +34,17 @@ export default async function LeadsPage({
   const status = (sp.status as LeadStatus | undefined) || undefined;
   const funnelFilter = sp.funnel || undefined;
 
-  const [{ contacts, total }, tags, funnelsRes, kpiQueries] = await Promise.all([
+  const [{ contacts, total }, tags, lists, funnelsRes, kpiQueries] = await Promise.all([
     listContacts(sb, user.id, {
       search: sp.q || undefined,
       tagId: sp.tag || undefined,
+      listId: sp.list || undefined,
       status,
       funnelId: funnelFilter,
       limit: 200,
     }),
     listTags(sb, user.id),
+    listContactLists(sb, user.id),
     sb.from("funnels").select("id, name").eq("user_id", user.id).order("name"),
     Promise.all([
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -76,11 +81,13 @@ export default async function LeadsPage({
         initialContacts={contacts}
         total={total}
         tags={tags}
+        lists={lists}
         funnels={funnels}
         exportHref={`/api/leads/export${funnelFilter ? `?funnelId=${funnelFilter}` : ""}`}
         filters={{
           q: sp.q ?? "",
           tag: sp.tag ?? "",
+          list: sp.list ?? "",
           status: sp.status ?? "",
           funnel: sp.funnel ?? "",
         }}

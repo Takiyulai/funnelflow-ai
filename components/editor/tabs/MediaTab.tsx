@@ -23,6 +23,7 @@ import type {
 } from "@/lib/funnels/types";
 import { compressImage, formatBytes } from "@/lib/images/compress";
 import { materializeSectionImage } from "@/lib/funnels/resolveMedia";
+import { FrameEditor } from "@/components/editor/FrameEditor";
 
 type Props = {
   section: FunnelSection;
@@ -392,6 +393,12 @@ export function MediaTab({ section, funnel, onChange }: Props) {
                 />
               </Field>
             )}
+
+            {/* 🆕 Habillage de l'image : bordure, arrondi, ombre, passe-partout. */}
+            <FrameEditor
+              frame={image?.frame}
+              onChange={(frame) => updateImage({ frame })}
+            />
 
             <Field label="Animation">
               <select

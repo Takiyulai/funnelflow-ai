@@ -25,6 +25,7 @@ import type {
   TimerItem,
 } from "@/lib/funnels/types";
 import { getVideoEmbed } from "@/lib/funnels/video";
+import { frameVars } from "@/lib/funnels/frames";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { TemplateThemeProvider } from "@/components/funnel/TemplateThemeProvider";
 import { effectiveLayoutVariant } from "@/lib/funnels/resolveMedia";
@@ -1730,6 +1731,11 @@ function HeroBlock({
           : {}),
         ...shadowStyleVar(shadowColor),
         ...bg.containerStyle,
+        // 🆕 Habillage images/cartes : variables consommées par funnel-theme.css
+        // sur `.ff-image` et `.ff-card`. Absentes si l'utilisateur n'a rien
+        // réglé → aucune règle ne s'applique, aucun tunnel existant ne bouge.
+        ...frameVars(section.image?.frame, "img"),
+        ...frameVars(section.style?.cardFrame, "card"),
       }}
     >
       {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (
@@ -2117,6 +2123,11 @@ function StandardSectionBlock({
           : {}),
         ...shadowStyleVar(shadowColor),
         ...bg.containerStyle,
+        // 🆕 Habillage images/cartes : variables consommées par funnel-theme.css
+        // sur `.ff-image` et `.ff-card`. Absentes si l'utilisateur n'a rien
+        // réglé → aucune règle ne s'applique, aucun tunnel existant ne bouge.
+        ...frameVars(section.image?.frame, "img"),
+        ...frameVars(section.style?.cardFrame, "card"),
       }}
     >
       {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (

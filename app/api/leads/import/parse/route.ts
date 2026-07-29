@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listCustomFieldDefs } from "@/lib/crm/customFields";
+import { listContactLists } from "@/lib/crm/lists";
 import { parseCsv } from "@/lib/import/csv";
 import { parseXlsx } from "@/lib/import/xlsx";
 import { suggestMapping, FIXED_TARGET_FIELDS } from "@/lib/import/leadsImport";
@@ -70,8 +71,24 @@ export async function POST(request: Request) {
     const truncated = totalRows > MAX_ROWS;
     const rows = truncated ? table.rows.slice(0, MAX_ROWS) : table.rows;
 
-    const customFields = await listCustomFieldDefs(sb, user.id);
+    // 🆕 Les listes existantes sont renvoyées avec l'aperçu : l'étape de
+    // mapping doit pouvoir proposer « ajouter à une liste existante » sans
+    // second aller-retour réseau.
+    const [customFields, lists] = await Promise.all([
+      listCustomFieldDefs(sb, user.id),
+      listContactLists(sb, user.id),
+    ]);
     const suggestedMapping = suggestMapping(table.headers);
+
+    // 🆕 Nom de lot proposé par défaut : le nom du fichier sans extension.
+    // C'est ce que l'utilisateur reconnaît le plus vite (« prospects-salon »),
+    // bien mieux qu'un « Import du 29/07 » anonyme quand il en fait plusieurs
+    // le même jour. On retombe sur la date si le nom est inexploitable.
+    const baseName = (file.name || "").replace(/\.[^.]+$/, "").trim();
+    const suggestedListName =
+      baseName.length >= 2
+        ? baseName.slice(0, 60)
+        : `Import du ${new Date().toLocaleDateString("fr-FR")}`;
 
     return NextResponse.json({
       ok: true,
@@ -82,6 +99,8 @@ export async function POST(request: Request) {
       suggestedMapping,
       fixedTargetFields: FIXED_TARGET_FIELDS,
       customFields,
+      lists,
+      suggestedListName,
     });
   } catch (e) {
     return NextResponse.json(

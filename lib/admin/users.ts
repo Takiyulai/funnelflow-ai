@@ -196,3 +196,62 @@ export async function setUserActive(admin: SupabaseClient, id: string, active: b
   });
   if (authError) throw new Error(authError.message);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🆕 ACTIONS ADMIN SUPPLÉMENTAIRES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** URL publique de l'app, pour construire le lien de réinitialisation.
+ *  Même cascade que lib/crm/emailTracking.ts : réglage explicite d'abord, puis
+ *  les variables fournies automatiquement par Vercel — sinon le mail partirait
+ *  avec un lien vers localhost. */
+function resolveAppUrl(): string {
+  const explicit = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const prodDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodDomain) return `https://${prodDomain.replace(/\/+$/, "")}`;
+  const deployUrl = process.env.VERCEL_URL;
+  if (deployUrl) return `https://${deployUrl.replace(/\/+$/, "")}`;
+  return "";
+}
+
+/**
+ * Envoie à l'utilisateur le mail de réinitialisation de mot de passe.
+ *
+ * ⚠️ L'admin ne voit JAMAIS le mot de passe et n'en définit aucun : on
+ * déclenche le même flux que le « mot de passe oublié » de la page de
+ * connexion. C'est le seul schéma acceptable — un admin qui choisirait le mot
+ * de passe d'un client pourrait ensuite se connecter à sa place.
+ *
+ * Le lien atterrit sur /reset-password, la page qui permet de SAISIR le
+ * nouveau mot de passe (cf. components/auth/AuthForm.tsx).
+ */
+export async function sendPasswordResetEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<void> {
+  const base = resolveAppUrl();
+  const { error } = await admin.auth.resetPasswordForEmail(email, {
+    redirectTo: base ? `${base}/reset-password` : undefined,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Supprime DÉFINITIVEMENT un compte.
+ *
+ * ⚠️ IRRÉVERSIBLE, contrairement à `setUserActive(false)` qui bannit
+ * temporairement. Réservé aux demandes de suppression (RGPD) et aux comptes
+ * de test. L'appelant DOIT avoir fait confirmer l'action par la saisie de
+ * l'email exact — la vérification est faite côté route, pas ici.
+ *
+ * On supprime l'utilisateur Auth : les tables applicatives référencent
+ * `auth.users(id) on delete cascade`, leurs lignes partent donc avec lui
+ * (tunnels, leads, listes, workflows…). La ligne `public.users` est retirée
+ * ensuite par sécurité, au cas où sa contrainte aurait été posée sans cascade.
+ */
+export async function deleteAdminUser(admin: SupabaseClient, id: string): Promise<void> {
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) throw new Error(error.message);
+  await admin.from("users").delete().eq("id", id);
+}

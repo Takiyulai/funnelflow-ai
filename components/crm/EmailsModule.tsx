@@ -10,14 +10,15 @@
 // composant Campagnes actuel, migré tel quel.
 
 import { useState } from "react";
-import { Mail, Workflow } from "lucide-react";
+import { Mail, Workflow, AtSign } from "lucide-react";
 import { CampaignsClient } from "@/components/crm/CampaignsClient";
 import { SequencesClient } from "@/components/crm/SequencesClient";
 import { EmailStatsBand } from "@/components/crm/EmailStatsBand";
+import { SendingDomainPanel } from "@/components/crm/SendingDomainPanel";
 import type { Campaign } from "@/lib/crm/types";
 import { EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
 
-type Tab = "newsletter" | "sequences";
+type Tab = "newsletter" | "sequences" | "expediteur";
 
 export type PublishedFunnelOption = { id: string; name: string };
 
@@ -75,6 +76,7 @@ export function EmailsModule({
       <div className="inline-flex w-fit gap-1 rounded-xl border border-line/60 bg-white/50 p-1">
         {tabBtn("newsletter", "Newsletter / Diffusions", Mail)}
         {tabBtn("sequences", "Séquences", Workflow)}
+        {tabBtn("expediteur", "Expéditeur", AtSign)}
       </div>
 
       {/* 🆕 On garde les DEUX onglets montés (masqués en CSS) pour ne pas perdre
@@ -91,6 +93,10 @@ export function EmailsModule({
       <div className={tab === "sequences" ? "" : "hidden"}>
         <SequencesClient publishedFunnels={publishedFunnels} />
       </div>
+      {/* 🆕 Monté seulement à l'ouverture : l'état du domaine vient d'un appel
+          réseau qu'il est inutile de déclencher pour tout le monde à chaque
+          visite de l'onglet Newsletter. */}
+      {tab === "expediteur" && <SendingDomainPanel />}
     </div>
   );
 }

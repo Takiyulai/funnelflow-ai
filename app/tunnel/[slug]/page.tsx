@@ -4,6 +4,7 @@ import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
 import { getHomePage } from "@/lib/funnels/types";
 import { resolvePublicCustomCode } from "@/lib/funnels/customCode";
 import { CustomCodeBlock } from "@/components/funnel/CustomCodeBlock";
+import { serveAbVariant } from "@/lib/ab/serve";
 import PublishedFunnelView from "./PublishedFunnelView";
 
 // 🆕 CORRECTIF FIABILITÉ PUBLICATION — la page publique est DYNAMIQUE (lecture
@@ -31,6 +32,14 @@ export default async function PublishedFunnelPage({
   // 🆕 Rendu unifié via FunnelPreview (parité exacte avec l'aperçu).
   const home = getHomePage(published.funnel);
 
+  // 🆕 MODULE 3 — Si un test A/B tourne sur cette page, `activePage` porte les
+  // sections de la variante affectée à ce visiteur, et la vue est comptée.
+  // Sans test en cours (cas courant), la page ressort inchangée.
+  const served = home
+    ? await serveAbVariant(published.funnelId, published.ownerId, home)
+    : null;
+  const activePage = served?.page ?? home;
+
   // 🆕 VAGUE CUSTOM-CODE — Résolu CÔTÉ SERVEUR (kill switch + plan Agency du
   // propriétaire + taille). null pour tout autre plan, quoi que contienne le JSON.
   const customCode = await resolvePublicCustomCode(published.funnel, published.ownerId);
@@ -38,7 +47,7 @@ export default async function PublishedFunnelPage({
   return (
     <>
       <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
-      <PublishedFunnelView funnel={published.funnel} activePage={home} />
+      <PublishedFunnelView funnel={published.funnel} activePage={activePage} />
       <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
     </>
   );

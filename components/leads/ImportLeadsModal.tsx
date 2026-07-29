@@ -4,11 +4,20 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, Plus, Loader2 } from "lucide-react";
+import { X, Upload, Plus, Loader2, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { TargetField } from "@/lib/import/leadsImport";
+import type { ContactListWithCount, LeadStatus } from "@/lib/crm/types";
 
 type CustomFieldOption = { id: string; field_key: string; label: string };
+
+const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
+  { value: "nouveau", label: "Nouveau" },
+  { value: "contacte", label: "Contacté" },
+  { value: "qualifie", label: "Qualifié" },
+  { value: "client", label: "Client" },
+  { value: "perdu", label: "Perdu" },
+];
 
 type ParseResponse = {
   ok: true;
@@ -19,6 +28,9 @@ type ParseResponse = {
   suggestedMapping: TargetField[];
   fixedTargetFields: { key: string; label: string; required?: boolean }[];
   customFields: CustomFieldOption[];
+  /** 🆕 Listes existantes + nom de lot suggéré (dérivé du nom de fichier). */
+  lists: ContactListWithCount[];
+  suggestedListName: string;
 };
 
 type CommitResponse = {
@@ -28,6 +40,8 @@ type CommitResponse = {
   errors: string[];
   totalErrors: number;
   totalRows: number;
+  listId: string | null;
+  listName: string | null;
 };
 
 type Step = "pick" | "mapping" | "result";
@@ -54,6 +68,14 @@ export function ImportLeadsModal({
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [result, setResult] = useState<CommitResponse | null>(null);
 
+  // 🆕 Classement du lot importé. `listChoice` vaut "__new__" (créer une
+  // nouvelle liste, cas par défaut) ou l'id d'une liste existante.
+  const [lists, setLists] = useState<ContactListWithCount[]>([]);
+  const [listChoice, setListChoice] = useState<string>("__new__");
+  const [listName, setListName] = useState("");
+  const [sourceLabel, setSourceLabel] = useState("");
+  const [defaultStatus, setDefaultStatus] = useState<LeadStatus>("nouveau");
+
   async function handleFile(file: File) {
     setBusy(true);
     setError(null);
@@ -69,6 +91,8 @@ export function ImportLeadsModal({
       setParsed(json);
       setMapping(json.suggestedMapping);
       setCustomFields(json.customFields);
+      setLists(json.lists ?? []);
+      setListName(json.suggestedListName ?? "");
       setStep("mapping");
     } catch {
       setError("Erreur réseau pendant la lecture du fichier.");
@@ -123,6 +147,12 @@ export function ImportLeadsModal({
           mapping,
           funnelId: funnelId || null,
           dedupeOn,
+          // Une seule des deux clés est renseignée : liste existante OU
+          // nouvelle liste par son nom. "__none__" = import non classé.
+          listId: listChoice === "__new__" || listChoice === "__none__" ? null : listChoice,
+          listName: listChoice === "__new__" ? listName.trim() : "",
+          sourceLabel: sourceLabel.trim(),
+          defaultStatus,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as CommitResponse & { error?: string };
@@ -141,6 +171,9 @@ export function ImportLeadsModal({
   }
 
   const hasEmailMapping = mapping.includes("email");
+  // Créer une liste sans lui donner de nom n'a pas de sens : on bloque plutôt
+  // que d'inventer un nom à la place de l'utilisateur.
+  const listReady = listChoice !== "__new__" || listName.trim().length > 0;
   const previewRows = parsed ? parsed.rows.slice(0, 8) : [];
 
   return (
@@ -192,6 +225,92 @@ export function ImportLeadsModal({
               {parsed.truncated ? " (seules les 20 000 premières seront importées)" : ""}. Associez chaque
               colonne à un champ.
             </p>
+
+            {/* 🆕 CLASSEMENT DU LOT — placé AVANT le mapping des colonnes, et
+                non après, parce que c'est la décision qui détermine si ces
+                contacts seront retrouvables plus tard. Reléguée en bas de
+                l'écran, elle serait systématiquement sautée. */}
+            <div className="rounded-xl border border-accent bg-accent-soft p-4">
+              <div className="flex items-start gap-2">
+                <FolderPlus size={16} className="mt-0.5 shrink-0 text-accent-ink" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-ink">Classer ces contacts</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Une liste regroupe les contacts d&apos;une même provenance.
+                    Sans elle, ces {parsed.totalRows} lignes se mélangeront aux
+                    leads capturés par tes tunnels, sans moyen de les isoler
+                    ensuite.
+                  </p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase text-muted">Liste</span>
+                      <select
+                        value={listChoice}
+                        onChange={(e) => setListChoice(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+                      >
+                        <option value="__new__">+ Nouvelle liste…</option>
+                        {lists.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name} ({l.contactsCount})
+                          </option>
+                        ))}
+                        <option value="__none__">Ne pas classer</option>
+                      </select>
+                    </label>
+
+                    {listChoice === "__new__" && (
+                      <label className="block">
+                        <span className="text-xs font-bold uppercase text-muted">
+                          Nom de la liste
+                        </span>
+                        <input
+                          value={listName}
+                          onChange={(e) => setListName(e.target.value)}
+                          placeholder="Salon Cotonou — juillet"
+                          className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase text-muted">
+                        Origine (optionnel)
+                      </span>
+                      <input
+                        value={sourceLabel}
+                        onChange={(e) => setSourceLabel(e.target.value)}
+                        placeholder="salon-cotonou"
+                        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+                      />
+                      <span className="mt-1 block text-[11px] text-muted">
+                        Recopié dans le champ « source » de chaque contact.
+                      </span>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase text-muted">
+                        Statut initial
+                      </span>
+                      <select
+                        value={defaultStatus}
+                        onChange={(e) => setDefaultStatus(e.target.value as LeadStatus)}
+                        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-[11px] text-muted">
+                        Utilisé seulement si le fichier n&apos;a pas de colonne statut.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
@@ -293,12 +412,17 @@ export function ImportLeadsModal({
                 Associez au moins une colonne au champ « Email » (obligatoire) pour continuer.
               </p>
             )}
+            {hasEmailMapping && !listReady && (
+              <p className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-ink">
+                Donnez un nom à la nouvelle liste, ou choisissez « Ne pas classer ».
+              </p>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setStep("pick")} disabled={busy}>
                 Retour
               </Button>
-              <Button onClick={confirmImport} disabled={busy || !hasEmailMapping}>
+              <Button onClick={confirmImport} disabled={busy || !hasEmailMapping || !listReady}>
                 {busy ? "Import en cours…" : `Importer ${parsed.totalRows} ligne${parsed.totalRows > 1 ? "s" : ""}`}
               </Button>
             </div>
@@ -307,6 +431,21 @@ export function ImportLeadsModal({
 
         {step === "result" && result && (
           <div className="grid gap-4">
+            {/* 🆕 On confirme explicitement OÙ les contacts ont atterri, avec
+                un lien direct vers la liste filtrée : sans ça, l'utilisateur
+                voit « 480 importés » et doit deviner où ils sont passés. */}
+            {result.listId && result.listName && (
+              <a
+                href={`/leads?list=${result.listId}`}
+                className="flex items-center gap-2 rounded-lg border border-accent bg-accent-soft px-3 py-2.5 text-sm text-ink transition hover:border-accent"
+              >
+                <FolderPlus size={15} className="shrink-0 text-accent-ink" />
+                <span className="min-w-0">
+                  Classés dans la liste{" "}
+                  <strong>{result.listName}</strong> — voir ces contacts
+                </span>
+              </a>
+            )}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg border border-line bg-canvas p-4">
                 <p className="text-2xl font-black text-ink">{result.imported}</p>

@@ -43,6 +43,19 @@ const config: Config = {
           contrast: "var(--ff-accent-contrast)",
         },
 
+        // Surface INVERSE + son encre, qui basculent ENSEMBLE entre les
+        // thèmes. À utiliser partout où l'on serait tenté d'écrire
+        // `bg-ash-950 text-white` — combinaison qui devient illisible en mode
+        // sombre (cf. le commentaire détaillé dans app/globals.css).
+        //
+        // ⚠️ Nommé `inverse` et non `solid` : un utilitaire `border-solid`
+        // existe déjà dans Tailwind (border-style) et serait écrasé par la
+        // classe de couleur générée.
+        inverse: {
+          DEFAULT: "var(--ff-inverse)",
+          ink: "var(--ff-inverse-ink)",
+        },
+
         // Sémantique : ÉTAT uniquement, jamais décoratif, jamais un CTA.
         success: {
           DEFAULT: "var(--ff-success)",

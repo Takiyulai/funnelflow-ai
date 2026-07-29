@@ -1712,6 +1712,42 @@
 [data-ff-template] [data-ff-shadow-scope="xl"] .ff-card,
 [data-ff-template] [data-ff-shadow-scope="xl"] .ff-card-elevated { box-shadow: 0 24px 48px color-mix(in srgb, var(--ff-shadow-color, #000) 40%, transparent); }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   🆕 18bis. HABILLAGE DES IMAGES ET DES CARTES (bordure, arrondi, ombre, marge)
+
+   Piloté par des variables posées sur la SECTION (cf. lib/funnels/frames.ts).
+   Placé APRÈS les règles de template pour pouvoir les surcharger : c'est un
+   réglage explicite de l'utilisateur, il doit gagner.
+
+   RÈGLE DE NON-RÉGRESSION. Chaque déclaration est conditionnée à la présence
+   de sa variable, via un sélecteur d'attribut sur le style inline de la
+   section. Sans réglage, aucune de ces règles ne s'applique et les tunnels
+   déjà publiés gardent exactement leur apparence — y compris les ombres et
+   bordures soignées propres à chaque template.
+   ═══════════════════════════════════════════════════════════════════════════ */
+[data-ff-template] [style*="--ff-img-radius"] .ff-image { border-radius: var(--ff-img-radius); }
+[data-ff-template] [style*="--ff-img-border-width"] .ff-image {
+  border-style: solid;
+  border-width: var(--ff-img-border-width);
+  border-color: var(--ff-img-border-color, currentColor);
+}
+[data-ff-template] [style*="--ff-img-shadow"] .ff-image { box-shadow: var(--ff-img-shadow); }
+[data-ff-template] [style*="--ff-img-padding"] .ff-image {
+  padding: var(--ff-img-padding);
+  box-sizing: border-box;
+}
+[data-ff-template] [style*="--ff-img-bg"] .ff-image { background-color: var(--ff-img-bg); }
+
+[data-ff-template] [style*="--ff-card-radius"] .ff-card { border-radius: var(--ff-card-radius); }
+[data-ff-template] [style*="--ff-card-border-width"] .ff-card {
+  border-style: solid;
+  border-width: var(--ff-card-border-width);
+  border-color: var(--ff-card-border-color, currentColor);
+}
+[data-ff-template] [style*="--ff-card-shadow"] .ff-card { box-shadow: var(--ff-card-shadow); }
+[data-ff-template] [style*="--ff-card-padding"] .ff-card { padding: var(--ff-card-padding); }
+[data-ff-template] [style*="--ff-card-bg"] .ff-card { background-color: var(--ff-card-bg); }
+
 /* ───────── 19. Split layout DESKTOP ───────── */
 @media (min-width: 768px) {
   [data-ff-template] .ff-section[data-ff-layout="split-text-image"] > div.relative,

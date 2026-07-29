@@ -23,7 +23,9 @@ function Step({
 }) {
   return (
     <li className="flex gap-3">
-      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ash-950 text-[11px] font-bold text-white">
+      {/* `bg-inverse text-inverse-ink` et non `bg-ash-950 text-white` : le
+          second donne un rond blanc au chiffre invisible en mode sombre. */}
+      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-inverse text-[11px] font-bold text-inverse-ink">
         {n}
       </span>
       <div className="min-w-0 flex-1">
@@ -84,7 +86,10 @@ export function TelegramConnect({ onConnected }: { onConnected: () => void }) {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    /* Aligné à GAUCHE (et non `mx-auto`) : centrer cette carte pendant que le
+       titre de page reste à gauche produisait le décalage visible signalé.
+       Cf. components/ui/PageHeader.tsx. */
+    <div className="max-w-2xl">
       <div className="rounded-xl border border-line bg-white p-6">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-info-soft text-info-ink">
@@ -163,11 +168,16 @@ export function TelegramConnect({ onConnected }: { onConnected: () => void }) {
           {error && (
             <p className="mt-2 text-xs text-danger-ink">{error}</p>
           )}
+          {/* CTA principal : aplat d'accent + encre, conformément à la règle
+              « l'or ne s'écrit pas sur du blanc » (cf. app/globals.css). Ce
+              couple reste lisible dans les deux thèmes, contrairement à
+              l'ancien `bg-ash-950 text-white` dont le libellé disparaissait en
+              mode sombre. */}
           <button
             type="button"
             onClick={connect}
             disabled={busy || token.trim().length < 20}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ash-950 px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-accent-contrast transition hover:opacity-90 disabled:opacity-40"
           >
             {busy ? (
               <>

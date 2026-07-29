@@ -273,7 +273,9 @@ export function MessagingInbox() {
                         m.direction === "out"
                           ? m.status === "failed"
                             ? "bg-danger-soft text-danger-ink"
-                            : "bg-ash-950 text-white"
+                            : // Paire inverse : bulle sortante lisible dans les
+                              // deux thèmes (cf. --ff-inverse dans globals.css).
+                              "bg-inverse text-inverse-ink"
                           : "bg-canvas text-ink"
                       }`}
                     >
@@ -312,7 +314,7 @@ export function MessagingInbox() {
                   type="button"
                   onClick={send}
                   disabled={sending || !draft.trim()}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ash-950 text-white transition hover:opacity-90 disabled:opacity-40"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent text-accent-contrast transition hover:opacity-90 disabled:opacity-40"
                   aria-label="Envoyer"
                 >
                   {sending ? (

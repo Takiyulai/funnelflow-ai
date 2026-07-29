@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Save, Undo2, Redo2, ExternalLink, Loader2,
-  Copy, Check, Globe, Rocket, Layers, Eye,
+  Copy, Check, Globe, Rocket, Layers, Eye, FlaskConical,
 } from "lucide-react";
 
 import { AppShell } from "@/components/dashboard/AppShell";
@@ -912,6 +912,23 @@ export default function EditorPage() {
               <ExternalLink className="h-3.5 w-3.5" />
               Aperçu
             </Link>
+
+            {/* 🆕 MODULE 3 — Point d'entrée vers l'A/B testing. Le panneau vit
+                dans les statistiques, où se trouvent les chiffres de
+                conversion qui permettent de juger un test ; mais c'est ICI
+                qu'on a l'idée de tester une accroche. Sans ce bouton, personne
+                ne découvrait la fonctionnalité.
+                Uniquement si le tunnel est PUBLIÉ : sans trafic, rien à mesurer. */}
+            {isPublished && activePage && (
+              <Link
+                href={`/funnels/${stored.id}/stats?abPage=${encodeURIComponent(activePage.id)}`}
+                title={`Tester la page « ${activePage.name} » en A/B`}
+                className="hidden lg:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                Tester
+              </Link>
+            )}
 
             <button
               onClick={handlePublish}

@@ -4,6 +4,9 @@ import { ArrowLeft, Eye, Users, Target, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Card } from "@/components/ui/Card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeFunnel } from "@/lib/store/normalizeFunnel";
+import { AbTestsPanel } from "@/components/funnel/AbTestsPanel";
+import type { FunnelPage } from "@/lib/funnels/types";
 
 // 🆕 VAGUE 1 / LOT 2 — Dashboard analytics v1 d'un tunnel : visites, visiteurs
 // uniques, leads, conversion par page, sources de trafic. Données 100 %
@@ -36,7 +39,9 @@ export default async function FunnelStatsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ days?: string }>;
+  // 🆕 `abPage` : id de page transmis par le bouton « Tester » de l'éditeur,
+  // pour arriver ici avec la bonne page déjà sélectionnée.
+  searchParams: Promise<{ days?: string; abPage?: string }>;
 }) {
   const { id: funnelId } = await params;
   const sp = await searchParams;
@@ -52,7 +57,7 @@ export default async function FunnelStatsPage({
 
   const { data: funnel, error: funnelErr } = await supabase
     .from("funnels")
-    .select("id, name, status, published_content")
+    .select("id, name, status, published_content, brief")
     .eq("id", funnelId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -70,6 +75,22 @@ export default async function FunnelStatsPage({
     if (typeof p?.slug === "string") pageNames.set(clean(p.slug), label || clean(p.slug));
   }
   if (!pageNames.has("")) pageNames.set("", "Page d'accueil");
+
+  // 🆕 MODULE 3 — Pages normalisées pour le panneau A/B. On part du contenu
+  // PUBLIÉ et non du brouillon : c'est lui que voient les visiteurs, donc la
+  // seule référence honnête pour la variante A.
+  let abPages: FunnelPage[] = [];
+  let abOfferName: string | undefined;
+  try {
+    if (funnel.published_content) {
+      abPages = normalizeFunnel(funnel.published_content).pages ?? [];
+    }
+    abOfferName = (funnel.brief as { offerName?: string } | null)?.offerName;
+  } catch (e) {
+    // Un contenu illisible ne doit pas faire tomber toute la page de stats :
+    // on renonce au panneau A/B, le reste s'affiche normalement.
+    console.error("[stats] normalisation du tunnel échouée :", e);
+  }
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data: rawStats, error: statsErr } = await supabase.rpc("funnel_stats_v1", {
@@ -259,6 +280,20 @@ export default async function FunnelStatsPage({
             )}
           </Card>
         </>
+      )}
+
+      {/* 🆕 MODULE 3 — Tests A/B. Placés ici et non dans l'éditeur : on décide
+          de tester une accroche en REGARDANT ses chiffres, pas en dessinant sa
+          page. Nécessite un tunnel publié — sans trafic, rien à mesurer. */}
+      {funnel.status === "published" && abPages.length > 0 && (
+        <div className="mt-6">
+          <AbTestsPanel
+            funnelId={funnelId}
+            pages={abPages}
+            offerName={abOfferName}
+            initialPageId={sp.abPage}
+          />
+        </div>
       )}
     </AppShell>
   );

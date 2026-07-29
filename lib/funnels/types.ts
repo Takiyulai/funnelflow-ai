@@ -162,6 +162,36 @@ export type ImageAnimation =
   | "float"
   | "pulse";
 
+/**
+ * 🆕 Habillage d'une image ou d'une carte : bordure, arrondi, ombre, marge
+ * intérieure.
+ *
+ * APPLIQUÉ PAR VARIABLES CSS, pas par classes. Les cartes sont rendues par des
+ * dizaines de composants de pattern différents ; leur passer des props aurait
+ * demandé de tous les modifier. À la place, la section racine porte des
+ * variables (`--ff-img-*`, `--ff-card-*`) que `app/funnel-theme.css` consomme
+ * sur `.ff-image` et `.ff-card`. Un seul bloc CSS couvre donc tous les
+ * templates et tous les patterns, présents comme futurs.
+ *
+ * Chaque champ est OPTIONNEL et sans valeur par défaut : une propriété absente
+ * laisse le thème décider, ce qui préserve l'apparence de tous les tunnels
+ * existants.
+ */
+export type VisualFrame = {
+  /** Rayon d'arrondi en px (0 = angles droits). */
+  radius?: number;
+  /** Épaisseur de bordure en px (0 = aucune). */
+  borderWidth?: number;
+  /** Couleur de bordure (hex ou rgba). */
+  borderColor?: string;
+  /** Intensité de l'ombre portée. */
+  shadow?: "none" | "sm" | "md" | "lg";
+  /** Marge intérieure en px : crée un passe-partout autour du contenu. */
+  padding?: number;
+  /** Couleur de fond, utile derrière une image détourée. */
+  backgroundColor?: string;
+};
+
 export type SectionImage = {
   mode: ImageMode;
   url?: string;
@@ -174,6 +204,8 @@ export type SectionImage = {
   customWidth?: number;
   animation?: ImageAnimation;
   mediaRef?: string;
+  /** 🆕 Habillage de l'image (bordure, arrondi, ombre…). */
+  frame?: VisualFrame;
 };
 
 export type SectionBackground = {
@@ -307,6 +339,10 @@ export type SectionStyle = {
   };
   /** 🆕 Affiche les puces/cartes numérotées (1, 2, 3…) au lieu d'icônes. */
   numberedBullets?: boolean;
+  /** 🆕 Habillage des CARTES de la section (bordure, arrondi, ombre…).
+   *  S'applique à tout élément `.ff-card` de la section, quel que soit le
+   *  pattern qui l'a produit. */
+  cardFrame?: VisualFrame;
 };
 
 export type AnimationPreset =

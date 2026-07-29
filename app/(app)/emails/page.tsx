@@ -26,7 +26,8 @@ export default async function EmailsPage({
   if (!user) redirect("/login");
 
   const { tab } = await searchParams;
-  const initialTab = tab === "sequences" ? "sequences" : "newsletter";
+  const initialTab =
+    tab === "sequences" ? "sequences" : tab === "expediteur" ? "expediteur" : "newsletter";
 
   // 🆕 Résilience : une coupure réseau ponctuelle vers Supabase (`fetch failed`)
   //    ne doit PAS crasher toute la route. On dégrade en état vide.

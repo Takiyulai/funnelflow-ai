@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { listAdminUsers } from "@/lib/admin/users";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
 import { AdminTabs } from "@/components/admin/AdminTabs";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +30,10 @@ export default async function AdminPage({
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-ink">Administration</h1>
-        <p className="mt-2 text-sm text-muted">
-          {total} compte{total > 1 ? "s" : ""} sur la plateforme. Réservé aux administrateurs.
-        </p>
-      </div>
+      <PageHeader
+        title="Administration"
+        subtitle={`${total} compte${total > 1 ? "s" : ""} sur la plateforme. Réservé aux administrateurs.`}
+      />
 
       <AdminTabs
         initialTab={initialTab}

@@ -147,11 +147,14 @@ export const PLANS: Record<PlanId, Plan> = {
       htmlExport: true,
       multiPlatform: true,
       clientWorkspaces: 0,
-      // 🚧 NON IMPLÉMENTÉ — remis à false/0 tant que la fonctionnalité n'existe
-      // pas (audit 2026-07 : aucun flux de vérification ni routage hostname).
-      // Valeurs cibles à restaurer à la livraison : customSendingDomain: true,
-      // customDomains: 1.
-      customSendingDomain: false,
+      // ✅ LIVRÉ — domaine d'ENVOI personnalisé : vérification DNS via l'API
+      // Domains de Resend (lib/email/sendingDomain.ts, onglet Emails →
+      // Expéditeur). L'envoi bascule automatiquement une fois le domaine
+      // vérifié (lib/email/userSender.ts).
+      customSendingDomain: true,
+      // 🚧 NON IMPLÉMENTÉ — domaines rattachés aux TUNNELS (routage par
+      // hostname). Distinct du domaine d'envoi ci-dessus : exige un domaine
+      // joker côté Vercel, donc un plan Vercel Pro. Valeur cible : 1.
       customDomains: 0,
       paymentsInFunnels: true,
       customCode: false,
@@ -183,12 +186,12 @@ export const PLANS: Record<PlanId, Plan> = {
       systemeExport: true,
       htmlExport: true,
       multiPlatform: true,
-      // 🚧 NON IMPLÉMENTÉ — remis à 0/false tant que ces fonctionnalités
-      // n'existent pas (audit 2026-07). Valeurs cibles à restaurer à la
-      // livraison : clientWorkspaces: 25, customSendingDomain: true,
-      // customDomains: Infinity.
+      // 🚧 NON IMPLÉMENTÉ — espace revendeur. Valeur cible : 25.
       clientWorkspaces: 0,
-      customSendingDomain: false,
+      // ✅ LIVRÉ — cf. commentaire du plan Pro.
+      customSendingDomain: true,
+      // 🚧 NON IMPLÉMENTÉ — domaines de TUNNELS, bloqué par le plan Vercel
+      // (domaine joker = fonctionnalité Pro). Valeur cible : Infinity.
       customDomains: 0,
       paymentsInFunnels: true,
       customCode: true,

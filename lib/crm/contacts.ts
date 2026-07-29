@@ -4,7 +4,7 @@
 // API (session utilisateur) ET par un futur webhook n8n (client admin + userId).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Contact, ContactWithTags, Tag, LeadStatus } from "./types";
+import type { Contact, ContactList, ContactWithTags, Tag, LeadStatus } from "./types";
 import { normalizePhoneE164 } from "./phone";
 
 const CONTACT_COLS =
@@ -18,6 +18,8 @@ function safeSearch(term: string): string {
 export type ListContactsOptions = {
   search?: string;
   tagId?: string;
+  /** 🆕 Filtre par liste de contacts (provenance d'un lot importé). */
+  listId?: string;
   status?: LeadStatus;
   funnelId?: string;
   limit?: number;
@@ -66,6 +68,34 @@ async function fetchTagsForContacts(
   return map;
 }
 
+/** 🆕 Symétrique de `fetchTagsForContacts`, pour les listes de contacts. */
+async function fetchListsForContacts(
+  sb: SupabaseClient,
+  userId: string,
+  ids: string[],
+): Promise<Record<string, ContactList[]>> {
+  if (ids.length === 0) return {};
+  const { data } = await sb
+    .from("crm_contact_lists")
+    .select(
+      "contact_id, crm_lists(id, user_id, name, description, origin, source_label, color, imported_at, created_at)",
+    )
+    .eq("user_id", userId)
+    .in("contact_id", ids);
+
+  const map: Record<string, ContactList[]> = {};
+  const rows = (data ?? []) as {
+    contact_id: string;
+    crm_lists: ContactList | ContactList[] | null;
+  }[];
+  for (const row of rows) {
+    const list = Array.isArray(row.crm_lists) ? row.crm_lists[0] : row.crm_lists;
+    if (!list) continue;
+    (map[row.contact_id] ??= []).push(list);
+  }
+  return map;
+}
+
 export async function listContacts(
   sb: SupabaseClient,
   userId: string,
@@ -83,6 +113,21 @@ export async function listContacts(
       .eq("user_id", userId)
       .eq("tag_id", opts.tagId);
     idFilter = (links ?? []).map((l: { contact_id: string }) => l.contact_id);
+    if (idFilter.length === 0) return { contacts: [], total: 0 };
+  }
+
+  // 🆕 Filtre par liste : même principe. Combiné au filtre par tag, on prend
+  // l'INTERSECTION (le contact doit satisfaire les deux), ce qui est le
+  // comportement attendu quand on empile deux filtres dans une barre.
+  if (opts.listId) {
+    const { data: links } = await sb
+      .from("crm_contact_lists")
+      .select("contact_id")
+      .eq("user_id", userId)
+      .eq("list_id", opts.listId);
+    const listIds = (links ?? []).map((l: { contact_id: string }) => l.contact_id);
+    if (listIds.length === 0) return { contacts: [], total: 0 };
+    idFilter = idFilter ? idFilter.filter((id) => listIds.includes(id)) : listIds;
     if (idFilter.length === 0) return { contacts: [], total: 0 };
   }
 
@@ -105,14 +150,18 @@ export async function listContacts(
   if (error) throw new Error(error.message);
 
   const contacts = (data ?? []) as Contact[];
-  const tagsByContact = await fetchTagsForContacts(
-    sb,
-    userId,
-    contacts.map((c) => c.id),
-  );
+  const ids = contacts.map((c) => c.id);
+  const [tagsByContact, listsByContact] = await Promise.all([
+    fetchTagsForContacts(sb, userId, ids),
+    fetchListsForContacts(sb, userId, ids),
+  ]);
 
   return {
-    contacts: contacts.map((c) => ({ ...c, tags: tagsByContact[c.id] ?? [] })),
+    contacts: contacts.map((c) => ({
+      ...c,
+      tags: tagsByContact[c.id] ?? [],
+      lists: listsByContact[c.id] ?? [],
+    })),
     total: count ?? 0,
   };
 }
@@ -131,8 +180,15 @@ export async function getContact(
   if (error) throw new Error(error.message);
   if (!data) return null;
 
-  const tagsByContact = await fetchTagsForContacts(sb, userId, [id]);
-  return { ...(data as Contact), tags: tagsByContact[id] ?? [] };
+  const [tagsByContact, listsByContact] = await Promise.all([
+    fetchTagsForContacts(sb, userId, [id]),
+    fetchListsForContacts(sb, userId, [id]),
+  ]);
+  return {
+    ...(data as Contact),
+    tags: tagsByContact[id] ?? [],
+    lists: listsByContact[id] ?? [],
+  };
 }
 
 export async function createContact(

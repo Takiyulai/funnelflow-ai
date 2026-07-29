@@ -58,10 +58,20 @@ export default function FunnelDetailPage() {
         </Link>
       </div>
 
-      <div className="flex items-start justify-between gap-4 mb-6 animate-[fadeIn_0.4s_ease-out]">
+      {/* 🆕 En-tête : empilé sous 1024 px, puis titre à gauche / actions à
+          droite. Avec cinq boutons, passer en ligne dès `sm` les faisait
+          s'entasser contre le titre ; le point de bascule est donc `lg`.
+          `lg:shrink-0` empêche le groupe d'être comprimé par un titre long,
+          et `justify-end` garde les rangées alignées à droite quand elles
+          passent à la ligne — c'était l'origine de l'effet d'escalier. */}
+      <div className="mb-6 flex flex-col gap-4 animate-[fadeIn_0.4s_ease-out] lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl font-black text-ink truncate">{displayName}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* `min-w-0` + `truncate` : sans la première classe, un titre long
+                pousse le badge hors de l'écran au lieu de se tronquer. */}
+            <h1 className="min-w-0 truncate text-2xl font-black text-ink sm:text-3xl">
+              {displayName}
+            </h1>
             <Badge tone={isPublished ? "green" : "neutral"}>
               {isPublished ? "Publié" : "Brouillon"}
             </Badge>
@@ -73,7 +83,7 @@ export default function FunnelDetailPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 lg:shrink-0 lg:justify-end">
           <Button variant="secondary" onClick={() => router.push(`/funnels/${funnelId}/stats`)}>
             <BarChart3 className="h-4 w-4" />
             Stats

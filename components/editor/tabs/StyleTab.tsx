@@ -10,6 +10,7 @@ import type {
   SectionAnimations,
   SectionStyle,
 } from "@/lib/funnels/types";
+import { FrameEditor } from "@/components/editor/FrameEditor";
 
 type Props = {
   section: FunnelSection;
@@ -327,6 +328,25 @@ export function StyleTab({ section, onChange }: Props) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* 🆕 Habillage des cartes de la section. S'applique à tout élément
+          `.ff-card`, quel que soit le pattern qui l'a produit — d'où le fait
+          qu'un seul réglage couvre témoignages, bénéfices, tarifs, etc. */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/70">
+          Cartes de la section
+        </h3>
+        <p className="mb-3 text-[10px] text-white/40">
+          Bordure, arrondi et ombre appliqués à toutes les cartes de cette
+          section. Laissé vide, c&apos;est le thème du tunnel qui décide.
+        </p>
+        <FrameEditor
+          frame={style.cardFrame}
+          onChange={(cardFrame) =>
+            onChange({ style: { ...style, cardFrame } as SectionStyle })
+          }
+        />
       </div>
 
       {/* Animations */}

@@ -18,10 +18,13 @@ import {
   Loader2,
   AlertTriangle,
   History,
+  // Renommée : `Workflow` est déjà le TYPE importé depuis lib/workflows/types.
+  Workflow as WorkflowIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
 import { WorkflowRunsPanel } from "@/components/workflows/WorkflowRunsPanel";
+import { WorkflowCanvas } from "@/components/workflows/WorkflowCanvas";
 import type {
   LeadStatus,
   Workflow,
@@ -609,6 +612,10 @@ function WorkflowList({
   // 🆕 Un seul historique déplié à la fois : deux panneaux ouverts en parallèle
   // sondent l'API pour rien et noient la page.
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
+  // 🆕 MODULE 4 — Un seul canvas ouvert à la fois : React Flow monte un
+  // conteneur de rendu par instance, en ouvrir dix alourdirait la page pour
+  // rien.
+  const [openCanvasId, setOpenCanvasId] = useState<string | null>(null);
 
   if (workflows.length === 0) {
     return (
@@ -695,6 +702,21 @@ function WorkflowList({
             {/* 🆕 Historique : replié par défaut. C'est un outil de diagnostic,
                 consulté quand quelque chose cloche — pas une information de
                 pilotage à afficher en permanence. */}
+            {/* 🆕 MODULE 4 — Vue graphique. Repliée comme l'historique : on
+                l'ouvre pour comprendre un enchaînement, pas à chaque visite. */}
+            <button
+              type="button"
+              onClick={() => setOpenCanvasId(openCanvasId === wf.id ? null : wf.id)}
+              aria-label="Vue graphique"
+              title="Vue graphique"
+              className={`grid h-8 w-8 place-items-center rounded-md border transition ${
+                openCanvasId === wf.id
+                  ? "border-accent text-accent-ink"
+                  : "border-line text-muted hover:text-ink"
+              }`}
+            >
+              <WorkflowIcon size={15} />
+            </button>
             <button
               type="button"
               onClick={() => setOpenHistoryId(openHistoryId === wf.id ? null : wf.id)}
@@ -721,6 +743,19 @@ function WorkflowList({
             </button>
           </div>
         </div>
+        {openCanvasId === wf.id && (
+          <div>
+            <p className="mb-2 text-[11px] text-muted">
+              Lecture seule : les nœuds ne se déplacent pas, car leur position
+              indique l&apos;ordre d&apos;exécution réel. Cliquez une action
+              pour ouvrir son formulaire.
+            </p>
+            <WorkflowCanvas
+              workflow={wf}
+              onSelectAction={() => onEdit(wf)}
+            />
+          </div>
+        )}
         {openHistoryId === wf.id && (
           <div className="rounded-lg border border-line bg-canvas p-4">
             <WorkflowRunsPanel workflowId={wf.id} workflowName={wf.name} />
