@@ -2672,6 +2672,44 @@ function ImageBlock({
     figureStyle.marginRight = "auto";
   }
 
+  // 🆕 HABILLAGE DE L'IMAGE — appliqué DIRECTEMENT ici, en style en ligne.
+  //
+  // ⚠️ Première tentative ratée, expliquée pour ne pas la refaire : je passais
+  // par des variables CSS posées sur la section, consommées par une règle
+  // `.ff-image` dans funnel-theme.css. Or cette classe N'EXISTE PAS dans ce
+  // rendu — l'image est un <img> sans classe, à l'intérieur de cette figure.
+  // La règle ne matchait donc jamais rien, en silence.
+  //
+  // Appliquer le style ici supprime toute dépendance à un nom de classe et au
+  // chemin de rendu emprunté. C'est la figure qui porte le cadre, et son
+  // `overflow-hidden` fait suivre l'arrondi à l'image qu'elle contient.
+  const frame = image.frame;
+  if (frame) {
+    if (frame.radius !== undefined) figureStyle.borderRadius = `${frame.radius}px`;
+    if (frame.borderWidth !== undefined) {
+      // Remplace la bordure par défaut posée plus haut, sinon les deux
+      // déclarations se marcheraient dessus.
+      figureStyle.border = `${frame.borderWidth}px solid ${frame.borderColor ?? "currentColor"}`;
+    } else if (frame.borderColor) {
+      figureStyle.borderColor = frame.borderColor;
+    }
+    if (frame.padding !== undefined) {
+      figureStyle.padding = `${frame.padding}px`;
+      figureStyle.boxSizing = "border-box";
+    }
+    if (frame.backgroundColor) figureStyle.backgroundColor = frame.backgroundColor;
+    if (frame.shadow) {
+      figureStyle.boxShadow =
+        frame.shadow === "none"
+          ? "none"
+          : frame.shadow === "sm"
+            ? "0 2px 6px rgba(0,0,0,0.10)"
+            : frame.shadow === "md"
+              ? "0 8px 20px rgba(0,0,0,0.14)"
+              : "0 20px 44px rgba(0,0,0,0.20)";
+    }
+  }
+
   return (
     <figure
       data-ff-anim={entryAnim}

@@ -15,10 +15,9 @@
  * - Parallélisme : 5 simultanés (évite de saturer le serveur source).
  */
 
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { ClonedMediaAsset } from "./types";
+import { uploadBuffer } from "@/lib/media/cloudinary";
 
-const BUCKET_NAME = "cloned-funnels-media";
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const PARALLEL_UPLOADS = 5;
@@ -37,10 +36,9 @@ export async function uploadMediaAssets(
   }
 
   console.log(
-    `[media-uploader] Uploading ${assets.length} media(s) to Supabase…`
+    `[media-uploader] Uploading ${assets.length} media(s) to Cloudinary…`
   );
 
-  const supabase = getSupabaseAdmin();
   let uploaded = 0;
   let failed = 0;
 
@@ -48,7 +46,7 @@ export async function uploadMediaAssets(
   for (let i = 0; i < assets.length; i += PARALLEL_UPLOADS) {
     const batch = assets.slice(i, i + PARALLEL_UPLOADS);
     const results = await Promise.all(
-      batch.map((asset) => uploadSingleAsset(asset, funnelId, supabase))
+      batch.map((asset) => uploadSingleAsset(asset, funnelId))
     );
     results.forEach((ok) => (ok ? uploaded++ : failed++));
   }
@@ -64,8 +62,7 @@ export async function uploadMediaAssets(
  */
 async function uploadSingleAsset(
   asset: ClonedMediaAsset,
-  funnelId: string,
-  supabase: SupabaseClient
+  funnelId: string
 ): Promise<boolean> {
   try {
     const buffer = await downloadAsset(asset.sourceUrl);
@@ -74,30 +71,20 @@ async function uploadSingleAsset(
       return false;
     }
 
-    const filename = buildFilename(asset, funnelId);
     const contentType = guessContentType(asset.sourceUrl, asset.type);
 
-    const { error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(filename, buffer, {
-        contentType,
-        cacheControl: "31536000",
-        upsert: false,
-      });
+    // 🆕 L'identifiant est l'empreinte du CONTENU, pas un chemin construit.
+    //
+    // C'est le correctif de fond du dépassement de stockage : un même site
+    // cloné quatre fois stockait quatre copies de chaque image sur Supabase.
+    // Avec l'empreinte, les quatre clonages retombent sur le même asset
+    // Cloudinary — la place n'est occupée qu'une fois.
+    const result = await uploadBuffer(buffer, {
+      folder: `clone/${funnelId}`,
+      mime: contentType,
+    });
 
-    if (error) {
-      console.error(
-        `[media-uploader] ❌ Upload error for ${asset.sourceUrl}: ${error.message}`
-      );
-      asset.uploadFailed = true;
-      return false;
-    }
-
-    const { data: publicData } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filename);
-
-    asset.uploadedUrl = publicData.publicUrl;
+    asset.uploadedUrl = result.url;
     return true;
   } catch (err) {
     console.error(
@@ -162,15 +149,6 @@ async function downloadAsset(url: string): Promise<Buffer | null> {
   }
 }
 
-/**
- * Construit un nom de fichier unique pour Supabase.
- */
-function buildFilename(asset: ClonedMediaAsset, funnelId: string): string {
-  const ext = guessExtension(asset.sourceUrl, asset.type);
-  const safeId = asset.id.replace(/[^a-z0-9-]/gi, "");
-  return `${funnelId}/${safeId}.${ext}`;
-}
-
 function guessExtension(url: string, type: "image" | "video"): string {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
@@ -207,20 +185,6 @@ function guessContentType(url: string, type: "image" | "video"): string {
   return map[ext] || (type === "video" ? "video/mp4" : "image/jpeg");
 }
 
-/**
- * Client Supabase admin (service role key requise pour upload).
- */
-function getSupabaseAdmin(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error(
-      "[media-uploader] NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante dans .env.local"
-    );
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
-}
+// ⚠️ `getSupabaseAdmin` a disparu avec la migration : ce module n'écrit plus
+// dans Supabase Storage. Les identifiants requis sont désormais ceux de
+// Cloudinary (cf. lib/media/cloudinary.ts).

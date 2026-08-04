@@ -11,12 +11,10 @@ import { normalizeFunnel } from "./normalizeFunnel";
 // Configuration Storage
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Nom du bucket Supabase Storage pour les médias des funnels.
- * ⚠️ Doit correspondre EXACTEMENT au bucket existant dans Supabase Storage.
- * Bucket actuel : "cloned-funnels-media" (PUBLIC).
- */
-const MEDIA_BUCKET = "cloned-funnels-media";
+// ⚠️ `MEDIA_BUCKET` a été retiré : les médias ne partent plus vers Supabase
+// Storage mais vers Cloudinary, via la route serveur `/api/media/upload`
+// (la clé Cloudinary ne doit jamais atteindre le navigateur).
+// Voir lib/media/cloudinary.ts.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapping ligne Supabase ⇄ StoredFunnel
@@ -54,7 +52,7 @@ function rowToStored(row: FunnelRow): StoredFunnel {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Upload des médias vers Supabase Storage (bucket MEDIA_BUCKET)
+// Upload des médias vers Cloudinary (via la route serveur /api/media/upload)
 // Remplace data:URL et idb-media:// par des URLs publiques durables.
 // Idempotent : une URL https déjà Supabase est laissée telle quelle.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,23 +76,42 @@ async function uploadOneMedia(
   dataUrl: string,
 ): Promise<string | null> {
   try {
-    const supabase = createSupabaseBrowserClient();
     const blob = await dataUrlToBlob(dataUrl);
     const ext = extFromDataUrl(dataUrl);
-    // Chemin : <userId>/<funnelId>/<rand>.<ext> — conforme aux policies storage
-    const path = `${userId}/${funnelId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage
-      .from(MEDIA_BUCKET)
-      .upload(path, blob, {
-        contentType: blob.type || `image/${ext}`,
-        upsert: false,
-      });
-    if (error) {
-      console.warn("[funnelRepository] upload média échoué:", error.message);
+
+    // 🆕 MIGRATION STOCKAGE — passage par la ROUTE SERVEUR `/api/media/upload`
+    // au lieu d'un envoi direct navigateur → Supabase Storage.
+    //
+    // C'est ce chemin-ci qui a saturé le bucket : il représentait 1 131 Mo sur
+    // les 1 464 Mo constatés, soit 77 % du dépassement.
+    //
+    // ⚠️ POURQUOI PASSER PAR LE SERVEUR. Cloudinary signe ses uploads avec
+    // CLOUDINARY_API_SECRET. Cette clé permet aussi de SUPPRIMER : la mettre
+    // dans un bundle navigateur reviendrait à donner à n'importe quel visiteur
+    // les droits d'écriture et d'effacement sur toute la médiathèque. Le
+    // navigateur envoie donc le fichier à notre route, qui signe côté serveur.
+    //
+    // `userId` n'est plus utilisé pour construire un chemin (Cloudinary nomme
+    // par empreinte de contenu) mais reste dans la signature : le supprimer
+    // casserait tous les appelants pour un gain nul.
+    void userId;
+
+    const form = new FormData();
+    form.append("file", blob, `media.${ext}`);
+    form.append("funnelId", funnelId);
+    form.append("spotId", "editor");
+
+    const res = await fetch("/api/media/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      console.warn(
+        "[funnelRepository] upload média échoué:",
+        detail?.error ?? `HTTP ${res.status}`,
+      );
       return null;
     }
-    const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-    return data.publicUrl;
+    const json = (await res.json()) as { url?: string };
+    return json.url ?? null;
   } catch (e) {
     console.warn("[funnelRepository] uploadOneMedia exception:", e);
     return null;

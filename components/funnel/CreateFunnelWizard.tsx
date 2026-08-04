@@ -84,6 +84,29 @@ type ApiError = {
   error?: string;
 };
 
+/**
+ * 🆕 Un libellé de prix désigne-t-il la gratuité ?
+ *
+ * Le champ `price` est du texte libre saisi par l'utilisateur : « Gratuit »,
+ * « gratuit », « 0€ », « free », « 0 »… Cette tolérance existe côté serveur
+ * (`isFreeOffer`), le sélecteur Gratuit/Payant doit la partager pour ne pas
+ * afficher « Payant » alors que l'utilisateur a tapé « gratuit » en minuscules.
+ *
+ * Un champ VIDE n'est pas « gratuit » : c'est un prix pas encore renseigné.
+ */
+function isFreePriceLabel(price: string | undefined): boolean {
+  const p = (price ?? "").trim().toLowerCase();
+  if (!p) return false;
+  return (
+    p === "0" ||
+    p === "0€" ||
+    p === "0 €" ||
+    p.startsWith("gratuit") ||
+    p.startsWith("free") ||
+    p.startsWith("gratis")
+  );
+}
+
 function capitalize(str: string): string {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -1145,6 +1168,7 @@ export function CreateFunnelWizard() {
                 calendarEmbedUrl={brief.calendarEmbedUrl}
                 onBookingChange={(patch) => updateMany(patch)}
                 challengeDays={brief.challengeDays}
+                challengeDayTitles={brief.challengeDayTitles}
                 onChallengeChange={(patch) => updateMany(patch)}
               />
             )}
@@ -1555,9 +1579,64 @@ function OfferStep({
           <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} />
         </Field>
 
-        <Field label="Prix">
-          <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
-        </Field>
+        {/* 🆕 CHALLENGE — sélecteur Gratuit / Payant.
+            La saisie libre laissait passer « gratuit », « 0€ », « free »… que
+            la porte payante interprétait diversement. Le sélecteur pose une
+            valeur canonique et rend le comportement déterministe (cf. N2). */}
+        {brief.funnelKind === "challenge" ? (
+          <Field
+            label="Participation au challenge"
+            hint="La plupart des challenges sont gratuits : ce qui se vend, c'est l'offre de clôture plus bas."
+          >
+            <div className="grid gap-2">
+              <div className="flex gap-1.5">
+                {[
+                  { id: "free" as const, label: "Gratuit" },
+                  { id: "paid" as const, label: "Payant" },
+                ].map((opt) => {
+                  const isFree = isFreePriceLabel(brief.price);
+                  const active = opt.id === "free" ? isFree : !isFree;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() =>
+                        update("price", opt.id === "free" ? "Gratuit" : "")
+                      }
+                      className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "border-[#C7A436] bg-[#C7A436]/15 text-ink"
+                          : "border-line text-muted hover:border-[#C7A436]/50 hover:text-ink"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {!isFreePriceLabel(brief.price) && (
+                <Input
+                  value={brief.price}
+                  onChange={(e) => update("price", e.target.value)}
+                  placeholder="27€, 47€..."
+                />
+              )}
+            </div>
+          </Field>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Prix">
+              <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
+            </Field>
+            {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
+            <Field
+              label="Prix barré (optionnel)"
+              hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+            >
+              <Input value={brief.anchorPrice ?? ""} onChange={(e) => update("anchorPrice", e.target.value)} placeholder="97€..." />
+            </Field>
+          </div>
+        )}
 
         <div className="rounded-xl border border-line/60 p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/60">
@@ -1672,9 +1751,18 @@ function OfferStep({
               <Input value={brief.postWebinarOfferName ?? ""} onChange={(e) => update("postWebinarOfferName", e.target.value)} placeholder="Ex. Programme d'accompagnement 90 jours" />
             </Field>
 
-            <Field label="Prix">
-              <Input value={brief.postWebinarPrice ?? ""} onChange={(e) => update("postWebinarPrice", e.target.value)} placeholder="497€..." />
-            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Prix">
+                <Input value={brief.postWebinarPrice ?? ""} onChange={(e) => update("postWebinarPrice", e.target.value)} placeholder="497€..." />
+              </Field>
+              {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
+              <Field
+                label="Prix barré (optionnel)"
+                hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+              >
+                <Input value={brief.postWebinarAnchorPrice ?? ""} onChange={(e) => update("postWebinarAnchorPrice", e.target.value)} placeholder="997€..." />
+              </Field>
+            </div>
 
             <Field label="Promesse de l'offre">
               <Textarea
@@ -1768,13 +1856,26 @@ function OfferStep({
             />
           </Field>
 
-          <Field label="Prix">
-            <Input
-              value={brief.challengeOfferPrice ?? ""}
-              onChange={(e) => update("challengeOfferPrice", e.target.value)}
-              placeholder="497€..."
-            />
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Prix">
+              <Input
+                value={brief.challengeOfferPrice ?? ""}
+                onChange={(e) => update("challengeOfferPrice", e.target.value)}
+                placeholder="497€..."
+              />
+            </Field>
+            {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
+            <Field
+              label="Prix barré (optionnel)"
+              hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+            >
+              <Input
+                value={brief.challengeOfferAnchorPrice ?? ""}
+                onChange={(e) => update("challengeOfferAnchorPrice", e.target.value)}
+                placeholder="997€..."
+              />
+            </Field>
+          </div>
 
           <Field label="Promesse de l'offre">
             <Textarea

@@ -4137,22 +4137,34 @@ if (shouldInjectPricing) {
   // checkout ne trouve pas de montant payable. Idem upsell/downsell.
   applyMainOfferPrice(finalFunnel, brief);
   applyOtoPrices(finalFunnel, brief);
-  // 🆕 Webinaire — prix de l'offre vendue APRÈS le webinaire (page "sales",
-  // jamais la home pour ce kind → hors de portée d'applyMainOfferPrice).
-  applyWebinarSalesOffer(finalFunnel, brief);
+  // 🆕 N1 — Prix de l'offre SECONDAIRE (page "sales") : couvre désormais le
+  // webinaire ET le challenge par la même fonction. Ces pages ne sont jamais la
+  // home pour ces types, donc hors de portée d'applyMainOfferPrice.
+  applySecondaryOfferPrice(finalFunnel, brief);
   // 🆕 LOT 10 — Order bump (produit complémentaire) sur la page de checkout.
   applyOrderBumpConfig(finalFunnel, brief);
   // 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de RDV.
   applyBookingCalendarEmbed(finalFunnel, brief);
   // 🆕 LOT 9 — Duplique la page "challenge-day" en jours 1..N + rechaîne.
   applyChallengeMultiDay(finalFunnel, brief);
+  // 🆕 R3 — Explique au participant que son lien du jour arrive par email.
+  applyChallengeEmailDeliveryNotice(finalFunnel, brief);
 
   // 🆕 Webinaire — l'offre PAYANTE à considérer pour "checkout actif ?" est
   // celle vendue APRÈS le webinaire (souvent brief.price = "Gratuit" pour le
   // webinaire lui-même, ce qui sautait à tort Palier 1/checkout interne sur la
   // page de vente réelle). Aucun effet sur les autres types (fallback brief.price).
+  // 🆕 N2 — Porte « offre payante ». Pour un webinaire comme pour un challenge,
+  // `brief.price` décrit l'ÉVÉNEMENT (souvent « Gratuit »), pas ce qui est
+  // vendu. Évaluer ce champ faisait passer un tunnel à offre de clôture payante
+  // pour un tunnel gratuit : le checkout n'était pas câblé et le prix
+  // n'apparaissait pas sur le CTA final.
+  //
+  // Le repli `funnelHasPaidOffer` rattrapait parfois le coup selon ce que l'IA
+  // avait écrit — un défaut INTERMITTENT, plus difficile à diagnostiquer qu'un
+  // défaut franc. On lit désormais l'offre secondaire déclarée.
   const effectivePriceForPaidGate =
-    normalizedKind === "webinar" ? (brief.postWebinarPrice ?? brief.price) : brief.price;
+    secondaryOfferOf(brief)?.price || brief.price;
 
   // ===== ÉTAPE 12 : 🆕 Lien de paiement (Palier 1) sur les CTA pricing =====
   // Doit passer APRÈS l'harmonisation (sinon elle réécrirait le CTA). Si l'offre
@@ -5766,44 +5778,104 @@ function applyInternalCheckoutCtas(funnel: Funnel): void {
  * qui casse le checkout (montant non payable). Le prix saisi par l'utilisateur
  * fait foi. N'agit pas si l'offre est gratuite.
  */
+/**
+ * 🆕 Écrit un prix (et éventuellement un prix d'ancrage barré) sur tous les
+ * items pricing d'un jeu de sections.
+ *
+ * Brique unique partagée par l'offre principale ET les offres secondaires
+ * (post-webinaire, clôture de challenge). Avant, chaque cas avait sa propre
+ * boucle : le challenge a simplement été OUBLIÉ, et le prix saisi au wizard
+ * n'atteignait jamais la page — c'est le prix inventé par l'IA qui subsistait.
+ *
+ * `anchorPrice` est purement cosmétique : il alimente `originalPrice`, jamais
+ * `price`. Le montant encaissé reste celui résolu au checkout.
+ */
+function writePricingOn(
+  sections: Funnel["sections"] | undefined,
+  price: string,
+  anchorPrice?: string,
+): void {
+  sections?.forEach((sec) => {
+    if (sec.type !== "offer" && sec.type !== "pricing") return;
+    sec.items?.forEach((it) => {
+      if (it.kind !== "pricing") return;
+      it.data.price = price;
+      // Un ancrage vide EFFACE l'éventuel `originalPrice` inventé par l'IA :
+      // laisser un prix barré que l'utilisateur n'a pas demandé serait une
+      // affirmation commerciale fabriquée en son nom.
+      const anchor = (anchorPrice ?? "").trim();
+      if (anchor) it.data.originalPrice = anchor;
+      else delete it.data.originalPrice;
+    });
+  });
+}
+
 function applyMainOfferPrice(funnel: Funnel, brief: FunnelBrief): void {
   if (isFreeOffer(brief.price)) return;
   const price = (brief.price ?? "").trim();
   if (!price) return;
-  const setOn = (sections?: Funnel["sections"]) => {
-    sections?.forEach((sec) => {
-      if (sec.type !== "offer" && sec.type !== "pricing") return;
-      sec.items?.forEach((it) => {
-        if (it.kind === "pricing") it.data.price = price;
-      });
-    });
-  };
-  setOn(funnel.sections);
+  writePricingOn(funnel.sections, price, brief.anchorPrice);
   const homePage = funnel.pages?.find((p) => p.isHome);
-  if (homePage && homePage.sections !== funnel.sections) setOn(homePage.sections);
+  if (homePage && homePage.sections !== funnel.sections) {
+    writePricingOn(homePage.sections, price, brief.anchorPrice);
+  }
   // Les pages OTO sont gérées par applyOtoPrices (prix dédiés) → on ne touche
   // QUE l'accueil ici pour ne pas écraser un prix upsell/downsell.
 }
 
 /**
- * 🆕 Webinaire — Force le prix de l'offre POST-webinaire (postWebinarPrice,
- * fallback brief.price) sur les items pricing de la page "sales" (post-live).
- * Cette page n'est PAS la home (isHome=false pour un funnel webinaire → la
- * home est "registration"), donc `applyMainOfferPrice` ne la touchait jamais :
- * son prix restait celui inventé par l'IA. N'agit que pour funnelKind="webinar".
+ * 🆕 N1 — Prix de l'offre SECONDAIRE, posé sur la page "sales".
+ *
+ * Couvre DEUX types de tunnel avec la même logique, via `secondaryOfferOf` :
+ *   • webinaire/masterclass → offre vendue APRÈS la session ;
+ *   • challenge → offre vendue à la CLÔTURE.
+ *
+ * Dans les deux cas, la page "sales" n'est PAS la page d'accueil (la home est
+ * l'inscription), donc `applyMainOfferPrice` ne l'atteint jamais et son prix
+ * resterait celui inventé par l'IA.
+ *
+ * Remplace l'ancien `applyWebinarSalesOffer`, qui sortait immédiatement dès que
+ * le type n'était pas « webinar ». Une fonction jumelle pour le challenge aurait
+ * divergé au premier correctif — c'est exactement ce qui s'était produit.
  */
-function applyWebinarSalesOffer(funnel: Funnel, brief: FunnelBrief): void {
-  if (normalizeFunnelKind(brief.funnelKind) !== "webinar") return;
-  const price = (brief.postWebinarPrice ?? brief.price ?? "").trim();
+function applySecondaryOfferPrice(funnel: Funnel, brief: FunnelBrief): void {
+  const offer = secondaryOfferOf(brief);
+  if (!offer) return;
+  const price = offer.price.trim();
   if (!price || isFreeOffer(price)) return;
   const salesPage = funnel.pages?.find((p) => p.role === "sales");
   if (!salesPage) return;
-  salesPage.sections?.forEach((sec) => {
-    if (sec.type !== "offer" && sec.type !== "pricing") return;
-    sec.items?.forEach((it) => {
-      if (it.kind === "pricing") it.data.price = price;
-    });
-  });
+  writePricingOn(salesPage.sections, price, offer.anchorPrice);
+}
+
+/**
+ * 🆕 Offre SECONDAIRE du tunnel (celle vendue sur la page "sales" quand la page
+ * d'accueil n'est pas une page de vente), ou null.
+ *
+ * Source de vérité UNIQUE pour : l'injection du prix, la porte « offre payante »
+ * et le prix d'ancrage. Toute nouvelle règle sur ces offres doit passer par ici,
+ * sinon on recrée l'asymétrie webinaire/challenge qu'on vient de corriger.
+ */
+function secondaryOfferOf(
+  brief: FunnelBrief,
+): { price: string; anchorPrice?: string } | null {
+  const kind = normalizeFunnelKind(brief.funnelKind);
+  if (kind === "webinar") {
+    return {
+      price: brief.postWebinarPrice ?? brief.price ?? "",
+      anchorPrice: brief.postWebinarAnchorPrice,
+    };
+  }
+  if (kind === "challenge") {
+    return {
+      // Pas de repli sur `brief.price` : pour un challenge, ce champ décrit le
+      // CHALLENGE (souvent gratuit), pas l'offre de clôture. Le repli aurait
+      // posé « Gratuit » sur une page de vente.
+      price: brief.challengeOfferPrice ?? "",
+      anchorPrice: brief.challengeOfferAnchorPrice,
+    };
+  }
+  return null;
 }
 
 function applyOtoPrices(funnel: Funnel, brief: FunnelBrief): void {
@@ -5862,8 +5934,28 @@ function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
   const dayIdx = funnel.pages.findIndex((p) => p.role === "challenge-day");
   if (dayIdx === -1) return;
 
-  const totalDays = Math.max(1, Math.min(30, Math.round(brief.challengeDays ?? 5)));
+  // Borne ramenée de 30 à 14 : au-delà, le tunnel dépassait 16 pages, lourd à
+  // générer comme à éditer, pour un format de challenge qui n'existe pas dans
+  // la pratique.
+  const totalDays = Math.max(1, Math.min(14, Math.round(brief.challengeDays ?? 5)));
   const templatePage = funnel.pages[dayIdx];
+
+  // 🆕 N3-a — Titre propre à chaque jour, saisi au wizard.
+  //
+  // Sans lui, les jours 2..N sont des copies conformes : `relabelDay` ne
+  // réécrit que si le texte contient littéralement « Jour 1 », donc un
+  // challenge de 5 jours pouvait livrer 5 pages rigoureusement identiques.
+  // Le titre saisi remplace le headline du hero — le corps reste cloné, ce qui
+  // est assumé (la génération différenciée par jour coûterait N appels IA).
+  const dayTitles = Array.isArray(brief.challengeDayTitles)
+    ? brief.challengeDayTitles
+    : [];
+  const applyDayTitle = (page: FunnelPage, day: number): void => {
+    const title = (dayTitles[day - 1] ?? "").trim();
+    if (!title) return; // non renseigné → on garde le titre généré
+    const hero = page.sections?.find((s) => s.type === "hero") ?? page.sections?.[0];
+    if (hero) hero.headline = title;
+  };
 
   const dayNumberPattern = /\b(Jour|Day|Día)\s*1\b/gi;
   const relabelDay = (text: string | undefined, day: number): string | undefined => {
@@ -5877,6 +5969,7 @@ function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
   templatePage.dayIndex = 1;
   templatePage.dayTotal = totalDays;
   templatePage.name = `Jour 1 sur ${totalDays}`;
+  applyDayTitle(templatePage, 1);
 
   if (totalDays <= 1) return;
 
@@ -5898,6 +5991,9 @@ function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
       headline: relabelDay(sec.headline, day) ?? sec.headline,
       subheadline: relabelDay(sec.subheadline, day),
     }));
+    // Titre du jour APRÈS le clonage des sections, sinon `relabelDay`
+    // réécrirait le titre que l'utilisateur vient de poser.
+    applyDayTitle(cloned, day);
     newDayPages.push(cloned);
   }
 
@@ -5910,6 +6006,77 @@ function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
     allDayPages[i].nextPageId =
       i < allDayPages.length - 1 ? allDayPages[i + 1].id : tailNextPageId;
   }
+}
+
+/**
+ * 🆕 R3 — Bloc « Diffusion par email » sur la page de confirmation d'un challenge.
+ *
+ * POURQUOI. Les pages « Jour N » ne sont pas listées et il n'existe aucun espace
+ * membre : le participant reçoit son lien du jour PAR EMAIL, envoyé depuis
+ * l'outil du créateur. Sans cette explication, il attend un accès qui ne
+ * viendra jamais et écrit au support — ou abandonne.
+ *
+ * Idempotent : si une section explicative existe déjà (même identifiant), on ne
+ * duplique pas. N'agit que pour le kind « challenge ».
+ */
+function applyChallengeEmailDeliveryNotice(funnel: Funnel, brief: FunnelBrief): void {
+  if (normalizeFunnelKind(brief.funnelKind) !== "challenge") return;
+  const confirmation = funnel.pages?.find((p) => p.role === "confirmation");
+  if (!confirmation) return;
+
+  const SECTION_ID = "challenge-email-delivery";
+  if (confirmation.sections?.some((s) => s.id === SECTION_ID)) return;
+
+  const days = Math.max(1, Math.min(14, Math.round(brief.challengeDays ?? 5)));
+  const lang = brief.language;
+
+  const copy = {
+    fr: {
+      eyebrow: "Comment ça se passe",
+      headline: "Ton lien du jour arrive par email",
+      subheadline: `Chaque jour pendant ${days} jours, tu reçois un email avec le lien de ta séance. Pas d'espace à créer, pas de mot de passe à retenir.`,
+      bullets: [
+        "Vérifie ta boîte de réception dès demain matin",
+        "Ajoute notre adresse à tes contacts pour ne rien manquer",
+        "Regarde aussi dans les spams et l'onglet Promotions",
+      ],
+    },
+    en: {
+      eyebrow: "How it works",
+      headline: "Your daily link arrives by email",
+      subheadline: `Every day for ${days} days, you get an email with your session link. No account to create, no password to remember.`,
+      bullets: [
+        "Check your inbox tomorrow morning",
+        "Add our address to your contacts so nothing gets lost",
+        "Also check spam and the Promotions tab",
+      ],
+    },
+    es: {
+      eyebrow: "Cómo funciona",
+      headline: "Tu enlace diario llega por email",
+      subheadline: `Cada día durante ${days} días recibes un email con el enlace de tu sesión. Sin cuenta que crear, sin contraseña que recordar.`,
+      bullets: [
+        "Revisa tu bandeja de entrada mañana por la mañana",
+        "Añade nuestra dirección a tus contactos para no perder nada",
+        "Mira también en spam y en la pestaña Promociones",
+      ],
+    },
+  }[lang];
+
+  const notice: FunnelSection = {
+    id: SECTION_ID,
+    type: "process",
+    eyebrow: copy.eyebrow,
+    headline: copy.headline,
+    subheadline: copy.subheadline,
+    bullets: copy.bullets,
+    visible: true,
+  };
+
+  // Inséré en 2e position : juste après le hero de remerciement, avant les
+  // rappels de programme. C'est l'information la plus utile à cet instant.
+  confirmation.sections = confirmation.sections ?? [];
+  confirmation.sections.splice(1, 0, notice);
 }
 
 /**

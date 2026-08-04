@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import {
   Bell,
@@ -32,6 +32,7 @@ import type {
   WorkflowActionKind,
   WorkflowConditionTest,
   WorkflowStatus,
+  WorkflowTriggerConfig,
   WorkflowTriggerEvent,
 } from "@/lib/workflows/types";
 import { waitActionMs } from "@/lib/workflows/types";
@@ -398,6 +399,39 @@ function defaultConditionTest(
   }
 }
 
+/**
+ * 🆕 Construit la configuration de déclencheur à partir du brouillon.
+ *
+ * EXTRAITE de `save()` pour être partagée avec l'aperçu en direct. Si l'aperçu
+ * recalculait le déclencheur de son côté, les deux versions divergeraient au
+ * premier ajout d'événement — et le canvas montrerait autre chose que ce qui
+ * serait réellement enregistré. C'est exactement le genre d'écart qui rend un
+ * aperçu pire qu'inutile.
+ */
+function triggerFromDraft(draft: Draft): WorkflowTriggerConfig {
+  const isTimed =
+    draft.triggerEvent === "time.elapsed" || draft.triggerEvent === "time.before_event";
+  return {
+    event: draft.triggerEvent,
+    // On ne retient que le filtre pertinent pour l'événement choisi.
+    // time.before_event : funnel OBLIGATOIRE (une date par tunnel), donc
+    // conservé même s'il n'est pas listé dans FUNNEL_FILTER_EVENTS.
+    funnelId:
+      FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) ||
+      draft.triggerEvent === "time.before_event"
+        ? draft.funnelId
+        : null,
+    tagId: draft.triggerEvent === "tag.added" ? draft.tagId : null,
+    status: draft.triggerEvent === "status.changed" ? draft.triggerStatus : null,
+    pageSlug: draft.triggerEvent === "page.visited" ? draft.pageSlug.trim() || null : null,
+    linkLabel:
+      draft.triggerEvent === "email.link_clicked" ? draft.linkLabel.trim() || null : null,
+    afterEvent: draft.triggerEvent === "time.elapsed" ? draft.afterEvent : null,
+    delayDays: isTimed ? draft.delayDays : undefined,
+    delayHours: isTimed ? draft.delayHours : undefined,
+  };
+}
+
 export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: Props) {
   const [workflows, setWorkflows] = useState<Workflow[]>(initialWorkflows);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
@@ -435,6 +469,21 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
     setError(null);
   };
 
+  // 🆕 Workflow reconstitué à partir du brouillon, pour l'aperçu graphique.
+  // `useMemo` sur `draft` : sans lui, le graphe serait recalculé à chaque
+  // rendu du formulaire — donc à chaque frappe dans un champ de texte.
+  const livePreview = useMemo<Workflow>(
+    () => ({
+      id: editingId === "new" ? "draft" : (editingId ?? "draft"),
+      userId: "",
+      name: draft.name || "Sans nom",
+      status: draft.status,
+      trigger: triggerFromDraft(draft),
+      actions: draft.actions.map((config, position) => ({ position, config })),
+    }),
+    [draft, editingId],
+  );
+
   async function refresh() {
     const res = await fetch("/api/workflows");
     const json = await res.json();
@@ -458,32 +507,8 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
     const payload = {
       name: draft.name,
       status: draft.status,
-      trigger: {
-        event: draft.triggerEvent,
-        // On n'envoie que le filtre pertinent pour l'événement choisi.
-        // 🆕 time.before_event : funnel OBLIGATOIRE (une date par tunnel), donc
-        // envoyé même si FUNNEL_FILTER_EVENTS ne le liste pas (celui-ci gère le
-        // cas "tous les tunnels", non applicable ici).
-        funnelId:
-          FUNNEL_FILTER_EVENTS.includes(draft.triggerEvent) ||
-          draft.triggerEvent === "time.before_event"
-            ? draft.funnelId
-            : null,
-        tagId: draft.triggerEvent === "tag.added" ? draft.tagId : null,
-        status: draft.triggerEvent === "status.changed" ? draft.triggerStatus : null,
-        pageSlug: draft.triggerEvent === "page.visited" ? draft.pageSlug.trim() || null : null,
-        linkLabel:
-          draft.triggerEvent === "email.link_clicked" ? draft.linkLabel.trim() || null : null,
-        afterEvent: draft.triggerEvent === "time.elapsed" ? draft.afterEvent : null,
-        delayDays:
-          draft.triggerEvent === "time.elapsed" || draft.triggerEvent === "time.before_event"
-            ? draft.delayDays
-            : undefined,
-        delayHours:
-          draft.triggerEvent === "time.elapsed" || draft.triggerEvent === "time.before_event"
-            ? draft.delayHours
-            : undefined,
-      },
+      // Même construction que l'aperçu en direct : une seule source de vérité.
+      trigger: triggerFromDraft(draft),
       actions: draft.actions,
     };
     const url = editingId === "new" ? "/api/workflows" : `/api/workflows/${editingId}`;
@@ -569,22 +594,43 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
           onNew={openNew}
         />
       ) : (
-        <WorkflowEditor
-          draft={draft}
-          setDraft={setDraft}
-          funnels={funnels}
-          sequences={sequences}
-          tags={tags}
-          saving={saving}
-          error={error}
-          isNew={editingId === "new"}
-          onAddAction={addAction}
-          onUpdateAction={updateAction}
-          onRemoveAction={removeAction}
-          onMoveAction={moveAction}
-          onCancel={closeEditor}
-          onSave={save}
-        />
+        // 🆕 Formulaire à gauche, aperçu du graphe à droite, mis à jour à
+        // chaque frappe. Le canvas devient un retour immédiat plutôt qu'une
+        // vérification a posteriori : on voit une branche apparaître au moment
+        // où on ajoute la condition qui la crée.
+        //
+        // Bascule à `xl` seulement : sous 1280 px, deux colonnes rendraient le
+        // formulaire trop étroit et le graphe illisible. En dessous, l'aperçu
+        // passe simplement dessous.
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:items-start">
+          <WorkflowEditor
+            draft={draft}
+            setDraft={setDraft}
+            funnels={funnels}
+            sequences={sequences}
+            tags={tags}
+            saving={saving}
+            error={error}
+            isNew={editingId === "new"}
+            onAddAction={addAction}
+            onUpdateAction={updateAction}
+            onRemoveAction={removeAction}
+            onMoveAction={moveAction}
+            onCancel={closeEditor}
+            onSave={save}
+          />
+          <div className="min-w-0 xl:sticky xl:top-4">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+              Aperçu en direct
+            </p>
+            <WorkflowCanvas workflow={livePreview} height={560} />
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+              Ce schéma reflète le brouillon en cours, pas la version
+              enregistrée. Les actions incomplètes y apparaissent aussi — c&apos;est
+              voulu, ça montre ce qui manque.
+            </p>
+          </div>
+        </div>
       )}
     </>
   );

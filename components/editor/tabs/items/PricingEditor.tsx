@@ -223,6 +223,26 @@ export function PricingEditor({ section, onChange }: Props) {
                     </div>
                   </div>
 
+                  {/* 🆕 Prix d'ancrage (barré). Purement cosmétique : il
+                      n'entre dans aucun calcul, le montant encaissé au checkout
+                      reste le « Prix » ci-dessus. */}
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-white/60">
+                      Prix barré (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={item.data.originalPrice || ""}
+                      onChange={(e) => updateItem(idx, { originalPrice: e.target.value })}
+                      placeholder="97€"
+                      className="w-full rounded-md border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-300/40 focus:outline-none"
+                    />
+                    <p className="mt-1 text-[10px] leading-snug text-white/40">
+                      Affiché rayé au-dessus du prix. Visuel uniquement : le
+                      montant réellement encaissé reste le prix ci-dessus.
+                    </p>
+                  </div>
+
                   {/* Période */}
                   <div>
                     <label className="mb-1 block text-[11px] font-medium text-white/60">

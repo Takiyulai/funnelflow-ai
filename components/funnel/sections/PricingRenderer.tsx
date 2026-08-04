@@ -31,6 +31,7 @@ export function PricingRenderer({
     const tiers: PriceTier[] = items.map((it) => ({
       name: it.data.name || "",
       price: it.data.price || "",
+      originalPrice: it.data.originalPrice,
       period: it.data.period,
       description: it.data.description,
       features: it.data.features || [],
@@ -128,6 +129,21 @@ export function PricingRenderer({
                 </p>
               )}
             </div>
+
+            {/* 🆕 PRIX D'ANCRAGE (barré), au-dessus du prix réel.
+                Purement cosmétique : il n'entre dans aucun calcul, le montant
+                encaissé reste `price`. Absent → rien n'est rendu, l'affichage
+                est identique à avant. */}
+            {item.data.originalPrice && (
+              <div className="mb-1">
+                <del
+                  className="text-lg font-semibold"
+                  style={{ color: "var(--ff-ink-soft, var(--ff-ink))", opacity: 0.5 }}
+                >
+                  {item.data.originalPrice}
+                </del>
+              </div>
+            )}
 
             <div className="mb-8 flex items-baseline gap-1.5">
               <span

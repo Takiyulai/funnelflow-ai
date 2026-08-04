@@ -14,10 +14,15 @@ export const dynamic = "force-dynamic";
 
 export default async function PublishedFunnelSubPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; pageSlug: string }>;
+  // 🆕 `ff_ab=a|b` force une variante pour APERÇU, sans compter la vue.
+  searchParams: Promise<{ ff_ab?: string }>;
 }) {
   const { slug, pageSlug } = await params;
+  const sp = await searchParams;
+  const forced = sp.ff_ab === "a" || sp.ff_ab === "b" ? sp.ff_ab : null;
   const published = await getPublishedFunnelBySlug(slug);
   if (!published) notFound();
 
@@ -37,6 +42,7 @@ export default async function PublishedFunnelSubPage({
     published.funnelId,
     published.ownerId,
     page,
+    forced,
   );
 
   return (

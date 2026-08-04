@@ -80,6 +80,11 @@ export async function POST(
         { status: 400 },
       );
     }
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    // On renvoie le message RÉEL et pas seulement un code : c'est ce qui
+    // manquait quand la RLS refusait l'insertion — l'interface affichait
+    // « Création impossible » sans la moindre piste, et il a fallu remonter
+    // jusqu'aux politiques de la base pour comprendre.
+    console.error("[ab-tests] création échouée :", message);
+    return NextResponse.json({ ok: false, error: message, message }, { status: 500 });
   }
 }

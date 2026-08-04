@@ -27,6 +27,7 @@ import {
   Trophy,
   Trash2,
   TriangleAlert,
+  Eye,
 } from "lucide-react";
 import type { FunnelPage, FunnelSection } from "@/lib/funnels/types";
 import { readResult, MIN_VIEWS_PER_VARIANT } from "@/lib/ab/assign";
@@ -226,12 +227,15 @@ export function AbTestsPanel({
   pages,
   offerName,
   initialPageId,
+  publicSlug,
 }: {
   funnelId: string;
   pages: FunnelPage[];
   offerName?: string;
   /** Page présélectionnée, transmise par le bouton « Tester » de l'éditeur. */
   initialPageId?: string;
+  /** Slug public du tunnel, pour les liens d'aperçu de variante. */
+  publicSlug?: string | null;
 }) {
   const [tests, setTests] = useState<AbTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -523,6 +527,29 @@ export function AbTestsPanel({
                   {reading.summary}
                 </p>
 
+                {/* 🆕 Aperçu forcé de chaque variante.
+                    L'affectation étant déterministe, tu tombes TOUJOURS sur la
+                    même variante depuis ton navigateur : sans ces liens, tu
+                    pouvais créer une variante B et n'avoir aucun moyen de la
+                    voir. Ces vues ne sont pas comptées dans les résultats. */}
+                {publicSlug && page && (
+                  <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+                    <span>Voir la page en :</span>
+                    {(["a", "b"] as const).map((v) => (
+                      <a
+                        key={v}
+                        href={`/tunnel/${publicSlug}${page.isHome ? "" : `/${page.slug.replace(/^\/+/, "")}`}?ff_ab=${v}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 font-semibold text-ink transition hover:border-accent"
+                      >
+                        <Eye size={11} /> Variante {v.toUpperCase()}
+                      </a>
+                    ))}
+                    <span className="opacity-70">(aperçu, non compté)</span>
+                  </p>
+                )}
+
                 {/* Choix du gagnant */}
                 {test.status !== "finished" && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -575,7 +602,17 @@ export function AbTestsPanel({
                               {sectionB.type}
                             </p>
                             {(["eyebrow", "headline", "subheadline", "ctaLabel"] as EditableField[])
-                              .filter((f) => readField(sectionA, f) !== "" || f === "headline")
+                              // Un champ n'est proposé que s'il existe VRAIMENT
+                              // dans la variante B. Sans le second test, la
+                              // ligne « Bouton » s'affichait pour une section
+                              // sans CTA : `writeField` renvoyait alors la
+                              // section inchangée et le champ paraissait gelé,
+                              // sans qu'aucune erreur ne l'explique.
+                              .filter((f) =>
+                                f === "ctaLabel"
+                                  ? !!sectionB.cta && !!sectionA.cta
+                                  : readField(sectionA, f) !== "" || f === "headline",
+                              )
                               .map((f) => (
                                 <FieldRow
                                   key={f}
@@ -599,14 +636,40 @@ export function AbTestsPanel({
                       })}
                     </div>
 
+                    {/* 🆕 Signal EXPLICITE de modifications non enregistrées.
+                        Sans lui, on pouvait retoucher plusieurs champs, aller
+                        voir la page, et constater qu'elle n'avait pas bougé —
+                        sans jamais comprendre qu'il manquait un clic. Le seul
+                        indice était le libellé du bouton, bien trop discret. */}
+                    {dirty && (
+                      <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-warning bg-warning-soft px-2.5 py-2 text-[11px] leading-relaxed text-warning-ink">
+                        <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+                        <span>
+                          Modifications <strong>non enregistrées</strong>. Tant
+                          que tu n&apos;as pas cliqué ci-dessous, tes visiteurs
+                          voient encore l&apos;ancienne variante B.
+                        </span>
+                      </p>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => patchTest(test.id, { variantB: draft })}
                       disabled={busy || !dirty}
                       className="mt-3 rounded-lg bg-accent px-3 py-2 text-sm font-bold text-accent-contrast transition hover:opacity-90 disabled:opacity-40"
                     >
-                      {dirty ? "Enregistrer la variante B" : "Aucune modification"}
+                      {dirty ? "Enregistrer la variante B" : "Aucune modification à enregistrer"}
                     </button>
+
+                    {/* Rappel du cas « B identique à A » : le test tourne, mais
+                        il ne mesure rien puisque les deux pages sont les mêmes. */}
+                    {!dirty && diffs === 0 && (
+                      <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                        La variante B est actuellement <strong>identique</strong> à
+                        la A — le test tourne mais ne mesure aucune différence.
+                        Modifie un champ ci-dessus, puis enregistre.
+                      </p>
+                    )}
                   </details>
                 )}
               </div>

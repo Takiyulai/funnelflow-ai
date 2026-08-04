@@ -69,13 +69,37 @@ create index if not exists funnel_ab_events_test_idx on public.funnel_ab_events 
 alter table public.funnel_ab_tests  enable row level security;
 alter table public.funnel_ab_events enable row level security;
 
--- Lecture par le propriétaire uniquement. AUCUNE policy d'écriture : seul le
--- service role écrit (rendu de la page publique + capture de lead), donc un
--- visiteur ne peut pas injecter de faux résultats depuis son navigateur.
+-- ⚠️ DEUX RÉGIMES DIFFÉRENTS, et les confondre a coûté un bug :
+--
+--   • `funnel_ab_tests` est piloté par le PROPRIÉTAIRE depuis l'interface, qui
+--     passe par le client de SESSION. Il lui faut donc les droits d'écriture
+--     sur ses propres lignes. La première version n'avait qu'une politique
+--     SELECT — la création de test échouait avec un « Création impossible »
+--     sans explication.
+--
+--   • `funnel_ab_events` contient les MESURES, écrites uniquement par le
+--     serveur (rendu public, capture de lead) via le service role. Lecture
+--     seule pour le propriétaire : sinon n'importe qui pourrait fabriquer de
+--     faux résultats depuis son navigateur.
 drop policy if exists funnel_ab_tests_owner on public.funnel_ab_tests;
-create policy funnel_ab_tests_owner on public.funnel_ab_tests
+
+drop policy if exists funnel_ab_tests_owner_select on public.funnel_ab_tests;
+create policy funnel_ab_tests_owner_select on public.funnel_ab_tests
   for select using (auth.uid() = user_id);
 
+drop policy if exists funnel_ab_tests_owner_insert on public.funnel_ab_tests;
+create policy funnel_ab_tests_owner_insert on public.funnel_ab_tests
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists funnel_ab_tests_owner_update on public.funnel_ab_tests;
+create policy funnel_ab_tests_owner_update on public.funnel_ab_tests
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists funnel_ab_tests_owner_delete on public.funnel_ab_tests;
+create policy funnel_ab_tests_owner_delete on public.funnel_ab_tests
+  for delete using (auth.uid() = user_id);
+
+-- Mesures : lecture seule pour le propriétaire.
 drop policy if exists funnel_ab_events_owner on public.funnel_ab_events;
 create policy funnel_ab_events_owner on public.funnel_ab_events
   for select using (auth.uid() = user_id);

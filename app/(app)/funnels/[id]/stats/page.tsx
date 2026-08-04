@@ -29,9 +29,29 @@ type Stats = {
 
 const DAY_OPTIONS = [7, 30, 90] as const;
 
-function pct(leads: number, uniques: number): string {
-  if (!uniques || uniques <= 0) return "—";
-  return `${((leads / uniques) * 100).toFixed(1).replace(".", ",")} %`;
+/**
+ * Taux de conversion = leads / visiteurs uniques.
+ *
+ * ⚠️ CE RATIO PEUT DÉPASSER 100 % — et ce n'était pas affiché honnêtement.
+ * Les deux nombres ne viennent pas de la même source : les visiteurs uniques
+ * sont comptés par un signal JavaScript (`funnel_visits`, identifiant en
+ * localStorage), les leads sont comptés à l'insertion en base. Trois cas
+ * courants font diverger les deux :
+ *   • un même visiteur soumet plusieurs fois le formulaire (typiquement toi,
+ *     en train de tester ton propre tunnel) → 300 % ;
+ *   • un bloqueur de publicité ou un navigateur en mode strict empêche le
+ *     signal de visite mais pas la soumission du formulaire ;
+ *   • le lead arrive par un autre chemin que la page mesurée.
+ *
+ * Afficher « 300 % » sans explication laisse croire à un bug de calcul. On
+ * plafonne donc l'affichage à 100 % et on signale le dépassement, plutôt que
+ * de masquer silencieusement l'écart.
+ */
+function pct(leads: number, uniques: number): { label: string; capped: boolean } {
+  if (!uniques || uniques <= 0) return { label: "—", capped: false };
+  const raw = (leads / uniques) * 100;
+  if (raw > 100) return { label: "100 %", capped: true };
+  return { label: `${raw.toFixed(1).replace(".", ",")} %`, capped: false };
 }
 
 export default async function FunnelStatsPage({
@@ -57,7 +77,7 @@ export default async function FunnelStatsPage({
 
   const { data: funnel, error: funnelErr } = await supabase
     .from("funnels")
-    .select("id, name, status, published_content, brief")
+    .select("id, name, status, published_content, brief, published_slug, slug")
     .eq("id", funnelId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -198,8 +218,15 @@ export default async function FunnelStatsPage({
                 <TrendingUp className="h-3.5 w-3.5" /> Conversion
               </div>
               <div className="text-2xl font-black mt-1">
-                {pct(stats.leads, stats.uniques)}
+                {pct(stats.leads, stats.uniques).label}
               </div>
+              {pct(stats.leads, stats.uniques).capped && (
+                <p className="mt-1 text-[11px] leading-snug text-muted">
+                  Plus de leads que de visiteurs comptés ({stats.leads} pour{" "}
+                  {stats.uniques}) — soumissions répétées depuis un même
+                  navigateur, ou signal de visite bloqué.
+                </p>
+              )}
             </Card>
           </div>
 
@@ -242,7 +269,15 @@ export default async function FunnelStatsPage({
                         <td className="px-4 py-2.5 text-right">{row.uniques}</td>
                         <td className="px-4 py-2.5 text-right">{leads}</td>
                         <td className="px-4 py-2.5 text-right font-semibold">
-                          {pct(leads, row.uniques)}
+                          {pct(leads, row.uniques).label}
+                          {pct(leads, row.uniques).capped && (
+                            <span
+                              className="ml-1 text-muted"
+                              title={`${leads} leads pour ${row.uniques} visiteurs comptés`}
+                            >
+                              *
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -292,6 +327,9 @@ export default async function FunnelStatsPage({
             pages={abPages}
             offerName={abOfferName}
             initialPageId={sp.abPage}
+            publicSlug={
+              (funnel.published_slug as string | null) ?? (funnel.slug as string | null)
+            }
           />
         </div>
       )}

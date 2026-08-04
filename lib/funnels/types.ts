@@ -412,6 +412,18 @@ export type TestimonialItem = {
 export type PricingPlanItem = {
   name: string;
   price: string;
+  /**
+   * 🆕 PRIX D'ANCRAGE (prix barré). Affiché AU-DESSUS de `price`, rayé, pour
+   * matérialiser la remise.
+   *
+   * ⚠️ PUREMENT COSMÉTIQUE. Il n'entre dans AUCUN calcul : le montant
+   * réellement encaissé reste `price`, résolu côté serveur au checkout. Le
+   * confondre avec un vrai prix ouvrirait la porte à facturer un montant
+   * différent de celui affiché — d'où cette séparation stricte.
+   *
+   * Absent/vide → aucun prix barré n'est rendu (comportement d'origine).
+   */
+  originalPrice?: string;
   period?: string;
   description?: string;
   features: string[];
@@ -1062,6 +1074,21 @@ export type FunnelBrief = {
   challengeOfferName?: string;
   challengeOfferPrice?: string;
   challengeOfferPromise?: string;
+  /** 🆕 Prix d'ancrage (barré) de l'offre de clôture. Cosmétique — cf.
+   *  `PricingPlanItem.originalPrice`. */
+  challengeOfferAnchorPrice?: string;
+  /**
+   * 🆕 N3-a — Titres des jours du challenge, un par jour (index 0 = Jour 1).
+   *
+   * Sans eux, les jours 2..N sont des copies conformes du Jour 1 : le seul
+   * mécanisme de différenciation réécrit littéralement « Jour 1 » → « Jour N »,
+   * donc un challenge de 5 jours livrait 5 pages identiques. Chaque titre
+   * renseigné remplace le `headline` du hero de la page correspondante.
+   *
+   * Tableau plus court que `challengeDays` → les jours non couverts gardent le
+   * titre généré (rétrocompatible avec les tunnels créés avant ce champ).
+   */
+  challengeDayTitles?: string[];
   /** 🆕 Offre de la page OTO/tripwire GÉNÉRIQUE ("oto", cochable dans l'aperçu
    *  du wizard sur TOUS les types de tunnel). Si vide, l'IA invente le nom, le
    *  prix ET la promesse de cette offre — comportement à éviter : renseigner
@@ -1121,6 +1148,12 @@ export type FunnelBrief = {
   postWebinarOfferName?: string;
   postWebinarPrice?: string;
   postWebinarPromise?: string;
+  /** 🆕 Prix d'ancrage (barré) de l'offre post-webinaire/masterclass.
+   *  Cosmétique — cf. `PricingPlanItem.originalPrice`. */
+  postWebinarAnchorPrice?: string;
+  /** 🆕 Prix d'ancrage (barré) de l'offre PRINCIPALE du tunnel (page de vente
+   *  classique). Cosmétique — cf. `PricingPlanItem.originalPrice`. */
+  anchorPrice?: string;
   templateId?: string;
   moodId?: MoodId;
   mainColor?: string;

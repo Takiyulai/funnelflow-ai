@@ -1,7 +1,7 @@
 // components/funnel/wizard/FunnelKindStep.tsx
 "use client";
 
-import { CheckCircle2, FileStack, CalendarClock } from "lucide-react";
+import { CheckCircle2, FileStack, CalendarClock, Info } from "lucide-react";
 import { FUNNEL_KINDS } from "@/lib/funnels/kinds";
 import type { FunnelKind, Language } from "@/lib/funnels/types";
 import { tWizard } from "@/lib/i18n/wizard";
@@ -25,10 +25,20 @@ export type BookingDetailsPatch = {
   calendarEmbedUrl?: string;
 };
 
-/** 🆕 LOT 9 — Patch du nombre de jours du challenge. */
+/** 🆕 LOT 9 — Patch du nombre de jours du challenge + titres par jour (N3-a). */
 export type ChallengeDetailsPatch = {
   challengeDays?: number;
+  challengeDayTitles?: string[];
 };
+
+/** Borne haute du nombre de jours. Ramenée de 30 à 14 : au-delà, le tunnel
+ *  dépasse 16 pages — lourd à générer comme à éditer, pour un format qui
+ *  n'existe pas dans la pratique. */
+export const MAX_CHALLENGE_DAYS = 14;
+
+/** Durées courantes, proposées en raccourci. La saisie libre reste possible
+ *  dans la limite ci-dessus. */
+const CHALLENGE_DAY_PRESETS = [3, 5, 7, 14];
 
 type Props = {
   language: Language;
@@ -48,8 +58,9 @@ type Props = {
   /** 🆕 Prise de RDV : embed calendrier natif (affiché si kind=booking) */
   calendarEmbedUrl?: string;
   onBookingChange?: (patch: BookingDetailsPatch) => void;
-  /** 🆕 Challenge : nombre de jours (affiché si kind=challenge) */
+  /** 🆕 Challenge : nombre de jours + titres par jour (affichés si kind=challenge) */
   challengeDays?: number;
+  challengeDayTitles?: string[];
   onChallengeChange?: (patch: ChallengeDetailsPatch) => void;
 };
 
@@ -357,19 +368,20 @@ export function BookingDetailsFields({
 export function ChallengeDetailsFields({
   language,
   challengeDays,
+  challengeDayTitles,
   onChange,
 }: {
   language: Language;
   challengeDays?: number;
+  challengeDayTitles?: string[];
   onChange: (patch: ChallengeDetailsPatch) => void;
 }) {
+  const days = Math.max(1, Math.min(MAX_CHALLENGE_DAYS, challengeDays ?? 5));
+  const titles = challengeDayTitles ?? [];
+
   const L = {
     title:
-      language === "en"
-        ? "Your challenge"
-        : language === "es"
-          ? "Tu reto"
-          : "Ton challenge",
+      language === "en" ? "Your challenge" : language === "es" ? "Tu reto" : "Ton challenge",
     label:
       language === "en"
         ? "Number of days"
@@ -378,28 +390,122 @@ export function ChallengeDetailsFields({
           : "Nombre de jours",
     hint:
       language === "en"
-        ? "Generates one page per day (Day 1 to Day N), plus a final pitch page."
+        ? `One page per day (Day 1 to Day N), plus a final pitch page. Up to ${MAX_CHALLENGE_DAYS} days.`
         : language === "es"
-          ? "Genera una página por día (Día 1 a Día N), más una página de pitch final."
-          : "Génère une page par jour (Jour 1 à Jour N), plus une page de pitch final.",
+          ? `Una página por día (Día 1 a Día N), más una página de pitch final. Hasta ${MAX_CHALLENGE_DAYS} días.`
+          : `Une page par jour (Jour 1 à Jour N), plus une page de pitch final. ${MAX_CHALLENGE_DAYS} jours maximum.`,
+    titlesLabel:
+      language === "en"
+        ? "Title of each day"
+        : language === "es"
+          ? "Título de cada día"
+          : "Titre de chaque jour",
+    titlesHint:
+      language === "en"
+        ? "Left empty, every day would carry the same headline. One subject per day makes the challenge feel real."
+        : language === "es"
+          ? "Si se dejan vacíos, todos los días llevarían el mismo titular. Un tema por día hace que el reto sea real."
+          : "Laissés vides, tous les jours porteraient le même titre. Un sujet par jour rend le challenge crédible.",
+    dayWord: language === "en" ? "Day" : language === "es" ? "Día" : "Jour",
+    placeholder:
+      language === "en"
+        ? "e.g. Lay the foundations"
+        : language === "es"
+          ? "ej. Sienta las bases"
+          : "ex. Poser les fondations",
+    noticeTitle:
+      language === "en"
+        ? "How participants access each day"
+        : language === "es"
+          ? "Cómo acceden los participantes a cada día"
+          : "Comment les participants accèdent à chaque jour",
+    noticeBody:
+      language === "en"
+        ? "These pages are not listed publicly, but stay reachable by anyone who knows the URL. Send them day after day by email — there is no member area or login."
+        : language === "es"
+          ? "Estas páginas no se listan públicamente, pero siguen siendo accesibles para quien conozca la URL. Envíalas día tras día por email — no hay área de miembros ni inicio de sesión."
+          : "Ces pages ne sont pas listées publiquement, mais restent accessibles à qui connaît l'URL. Envoie-les jour après jour par email — il n'y a ni espace membre ni connexion.",
   };
+
+  const setTitle = (index: number, value: string) => {
+    const next = [...titles];
+    while (next.length < days) next.push("");
+    next[index] = value;
+    onChange({ challengeDayTitles: next.slice(0, days) });
+  };
+
   return (
     <div className="rounded-lg border border-[#31845C]/30 bg-[#31845C]/5 p-3.5 grid gap-3">
       <div className="flex items-center gap-2 text-sm font-bold text-ink">
         <CalendarClock size={15} className="text-[#31845C]" />
         {L.title}
       </div>
+
       <Field label={L.label} hint={L.hint}>
-        <Input
-          type="number"
-          min={1}
-          max={30}
-          value={challengeDays ?? 5}
-          onChange={(e) =>
-            onChange({ challengeDays: Math.max(1, Math.min(30, Number(e.target.value) || 5)) })
-          }
-        />
+        <div className="grid gap-2">
+          {/* Raccourcis vers les durées courantes : la saisie libre reste
+              possible juste en dessous. */}
+          <div className="flex flex-wrap gap-1.5">
+            {CHALLENGE_DAY_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => onChange({ challengeDays: preset })}
+                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+                  days === preset
+                    ? "border-[#31845C] bg-[#31845C]/15 text-ink"
+                    : "border-line text-muted hover:border-[#31845C]/50 hover:text-ink"
+                }`}
+              >
+                {preset} {L.dayWord.toLowerCase()}s
+              </button>
+            ))}
+          </div>
+          <Input
+            type="number"
+            min={1}
+            max={MAX_CHALLENGE_DAYS}
+            value={days}
+            onChange={(e) =>
+              onChange({
+                challengeDays: Math.max(
+                  1,
+                  Math.min(MAX_CHALLENGE_DAYS, Number(e.target.value) || 5),
+                ),
+              })
+            }
+          />
+        </div>
       </Field>
+
+      {/* 🆕 N3-a — Un titre par jour. Sans eux, les jours 2..N sont des copies
+          conformes du Jour 1 : le seul mécanisme de différenciation réécrit
+          littéralement « Jour 1 » → « Jour N ». */}
+      <Field label={L.titlesLabel} hint={L.titlesHint}>
+        <div className="grid gap-1.5">
+          {Array.from({ length: days }, (_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted">
+                {L.dayWord} {i + 1}
+              </span>
+              <Input
+                value={titles[i] ?? ""}
+                onChange={(e) => setTitle(i, e.target.value)}
+                placeholder={L.placeholder}
+              />
+            </div>
+          ))}
+        </div>
+      </Field>
+
+      {/* 🆕 R2 — Nature réelle des URL « Jour N ». Ne pas le dire laisserait
+          croire à un accès protégé qui n'existe pas. */}
+      <div className="flex items-start gap-2 rounded-md border border-line bg-white/60 p-2.5 text-[11px] leading-relaxed text-muted">
+        <Info size={13} className="mt-0.5 shrink-0 text-[#31845C]" />
+        <span>
+          <strong className="text-ink">{L.noticeTitle} :</strong> {L.noticeBody}
+        </span>
+      </div>
     </div>
   );
 }
@@ -419,6 +525,7 @@ export function FunnelKindStep({
   calendarEmbedUrl,
   onBookingChange,
   challengeDays,
+  challengeDayTitles,
   onChallengeChange,
 }: Props) {
   return (
@@ -493,6 +600,7 @@ export function FunnelKindStep({
         <ChallengeDetailsFields
           language={language}
           challengeDays={challengeDays}
+          challengeDayTitles={challengeDayTitles}
           onChange={onChallengeChange}
         />
       )}

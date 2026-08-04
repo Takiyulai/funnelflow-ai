@@ -1279,12 +1279,20 @@ ${d.features.map((f) => `  <li><span class="ff-feat-check">${featureIconHtml}</s
       const ctaHtml = d.cta?.label
         ? renderCtaButton(d.cta, "ff-pricing-cta", "fade-up", nav)
         : "";
+      // 🆕 Prix d'ancrage barré. Rendu dans l'export AUSSI : un tunnel exporté
+      // qui perdrait le prix barré afficherait une offre différente de celle
+      // vue dans l'éditeur. Style en ligne — l'export ne dépend d'aucune
+      // feuille externe.
+      const anchor = d.originalPrice
+        ? `<del style="display:block;font-size:18px;font-weight:600;opacity:.5;margin-bottom:2px">${escapeHtml(d.originalPrice)}</del>`
+        : "";
 
       return `  <div class="${cardCls}">
     ${badge}
     <h3 class="ff-pricing-name">${escapeHtml(d.name || `Plan ${idx + 1}`)}</h3>
     ${desc}
     <div class="ff-pricing-price">
+      ${anchor}
       <span class="ff-pricing-amount">${escapeHtml(d.price || "—")}</span>
       ${period}
     </div>

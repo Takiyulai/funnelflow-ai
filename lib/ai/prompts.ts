@@ -83,6 +83,26 @@ function productRuleBlock(brief: FunnelBrief): string {
     `- ${tr({ fr: "Style visuel", en: "Design style", es: "Estilo visual" }, lang)}: ${brief.designStyle}`,
     `- ${tr({ fr: "Langue de sortie", en: "Output language", es: "Idioma de salida" }, lang)}: ${lang} (${langName(lang)})`,
   ];
+
+  // 🆕 R4 — Durée du challenge dans le copywriting.
+  //
+  // `challengeDays` pilotait la GÉNÉRATION des pages (une par jour) mais
+  // n'était jamais transmis au rédactionnel : la landing d'un challenge de
+  // 7 jours ne mentionnait nulle part « 7 jours », alors que la durée est
+  // justement l'argument de vente central de ce format.
+  if (brief.funnelKind === "challenge" && brief.challengeDays && brief.challengeDays > 1) {
+    lines.push(
+      tr(
+        {
+          fr: `- Durée du challenge : ${brief.challengeDays} jours. MENTIONNE explicitement cette durée dans le titre principal et les bénéfices (ex. « en ${brief.challengeDays} jours »). C'est l'argument central de ce format.`,
+          en: `- Challenge duration: ${brief.challengeDays} days. EXPLICITLY mention this duration in the headline and benefits (e.g. "in ${brief.challengeDays} days"). It is the core selling point of this format.`,
+          es: `- Duración del reto: ${brief.challengeDays} días. MENCIONA explícitamente esta duración en el titular y los beneficios (ej. «en ${brief.challengeDays} días»). Es el argumento central de este formato.`,
+        },
+        lang,
+      ),
+    );
+  }
+
   return [header, ...lines].join("\n");
 }
 

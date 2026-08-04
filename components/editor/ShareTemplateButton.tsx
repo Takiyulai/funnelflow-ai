@@ -7,7 +7,6 @@
 
 import { useState } from "react";
 import { Share2, Loader2, Check, X } from "lucide-react";
-import { handlePlanGate } from "@/lib/billing/planGate";
 import { useCelebrate } from "@/components/ui/Celebration";
 
 export function ShareTemplateButton({
@@ -27,6 +26,8 @@ export function ShareTemplateButton({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  /** 🆕 Refus pour absence d'abonnement : affiché en place, sans redirection. */
+  const [needsPlan, setNeedsPlan] = useState(false);
   const { celebrate } = useCelebrate();
 
   async function submit() {
@@ -53,7 +54,23 @@ export function ShareTemplateButton({
         }),
       });
       const json = await res.json().catch(() => ({}));
-      if (handlePlanGate(res.status, json, (m) => setMsg(`${m.title}. ${m.description}`))) return;
+
+      // 🆕 CAS DU FORFAIT — traité SANS `handlePlanGate` ici, volontairement.
+      //
+      // Le helper générique redirige vers /abonnement au bout de 1,3 s. Depuis
+      // une modale ouverte, l'utilisateur voit un message fugace puis se
+      // retrouve éjecté de son éditeur : c'est exactement ce que remontaient
+      // les utilisateurs sans abonnement actif — « le partage ne marche pas »,
+      // alors que le refus était intentionnel mais illisible.
+      //
+      // On affiche donc l'explication EN PLACE, avec un lien qu'il choisit de
+      // suivre ou non, et sans lui faire perdre son travail en cours.
+      if (res.status === 402 || json.error === "subscription_required") {
+        setNeedsPlan(true);
+        setMsg(null);
+        return;
+      }
+
       if (!res.ok || !json.ok) {
         setMsg(json.message || json.error || "Partage impossible.");
         return;
@@ -79,7 +96,7 @@ export function ShareTemplateButton({
     <>
       <button
         type="button"
-        onClick={() => { setOpen(true); setDone(false); setMsg(null); }}
+        onClick={() => { setOpen(true); setDone(false); setMsg(null); setNeedsPlan(false); }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300/30 bg-violet-300/10 px-3 py-2 text-xs font-semibold text-violet-200 transition hover:border-violet-300/50"
         title="Partager ce tunnel comme modèle communautaire"
       >
@@ -168,6 +185,22 @@ export function ShareTemplateButton({
                     J&apos;accepte de partager publiquement ce modèle sous mon nom dans la Galerie
                     communautaire.
                   </label>
+                  {needsPlan && (
+                    <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-100">
+                      <strong className="block text-amber-50">
+                        Un forfait actif est requis pour partager un modèle.
+                      </strong>
+                      <span className="mt-1 block">
+                        Ton travail est conservé — ferme simplement cette fenêtre.
+                      </span>
+                      <a
+                        href="/abonnement"
+                        className="mt-2 inline-block font-semibold text-amber-200 underline underline-offset-2"
+                      >
+                        Voir les forfaits
+                      </a>
+                    </div>
+                  )}
                   {msg && <p className="text-xs text-red-300">{msg}</p>}
                   <button
                     type="button"

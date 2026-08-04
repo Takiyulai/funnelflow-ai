@@ -12,6 +12,8 @@ import { RichText } from "@/components/funnel/RichText";
 export type PriceTier = {
   name: string;
   price: string;
+  /** 🆕 Prix d'ancrage barré, affiché au-dessus du prix réel. Cosmétique. */
+  originalPrice?: string;
   period?: string;
   description?: string;
   features: string[];
@@ -94,13 +96,32 @@ function Header({ section }: { section: FunnelSection }) {
 
 function Price({ tier }: { tier: PriceTier }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 20 }}>
-      <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--ff-ink)" }}>
-        {tier.price || "—"}
-      </span>
-      {tier.period && (
-        <span style={{ fontSize: 14, color: "var(--ff-ink)", opacity: 0.6 }}>{tier.period}</span>
+    <div style={{ marginBottom: 20 }}>
+      {/* 🆕 Prix d'ancrage barré, au-dessus du prix réel. Purement cosmétique :
+          il n'entre dans aucun calcul, le montant encaissé reste `price`.
+          Absent → rien n'est rendu, l'affichage reste celui d'origine. */}
+      {tier.originalPrice && (
+        <del
+          style={{
+            display: "block",
+            fontSize: 18,
+            fontWeight: 600,
+            color: "var(--ff-ink)",
+            opacity: 0.5,
+            marginBottom: 2,
+          }}
+        >
+          {tier.originalPrice}
+        </del>
       )}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--ff-ink)" }}>
+          {tier.price || "—"}
+        </span>
+        {tier.period && (
+          <span style={{ fontSize: 14, color: "var(--ff-ink)", opacity: 0.6 }}>{tier.period}</span>
+        )}
+      </div>
     </div>
   );
 }

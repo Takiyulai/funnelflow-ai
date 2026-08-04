@@ -22,10 +22,15 @@ export const dynamic = "force-dynamic";
 
 export default async function PublishedFunnelPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  // 🆕 `ff_ab=a|b` force une variante pour APERÇU, sans compter la vue.
+  searchParams: Promise<{ ff_ab?: string }>;
 }) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const forced = sp.ff_ab === "a" || sp.ff_ab === "b" ? sp.ff_ab : null;
   const published = await getPublishedFunnelBySlug(slug);
   if (!published) notFound();
 
@@ -36,7 +41,7 @@ export default async function PublishedFunnelPage({
   // sections de la variante affectée à ce visiteur, et la vue est comptée.
   // Sans test en cours (cas courant), la page ressort inchangée.
   const served = home
-    ? await serveAbVariant(published.funnelId, published.ownerId, home)
+    ? await serveAbVariant(published.funnelId, published.ownerId, home, forced)
     : null;
   const activePage = served?.page ?? home;
 

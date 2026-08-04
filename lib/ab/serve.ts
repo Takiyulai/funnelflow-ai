@@ -34,6 +34,18 @@ export async function serveAbVariant(
   funnelId: string,
   ownerId: string,
   page: FunnelPage,
+  /**
+   * 🆕 Variante FORCÉE par l'URL (`?ff_ab=a` ou `?ff_ab=b`).
+   *
+   * Pourquoi c'est nécessaire : l'affectation étant déterministe, le
+   * propriétaire tombe TOUJOURS sur la même variante depuis son navigateur. Il
+   * pouvait donc créer une variante B, aller voir sa page… et n'avoir aucun
+   * moyen de la contempler, en concluant que rien ne marchait.
+   *
+   * 🔒 Une vue forcée n'est JAMAIS comptée (voir plus bas) : sinon n'importe
+   * qui pourrait gonfler une variante en rechargeant l'URL truquée.
+   */
+  forcedVariant?: "a" | "b" | null,
 ): Promise<ServedPage> {
   try {
     const cookieStore = await cookies();
@@ -47,15 +59,21 @@ export async function serveAbVariant(
     const test = await getRunningTest(admin, funnelId, page.id);
     if (!test) return { page, testId: null, variant: null };
 
-    const variant = pickVariant(visitorKey, test.id, test.traffic_split);
+    const variant = forcedVariant ?? pickVariant(visitorKey, test.id, test.traffic_split);
 
-    await recordAbEvent(admin, {
-      testId: test.id,
-      userId: ownerId,
-      variant,
-      kind: "view",
-      visitorKey,
-    });
+    // 🔒 Une variante forcée par l'URL est un APERÇU : on ne compte rien.
+    // Compter ces vues permettrait à n'importe qui de fausser un test en
+    // rechargeant `?ff_ab=b`, et fausserait aussi tes propres chiffres à
+    // chaque fois que tu vas vérifier ta page.
+    if (!forcedVariant) {
+      await recordAbEvent(admin, {
+        testId: test.id,
+        userId: ownerId,
+        variant,
+        kind: "view",
+        visitorKey,
+      });
+    }
 
     // La variante B ne remplace les sections que si elle en contient : une
     // variante vide afficherait une page blanche aux visiteurs concernés.

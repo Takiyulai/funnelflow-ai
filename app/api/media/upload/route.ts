@@ -1,9 +1,17 @@
 // app/api/media/upload/route.ts
 //
-// Endpoint d'upload de médias (images, vidéos) vers Supabase Storage.
+// Endpoint d'upload de médias (images, vidéos).
+//
+// 🆕 MIGRATION STOCKAGE — destination CLOUDINARY et non plus Supabase Storage
+// (bucket saturé à 149 % du quota). Le contrat de réponse est identique, aucun
+// appelant côté front n'a été modifié. Voir lib/media/cloudinary.ts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import {
+  uploadBuffer,
+  isCloudinaryConfigured,
+  CloudinaryNotConfiguredError,
+} from "@/lib/media/cloudinary";
 
 export const runtime = "nodejs";
 
@@ -26,31 +34,9 @@ const ALLOWED_MIMES = new Set([
   "video/x-matroska",
 ]);
 
-const BUCKET = "cloned-funnels-media";
-
-function mimeToExt(mime: string, fallbackName: string): string {
-  const map: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-    "image/svg+xml": "svg",
-    "image/avif": "avif",
-    "image/bmp": "bmp",
-    "image/tiff": "tiff",
-    "image/heic": "heic",
-    "image/heif": "heif",
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "video/quicktime": "mov",
-    "video/x-matroska": "mkv",
-  };
-  if (map[mime]) return map[mime];
-  // Fallback : extension depuis le nom de fichier
-  const m = fallbackName.match(/\.([a-z0-9]+)$/i);
-  return m ? m[1].toLowerCase() : "bin";
-}
+// ⚠️ `BUCKET` et `mimeToExt` ont été retirés avec la migration : Cloudinary
+// déduit l'extension du contenu et nomme l'asset par son empreinte. Plus de
+// bucket Supabase ici.
 
 function sanitizeFilename(name: string): string {
   return (
@@ -68,13 +54,12 @@ export async function POST(req: NextRequest) {
   console.log("[/api/media/upload] === Nouvelle requête ===");
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !serviceKey) {
-      console.error("[/api/media/upload] Missing env vars");
+    // Contrôle de configuration AVANT de lire le fichier : inutile de recevoir
+    // 15 Mo pour échouer ensuite faute d'identifiants.
+    if (!isCloudinaryConfigured()) {
+      console.error("[/api/media/upload] Cloudinary non configuré");
       return NextResponse.json(
-        { error: "Configuration serveur incomplète." },
+        { error: new CloudinaryNotConfiguredError().message },
         { status: 500 },
       );
     }
@@ -161,15 +146,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3) Chemin de destination
-    const ext = mimeToExt(mime, file.name);
-    const ts = Date.now();
-    const rand = Math.random().toString(36).slice(2, 8);
-    const safeSpot = sanitizeFilename(spotId);
+    // 3) Dossier de destination chez Cloudinary.
+    //
+    // Plus de nom de fichier construit à la main : l'identifiant est
+    // l'empreinte du CONTENU (cf. lib/media/cloudinary.ts). Deux envois du même
+    // fichier retombent donc sur le même asset au lieu d'en créer deux — c'est
+    // exactement la duplication qui a saturé Supabase.
     const safeFunnel = sanitizeFilename(funnelId);
-    const path = `user-uploads/${safeFunnel}/${safeSpot}-${ts}-${rand}.${ext}`;
 
-    console.log("[/api/media/upload] Destination:", path);
+    console.log("[/api/media/upload] Dossier:", `uploads/${safeFunnel}`, {
+      spot: sanitizeFilename(spotId),
+    });
 
     // 4) Buffer
     let buffer: Buffer;
@@ -184,53 +171,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5) Upload
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    const { error: upErr, data: upData } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, buffer, {
-        contentType: mime,
-        upsert: false,
+    // 5) Upload → CLOUDINARY (et non plus Supabase Storage).
+    //
+    // Le contrat de réponse est INCHANGÉ ({ url, path, mime, size }) : aucun
+    // appelant côté front n'a besoin d'être modifié. `path` porte désormais le
+    // `public_id` Cloudinary, qui joue le même rôle d'identifiant stable.
+    try {
+      const result = await uploadBuffer(buffer, {
+        folder: `uploads/${safeFunnel}`,
+        mime,
       });
 
-    if (upErr) {
-      console.error("[/api/media/upload] Supabase error:", {
-        message: upErr.message,
-        name: upErr.name,
-        stack: upErr.stack,
+      console.log("[/api/media/upload] Upload Cloudinary OK:", result.publicId);
+
+      return NextResponse.json({
+        url: result.url,
+        path: result.publicId,
+        mime: result.mime,
+        size: result.size,
       });
+    } catch (err) {
+      if (err instanceof CloudinaryNotConfiguredError) {
+        console.error("[/api/media/upload]", err.message);
+        return NextResponse.json({ error: err.message }, { status: 500 });
+      }
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      console.error("[/api/media/upload] Cloudinary error:", msg);
       return NextResponse.json(
-        {
-          error: `Échec Supabase : ${upErr.message}`,
-          details: {
-            name: upErr.name,
-            bucket: BUCKET,
-            path,
-          },
-        },
+        { error: `Échec de l'envoi du média : ${msg}` },
         { status: 500 },
       );
     }
-
-    console.log("[/api/media/upload] Upload OK:", upData);
-
-    // 6) URL publique
-    const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-
-    console.log("[/api/media/upload] URL publique:", pub.publicUrl);
-
-    return NextResponse.json({
-      url: pub.publicUrl,
-      path,
-      mime,
-      size: file.size,
-    });
   } catch (err) {
     console.error("[/api/media/upload] Erreur inattendue:", err);
     const msg = err instanceof Error ? err.message : "Erreur inconnue";
+    // `unknown` plutôt qu'un `any` : la cause d'une Error n'est pas typée, on
+    // la lit sans désactiver le typage sur tout l'objet.
     const cause =
-      err instanceof Error && "cause" in err ? String((err as any).cause) : "";
+      err instanceof Error && "cause" in err
+        ? String((err as Error & { cause?: unknown }).cause)
+        : "";
     return NextResponse.json(
       {
         error: `Erreur serveur : ${msg}${cause ? ` (cause: ${cause})` : ""}`,

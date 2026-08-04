@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Save, Undo2, Redo2, ExternalLink, Loader2,
-  Copy, Check, Globe, Rocket, Layers, Eye, FlaskConical,
+  Copy, Check, Globe, Rocket, Layers, Eye, FlaskConical, Info,
 } from "lucide-react";
 
 import { AppShell } from "@/components/dashboard/AppShell";
@@ -1024,6 +1024,22 @@ export default function EditorPage() {
             onDeletePage={handleDeletePage}
             onReorder={handleReorderPages}
           />
+
+          {/* 🆕 R2 — Nature réelle des URL « Jour N » d'un challenge.
+              Ces pages ne sont pas listées, mais rien ne les protège : il n'y a
+              ni espace membre ni connexion. Sans ce rappel, on peut croire que
+              le Jour 5 est inaccessible avant le cinquième jour. */}
+          {activePage?.role === "challenge-day" && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-[11px] leading-relaxed text-amber-100">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                <strong>Accès à cette page :</strong> elle n&apos;est pas listée
+                publiquement, mais reste accessible à qui connaît l&apos;URL.
+                Envoie-la le jour voulu par email — il n&apos;y a ni espace
+                membre ni connexion.
+              </span>
+            </div>
+          )}
 
           {activePage && (
             <PageRegenPanel
