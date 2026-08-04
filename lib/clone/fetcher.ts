@@ -14,12 +14,24 @@
  * échec bascule sur le suivant. L'ordre est surchargeable sans redéploiement
  * via `CLONE_SCRAPER_ORDER` (ex. "scrapingbee,scrapingdog").
  *
- * ⚠️ ÉCART FONCTIONNEL ASSUMÉ : le `js_scenario` (CSS runtime + capture des
- * fonds) est propre à ScrapingBee. Scrapingdog n'expose pas d'exécution de
- * script arbitraire : un clone servi par Scrapingdog garde le HTML hydraté et
- * les <style>/<link> du document, mais PERD les CSS injectées en mémoire par
- * styled-components/emotion ainsi que les fonds recalculés. Sur un site bâti
- * en CSS-in-JS, le repli ScrapingBee reste qualitativement supérieur.
+ * ⚠️ ÉCART FONCTIONNEL : le `js_scenario` (CSS runtime + capture des fonds) est
+ * propre à ScrapingBee. Scrapingdog n'expose pas d'exécution de script
+ * arbitraire (son endpoint /scrape ne documente que `api_key`, `url`,
+ * `dynamic`) : un clone servi par Scrapingdog garde le HTML hydraté et les
+ * <style>/<link> du document, mais PERD les CSS injectées en mémoire par
+ * styled-components/emotion ainsi que les fonds recalculés.
+ *
+ * 🆕 CORRECTIF — ESCALADE AUTOMATIQUE. Cet écart n'est plus « assumé » : il est
+ * DÉTECTÉ. Après chaque réponse Scrapingdog (et fetch natif), on passe le HTML
+ * à `assessCssCompleteness()`. Si la page porte des <style> vides signés
+ * CSS-in-JS, le résultat est REJETÉ et la chaîne bascule sur ScrapingBee, seul
+ * capable de matérialiser le CSSOM. Scrapingdog reste donc le fournisseur
+ * principal (moins cher) pour les 95 % de pages en CSS classique, et ne brûle
+ * un crédit ScrapingBee que quand c'est indispensable.
+ *
+ * Mesure sur une page systeme.io (styled-components v6) : 132 642 caractères de
+ * CSS (1 145 règles) présents dans le CSSOM, 65 caractères une fois sérialisés
+ * — soit 92 % du style de la page perdu sans ce correctif.
  *
  * Timeout global : 45s (l'extraction CSS runtime ajoute ~3-5s).
  *
@@ -31,6 +43,7 @@
  */
 
 import type { FetchedPage, CloneErrorCode } from "./types";
+import { assessCssCompleteness } from "./css-completeness";
 
 const SCRAPINGBEE_ENDPOINT = "https://app.scrapingbee.com/api/v1/";
 const SCRAPINGDOG_ENDPOINT = "https://api.scrapingdog.com/scrape";
@@ -103,6 +116,10 @@ export async function fetchPageHtml(rawUrl: string): Promise<FetchedPage> {
   const order = resolveScraperOrder();
   const failures: string[] = [];
   let sawConfiguredProvider = false;
+  /** 🆕 Au moins un fournisseur a renvoyé une page dont le CSS vit dans le CSSOM. */
+  let sawCssRuntimeMissing = false;
+  /** 🆕 ScrapingBee — le seul capable de matérialiser le CSSOM — a-t-il été tenté ? */
+  let triedScrapingBee = false;
 
   console.log(`[clone-fetcher] Fetching ${url.toString()}`);
   console.log(`[clone-fetcher] Ordre des fournisseurs : ${order.join(" → ")} → natif`);
@@ -114,6 +131,7 @@ export async function fetchPageHtml(rawUrl: string): Promise<FetchedPage> {
       continue;
     }
     sawConfiguredProvider = true;
+    if (name === "scrapingbee") triedScrapingBee = true;
 
     try {
       return name === "scrapingdog"
@@ -121,6 +139,9 @@ export async function fetchPageHtml(rawUrl: string): Promise<FetchedPage> {
         : await fetchViaScrapingBee(url, apiKey);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof CloneFetchError && err.code === "css-runtime-missing") {
+        sawCssRuntimeMissing = true;
+      }
       failures.push(`${name} → ${message}`);
       console.warn(`[clone-fetcher] ❌ ${name} a échoué, bascule sur le suivant. ${message}`);
       continue;
@@ -134,6 +155,27 @@ export async function fetchPageHtml(rawUrl: string): Promise<FetchedPage> {
     }
     return await fetchViaNative(url);
   } catch (nativeErr) {
+    if (nativeErr instanceof CloneFetchError && nativeErr.code === "css-runtime-missing") {
+      sawCssRuntimeMissing = true;
+    }
+
+    // 🆕 Cas dédié : la page est exploitable, mais AUCUN fournisseur disponible
+    // ne sait matérialiser son CSS runtime. Un message générique
+    // « scraping-blocked » enverrait l'utilisateur chercher un blocage anti-bot
+    // qui n'existe pas — la vraie action est de rendre ScrapingBee disponible.
+    if (sawCssRuntimeMissing) {
+      throw new CloneFetchError(
+        "css-runtime-missing",
+        `Cette page construit son style en CSS-in-JS (styled-components / emotion) : ` +
+          `les règles ne figurent pas dans le HTML et seul ScrapingBee sait les extraire. ` +
+          (triedScrapingBee
+            ? `ScrapingBee a été tenté sans succès — vérifiez la clé SCRAPINGBEE_API_KEY et son quota. `
+            : `Configurez SCRAPINGBEE_API_KEY (ou forcez CLONE_SCRAPER_ORDER=scrapingbee). `) +
+          `Repli possible : CLONE_ALLOW_DEGRADED_CSS=true pour accepter un clone sans style. ` +
+          (failures.length > 0 ? `Détail : ${failures.join(" | ")}` : ""),
+      );
+    }
+
     if (failures.length > 0) {
       // On remonte le détail de CHAQUE fournisseur : sans ça, l'utilisateur ne
       // voyait qu'un « HTTP 400 » sec, sans savoir lequel ni pourquoi.
@@ -225,6 +267,10 @@ async function fetchViaScrapingdog(url: URL, apiKey: string): Promise<FetchedPag
 
   const html = await response.text();
   validateHtmlSize(html, url.toString());
+  // ⚠️ Scrapingdog rend le JS mais ne peut PAS exécuter de script avant
+  // sérialisation : si la page est en CSS-in-JS, on rejette pour laisser
+  // ScrapingBee prendre la main.
+  assertCssUsable("Scrapingdog", html, url.toString());
 
   console.log(`[clone-fetcher] ✅ Scrapingdog : ${html.length} chars (rendu JS, sans extraction CSS runtime)`);
 
@@ -519,6 +565,19 @@ async function fetchViaScrapingBee(url: URL, apiKey: string): Promise<FetchedPag
     `[clone-fetcher] ✅ ScrapingBee : ${html.length} chars (resolved: ${resolvedUrl}) — runtime CSS extracted: ${extractedLength} chars`
   );
 
+  // 🆕 Diagnostic : ScrapingBee est censé matérialiser le CSSOM. S'il n'a rien
+  // extrait alors que la page est signée CSS-in-JS, le js_scenario n'a pas
+  // tourné (timeout d'hydratation, scénario rejeté…) — on le dit clairement
+  // dans les logs plutôt que de livrer un clone sans style en silence.
+  const beeReport = assessCssCompleteness(html);
+  if (extractedLength === 0 && beeReport.runtimeEngines.length > 0) {
+    console.warn(
+      `[clone-fetcher] ⚠️ ScrapingBee n'a extrait AUCUNE règle runtime alors que la page ` +
+        `utilise ${beeReport.runtimeEngines.join(", ")} — le js_scenario n'a probablement pas ` +
+        `abouti (hydratation trop lente ?). Le clone risque d'être sans style.`,
+    );
+  }
+
   return {
     url: url.toString(),
     finalUrl: resolvedUrl,
@@ -579,6 +638,8 @@ async function fetchViaNative(url: URL): Promise<FetchedPage> {
 
   const html = await response.text();
   validateHtmlSize(html, url.toString());
+  // Le fetch natif n'exécute aucun JS : même garde-fou, a fortiori.
+  assertCssUsable("Fetch natif", html, url.toString());
 
   console.log(
     `[clone-fetcher] ✅ Native fetch : ${html.length} chars (no JS rendering)`
@@ -603,4 +664,37 @@ function validateHtmlSize(html: string, sourceUrl: string): void {
       `Page trop petite (${html.length} chars < ${MIN_HTML_LENGTH}) pour "${sourceUrl}" — probable blocage ou page vide`
     );
   }
+}
+
+/**
+ * 🆕 Garde-fou CSS : rejette un HTML dont le style vit dans le CSSOM.
+ *
+ * Appelé pour les fournisseurs INCAPABLES d'exécuter du JS avant sérialisation
+ * (Scrapingdog, fetch natif). Lever une erreur ici fait basculer la chaîne de
+ * repli sur ScrapingBee au lieu de produire un clone visuellement cassé.
+ *
+ * Échappatoire : `CLONE_ALLOW_DEGRADED_CSS=true` dégrade l'erreur en simple
+ * avertissement (utile si le quota ScrapingBee est épuisé et qu'un clone
+ * approximatif vaut mieux que pas de clone du tout).
+ */
+function assertCssUsable(providerLabel: string, html: string, sourceUrl: string): void {
+  const report = assessCssCompleteness(html);
+  if (report.sufficient) return;
+
+  const detail =
+    `${providerLabel} : ${report.reason} ` +
+    `(CSS inline retenu : ${report.inlineCssChars} car., feuilles externes : ${report.externalStylesheets})`;
+
+  if ((process.env.CLONE_ALLOW_DEGRADED_CSS ?? "").trim().toLowerCase() === "true") {
+    console.warn(
+      `[clone-fetcher] ⚠️ CSS incomplet TOLÉRÉ (CLONE_ALLOW_DEGRADED_CSS=true) — ${detail}`,
+    );
+    return;
+  }
+
+  console.warn(`[clone-fetcher] ⚠️ ${detail} → escalade vers un fournisseur capable d'exécuter du JS.`);
+  throw new CloneFetchError(
+    "css-runtime-missing",
+    `${detail} — page : ${sourceUrl}`,
+  );
 }

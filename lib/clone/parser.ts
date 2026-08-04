@@ -481,15 +481,72 @@ function extractItems(
 ): Array<{ title?: string; description?: string }> {
   const items: Array<{ title?: string; description?: string }> = [];
 
-  // FAQ : pairs question/réponse
+  // FAQ : paires question/réponse.
+  //
+  // 🐛 L'ancienne liste (`details, .faq-item, .question`) ne couvrait AUCUN des
+  // grands constructeurs de pages. Sur une page Divi, le markup est
+  // `.et_pb_toggle > h5.et_pb_toggle_title + .et_pb_toggle_content` : rien ne
+  // matchait, l'extraction retombait sur la branche générique `li, .feature…`
+  // qui ne trouve ni titre (le titre est un <h5>, pas listé) ni réponse. Côté
+  // éditeur, la réponse n'avait donc aucun champ de saisie.
+  //
+  // On décrit désormais chaque constructeur par un triplet
+  // (conteneur d'item, titre, contenu), du plus spécifique au plus générique.
   if (type === "faq") {
-    $block.find("details, .faq-item, .question").each((_, el) => {
-      const $el = $(el);
-      const title = $el.find("summary, h3, h4, .question-title").first().text().trim();
-      const description = $el.find("p, .answer, .question-body").first().text().trim();
-      if (title || description) items.push({ title, description });
-    });
-    if (items.length > 0) return items;
+    const FAQ_PATTERNS: Array<{ item: string; title: string; content: string }> = [
+      // Divi (WordPress)
+      {
+        item: ".et_pb_toggle",
+        title: ".et_pb_toggle_title",
+        content: ".et_pb_toggle_content",
+      },
+      // Elementor (accordéon ET toggle)
+      {
+        item: ".elementor-accordion-item, .elementor-toggle-item",
+        title: ".elementor-tab-title",
+        content: ".elementor-tab-content",
+      },
+      // Bootstrap 5
+      {
+        item: ".accordion-item",
+        title: ".accordion-button, .accordion-header",
+        content: ".accordion-body, .accordion-collapse",
+      },
+      // Beaver Builder
+      {
+        item: ".fl-accordion-item",
+        title: ".fl-accordion-button-label, .fl-accordion-button",
+        content: ".fl-accordion-content",
+      },
+      // <details> natif / blocs WordPress
+      {
+        item: "details, .wp-block-details",
+        title: "summary",
+        content: "p, div",
+      },
+      // Génériques nommés (ancien comportement, conservé en dernier)
+      {
+        item: ".faq-item, .accordion-item, .qa-item, .question",
+        title: "summary, h3, h4, h5, .question-title, .faq-question, .qa-question",
+        content: "p, .answer, .faq-answer, .question-body, .qa-answer",
+      },
+    ];
+
+    for (const pattern of FAQ_PATTERNS) {
+      $block.find(pattern.item).each((_, el) => {
+        const $el = $(el);
+        const title = $el.find(pattern.title).first().text().trim();
+        const description = $el.find(pattern.content).first().text().trim();
+        // Une paire n'a d'intérêt que si les deux côtés existent et diffèrent :
+        // sinon on renvoie une question dupliquée en guise de réponse.
+        if (title && description && title !== description) {
+          items.push({ title, description });
+        } else if (title || description) {
+          items.push({ title: title || undefined, description: description || undefined });
+        }
+      });
+      if (items.length > 0) return items.slice(0, 12);
+    }
   }
 
   // Benefits / pricing : listes

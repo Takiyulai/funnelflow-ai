@@ -5,6 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import { applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches";
 import { detectFeatures, buildFeatureRuntime } from "@/lib/clone/feature-modules";
+import {
+  ACCORDION_RUNTIME_SCRIPT,
+  ACCORDION_EDIT_REVEAL_CSS,
+  SCROLL_ANIMATION_REVEAL_CSS,
+} from "@/lib/clone/accordion-runtime";
 import type { FunnelSection } from "@/lib/funnels/types";
 
 type ClonedBody = {
@@ -581,149 +586,15 @@ function wrapHtmlDocument(
     : "";
 
   // ───────────────────────────────────────────────────────────────────
-  // FAQ runtime : UNIQUEMENT en mode public (aperçu non-éditable).
-  // Identique au script injecté à l'export dans lib/export/faq-script.ts.
+  // Runtime accordéon : UNIQUEMENT en mode public (aperçu non-éditable).
+  // En édition, les réponses restent toutes dépliées pour être modifiables.
   // ───────────────────────────────────────────────────────────────────
-  const faqRuntimeScript = !editMode
-    ? `
-<script>
-(function(){
-  if (window.__ffFaqBooted) return;
-  window.__ffFaqBooted = true;
-
-  function findAnswerFor(q){
-    var n = q.nextElementSibling;
-    while(n){
-      if(n.tagName && n.tagName.toLowerCase()==='div') return n;
-      n = n.nextElementSibling;
-    }
-    return null;
-  }
-
-  function setOpen(q, a, open){
-    if(!a) return;
-    if(open){
-      a.style.setProperty('display','block','important');
-      a.style.setProperty('visibility','visible','important');
-      a.style.setProperty('opacity','1','important');
-      a.style.setProperty('height','auto','important');
-      a.style.setProperty('max-height','none','important');
-      a.style.setProperty('min-height','0','important');
-      a.style.setProperty('overflow','visible','important');
-      a.style.setProperty('clip','auto','important');
-      a.style.setProperty('clip-path','none','important');
-      a.style.setProperty('transform','none','important');
-      a.style.setProperty('pointer-events','auto','important');
-      q.setAttribute('data-ff-faq-open','true');
-      var i = q.querySelector('i[class*="fa-chevron"]');
-      if(i){
-        i.classList.remove('fa-chevron-circle-down');
-        i.classList.add('fa-chevron-circle-up');
-      }
-    } else {
-      a.style.setProperty('display','none','important');
-      a.style.setProperty('height','0','important');
-      a.style.setProperty('max-height','0','important');
-      a.style.setProperty('overflow','hidden','important');
-      q.setAttribute('data-ff-faq-open','false');
-      var i2 = q.querySelector('i[class*="fa-chevron"]');
-      if(i2){
-        i2.classList.remove('fa-chevron-circle-up');
-        i2.classList.add('fa-chevron-circle-down');
-      }
-    }
-  }
-
-  function bindAll(){
-    var bound = 0;
-    var icons = document.querySelectorAll('i[class*="fa-chevron-circle"]');
-    for(var k=0; k<icons.length; k++){
-      var icon = icons[k];
-      var q = icon.parentElement;
-      if(!q) continue;
-      if(q.getAttribute('data-ff-faq-question')==='true') continue;
-      var a = findAnswerFor(q);
-      if(!a) continue;
-      q.setAttribute('data-ff-faq-question','true');
-      q.style.cursor = 'pointer';
-      setOpen(q, a, false);
-      (function(qq, aa){
-        qq.addEventListener('click', function(ev){
-          ev.preventDefault();
-          ev.stopPropagation();
-          var open = qq.getAttribute('data-ff-faq-open')==='true';
-          setOpen(qq, aa, !open);
-        });
-      })(q, a);
-      bound++;
-    }
-
-    // 🆕 Fallback générique (markup systeme.io sans icône chevron) : on lie les
-    // éléments « question » (texte court terminé par ?) à leur réponse (bloc
-    // frère plus long), et on les replie par défaut → accordéon cliquable.
-    function findAnswerLenient(q){
-      var n = q.nextElementSibling;
-      while(n){
-        var nt = (n.textContent||'').trim();
-        if(nt.length >= 40) return n;
-        n = n.nextElementSibling;
-      }
-      // sinon : frère suivant du parent
-      var p = q.parentElement;
-      if(p && p.nextElementSibling){
-        var pt = (p.nextElementSibling.textContent||'').trim();
-        if(pt.length >= 40) return p.nextElementSibling;
-      }
-      return null;
-    }
-    var cands = document.querySelectorAll('p,div,h3,h4,h5,strong,span');
-    for(var j=0; j<cands.length; j++){
-      var cq = cands[j];
-      if(cq.getAttribute('data-ff-faq-question')==='true') continue;
-      if(cq.children.length > 3) continue;
-      var qt = (cq.textContent||'').trim();
-      if(!(qt.length > 4 && qt.length < 200 && /\\?\\s*$/.test(qt))) continue;
-      var ca = findAnswerLenient(cq);
-      if(!ca) continue;
-      var cat = (ca.textContent||'').trim();
-      if(!(cat.length >= 40 && cat.length > qt.length && cat !== qt)) continue;
-      cq.setAttribute('data-ff-faq-question','true');
-      cq.style.cursor = 'pointer';
-      setOpen(cq, ca, false);
-      (function(qq, aa){
-        qq.addEventListener('click', function(ev){
-          ev.preventDefault();
-          ev.stopPropagation();
-          var open = qq.getAttribute('data-ff-faq-open')==='true';
-          setOpen(qq, aa, !open);
-        });
-      })(cq, ca);
-      bound++;
-    }
-
-    if(bound>0){
-      try{ console.log('[FAQ-preview] bound', bound, 'questions'); }catch(e){}
-    }
-    return bound;
-  }
-
-  function boot(){ bindAll(); }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', boot);
-  } else { boot(); }
-  setTimeout(boot, 300);
-  setTimeout(boot, 800);
-  setTimeout(boot, 1500);
-  setTimeout(boot, 3000);
-
-  try{
-    var obs = new MutationObserver(function(){ boot(); });
-    obs.observe(document.body, { childList:true, subtree:true });
-    setTimeout(function(){ try{ obs.disconnect(); }catch(e){} }, 10000);
-  }catch(e){}
-})();
-</script>`
-    : "";
+  // 🆕 PARTAGÉ avec l'export (lib/clone/accordion-runtime.ts).
+  // L'ancienne copie inline vivait ici en double avec lib/export/faq-script.ts,
+  // et les deux avaient divergé. Elle échouait par ailleurs sur deux markups
+  // très répandus : Divi (titre <h5> sans icône enfant) et les questions
+  // décorées d'un emoji après le « ? ».
+  const faqRuntimeScript = !editMode ? ACCORDION_RUNTIME_SCRIPT : "";
 
   const editModeFlag = editMode ? "true" : "false";
   const interactivityScript = `
@@ -969,10 +840,66 @@ function wrapHtmlDocument(
             }
           }
 
+          // 🆕 Chemin STRUCTUREL (Divi, Elementor, Bootstrap…). Divi place le
+          // titre dans un <h5> SANS icône enfant — l'icône est un
+          // pseudo-élément — donc le chemin « chevron » ci-dessus ne trouvait
+          // jamais rien et la réponse restait inaccessible à l'édition.
+          if (!answerSpotId) {
+            var ACC = [
+              ['.et_pb_toggle', '.et_pb_toggle_content'],
+              ['.elementor-accordion-item, .elementor-toggle-item', '.elementor-tab-content'],
+              ['.accordion-item', '.accordion-collapse, .accordion-body'],
+              ['.faq-item, .fl-accordion-item, .qa-item', '.faq-answer, .fl-accordion-content, .qa-answer']
+            ];
+            for (var ac = 0; ac < ACC.length && !answerSpotId; ac++) {
+              var item = spot.closest(ACC[ac][0]);
+              if (!item) continue;
+              var contentEl = item.querySelector(ACC[ac][1]);
+              if (!contentEl || contentEl.contains(spot)) continue;
+              var inner = contentEl.matches('[data-ff-spot-id]')
+                ? contentEl
+                : contentEl.querySelector('[data-ff-spot-id]');
+              if (inner) {
+                answerSpotId = inner.getAttribute('data-ff-spot-id');
+                isFaqQuestion = true;
+              }
+            }
+          }
+
           // Fallback heuristique
           if (!answerSpotId) {
             var qText = (spot.textContent || '').trim();
-            var looksLikeQuestion = qText.length > 4 && qText.length < 200 && /\\?\\s*$/.test(qText);
+            // 🐛 L'ancien test /\\?\\s*$/ échouait dès qu'une décoration suivait
+            // le point d'interrogation. Sur une page réelle, les 7 questions se
+            // terminaient par « ? 👇 » : AUCUNE n'était reconnue. On rogne donc
+            // la décoration finale avant de tester, et on accepte aussi
+            // l'ouverture espagnole « ¿ ».
+            //
+            // Balayage LINÉAIRE, pas de regex : la variante par expression
+            // régulière avait des alternatives qui se recouvraient et figeait
+            // l'onglet par backtracking exponentiel.
+            var isDeco = function (c) {
+              return c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D || c === 0xA0 ||
+                     c === 0xFE0F || c === 0x200D ||
+                     (c >= 0x2190 && c <= 0x2BFF) || (c >= 0x2600 && c <= 0x27BF) ||
+                     c === 0x2D || c === 0x2013 || c === 0x2014 ||
+                     c === 0x3A || c === 0x3B || c === 0x2E;
+            };
+            var qi = qText.length;
+            while (qi > 0) {
+              var qc = qText.charCodeAt(qi - 1);
+              if (qc >= 0xDC00 && qc <= 0xDFFF && qi >= 2) {
+                var qhi = qText.charCodeAt(qi - 2);
+                if (qhi >= 0xD800 && qhi <= 0xDBFF) { qi -= 2; continue; }
+              }
+              if (isDeco(qc)) { qi -= 1; continue; }
+              break;
+            }
+            var qClean = qText.slice(0, qi);
+            var qLast = qClean.length ? qClean.charCodeAt(qClean.length - 1) : 0;
+            var looksLikeQuestion =
+              qText.length > 4 && qText.length < 220 &&
+              (qLast === 0x3F || qLast === 0xFF1F || qText.charCodeAt(0) === 0x00BF);
             if (looksLikeQuestion) {
               // Conteneur d'item FAQ : ancêtre proche au "look" FAQ, sinon parent.
               var container = spot.closest('[class*="faq" i],[class*="accordion" i],[class*="question" i],[class*="toggle" i],[class*="collaps" i],[class*="item" i]') || spot.parentElement;
@@ -1081,27 +1008,71 @@ function wrapHtmlDocument(
   // body.scrollHeight complété par le bas des enfants directs réellement
   // dans le flux (on ignore le conteneur d'overlays hors-flux
   // data-ff-overlays, sinon un popup positionné loin regonfle la hauteur).
+  //
+  // 🐛 BUG « bande vide sous le footer » — CLIQUET DE HAUTEUR.
+  //
+  // L'ancienne version partait de \`body.scrollHeight\`. Or scrollHeight ne
+  // descend JAMAIS sous la hauteur du viewport : dans une iframe dont on vient
+  // de fixer height = H, body.scrollHeight renvoie au minimum H, même si le
+  // contenu ne fait plus que H/2. La hauteur ne pouvait donc que croître.
+  //
+  // Il suffisait d'UNE mesure transitoirement trop grande — images pas encore
+  // chargées, polices en cours de swap, éléments d'animation encore dépliés —
+  // pour que l'iframe reste définitivement trop haute. D'où la bande vide sous
+  // le footer, qui ne se résorbait jamais.
+  //
+  // On mesure désormais le BAS DU DERNIER ENFANT RÉEL, sans jamais consulter
+  // scrollHeight : la valeur peut redescendre, le cliquet disparaît.
   function measureContentHeight() {
     var body = document.body;
     if (!body) return 0;
-    var h = body.scrollHeight;
+
+    var max = 0;
     var children = body.children;
+    var scrollTop = window.scrollY || window.pageYOffset || 0;
+
     for (var i = 0; i < children.length; i++) {
       var el = children[i];
       if (el.hasAttribute && el.hasAttribute('data-ff-overlays')) continue;
+
+      var tag = el.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'LINK' ||
+          tag === 'META' || tag === 'TEMPLATE' || tag === 'NOSCRIPT') continue;
+
+      var cs;
+      try { cs = getComputedStyle(el); } catch (e) { continue; }
+      if (!cs || cs.display === 'none') continue;
+
+      // Ancrés au viewport : leur position suit la hauteur de l'iframe et
+      // ré-alimenterait le cliquet (ex. bandeau de plugin en position:fixed).
+      if (cs.position === 'fixed' || cs.position === 'sticky') continue;
+
       var rect = el.getBoundingClientRect();
-      if (rect.height > 0) h = Math.max(h, Math.ceil(rect.bottom));
+      if (rect.height <= 0) continue;
+
+      var bottom = rect.bottom + scrollTop + (parseFloat(cs.marginBottom) || 0);
+      if (bottom > max) max = bottom;
     }
-    return h;
+
+    if (max <= 0) return body.scrollHeight; // filet de sécurité
+
+    var bs = getComputedStyle(body);
+    max += (parseFloat(bs.paddingBottom) || 0) + (parseFloat(bs.marginBottom) || 0);
+    return Math.ceil(max);
   }
 
   var __ffHeightRO = null;
+  var __ffLastHeight = 0;
   function reportHeight() {
     try {
       var h = measureContentHeight();
-      if (h > 0) {
-        window.parent.postMessage({ type: 'ff-height', sectionId: SECTION_ID, height: h }, '*');
-      }
+      if (h <= 0) return;
+      // Zone morte de 2 px : la hauteur peut désormais DESCENDRE, ce qui rend
+      // possible un aller-retour parent↔iframe via le ResizeObserver. On ne
+      // remonte donc que les variations réelles.
+      if (Math.abs(h - __ffLastHeight) < 2) return;
+      __ffLastHeight = h;
+      window.parent.postMessage({ type: 'ff-height', sectionId: SECTION_ID, height: h }, '*');
     } catch (e) {}
   }
 
@@ -1182,6 +1153,8 @@ ${head}
 ${desktopForceStyle}
 ${revealHiddenStyle}
 ${faqFixStyle}
+${SCROLL_ANIMATION_REVEAL_CSS}
+${editMode ? ACCORDION_EDIT_REVEAL_CSS : ""}
 ${mediaFixStyle}
 ${editModeOnlyStyle}
 ${featureCss}

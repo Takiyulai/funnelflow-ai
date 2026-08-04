@@ -138,6 +138,10 @@ function mapCodeToStatus(code: CloneErrorCode): number {
     case "scrapingbee-quota":
     case "scraper-missing-key":
     case "scraper-quota":
+    // 🆕 Aucun fournisseur disponible ne sait matérialiser le CSS runtime de la
+    // page : c'est une indisponibilité de capacité côté service, pas une erreur
+    // de l'utilisateur ni un blocage de la page cible.
+    case "css-runtime-missing":
       return 503;
     case "scraping-blocked":
     case "scraping-timeout":

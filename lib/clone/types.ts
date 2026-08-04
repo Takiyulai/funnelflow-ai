@@ -51,6 +51,14 @@ export type CloneErrorCode =
   | "scraper-quota"
   | "scraper-missing-key"
   | "page-too-small"
+  /**
+   * 🆕 La page cible construit son CSS via CSS-in-JS (styled-components,
+   * emotion…) : les règles vivent dans le CSSOM et n'apparaissent pas dans le
+   * HTML sérialisé. Il faut un fournisseur capable d'exécuter du JS avant
+   * sérialisation (ScrapingBee) — Scrapingdog et le fetch natif ne suffisent
+   * pas. Cf. lib/clone/css-completeness.ts
+   */
+  | "css-runtime-missing"
   | "parsing-failed"
   | "media-upload-failed"
   | "supabase-error"

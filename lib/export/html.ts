@@ -67,6 +67,11 @@ import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import { applyRawHtmlPatchesServer as applyRawHtmlPatches } from "@/lib/clone/raw-html-apply-patches.server";
 import { FAQ_RUNTIME_SCRIPT } from "./faq-script";
+// 🆕 Même correctif que l'aperçu : les bibliothèques d'animation « au scroll »
+// (Divi `.et_animated`, WOW.js, Elementor…) posent `opacity: 0` par une classe
+// que seul leur JS lève. Le clonage retirant ce JS, les éléments concernés —
+// typiquement les boutons CTA — restaient invisibles dans le HTML exporté.
+import { SCROLL_ANIMATION_REVEAL_CSS } from "@/lib/clone/accordion-runtime";
 // 🆕 FIX PARITÉ SKINS — jeux de tokens des 6 templates "factory" (system de
 // skins bespoke, components/funnel/templates/skins/factory.tsx), réutilisés
 // pour reproduire fidèlement le CTA final et les cartes programme/process dans
@@ -3283,6 +3288,7 @@ export function createSystemeBlocks(
   }
 </style>
 ${clonedHeadHtml}
+${SCROLL_ANIMATION_REVEAL_CSS}
 <div class="${scopeClass}" data-ff-export="true" data-ff-raw-html-block="true">
 ${sectionHtml}
 </div>
