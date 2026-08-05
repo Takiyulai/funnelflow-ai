@@ -8,6 +8,20 @@
 import { useState } from "react";
 import { Share2, Loader2, Check, X } from "lucide-react";
 import { useCelebrate } from "@/components/ui/Celebration";
+import { loadFunnel } from "@/lib/store/funnelStore";
+import { saveRemote } from "@/lib/store/funnelRepository";
+
+/**
+ * Messages lisibles pour chaque refus de la route de partage. Sans cette table,
+ * la modale affichait le code brut (« not_found ») : le bêta-testeur en
+ * concluait « le partage ne marche pas », sans savoir quoi faire.
+ */
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid_input: "Nom ou nom d'auteur invalide. Vérifie les champs et réessaie.",
+  not_owner: "Seul le propriétaire d'un tunnel peut le partager.",
+  unauthorized: "Ta session a expiré. Reconnecte-toi puis réessaie.",
+  share_failed: "L'enregistrement dans la galerie a échoué. Réessaie dans un instant.",
+};
 
 export function ShareTemplateButton({
   funnelId,
@@ -24,6 +38,8 @@ export function ShareTemplateButton({
   const [desc, setDesc] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Phase « synchronisation du tunnel vers Supabase » avant l'appel de partage. */
+  const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   /** 🆕 Refus pour absence d'abonnement : affiché en place, sans redirection. */
@@ -43,6 +59,37 @@ export function ShareTemplateButton({
     setBusy(true);
     setMsg(null);
     try {
+      // ─────────────────────────────────────────────────────────────────────
+      // 🆕 ÉTAPE 1 — GARANTIR LA PRÉSENCE DU TUNNEL CÔTÉ SERVEUR.
+      //
+      // C'est la cause du « je n'arrive pas à partager mon tunnel importé ».
+      // Le partage lit le tunnel dans Supabase, or :
+      //   - /api/clone-funnel ne persiste RIEN côté serveur (le tunnel est
+      //     construit puis enregistré par le client) ;
+      //   - `saveFunnel()` déclenche la synchro distante en tâche de fond, sans
+      //     que personne ne l'attende ;
+      //   - un tunnel importé est le plus lourd (jusqu'à ~2 Mo), donc le plus
+      //     lent à remonter et le premier évincé par le quota localStorage.
+      // Un utilisateur qui clone puis partage dans la foulée déclenchait donc
+      // un 404 côté serveur.
+      //
+      // On force ici une synchro ATTENDUE (upsert idempotent) avant de
+      // partager. Un échec n'interrompt pas : la ligne peut déjà exister côté
+      // serveur — on garde la cause sous le coude pour le message d'erreur.
+      let syncError: string | null = null;
+      try {
+        const stored = loadFunnel(funnelId);
+        if (stored) {
+          setSyncing(true);
+          await saveRemote(stored);
+        }
+      } catch (e) {
+        syncError = e instanceof Error ? e.message : String(e);
+        console.warn("[share] synchronisation préalable impossible :", syncError);
+      } finally {
+        setSyncing(false);
+      }
+
       const res = await fetch("/api/templates/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,16 +102,14 @@ export function ShareTemplateButton({
       });
       const json = await res.json().catch(() => ({}));
 
-      // 🆕 CAS DU FORFAIT — traité SANS `handlePlanGate` ici, volontairement.
+      // FILET DE SÉCURITÉ — le partage n'exige PLUS d'abonnement (la route ne
+      // demande qu'une session valide). Ce cas ne devrait donc plus survenir ;
+      // on le conserve au cas où une couche intermédiaire renverrait un 402,
+      // pour ne jamais retomber sur un code brut illisible.
       //
-      // Le helper générique redirige vers /abonnement au bout de 1,3 s. Depuis
-      // une modale ouverte, l'utilisateur voit un message fugace puis se
-      // retrouve éjecté de son éditeur : c'est exactement ce que remontaient
-      // les utilisateurs sans abonnement actif — « le partage ne marche pas »,
-      // alors que le refus était intentionnel mais illisible.
-      //
-      // On affiche donc l'explication EN PLACE, avec un lien qu'il choisit de
-      // suivre ou non, et sans lui faire perdre son travail en cours.
+      // Il reste traité SANS `handlePlanGate` : ce helper redirige vers
+      // /abonnement au bout de 1,3 s, ce qui éjectait l'utilisateur de son
+      // éditeur depuis une modale ouverte.
       if (res.status === 402 || json.error === "subscription_required") {
         setNeedsPlan(true);
         setMsg(null);
@@ -72,7 +117,20 @@ export function ShareTemplateButton({
       }
 
       if (!res.ok || !json.ok) {
-        setMsg(json.message || json.error || "Partage impossible.");
+        // Le tunnel reste introuvable côté serveur MALGRÉ la synchro forcée :
+        // c'est donc la synchro qui a échoué. On remonte sa cause réelle
+        // (session expirée, RLS, quota…) plutôt qu'un « tunnel introuvable »
+        // qui enverrait l'utilisateur chercher au mauvais endroit.
+        if (json.error === "funnel_not_synced" && syncError) {
+          setMsg(`Enregistrement du tunnel impossible : ${syncError}`);
+          return;
+        }
+        setMsg(
+          json.message ||
+            ERROR_MESSAGES[json.error as string] ||
+            json.error ||
+            "Partage impossible.",
+        );
         return;
       }
       setDone(true);
@@ -209,7 +267,11 @@ export function ShareTemplateButton({
                     className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-4 py-2.5 text-sm font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
                   >
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 size={15} />}
-                    {busy ? "Partage…" : "Partager dans la galerie"}
+                    {syncing
+                      ? "Enregistrement du tunnel…"
+                      : busy
+                        ? "Partage…"
+                        : "Partager dans la galerie"}
                   </button>
                 </div>
               </>

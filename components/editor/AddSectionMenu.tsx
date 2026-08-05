@@ -55,6 +55,7 @@ const GROUPS: Group[] = [
       { type: "form", label: "Formulaire", hint: "Capture de leads" },
       { type: "qualification", label: "Qualification", hint: "Questions de qualif" },
       { type: "webinar", label: "Webinaire", hint: "Inscription webinaire" },
+      { type: "booking", label: "Prise de RDV", hint: "Calendrier de réservation" },
     ],
   },
   {
@@ -89,6 +90,7 @@ const DEFAULT_HEADLINES: Record<FunnelSectionType, string> = {
   qualification: "Êtes-vous au bon endroit ?",
   agitation: "Et si rien ne change ?",
   urgency: "L'offre ne durera pas",
+  booking: "Réservez votre rendez-vous",
   "raw-html": "Section HTML personnalisée",
 };
 

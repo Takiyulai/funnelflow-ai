@@ -14,6 +14,7 @@ import type {
   SectionLayoutVariant,
 } from "@/lib/funnels/types";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
+import { BookingWidget } from "@/components/booking/BookingWidget";
 
 
 type Props = {
@@ -84,6 +85,32 @@ if (section.type === "raw-html") {
     </section>
   );
 }
+
+  // 🆕 Section « Calendrier de RDV ». Elle monte EXACTEMENT le même composant
+  // que la page publique /rdv/[slug] : un seul comportement de réservation à
+  // maintenir, donc pas de dérive possible entre les deux points d'entrée.
+  if (section.type === "booking") {
+    return (
+      <section
+        id={section.id || section.type}
+        data-ff-section="booking"
+        className="ff-section ff-booking"
+      >
+        {section.headline && (
+          <h2 className="ff-headline mb-6 text-center">{section.headline}</h2>
+        )}
+        {section.bookingSlug ? (
+          <BookingWidget slug={section.bookingSlug} />
+        ) : (
+          // Sans slug, afficher une grille vide laisserait croire à une panne.
+          <p className="mx-auto max-w-md rounded-xl border border-dashed border-current/30 p-6 text-center text-sm opacity-70">
+            Aucun type de rendez-vous n&apos;est encore rattaché à cette section.
+            Choisis-en un dans l&apos;éditeur.
+          </p>
+        )}
+      </section>
+    );
+  }
 
   const sectionId = section.id || section.type;
   // 🆕 FIX « animations absentes » : le repli était "none", ce qui rendait

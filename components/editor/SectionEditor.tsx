@@ -15,6 +15,7 @@ import { CtaTab } from "@/components/editor/tabs/CtaTab";
 import { StyleTab } from "@/components/editor/tabs/StyleTab";
 import { BackgroundTab } from "@/components/editor/tabs/BackgroundTab";
 import { RawHtmlContentTab } from "@/components/editor/tabs/RawHtmlContentTab";
+import { BookingContentTab } from "@/components/editor/tabs/BookingContentTab";
 import { SectionRegenPanel } from "@/components/editor/SectionRegenPanel";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 
@@ -65,6 +66,7 @@ const SECTION_LABELS: Record<string, string> = {
   webinar: "Webinaire",
   vsl: "VSL",
   qualification: "Qualification",
+  booking: "Prise de rendez-vous",
   "raw-html": "Section clonée",
 };
 
@@ -80,7 +82,16 @@ export function SectionEditor({ section, language, funnel, onChange, onFunnelCha
     [section.type, section.body],
   );
 
-  const availableTabs = isRawHtml ? TABS_RAW_HTML : TABS;
+  // 🆕 Section « Prise de RDV » : le contenu est produit par le calendrier
+  // lui-même. Les onglets Média et CTA n'ont rien à piloter ici — les afficher
+  // ne ferait qu'ouvrir des réglages sans effet.
+  const isBooking = section.type === ("booking" as FunnelSection["type"]);
+
+  const availableTabs = isRawHtml
+    ? TABS_RAW_HTML
+    : isBooking
+      ? TABS.filter((t) => t.id === "content" || t.id === "style" || t.id === "background")
+      : TABS;
 
   // 🆕 Si l'onglet actif n'existe pas dans la liste disponible
   // (cas d'un toggle entre section native et raw-html), on retombe sur "content".
@@ -143,6 +154,8 @@ export function SectionEditor({ section, language, funnel, onChange, onFunnelCha
         {safeActiveTab === "content" &&
           (isRawHtml ? (
             <RawHtmlContentTab section={section} onChange={onChange} />
+          ) : isBooking ? (
+            <BookingContentTab section={section} onChange={onChange} />
           ) : (
             <>
               {/* 🆕 Régénération du copy par prompt (IA) — sections natives. */}

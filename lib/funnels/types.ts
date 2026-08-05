@@ -73,6 +73,11 @@ export type FunnelSectionType =
   // 🆕 Sous-étape C : sections direct-response distinctes
   | "agitation" // amplification de la douleur (suite du "problem")
   | "urgency" // urgence / rareté légitime, juste avant le CTA final
+  // 🆕 Module « Calendrier de RDV natif » : insère la grille de réservation
+  // directement dans le tunnel. Le slug du type de RDV est porté par
+  // `section.bookingSlug` ; le composant est le MÊME que celui de la page
+  // publique /rdv/[slug], pour n'avoir qu'un comportement à maintenir.
+  | "booking"
   |"raw-html";
   
 
@@ -612,6 +617,14 @@ export type FunnelSection = {
   reassurance?: string;
   /** Patches d'édition pour les sections de type "raw-html" uniquement. */
   rawHtmlPatches?: RawHtmlPatch;
+  /**
+   * 🆕 Slug du type de RDV affiché, pour les sections de type "booking".
+   * On stocke le SLUG et non l'identifiant : c'est ce que l'hôte voit dans son
+   * URL publique, et cela rend la section lisible dans un export JSON ou un
+   * modèle partagé. Un slug absent ou inconnu fait afficher une invite de
+   * configuration plutôt qu'une section vide.
+   */
+  bookingSlug?: string;
 };
 
 /** Message de réassurance par défaut affiché sous les formulaires (popup et section form). */

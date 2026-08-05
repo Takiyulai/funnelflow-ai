@@ -1996,6 +1996,25 @@ function renderSectionInnerContent(
     else if (type === "guarantee") specialized = renderGuarantee(section);
   }
 
+  // 🆕 Section « Prise de RDV » dans un export STATIQUE.
+  //
+  // Le calendrier interroge /api/booking/* : hors de l'application, cette API
+  // n'existe pas. Embarquer le widget produirait une grille vide en
+  // permanence — le pire des résultats, puisqu'il a l'air de fonctionner.
+  // On exporte donc un bouton vers la page de réservation hébergée, qui, elle,
+  // reste pleinement fonctionnelle.
+  if (type === "booking") {
+    const slug = (section as { bookingSlug?: string }).bookingSlug;
+    if (slug) {
+      const base = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+      const href = `${base}/rdv/${encodeURIComponent(slug)}`;
+      specialized =
+        `<div class="ff-booking-cta" style="text-align:center;margin:24px 0">` +
+        `<a class="ff-btn" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">` +
+        `${escapeHtml(section.cta?.label || "Réserver un créneau")}</a></div>`;
+    }
+  }
+
   const bullets =
     !specialized && section.bullets?.length ? renderBullets(section) : "";
 
