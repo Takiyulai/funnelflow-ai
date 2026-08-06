@@ -2,22 +2,26 @@
 
 // components/booking/BookingWidget.tsx
 //
-// Interface de réservation — utilisée À LA FOIS par la page publique
-// /rdv/[slug] et par la section `booking` d'un tunnel. Un seul composant, donc
-// un seul comportement à maintenir et à corriger.
+// Page publique de réservation. Utilisée À LA FOIS par /rdv/[slug] et par la
+// section `booking` d'un tunnel : un seul comportement à maintenir.
 //
-// ── PARTI PRIS SUR LES FUSEAUX ─────────────────────────────────────────────
-// Le fuseau du visiteur est détecté puis AFFICHÉ ET MODIFIABLE. Le détecter en
-// silence suffirait dans 95 % des cas, mais quelqu'un qui réserve depuis un
-// ordinateur mal réglé, un VPN ou en déplacement n'aurait aucun moyen de s'en
-// apercevoir avant de manquer le rendez-vous. Rendre le fuseau visible et
-// corrigeable coûte une ligne d'interface et supprime toute une classe de
-// rendez-vous manqués.
+// ── POURQUOI UN FLUX DATE → CRÉNEAUX ───────────────────────────────────────
+// La première version empilait tous les créneaux de tous les jours : plus de
+// 200 boutons d'affilée. Face à ce mur, le prospect ne compare pas, il renonce.
+// Le flux en deux temps (choisir un jour, puis une heure) ramène la décision à
+// deux choix de quelques options chacun.
+//
+// ⚠️ CE COMPOSANT NE CALCULE AUCUN CRÉNEAU. Toute la logique (fuseaux, pas de
+// grille, débordement, jours fermés, délai minimum) reste dans
+// lib/booking/slots.ts, côté serveur. On ne fait que REGROUPER et AFFICHER ce
+// que l'API renvoie.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Info, Clock, Video, Loader2 } from "lucide-react";
 import {
   DEFAULT_TIMEZONE,
   TIMEZONE_OPTIONS,
+  daylightSavingShortNotice,
   detectVisitorTimeZone,
   formatDateInZone,
   formatTimeInZone,
@@ -37,22 +41,60 @@ type EventTypeView = {
   locationValue?: string | null;
   language: string;
   timezone: string;
-  timezoneLabel: string;
 };
 
 type SlotsResponse = {
   ok: boolean;
   eventType?: EventTypeView;
   days?: DaySlots[];
-  daylightNotice?: string | null;
   message?: string;
 };
 
-function locationText(kind: string, value?: string | null): string {
-  if (kind === "visio") return value || "Visioconférence — lien envoyé par e-mail";
-  if (kind === "phone") return value ? `Appel — ${value}` : "Appel téléphonique";
-  if (kind === "in_person") return value || "En personne";
-  return value || "";
+/**
+ * Libellé de lieu PUBLIC.
+ *
+ * ⚠️ On ne rend JAMAIS `locationValue` tel quel. Ce champ contient l'URL de
+ * visio ou l'adresse du rendez-vous :
+ *   - l'afficher étale une URL technique sous le titre, ce qui fait amateur ;
+ *   - surtout, publier un lien de visioconférence sur une page ouverte permet
+ *     à n'importe qui de rejoindre la réunion.
+ * Le lien réel part dans l'e-mail de confirmation et le .ics, c'est-à-dire à la
+ * personne qui a effectivement réservé.
+ */
+function publicLocationLabel(kind: string): string {
+  if (kind === "phone") return "Par téléphone";
+  if (kind === "in_person") return "En personne";
+  if (kind === "visio") return "Visioconférence";
+  return "Détails envoyés par e-mail";
+}
+
+const WEEKDAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
+const MONTH_FORMATTER = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
+
+/** "YYYY-MM-DD" → composants numériques, sans passer par Date (pas de fuseau). */
+function parseDayKey(key: string): { y: number; m: number; d: number } {
+  const [y, m, d] = key.split("-").map(Number);
+  return { y, m, d };
+}
+
+function dayKey(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Grille du mois, semaines commençant le LUNDI (convention francophone).
+ * `null` = case vide avant le 1er / après le dernier jour.
+ */
+function monthGrid(year: number, month: number): Array<string | null> {
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  // getUTCDay : 0 = dimanche. On décale pour que lundi vaille 0.
+  const leading = (first.getUTCDay() + 6) % 7;
+
+  const cells: Array<string | null> = Array(leading).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(dayKey(year, month, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
 }
 
 export function BookingWidget({ slug }: { slug: string }) {
@@ -61,18 +103,25 @@ export function BookingWidget({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<Slot | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [month, setMonth] = useState<{ y: number; m: number } | null>(null);
+  const [tzDetailOpen, setTzDetailOpen] = useState(false);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  /** Navigation vers la page de confirmation du tunnel en cours. */
+  const [redirecting, setRedirecting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState<{ manageUrl: string; startsAt: string } | null>(null);
 
-  // La détection ne peut avoir lieu qu'après montage : le rendu serveur ne
-  // connaît pas le fuseau du visiteur, et deviner produirait une hydratation
-  // incohérente.
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // La détection ne peut avoir lieu qu'après montage : le rendu serveur ignore
+  // le fuseau du visiteur, et le deviner produirait une hydratation incohérente.
   useEffect(() => {
     setTimezone(detectVisitorTimeZone());
   }, []);
@@ -81,8 +130,11 @@ export function BookingWidget({ slug }: { slug: string }) {
     setLoading(true);
     setError(null);
     try {
+      // On demande l'horizon complet (le serveur le plafonne) : le calendrier
+      // doit pouvoir griser les jours fermés de TOUT le mois, pas seulement des
+      // deux prochaines semaines.
       const res = await fetch(
-        `/api/booking/${encodeURIComponent(slug)}/slots?tz=${encodeURIComponent(timezone)}&days=14`,
+        `/api/booking/${encodeURIComponent(slug)}/slots?tz=${encodeURIComponent(timezone)}&days=62`,
         { cache: "no-store" },
       );
       const json = (await res.json()) as SlotsResponse;
@@ -103,15 +155,61 @@ export function BookingWidget({ slug }: { slug: string }) {
     void load();
   }, [load]);
 
-  const hostTz = data?.eventType?.timezone ?? DEFAULT_TIMEZONE;
+  /** Jours ayant au moins un créneau — la seule source de « cliquable ». */
+  const availableDays = useMemo(() => {
+    const map = new Map<string, Slot[]>();
+    for (const d of data?.days ?? []) {
+      if (d.slots.length > 0) map.set(d.day, d.slots);
+    }
+    return map;
+  }, [data]);
 
-  const daysWithSlots = useMemo(
-    () => (data?.days ?? []).filter((d) => d.slots.length > 0),
-    [data],
+  const firstAvailable = useMemo(
+    () => Array.from(availableDays.keys()).sort()[0] ?? null,
+    [availableDays],
   );
 
+  // Sélection initiale : le premier jour disponible. Ouvrir sur un mois vide
+  // obligerait le prospect à chercher lui-même où sont les disponibilités.
+  useEffect(() => {
+    if (!firstAvailable) return;
+    setSelectedDay((prev) => (prev && availableDays.has(prev) ? prev : firstAvailable));
+    setMonth((prev) => {
+      if (prev) return prev;
+      const p = parseDayKey(firstAvailable);
+      return { y: p.y, m: p.m };
+    });
+  }, [firstAvailable, availableDays]);
+
+  const hostTz = data?.eventType?.timezone ?? DEFAULT_TIMEZONE;
+  const daySlots = selectedDay ? (availableDays.get(selectedDay) ?? []) : [];
+  const tzNotice = data?.eventType ? daylightSavingShortNotice(hostTz, timezone) : null;
+
+  const grid = month ? monthGrid(month.y, month.m) : [];
+  const monthLabel = month
+    ? MONTH_FORMATTER.format(new Date(Date.UTC(month.y, month.m - 1, 1)))
+    : "";
+
+  function shiftMonth(delta: number) {
+    setMonth((prev) => {
+      if (!prev) return prev;
+      const d = new Date(Date.UTC(prev.y, prev.m - 1 + delta, 1));
+      return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1 };
+    });
+  }
+
+  function pickSlot(s: Slot) {
+    setSelectedSlot(s);
+    setFormError(null);
+    // Sur mobile, le formulaire apparaît sous la grille : sans ce défilement,
+    // le prospect clique un créneau et croit qu'il ne s'est rien passé.
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function submit() {
-    if (!selected || submitting) return;
+    if (!selectedSlot || submitting) return;
     if (!name.trim() || !email.trim()) {
       setFormError("Renseigne ton nom et ton e-mail.");
       return;
@@ -123,7 +221,7 @@ export function BookingWidget({ slug }: { slug: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startsAt: selected.startsAt,
+          startsAt: selectedSlot.startsAt,
           timezone,
           name: name.trim(),
           email: email.trim(),
@@ -134,13 +232,20 @@ export function BookingWidget({ slug }: { slug: string }) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
         setFormError(json.message ?? "Réservation impossible.");
-        // Un créneau pris entre-temps : on recharge la grille pour que le
-        // visiteur voie immédiatement ce qui reste, plutôt que de recliquer sur
-        // un créneau qui n'existe plus.
         if (res.status === 409) {
-          setSelected(null);
+          // Créneau pris entre-temps : on recharge pour montrer ce qui reste.
+          setSelectedSlot(null);
           void load();
         }
+        return;
+      }
+      // 🆕 Tunnel rattaché : on renvoie le prospect sur SA page de confirmation.
+      // `redirecting` garde le bouton désactivé pendant la navigation — le
+      // `finally` ci-dessous relâche `submitting`, et sans ce second verrou le
+      // bouton redeviendrait cliquable, invitant à un second envoi.
+      if (json.redirectUrl) {
+        setRedirecting(true);
+        window.location.assign(json.redirectUrl as string);
         return;
       }
       setDone({ manageUrl: json.manageUrl, startsAt: json.startsAt });
@@ -151,23 +256,25 @@ export function BookingWidget({ slug }: { slug: string }) {
     }
   }
 
+  // ── Confirmation ─────────────────────────────────────────────────────────
   if (done) {
     const d = new Date(done.startsAt);
     return (
-      <div className="mx-auto max-w-lg rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-8 text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-2xl">
+      <div className="mx-auto max-w-lg rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.07] p-8 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/15 text-2xl text-emerald-300">
           ✓
         </div>
-        <h2 className="text-xl font-bold">C&apos;est confirmé !</h2>
-        <p className="mt-2 text-sm opacity-70">
-          {formatDateInZone(d, timezone)} à {formatTimeInZone(d, timezone)} ({shortZoneLabel(timezone)})
+        <h2 className="text-xl font-bold text-white">C&apos;est confirmé !</h2>
+        <p className="mt-2 text-sm capitalize text-white/70">
+          {formatDateInZone(d, timezone)} · {formatTimeInZone(d, timezone)}
         </p>
-        <p className="mt-4 text-sm opacity-70">
+        <p className="mt-1 text-xs text-white/40">{shortZoneLabel(timezone)}</p>
+        <p className="mt-5 text-sm leading-relaxed text-white/60">
           Un e-mail de confirmation vient de partir, avec le fichier à ajouter à ton agenda.
         </p>
         <a
           href={done.manageUrl}
-          className="mt-5 inline-block text-sm font-semibold underline underline-offset-4"
+          className="mt-5 inline-block text-sm font-semibold text-white/80 underline underline-offset-4 hover:text-white"
         >
           Gérer ou annuler ce rendez-vous
         </a>
@@ -175,165 +282,275 @@ export function BookingWidget({ slug }: { slug: string }) {
     );
   }
 
+  const ev = data?.eventType;
+
   return (
-    <div className="mx-auto max-w-3xl">
-      {data?.eventType && (
+    <div className="mx-auto max-w-4xl">
+      {/* ── En-tête : nom + durée + lieu. JAMAIS d'URL technique. ────────── */}
+      {ev && (
         <header className="mb-6">
-          <h1 className="text-2xl font-bold">{data.eventType.name}</h1>
-          <p className="mt-1 text-sm opacity-70">
-            {data.eventType.durationMin} min · {locationText(data.eventType.locationKind, data.eventType.locationValue)}
-          </p>
-          {data.eventType.description && (
-            <p className="mt-3 text-sm leading-relaxed opacity-80">{data.eventType.description}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{ev.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
+            <span className="inline-flex items-center gap-1.5">
+              <Clock size={14} /> {ev.durationMin} min
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Video size={14} /> {publicLocationLabel(ev.locationKind)}
+            </span>
+          </div>
+          {ev.description && (
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/70">{ev.description}</p>
           )}
         </header>
       )}
 
-      {/* Fuseau : visible et corrigeable, jamais imposé en silence. */}
-      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
-        <span className="opacity-70">Heures affichées pour</span>
-        <select
-          value={timezone}
-          onChange={(e) => {
-            setSelected(null);
-            setTimezone(e.target.value);
-          }}
-          className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm"
-        >
-          {!TIMEZONE_OPTIONS.some((t) => t.id === timezone) && (
-            <option value={timezone}>{shortZoneLabel(timezone)}</option>
-          )}
-          {TIMEZONE_OPTIONS.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        {data?.eventType && !sameWallClock(new Date(), timezone, hostTz) && (
-          <span className="opacity-60">
-            · l&apos;organisateur est à {shortZoneLabel(hostTz)}
-          </span>
-        )}
-      </div>
+      {loading && (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] py-20 text-sm text-white/50">
+          <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+          Chargement des disponibilités…
+        </div>
+      )}
 
-      {loading && <p className="py-10 text-center text-sm opacity-60">Chargement des créneaux…</p>}
-      {error && <p className="py-10 text-center text-sm text-red-300">{error}</p>}
-
-      {!loading && !error && daysWithSlots.length === 0 && (
-        <p className="py-10 text-center text-sm opacity-60">
-          Aucune disponibilité sur les deux prochaines semaines.
+      {error && (
+        <p className="rounded-2xl border border-red-400/25 bg-red-400/[0.07] p-6 text-center text-sm text-red-200">
+          {error}
         </p>
       )}
 
-      <div className="grid gap-5">
-        {daysWithSlots.map((d) => {
-          const first = new Date(d.slots[0].startsAt);
-          return (
-            <section key={d.day}>
-              <h3 className="mb-2 text-sm font-semibold capitalize opacity-80">
-                {formatDateInZone(first, timezone)}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {d.slots.map((s) => {
-                  const utc = new Date(s.startsAt);
-                  const isSel = selected?.startsAt === s.startsAt;
-                  const differs = !sameWallClock(utc, timezone, hostTz);
+      {!loading && !error && availableDays.size === 0 && (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center text-sm text-white/50">
+          Aucune disponibilité pour le moment. Reviens un peu plus tard.
+        </p>
+      )}
+
+      {!loading && !error && availableDays.size > 0 && (
+        <>
+          {/* ── Deux colonnes desktop, étapes empilées mobile ───────────── */}
+          <div className="grid gap-5 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+            {/* Calendrier */}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(-1)}
+                  className="rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white motion-reduce:transition-none"
+                  aria-label="Mois précédent"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-sm font-semibold capitalize text-white">{monthLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(1)}
+                  className="rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white motion-reduce:transition-none"
+                  aria-label="Mois suivant"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {WEEKDAY_LABELS.map((w, i) => (
+                  <span key={i} className="py-1 text-[11px] font-medium text-white/35">
+                    {w}
+                  </span>
+                ))}
+                {grid.map((key, i) => {
+                  if (!key) return <span key={`empty-${i}`} />;
+                  const isAvailable = availableDays.has(key);
+                  const isSelected = key === selectedDay;
+                  const num = parseDayKey(key).d;
                   return (
                     <button
-                      key={s.startsAt}
+                      key={key}
                       type="button"
+                      // Un jour sans créneau n'est pas cliquable : laisser
+                      // cliquer pour n'afficher « rien » serait une impasse.
+                      disabled={!isAvailable}
                       onClick={() => {
-                        setSelected(s);
-                        setFormError(null);
+                        setSelectedDay(key);
+                        setSelectedSlot(null);
                       }}
+                      aria-pressed={isSelected}
                       className={
-                        "rounded-lg border px-3 py-2 text-sm transition " +
-                        (isSel
-                          ? "border-violet-400 bg-violet-400/20 font-semibold"
-                          : "border-white/15 hover:border-white/40")
-                      }
-                      // Double affichage au survol : la grille reste lisible,
-                      // l'information de fuseau reste accessible.
-                      title={
-                        differs
-                          ? `${formatTimeInZone(utc, timezone)} chez toi · ${formatTimeInZone(utc, hostTz)} chez l'organisateur (${shortZoneLabel(hostTz)})`
-                          : undefined
+                        "aspect-square rounded-lg text-sm transition motion-reduce:transition-none " +
+                        (isSelected
+                          ? "bg-violet-400 font-bold text-zinc-950"
+                          : isAvailable
+                            ? "bg-white/[0.07] font-medium text-white hover:bg-white/15"
+                            : "text-white/20")
                       }
                     >
-                      {formatTimeInZone(utc, timezone)}
+                      {num}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Fuseau : une ligne, détail repliable. */}
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-white/50">
+                  <span>Heures affichées pour</span>
+                  <select
+                    value={timezone}
+                    onChange={(e) => {
+                      setSelectedSlot(null);
+                      setTimezone(e.target.value);
+                    }}
+                    className="max-w-[150px] truncate rounded-md border border-white/15 bg-black/40 px-1.5 py-0.5 text-xs text-white/80"
+                  >
+                    {!TIMEZONE_OPTIONS.some((t) => t.id === timezone) && (
+                      <option value={timezone}>{shortZoneLabel(timezone)}</option>
+                    )}
+                    {TIMEZONE_OPTIONS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  {tzNotice && (
+                    <button
+                      type="button"
+                      onClick={() => setTzDetailOpen((v) => !v)}
+                      aria-expanded={tzDetailOpen}
+                      className="rounded-full p-0.5 text-white/40 transition hover:text-white/80 motion-reduce:transition-none"
+                      aria-label="À propos des fuseaux horaires"
+                    >
+                      <Info size={13} />
+                    </button>
+                  )}
+                </div>
+                {tzNotice && tzDetailOpen && (
+                  <p className="mt-2 rounded-lg bg-white/[0.05] p-2.5 text-[11px] leading-relaxed text-white/60">
+                    {tzNotice}
+                  </p>
+                )}
+              </div>
             </section>
-          );
-        })}
-      </div>
 
-      {selected && (
-        <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h3 className="text-base font-bold">Confirmer ce créneau</h3>
-          <p className="mt-1 text-sm opacity-75">
-            {formatDateInZone(new Date(selected.startsAt), timezone)} ·{" "}
-            {formatTimeInZone(new Date(selected.startsAt), timezone)} ({shortZoneLabel(timezone)})
-          </p>
-          {!sameWallClock(new Date(selected.startsAt), timezone, hostTz) && (
-            <p className="mt-1 text-xs opacity-60">
-              Soit {formatTimeInZone(new Date(selected.startsAt), hostTz)} chez l&apos;organisateur (
-              {shortZoneLabel(hostTz)}).
-            </p>
-          )}
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ton nom *"
-              maxLength={120}
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
-            />
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Ton e-mail *"
-              type="email"
-              maxLength={200}
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
-            />
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Téléphone (optionnel)"
-              maxLength={40}
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm sm:col-span-2"
-            />
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Un mot sur ton besoin (optionnel)"
-              rows={3}
-              maxLength={1000}
-              className="resize-y rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm sm:col-span-2"
-            />
+            {/* Créneaux du jour choisi */}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              {selectedDay ? (
+                <>
+                  <h2 className="mb-3 text-sm font-semibold capitalize text-white">
+                    {formatDateInZone(new Date(daySlots[0]?.startsAt ?? Date.now()), timezone)}
+                  </h2>
+                  <div className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+                    {daySlots.map((s) => {
+                      const utc = new Date(s.startsAt);
+                      const isSel = selectedSlot?.startsAt === s.startsAt;
+                      const differs = !sameWallClock(utc, timezone, hostTz);
+                      return (
+                        <button
+                          key={s.startsAt}
+                          type="button"
+                          onClick={() => pickSlot(s)}
+                          title={
+                            differs
+                              ? `${formatTimeInZone(utc, timezone)} chez toi · ${formatTimeInZone(utc, hostTz)} chez l'organisateur (${shortZoneLabel(hostTz)})`
+                              : undefined
+                          }
+                          className={
+                            "rounded-lg border py-2.5 text-sm font-medium transition motion-reduce:transition-none " +
+                            (isSel
+                              ? "border-violet-400 bg-violet-400 text-zinc-950"
+                              : "border-white/15 bg-white/[0.06] text-white hover:border-violet-400/60 hover:bg-white/[0.12]")
+                          }
+                        >
+                          {formatTimeInZone(utc, timezone)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="py-16 text-center text-sm text-white/40">
+                  Choisis une date dans le calendrier.
+                </p>
+              )}
+            </section>
           </div>
 
-          {formError && <p className="mt-3 text-xs text-red-300">{formError}</p>}
+          {/* ── Formulaire contextuel ──────────────────────────────────── */}
+          {selectedSlot && (
+            <div
+              ref={formRef}
+              className="mt-5 rounded-2xl border border-violet-400/25 bg-white/[0.05] p-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
+                <div>
+                  <p className="text-sm font-bold capitalize text-white">
+                    {formatDateInZone(new Date(selectedSlot.startsAt), timezone)} ·{" "}
+                    {formatTimeInZone(new Date(selectedSlot.startsAt), timezone)}
+                  </p>
+                  <p className="mt-1 text-xs text-white/50">
+                    {ev?.name} · {ev?.durationMin} min · {shortZoneLabel(timezone)}
+                  </p>
+                  {!sameWallClock(new Date(selectedSlot.startsAt), timezone, hostTz) && (
+                    <p className="mt-1 text-xs text-white/40">
+                      Soit {formatTimeInZone(new Date(selectedSlot.startsAt), hostTz)} chez
+                      l&apos;organisateur ({shortZoneLabel(hostTz)}).
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSlot(null)}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white motion-reduce:transition-none"
+                >
+                  Changer
+                </button>
+              </div>
 
-          <button
-            type="button"
-            onClick={submit}
-            disabled={submitting}
-            className="mt-4 w-full rounded-lg bg-violet-400 px-4 py-2.5 text-sm font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
-          >
-            {submitting ? "Réservation…" : "Confirmer le rendez-vous"}
-          </button>
-        </div>
-      )}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ton nom *"
+                  maxLength={120}
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none"
+                />
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Ton e-mail *"
+                  type="email"
+                  maxLength={200}
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none"
+                />
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Téléphone (optionnel)"
+                  maxLength={40}
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none sm:col-span-2"
+                />
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Un mot sur ton besoin (optionnel)"
+                  rows={3}
+                  maxLength={1000}
+                  className="resize-y rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none sm:col-span-2"
+                />
+              </div>
 
-      {data?.daylightNotice && (
-        <p className="mt-6 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-100">
-          {data.daylightNotice}
-        </p>
+              {formError && <p className="mt-3 text-xs text-red-300">{formError}</p>}
+
+              <button
+                type="button"
+                onClick={submit}
+                disabled={submitting || redirecting}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-violet-300 disabled:opacity-50 motion-reduce:transition-none"
+              >
+                {(submitting || redirecting) && (
+                  <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
+                )}
+                {redirecting ? "Redirection…" : submitting ? "Réservation…" : "Confirmer le rendez-vous"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

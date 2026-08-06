@@ -2414,6 +2414,10 @@ export function parseFunnelJson(raw: string, brief: FunnelBrief): Funnel {
     media,
     meta: {
       funnelKind: brief.funnelKind,
+      // 🆕 Rattachement au moteur de RDV natif : lu par harmonizeCTAsByFunnelKind
+      // (étape 11) pour pointer les CTA vers /rdv/{slug}. Absent = comportement
+      // historique.
+      bookingSlug: brief.bookingSlug,
       moodId: brief.moodId,
       creationMode: brief.creationMode,
       templateId: brief.templateId,
@@ -3083,6 +3087,26 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
   });
   const conversionPageId = conversionPage?.id;
 
+  // 🆕 MOTEUR DE RDV NATIF.
+  //
+  // Pour un tunnel Booking, la conversion n'est pas une page du tunnel : c'est
+  // le calendrier natif, à son URL propre /rdv/{slug}. Quand le tunnel y est
+  // rattaché, les CTA « convert-primary » pointent directement dessus, au lieu
+  // de renvoyer vers une page interne qui ne sait pas réserver.
+  //
+  // Sans rattachement (tunnels générés avant ce changement, ou création auto
+  // désactivée), `bookingSlug` est absent → on retombe intégralement sur le
+  // comportement historique. Aucune régression sur l'existant.
+  const bookingSlug =
+    archetype === "booking"
+      ? (funnel.meta as { bookingSlug?: string } | undefined)?.bookingSlug?.trim() || null
+      : null;
+  const nativeBookingUrl = bookingSlug ? `/rdv/${encodeURIComponent(bookingSlug)}` : null;
+
+  if (nativeBookingUrl) {
+    console.log(`[cta-harmonize] Calendrier natif rattaché → CTA vers ${nativeBookingUrl}`);
+  }
+
   // Compteur global pour varier les labels de la landing
   let landingCtaIndex = 0;
 
@@ -3130,6 +3154,20 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
           const labels = config.primaryLabels[lang];
           const label = labels[landingCtaIndex % labels.length];
           landingCtaIndex++;
+
+          // 🆕 Priorité absolue au calendrier natif : c'est le seul endroit où
+          // le prospect peut réellement choisir un créneau.
+          if (nativeBookingUrl) {
+            const calendarCta: CtaConfig = {
+              ...section.cta,
+              label,
+              mode: "redirect",
+              url: nativeBookingUrl,
+              pageId: undefined,
+              target: "_self",
+            };
+            return { ...section, cta: calendarCta };
+          }
 
           // Si on a une page de conversion identifiée → navigation inter-pages
           if (conversionPageId) {
@@ -6336,6 +6374,10 @@ export function createDemoFunnel(brief: FunnelBrief): Funnel {
     defaultCta: primaryCta,
     meta: {
       funnelKind: brief.funnelKind,
+      // 🆕 Rattachement au moteur de RDV natif : lu par harmonizeCTAsByFunnelKind
+      // (étape 11) pour pointer les CTA vers /rdv/{slug}. Absent = comportement
+      // historique.
+      bookingSlug: brief.bookingSlug,
       moodId: brief.moodId,
       creationMode: brief.creationMode,
       templateId: brief.templateId,

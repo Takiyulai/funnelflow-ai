@@ -19,6 +19,7 @@ import {
   createBooking,
   getEventTypeBySlug,
   loadSchedulingContext,
+  resolveConfirmationUrl,
   upsertLeadForBooking,
 } from "@/lib/booking/repository";
 import { isSlotBookable } from "@/lib/booking/slots";
@@ -195,10 +196,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     hostName,
   ).catch(() => null);
 
+  // 🆕 Boucle du tunnel refermée : si ce calendrier est rattaché à un tunnel,
+  // le prospect atterrit sur SA page de confirmation (avec son copywriting, ses
+  // prochaines étapes, ses canaux) plutôt que sur la carte de succès générique.
+  //
+  // Résolu APRÈS l'écriture et l'envoi des e-mails : une redirection ne doit
+  // jamais court-circuiter ce qui garantit l'existence du rendez-vous.
+  const redirectUrl = await resolveConfirmationUrl(eventType, appOrigin(req)).catch(() => null);
+
   return NextResponse.json({
     ok: true,
     bookingId: created.id,
     manageUrl,
+    // Absent = le calendrier est utilisé seul : le widget garde sa confirmation
+    // intégrée. Il ne doit surtout pas rediriger vers une page inexistante.
+    redirectUrl,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
     visitorTimezone,

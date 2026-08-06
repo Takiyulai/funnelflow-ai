@@ -309,9 +309,18 @@ export function WebinarDetailsFields({
   );
 }
 
-/** 🆕 LOT 7 — Champ embed calendrier natif (Calendly/Cal.com) pour la prise
- *  de RDV. Affiché uniquement si kind="booking". Vide → repli sur le
- *  formulaire de contact classique. */
+/**
+ * Calendrier de prise de RDV. Affiché uniquement si kind="booking".
+ *
+ * 🆕 Le champ ne demande plus un lien Calendly par défaut : AutoFunnel possède
+ * désormais son PROPRE moteur de réservation (créneaux, fuseaux, anti-double-
+ * réservation, e-mails, .ics). Proposer d'emblée un outil tiers revenait à
+ * ignorer la fonctionnalité maison et à sortir le prospect de la plateforme.
+ *
+ * Le calendrier natif est donc le défaut, provisionné automatiquement à la
+ * génération. Le champ externe reste accessible pour qui tient à son outil
+ * habituel — et pour la rétrocompatibilité des tunnels déjà créés avec lui.
+ */
 export function BookingDetailsFields({
   language,
   calendarEmbedUrl,
@@ -321,6 +330,13 @@ export function BookingDetailsFields({
   calendarEmbedUrl?: string;
   onChange: (patch: BookingDetailsPatch) => void;
 }) {
+  // `undefined` = calendrier natif ; toute valeur (même vide) = mode externe.
+  // On bascule en mode externe avec une chaîne d'un espace, ce qui distingue
+  // « l'utilisateur a choisi l'externe mais n'a pas encore collé son lien » de
+  // « il utilise le natif », sans ajouter un champ au brief. Un espace est
+  // inoffensif en aval : `applyBookingCalendarEmbed` fait `.trim()` et ignore
+  // les valeurs vides.
+  const useExternal = calendarEmbedUrl !== undefined;
   const L = {
     title:
       language === "en"
@@ -328,6 +344,24 @@ export function BookingDetailsFields({
         : language === "es"
           ? "Tu calendario de reservas"
           : "Ton calendrier de RDV",
+    native:
+      language === "en"
+        ? "Built-in calendar (recommended)"
+        : language === "es"
+          ? "Calendario integrado (recomendado)"
+          : "Calendrier intégré (recommandé)",
+    nativeHint:
+      language === "en"
+        ? "Created automatically with your funnel. Slots, time zones, confirmation emails and calendar files are handled for you — set your availability afterwards in Appointments."
+        : language === "es"
+          ? "Se crea automáticamente con tu embudo. Franjas, zonas horarias, correos de confirmación y archivos de calendario incluidos — ajusta tu disponibilidad luego en Citas."
+          : "Créé automatiquement avec ton tunnel. Créneaux, fuseaux horaires, e-mails de confirmation et fichiers agenda sont gérés — tu règles tes disponibilités ensuite dans « Rendez-vous ».",
+    external:
+      language === "en"
+        ? "Use an external calendar instead"
+        : language === "es"
+          ? "Usar un calendario externo"
+          : "Utiliser plutôt un calendrier externe",
     label:
       language === "en"
         ? "Calendar link (Calendly / Cal.com)"
@@ -336,29 +370,52 @@ export function BookingDetailsFields({
           : "Lien du calendrier (Calendly / Cal.com)",
     hint:
       language === "en"
-        ? "Embedded directly on the booking page. Leave empty to keep the classic contact form."
+        ? "Embedded on the booking page. Your prospects leave AutoFunnel to book."
         : language === "es"
-          ? "Se incrusta directamente en la página de reserva. Déjalo vacío para conservar el formulario de contacto clásico."
-          : "Intégré directement sur la page de RDV. Laisse vide pour garder le formulaire de contact classique.",
-    ph:
-      language === "en"
-        ? "https://calendly.com/..."
-        : "https://calendly.com/...",
+          ? "Se incrusta en la página de reserva. Tus prospectos salen de AutoFunnel para reservar."
+          : "Intégré sur la page de RDV. Tes prospects quittent AutoFunnel pour réserver.",
+    ph: "https://calendly.com/...",
   };
+
   return (
     <div className="rounded-lg border border-[#31845C]/30 bg-[#31845C]/5 p-3.5 grid gap-3">
       <div className="flex items-center gap-2 text-sm font-bold text-ink">
         <CalendarClock size={15} className="text-[#31845C]" />
         {L.title}
       </div>
-      <Field label={L.label} hint={L.hint}>
-        <Input
-          type="url"
-          value={calendarEmbedUrl ?? ""}
-          placeholder={L.ph}
-          onChange={(e) => onChange({ calendarEmbedUrl: e.target.value || undefined })}
-        />
-      </Field>
+
+      {!useExternal ? (
+        <>
+          <div className="rounded-md border border-[#31845C]/25 bg-white/60 p-3">
+            <p className="text-sm font-semibold text-ink">{L.native}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink/60">{L.nativeHint}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ calendarEmbedUrl: " " })}
+            className="justify-self-start text-xs font-medium text-ink/50 underline underline-offset-2 hover:text-ink/80"
+          >
+            {L.external}
+          </button>
+        </>
+      ) : (
+        <Field label={L.label} hint={L.hint}>
+          <Input
+            type="url"
+            value={calendarEmbedUrl?.trim() ?? ""}
+            placeholder={L.ph}
+            autoFocus
+            onChange={(e) => onChange({ calendarEmbedUrl: e.target.value || " " })}
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ calendarEmbedUrl: undefined })}
+            className="mt-2 text-xs font-medium text-ink/50 underline underline-offset-2 hover:text-ink/80"
+          >
+            {L.native}
+          </button>
+        </Field>
+      )}
     </div>
   );
 }

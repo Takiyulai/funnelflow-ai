@@ -919,6 +919,15 @@ export type Funnel = {
     /** 🆕 Version du schéma de données (pour migrations futures) */
     schemaVersion?: number;
     /**
+     * 🆕 Slug du type de RDV du moteur NATIF rattaché à ce tunnel (/rdv/{slug}).
+     *
+     * Présent uniquement sur les tunnels de type "booking". C'est ce champ qui
+     * fait que les CTA de la page de vente pointent vers le vrai calendrier au
+     * lieu d'une page décorative. Absent = comportement historique conservé
+     * (rétrocompatibilité des tunnels Booking déjà créés).
+     */
+    bookingSlug?: string;
+    /**
      * 🆕 Variante de pied de page : "footer-minimal-centered" (défaut),
      * "footer-grid-sitemap" ou "footer-cta-newsletter". Choisie de façon seedée
      * par le générateur, rendue par components/funnel/FunnelFooter.tsx.
@@ -1071,10 +1080,16 @@ export type FunnelBrief = {
   orderBumpName?: string;
   orderBumpPrice?: string;
   orderBumpDescription?: string;
-  /** 🆕 LOT 7 — URL d'embed calendrier natif (Calendly/Cal.com) affiché
-   *  directement sur la page de prise de RDV. Vide → repli sur le formulaire
-   *  de contact classique (comportement historique, rétro-compatible). */
+  /** 🆕 LOT 7 — URL d'embed d'un calendrier EXTERNE (Calendly / Cal.com).
+   *  ⚠️ À ne pas confondre avec `bookingSlug` ci-dessous, qui désigne le
+   *  moteur de RDV NATIF d'AutoFunnel. Ce champ reste pour qui préfère son
+   *  outil habituel, et pour la rétrocompatibilité des tunnels existants. */
   calendarEmbedUrl?: string;
+  /** 🆕 Slug du type de RDV du moteur NATIF rattaché au tunnel (/rdv/{slug}).
+   *  Renseigné automatiquement à la génération d'un tunnel « booking » : les
+   *  CTA de la page de vente pointent alors vers le vrai calendrier. Vide →
+   *  comportement historique intégralement conservé. */
+  bookingSlug?: string;
   /** 🆕 LOT 9 — Nombre de jours du challenge (génère autant de pages
    *  "jour-1"..."jour-N"). Défaut : 5 si non renseigné. */
   challengeDays?: number;

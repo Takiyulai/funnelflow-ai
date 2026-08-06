@@ -11,6 +11,7 @@ import { guardApiAccess, quotaExceededResponse } from "@/lib/billing/apiGuard";
 import { canCreateFunnel } from "@/lib/billing/subscription";
 import { consumeQuota } from "@/lib/billing/usage";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { ensureBookingEventType } from "@/lib/booking/autoProvision";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60 secondes pour la génération multi-pages
@@ -83,8 +84,13 @@ const briefSchema = z.object({
   orderBumpName: z.string().max(200).optional(),
   orderBumpPrice: z.string().max(40).optional(),
   orderBumpDescription: z.string().max(300).optional(),
-  // 🆕 LOT 7 — Embed calendrier natif (Calendly/Cal.com) sur la page de RDV.
+  // 🆕 LOT 7 — Embed d'un calendrier EXTERNE (Calendly / Cal.com).
   calendarEmbedUrl: z.string().max(500).optional(),
+  // 🆕 Slug du type de RDV du moteur NATIF. Généralement absent de la requête
+  // (provisionné côté serveur), mais accepté pour rattacher un tunnel à un
+  // type de RDV existant. Sans cette entrée, zod le retirerait silencieusement
+  // du brief avant qu'il n'atteigne le générateur — même piège que brandColors.
+  bookingSlug: z.string().max(60).optional(),
   // 🆕 LOT 9 — Nombre de jours du challenge (génère jour-1..jour-N).
   challengeDays: z.number().int().min(1).max(30).optional(),
   // 🆕 Offre de la page OTO/tripwire générique ("oto"), cochable sur tous les
@@ -284,7 +290,27 @@ export async function POST(request: Request) {
   );
 
   try {
-    const funnel = await generateMultiPageFunnelWithAI(data);
+    // 🆕 MOTEUR DE RDV NATIF — provisionnement AVANT génération.
+    //
+    // Le slug doit exister au moment où `harmonizeCTAsByFunnelKind` construit
+    // les CTA, sinon la page de vente pointerait dans le vide. Un tunnel
+    // « booking » sans calendrier rattaché n'a aucun intérêt : c'est justement
+    // ce qui produisait une page de réservation décorative, incapable de
+    // réserver quoi que ce soit.
+    //
+    // Best-effort : en cas d'échec, `bookingSlug` reste absent et la génération
+    // retombe intégralement sur le comportement historique.
+    let bookingSlug = data.bookingSlug;
+    if (!bookingSlug && data.funnelKind === "booking") {
+      bookingSlug =
+        (await ensureBookingEventType({
+          userId: guard.userId,
+          offerName: data.offerName,
+          language: data.language,
+        })) ?? undefined;
+    }
+
+    const funnel = await generateMultiPageFunnelWithAI({ ...data, bookingSlug });
 
     const duration = Date.now() - startTime;
     console.info(

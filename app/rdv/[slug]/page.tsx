@@ -31,9 +31,12 @@ export default async function BookingPage(props: { params: Promise<{ slug: strin
   if (!eventType || !eventType.active) notFound();
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-12 text-white">
+    // Fond légèrement dégradé plutôt qu'un noir plat : les cartes du widget
+    // (bg-white/[0.04]) n'ont de relief que si l'arrière-plan n'est pas déjà
+    // au maximum de noir.
+    <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 px-4 py-10 text-white sm:py-14">
       <BookingWidget slug={slug} />
-      <p className="mt-12 text-center text-xs opacity-40">Propulsé par AutoFunnel AI</p>
+      <p className="mt-12 text-center text-xs text-white/25">Propulsé par AutoFunnel AI</p>
     </main>
   );
 }

@@ -143,6 +143,74 @@ export async function loadSchedulingContext(
   return { rules, exceptions, busy };
 }
 
+/**
+ * URL de la page de CONFIRMATION du tunnel rattaché à ce type de RDV.
+ *
+ * ── POURQUOI DEUX CHEMINS DE RÉSOLUTION ────────────────────────────────────
+ * 1. `booking_event_types.funnel_id`, quand il est renseigné (rattachement
+ *    explicite depuis l'éditeur).
+ * 2. À défaut, on cherche le tunnel PUBLIÉ de l'utilisateur dont
+ *    `json_content.meta.bookingSlug` désigne ce type de RDV. C'est le cas des
+ *    tunnels générés automatiquement : au moment de la génération, le tunnel
+ *    n'existe pas encore en base (il est enregistré côté client ensuite), donc
+ *    `funnel_id` ne PEUT PAS être posé à ce moment-là.
+ *
+ * Résoudre paresseusement, au moment de la réservation, évite d'ajouter une
+ * écriture supplémentaire dans le chemin d'enregistrement du tunnel.
+ *
+ * Retourne null si aucun tunnel ne correspond : le calendrier reste alors
+ * parfaitement utilisable seul, avec sa confirmation intégrée.
+ */
+export async function resolveConfirmationUrl(
+  eventType: BookingEventType,
+  origin: string,
+): Promise<string | null> {
+  const admin = getSupabaseAdmin();
+
+  type FunnelRow = { slug: string; published_slug: string | null; json_content: any };
+
+  const buildUrl = (row: FunnelRow): string | null => {
+    const pages = row.json_content?.pages;
+    if (!Array.isArray(pages)) return null;
+    const confirmation = pages.find(
+      (p: { role?: string }) => p?.role === "confirmation" || p?.role === "thankyou",
+    );
+    if (!confirmation?.slug) return null;
+    const funnelSlug = row.published_slug || row.slug;
+    if (!funnelSlug) return null;
+    return `${origin}/tunnel/${funnelSlug}/${String(confirmation.slug).replace(/^\/+/, "")}`;
+  };
+
+  try {
+    if (eventType.funnelId) {
+      const { data } = await admin
+        .from("funnels")
+        .select("slug, published_slug, json_content")
+        .eq("id", eventType.funnelId)
+        .maybeSingle<FunnelRow>();
+      if (data) {
+        const url = buildUrl(data);
+        if (url) return url;
+      }
+    }
+
+    const { data } = await admin
+      .from("funnels")
+      .select("slug, published_slug, json_content")
+      .eq("user_id", eventType.userId)
+      .eq("status", "published")
+      .eq("json_content->meta->>bookingSlug", eventType.slug)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<FunnelRow>();
+
+    return data ? buildUrl(data) : null;
+  } catch (e) {
+    console.warn("[booking] résolution de la page de confirmation impossible :", e);
+    return null;
+  }
+}
+
 export type CreateBookingInput = {
   eventType: BookingEventType;
   startsAt: string;

@@ -275,6 +275,10 @@ export function daylightSavingNotice(
   reference: Date = new Date(),
 ): string | null {
   if (!observesDaylightSaving(timeZone, reference)) return null;
+  // Réservé à l'écran d'ADMINISTRATION : ce texte long éclaire l'hôte, qui
+  // configure des plages récurrentes. Côté prospect, il n'apporte rien à la
+  // décision de réserver et écrase la page — la version publique se limite à
+  // une ligne avec un détail repliable (cf. daylightSavingShortNotice).
   if (language === "en") {
     return `${shortZoneLabel(timeZone)} observes daylight saving time. Your slots shift by one hour twice a year relative to countries that don't — your bookings' absolute time is preserved either way.`;
   }
@@ -285,6 +289,32 @@ export function daylightSavingNotice(
     `${shortZoneLabel(timeZone)} applique le changement d'heure. Tes créneaux se décalent d'une heure ` +
     `deux fois par an par rapport à l'Afrique de l'Ouest, qui n'en change jamais. ` +
     `Les RDV déjà réservés gardent leur heure absolue : c'est l'affichage local qui suit.`
+  );
+}
+
+/**
+ * Version COURTE de l'avertissement, pour la page publique de réservation.
+ *
+ * Le prospect n'a qu'une chose à savoir : les heures qu'il voit sont les
+ * siennes. Le détail sur le changement d'heure reste accessible derrière un
+ * « ⓘ », mais ne doit pas occuper trois lignes au-dessus du calendrier.
+ */
+export function daylightSavingShortNotice(
+  hostTz: TimeZoneId,
+  visitorTz: TimeZoneId,
+  reference: Date = new Date(),
+): string | null {
+  // Concerne uniquement les paires de fuseaux dont l'un bouge et pas l'autre :
+  // c'est là que l'écart change au fil de l'année.
+  const hostDst = observesDaylightSaving(hostTz, reference);
+  const visitorDst = observesDaylightSaving(visitorTz, reference);
+  if (hostDst === visitorDst) return null;
+  const shifting = hostDst ? hostTz : visitorTz;
+  return (
+    `${shortZoneLabel(shifting)} applique le changement d'heure, contrairement à ` +
+    `${shortZoneLabel(hostDst ? visitorTz : hostTz)}. L'écart entre vos deux fuseaux varie ` +
+    `donc d'une heure selon la saison. Les créneaux ci-dessus tiennent déjà compte de la date ` +
+    `choisie : l'heure affichée est la bonne.`
   );
 }
 

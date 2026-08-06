@@ -317,7 +317,10 @@ const BOOKING: FunnelBlueprint = {
     {
       role: "landing",
       slug: "rendez-vous",
-      name: "Page de réservation",
+      // ⚠️ Renommée : deux pages s'appelaient « réservation », ce qui rendait
+      // le tunnel illisible dans l'éditeur. Celle-ci vend le rendez-vous ; la
+      // réservation elle-même a lieu sur le calendrier natif /rdv/{slug}.
+      name: "Page de vente du rendez-vous",
       // speaker → about
       defaultSectionTypes: ["hero", "benefits", "process", "testimonials", "faq", "cta"],
       allowedSectionTypes: [
@@ -353,23 +356,25 @@ const BOOKING: FunnelBlueprint = {
         es: "Página de calificación — filtra prospectos antes del calendario",
       },
     },
-    {
-      role: "booking",
-      slug: "reservation",
-      name: "Page de prise de rendez-vous",
-      // 🆕 LOT 7 — "form" reste le repli historique (champs de contact) ; si un
-      // lien Calendly/Cal.com est fourni, le calendrier natif s'affiche EN PLUS
-      // (voir applyBookingCalendarEmbed dans lib/ai/generate.ts).
-      defaultSectionTypes: ["hero", "form", "guarantee", "cta"],
-      allowedSectionTypes: [
-        "hero", "form", "guarantee", "cta",
-        "about", "testimonials", "faq",
-      ],
-      copywritingFramework: "REASSURANCE",
-      heroMediaPolicy: "single-only",
-      minSections: 3,
-      publiclyLinked: false,
-    },
+    // ⚠️ La page « Page de prise de rendez-vous » (role: "booking") a été
+    // RETIRÉE du blueprint, pour la même raison que la page « Accès » du lead
+    // magnet — mais avec un motif plus grave.
+    //
+    // Elle annonçait « Choisissez votre créneau » et portait un bouton
+    // « Confirmer ma réservation »… qui ne réservait rien : c'était un simple
+    // formulaire de contact. La vraie réservation a toujours lieu sur le
+    // moteur natif, à /rdv/{slug}. Un prospect qui remplissait cette page
+    // CROYAIT avoir un rendez-vous, et créait un lead sans créneau associé.
+    //
+    // Une page redondante coûte un clic ; une page qui ment coûte un client.
+    //
+    // Le pré-cadrage (rassurer, filtrer, créer l'urgence avant le calendrier)
+    // reste couvert par la page « qualification » ci-dessus, optionnelle et
+    // prévue exactement pour ça.
+    //
+    // Le rôle "booking" reste défini partout ailleurs (types, cta-matrix,
+    // labels) pour la RÉTROCOMPATIBILITÉ des tunnels déjà générés en 3-4 pages,
+    // qui continuent de fonctionner à l'identique.
     {
       role: "confirmation",
       slug: "confirmation",
