@@ -12,6 +12,7 @@ import { canCreateFunnel } from "@/lib/billing/subscription";
 import { consumeQuota } from "@/lib/billing/usage";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { ensureBookingEventType } from "@/lib/booking/autoProvision";
+import { usesNativeBookingEngine } from "@/lib/booking/mode";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60 secondes pour la génération multi-pages
@@ -91,6 +92,10 @@ const briefSchema = z.object({
   // type de RDV existant. Sans cette entrée, zod le retirerait silencieusement
   // du brief avant qu'il n'atteigne le générateur — même piège que brandColors.
   bookingSlug: z.string().max(60).optional(),
+  // 🆕 B3 — Mode de réservation. "external" ⇒ aucun appel au moteur natif.
+  bookingMode: z.enum(["native", "external"]).optional(),
+  // 🆕 B4 — Générer la page de confirmation du tunnel (défaut : true).
+  bookingConfirmationPage: z.boolean().optional(),
   // 🆕 LOT 9 — Nombre de jours du challenge (génère jour-1..jour-N).
   challengeDays: z.number().int().min(1).max(30).optional(),
   // 🆕 Offre de la page OTO/tripwire générique ("oto"), cochable sur tous les
@@ -300,8 +305,12 @@ export async function POST(request: Request) {
     //
     // Best-effort : en cas d'échec, `bookingSlug` reste absent et la génération
     // retombe intégralement sur le comportement historique.
+    // ⚠️ MODE EXTERNE : `usesNativeBookingEngine` renvoie false, donc AUCUNE
+    // écriture dans `booking_event_types`, aucun `funnel_id`, aucune
+    // dépendance au moteur natif. C'est ce qui permet au tunnel de rester
+    // fonctionnel une fois exporté vers Systeme.io.
     let bookingSlug = data.bookingSlug;
-    if (!bookingSlug && data.funnelKind === "booking") {
+    if (!bookingSlug && usesNativeBookingEngine(data)) {
       bookingSlug =
         (await ensureBookingEventType({
           userId: guard.userId,

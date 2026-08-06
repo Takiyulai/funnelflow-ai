@@ -56,6 +56,9 @@ import {
   filterSectionsByBlueprint,
 } from "@/lib/funnels/pageGenerator";
 import { normalizeFunnelKind } from "@/lib/funnels/kinds";
+// 🆕 B3 — Résolution du mode de réservation (natif / externe). Module PUR :
+// aucun accès base, importable côté serveur comme côté client.
+import { externalCalendarUrl, resolveBookingMode } from "@/lib/booking/mode";
 import { isUsableMediaUrl } from "@/lib/funnels/resolveMedia";
 import {
   getFunnelBlueprint,
@@ -3065,7 +3068,11 @@ function applyFooterMeta(funnel: Funnel, brief: FunnelBrief): void {
  *
  * Fonctionne pour TOUS les types de tunnels via la matrice cta-matrix.ts.
  */
-function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
+// ⚠️ EXPORTÉE UNIQUEMENT POUR LES TESTS. Cette fonction décide de la
+// destination de TOUS les CTA du tunnel — et vient de causer deux régressions
+// silencieuses (CTA vers une page décorative, puis ancre vers un élément
+// inexistant). Elle doit être vérifiable sans monter toute la génération IA.
+export function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
   const lang = brief.language;
   const isFree = isFreeOffer(brief.price);
   const archetype = getArchetype(brief.funnelKind);
@@ -3087,24 +3094,42 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
   });
   const conversionPageId = conversionPage?.id;
 
-  // 🆕 MOTEUR DE RDV NATIF.
+  // 🆕 B3 — DESTINATION DE RÉSERVATION, DEUX MODES.
   //
   // Pour un tunnel Booking, la conversion n'est pas une page du tunnel : c'est
-  // le calendrier natif, à son URL propre /rdv/{slug}. Quand le tunnel y est
-  // rattaché, les CTA « convert-primary » pointent directement dessus, au lieu
-  // de renvoyer vers une page interne qui ne sait pas réserver.
+  // un calendrier. Lequel dépend du mode choisi par l'utilisateur :
   //
-  // Sans rattachement (tunnels générés avant ce changement, ou création auto
-  // désactivée), `bookingSlug` est absent → on retombe intégralement sur le
-  // comportement historique. Aucune régression sur l'existant.
+  //   EXTERNE  → son Calendly/Cal.com. URL ABSOLUE et `_blank` : le tunnel doit
+  //              rester fonctionnel une fois exporté vers Systeme.io, où ni le
+  //              moteur natif ni les chemins relatifs d'AutoFunnel n'existent.
+  //   NATIF    → /rdv/{slug}, en `_self` : on reste dans le tunnel, la
+  //              redirection post-réservation ramènera sur sa confirmation.
+  //
+  // Aucun des deux → repli historique, protégé par le garde B2 plus bas.
+  const bookingMode = archetype === "booking" ? resolveBookingMode(brief) : "native";
+  const externalUrl = archetype === "booking" ? externalCalendarUrl(brief) : null;
+
   const bookingSlug =
-    archetype === "booking"
+    archetype === "booking" && bookingMode === "native"
       ? (funnel.meta as { bookingSlug?: string } | undefined)?.bookingSlug?.trim() || null
       : null;
-  const nativeBookingUrl = bookingSlug ? `/rdv/${encodeURIComponent(bookingSlug)}` : null;
 
-  if (nativeBookingUrl) {
-    console.log(`[cta-harmonize] Calendrier natif rattaché → CTA vers ${nativeBookingUrl}`);
+  const bookingTarget: { url: string; target: "_self" | "_blank" } | null =
+    bookingMode === "external" && externalUrl
+      ? { url: externalUrl, target: "_blank" }
+      : bookingSlug
+        ? { url: `/rdv/${encodeURIComponent(bookingSlug)}`, target: "_self" }
+        : null;
+
+  if (bookingTarget) {
+    console.log(
+      `[cta-harmonize] Réservation en mode "${bookingMode}" → CTA vers ${bookingTarget.url}`,
+    );
+  } else if (archetype === "booking") {
+    console.warn(
+      "[cta-harmonize] ⚠️ Tunnel booking sans destination de réservation " +
+        "(ni slug natif, ni URL externe) → repli sur le comportement historique.",
+    );
   }
 
   // Compteur global pour varier les labels de la landing
@@ -3155,16 +3180,17 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
           const label = labels[landingCtaIndex % labels.length];
           landingCtaIndex++;
 
-          // 🆕 Priorité absolue au calendrier natif : c'est le seul endroit où
-          // le prospect peut réellement choisir un créneau.
-          if (nativeBookingUrl) {
+          // 🆕 B3 — Priorité absolue à la destination de réservation résolue
+          // (calendrier externe OU natif) : c'est le seul endroit où le
+          // prospect peut réellement choisir un créneau.
+          if (bookingTarget) {
             const calendarCta: CtaConfig = {
               ...section.cta,
               label,
               mode: "redirect",
-              url: nativeBookingUrl,
+              url: bookingTarget.url,
               pageId: undefined,
-              target: "_self",
+              target: bookingTarget.target,
             };
             return { ...section, cta: calendarCta };
           }
@@ -3180,6 +3206,27 @@ function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): Funnel {
             };
             return { ...section, cta: nextCta };
           }
+
+          // 🆕 B2 — GARDE ANTI-ANCRE-MORTE (tous types, pas seulement booking).
+          //
+          // Le repli historique ancrait systématiquement vers `#lead-form`.
+          // Si la page ne contient AUCUNE section `form`, ce bouton ne fait
+          // rien du tout : aucune erreur, aucun log, juste un CTA inerte — le
+          // pire mode d'échec possible sur l'élément qui porte la conversion.
+          //
+          // C'est exactement ce qui s'est produit sur Booking après le retrait
+          // de sa page de réservation décorative : plus de page de conversion,
+          // plus de section `form`, et une ancre vers le vide.
+          const hasFormSection = filteredSections.some((s) => s.type === "form");
+          if (!hasFormSection) {
+            console.warn(
+              `[cta-harmonize] Page "${page.role}" : aucune destination de conversion ` +
+                `et aucune section "form" → CTA neutralisé (une ancre vers #lead-form ` +
+                `serait morte).`,
+            );
+            return stripCta(section);
+          }
+
           // Sinon, on scrolle vers le form de la page courante
           const anchorCta: CtaConfig = {
             ...section.cta,
@@ -3579,6 +3626,30 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     if (!b.optional) return true;
     return selectedOptional.has(b.role);
   });
+
+  // 🆕 B4 — Page de confirmation d'un tunnel « booking ».
+  //
+  // Elle est GÉNÉRÉE PAR DÉFAUT (`bookingConfirmationPage` absent = true) et
+  // seule une décoche explicite la retire — et uniquement en mode NATIF, où
+  // l'écran de confirmation du calendrier suffit à lui seul.
+  //
+  // En mode EXTERNE elle est toujours produite : Calendly & consorts
+  // redirigent vers l'URL qu'on leur donne, et cette page EST cette cible. La
+  // retirer laisserait le mode externe sans atterrissage après réservation.
+  if (normalizedKind === "booking" && brief.bookingConfirmationPage === false) {
+    if (resolveBookingMode(brief) === "native") {
+      secondaryBlueprints = secondaryBlueprints.filter((b) => b.role !== "confirmation");
+      console.log(
+        "[blueprint] Booking natif : page de confirmation décochée → non générée " +
+          "(l'écran du calendrier natif fait office de confirmation).",
+      );
+    } else {
+      console.log(
+        "[blueprint] Booking externe : page de confirmation CONSERVÉE malgré la décoche — " +
+          "c'est la cible de redirection de la plateforme tierce.",
+      );
+    }
+  }
 
   // Express IA : on cale le nombre de pages sur le choix de l'utilisateur
   // (1 = page principale seule ; N = page principale + (N-1) pages secondaires).
@@ -4006,6 +4077,18 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
     media,
     meta: {
       funnelKind: normalizedKind ?? brief.funnelKind,
+      // 🆕 B1 — Rattachement au moteur de RDV natif.
+      //
+      // ⚠️ C'EST ICI que le champ doit être posé : ce littéral est le SEUL
+      // emprunté par `generateMultiPageFunnelWithAI`. Une tentative
+      // précédente l'avait ajouté au parseur mono-page legacy (~L2415) et à
+      // un littéral de repli (~L6371), deux chemins morts pour le multi-pages
+      // → `harmonizeCTAsByFunnelKind` lisait toujours `undefined`, et les CTA
+      // Booking ancraient vers un `#lead-form` inexistant.
+      //
+      // Le champ est ensuite préservé par l'étape 6 (`finalFunnel.meta` fait
+      // `...(styledFunnel.meta ?? {})`), donc il survit jusqu'à l'étape 11.
+      bookingSlug: brief.bookingSlug,
       moodId: brief.moodId,
       creationMode: brief.creationMode,
       templateId: brief.templateId,

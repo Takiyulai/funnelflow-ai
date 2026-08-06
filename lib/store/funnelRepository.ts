@@ -382,7 +382,44 @@ export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | n
   if (error) {
     throw new Error(formatPgError("Enregistrement Supabase impossible", error));
   }
+
+  // 🆕 B5 — Rattachement du type de RDV natif à ce tunnel.
+  //
+  // À la GÉNÉRATION, le tunnel n'existe pas encore en base (cette fonction est
+  // justement ce qui l'y met) : `funnel_id` ne peut donc pas être posé à ce
+  // moment-là. On le pose ici, au premier enregistrement.
+  //
+  // Sans lui, la redirection post-réservation devait deviner le tunnel via
+  // `json_content->meta->>bookingSlug` ET `status = 'published'` — donc rien
+  // ne fonctionnait pour un tunnel encore en brouillon.
+  //
+  // Ne se déclenche JAMAIS en mode externe : `meta.bookingSlug` n'y est pas posé.
+  await linkBookingEventType(funnelWithUrls, stored.id);
+
   return data ? rowToStored(data as FunnelRow) : null;
+}
+
+/**
+ * Pose `booking_event_types.funnel_id` si ce n'est pas déjà fait.
+ *
+ * Best-effort STRICT et conditionnel : un seul UPDATE, filtré sur
+ * `funnel_id is null`, donc idempotent et sans coût aux enregistrements
+ * suivants. Un échec ne doit jamais faire échouer la sauvegarde du tunnel —
+ * la résolution de repli par `meta.bookingSlug` reste en place côté serveur.
+ */
+async function linkBookingEventType(funnel: Funnel, funnelId: string): Promise<void> {
+  const slug = (funnel.meta as { bookingSlug?: string } | undefined)?.bookingSlug?.trim();
+  if (!slug) return;
+  try {
+    const supabase = createSupabaseBrowserClient();
+    await supabase
+      .from("booking_event_types")
+      .update({ funnel_id: funnelId })
+      .ilike("slug", slug)
+      .is("funnel_id", null);
+  } catch (e) {
+    console.warn("[funnelRepository] rattachement du calendrier impossible :", e);
+  }
 }
 
 /** Trouve un `slug` (brouillon) libre pour cet utilisateur (≠ autres lignes). */

@@ -1090,6 +1090,18 @@ export type FunnelBrief = {
    *  CTA de la page de vente pointent alors vers le vrai calendrier. Vide →
    *  comportement historique intégralement conservé. */
   bookingSlug?: string;
+  /** 🆕 B3 — Mode de réservation d'un tunnel « booking ».
+   *  - "native"   : moteur AutoFunnel (/rdv/{slug}). Défaut.
+   *  - "external" : calendrier tiers via `calendarEmbedUrl`. Aucun appel au
+   *    moteur natif, URL absolue qui survit à un export Systeme.io.
+   *  Absent → déduit de `calendarEmbedUrl` (rétrocompat, cf. lib/booking/mode.ts). */
+  bookingMode?: "native" | "external";
+  /** 🆕 B4 — Générer la page de confirmation du tunnel pour un « booking ».
+   *  Défaut TRUE. Décochée en mode natif → le prospect reste sur l'écran de
+   *  confirmation du calendrier. En mode EXTERNE, la page reste générée quoi
+   *  qu'il arrive : c'est la seule cible de redirection dont dispose la
+   *  plateforme tierce après réservation. */
+  bookingConfirmationPage?: boolean;
   /** 🆕 LOT 9 — Nombre de jours du challenge (génère autant de pages
    *  "jour-1"..."jour-N"). Défaut : 5 si non renseigné. */
   challengeDays?: number;

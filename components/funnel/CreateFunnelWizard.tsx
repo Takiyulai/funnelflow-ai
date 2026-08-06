@@ -14,6 +14,14 @@ import { LoaderIA } from "@/components/ui/LoaderIA";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { LogoUploader } from "@/components/funnel/LogoUploader";
 import { FunnelKindStep, WebinarDetailsFields } from "@/components/funnel/wizard/FunnelKindStep";
+// 🆕 B6 — Quels blocs du wizard afficher selon le type de tunnel.
+import {
+  PRICING_BLOCK_FIELDS,
+  showsOtoOption,
+  showsPricingBlock,
+} from "@/lib/funnels/wizardFields";
+// 🆕 Validation du calendrier externe — MÊME règle que le générateur.
+import { bookingExternalUrlMissing } from "@/lib/booking/mode";
 import { MoodStep } from "@/components/funnel/wizard/MoodStep";
 import { VideoStep } from "@/components/funnel/wizard/VideoStep";
 import TemplateGalleryStep from "@/components/funnel/TemplateGalleryStep";
@@ -604,6 +612,9 @@ export function CreateFunnelWizard() {
   // ici pour pouvoir sauter sur l'onglet incomplet quand on bloque « Suivant »).
   const [offerSubTab, setOfferSubTab] = useState<OfferSubTab>("marque");
   const [offerStepError, setOfferStepError] = useState("");
+  // 🆕 Message de validation de l'étape « Format » (aujourd'hui : URL de
+  // calendrier externe manquante). Même mécanique que `offerStepError`.
+  const [formatStepError, setFormatStepError] = useState("");
   const stepperRef = useRef<HTMLDivElement>(null);
   const [brief, setBrief] = useState<FunnelBrief>(initialBrief);
   const [logoPreview, setLogoPreview] = useState<string>("");
@@ -700,11 +711,34 @@ export function CreateFunnelWizard() {
 
   function selectKind(kind: FunnelKind) {
     const k = getFunnelKind(kind);
+
+    // 🆕 B6 — NETTOYAGE À LA BASCULE DE TYPE.
+    //
+    // Masquer un champ ne suffit pas : une valeur saisie avant le changement de
+    // type reste dans le brief et continue d'alimenter la génération. Un
+    // utilisateur qui renseigne « 297€ » puis bascule sur « prise de RDV »
+    // obtiendrait un tunnel de réservation avec une page de commande fantôme
+    // et un prix collé sur le bouton. On remet donc les champs devenus
+    // invisibles à `undefined`.
+    const cleared: Record<string, undefined> = {};
+    if (!showsPricingBlock(kind)) {
+      for (const field of PRICING_BLOCK_FIELDS) cleared[field] = undefined;
+    }
+
     updateMany({
       funnelKind: kind,
       funnelType:
         funnelTemplates.find((t) => t.id === k?.suggestedTemplateId)?.name ??
         brief.funnelType,
+      ...cleared,
+      // La page OTO n'a plus de raison d'être si le bloc commercial disparaît.
+      ...(showsOtoOption(kind)
+        ? {}
+        : {
+            selectedOptionalPages: (brief.selectedOptionalPages ?? []).filter(
+              (r) => r !== "oto",
+            ),
+          }),
     });
     // 🆕 BUG CORRIGÉ : l'avance automatique au step suivant masquait
     // instantanément le bloc date/heure + urgence du webinaire (affiché sur ce
@@ -929,6 +963,20 @@ export function CreateFunnelWizard() {
   // si un champ obligatoire (nom de marque, nom de l'offre) est vide, on NE passe
   // PAS, on affiche un message et on saute sur le sous-onglet incomplet.
   const goNext = () => {
+    // 🆕 Étape « Format » : en mode calendrier EXTERNE, l'URL est obligatoire.
+    // Sans elle, aucune destination de réservation n'existe et le garde
+    // anti-ancre-morte retire les CTA — l'utilisateur obtiendrait un tunnel de
+    // prise de RDV sans le moindre bouton, sans comprendre pourquoi.
+    if (stepLabel === "Format") {
+      if (bookingExternalUrlMissing(brief)) {
+        setFormatStepError(
+          "Colle le lien de ton calendrier externe (Calendly, Cal.com…) pour que le " +
+            "bouton de réservation fonctionne.",
+        );
+        return;
+      }
+      setFormatStepError("");
+    }
     if (stepLabel === "Ton offre") {
       const missing = getOfferMissingRequired(brief);
       if (missing.length > 0) {
@@ -1166,7 +1214,15 @@ export function CreateFunnelWizard() {
                 evergreenOfferHours={brief.evergreenOfferHours}
                 onWebinarChange={(patch) => updateMany(patch)}
                 calendarEmbedUrl={brief.calendarEmbedUrl}
-                onBookingChange={(patch) => updateMany(patch)}
+                bookingMode={brief.bookingMode}
+                bookingConfirmationPage={brief.bookingConfirmationPage}
+                bookingError={formatStepError}
+                onBookingChange={(patch) => {
+                  updateMany(patch);
+                  // L'erreur disparaît dès que l'utilisateur corrige — y compris
+                  // en revenant au mode natif, où le champ n'est plus requis.
+                  if (formatStepError) setFormatStepError("");
+                }}
                 challengeDays={brief.challengeDays}
                 challengeDayTitles={brief.challengeDayTitles}
                 onChallengeChange={(patch) => updateMany(patch)}
@@ -1278,6 +1334,8 @@ export function CreateFunnelWizard() {
                 webinarMode={brief.webinarMode}
                 webinarDate={brief.webinarDate}
                 evergreenVideoUrl={brief.evergreenVideoUrl}
+                bookingMode={brief.bookingMode}
+                calendarEmbedUrl={brief.calendarEmbedUrl}
                 otoOfferName={brief.otoOfferName}
                 otoPrice={brief.otoPrice}
                 otoPromise={brief.otoPromise}
@@ -1565,7 +1623,10 @@ function OfferStep({
       </section>
       )}
 
-      {/* ── Bloc 2 : Offre (générique, tous types SAUF webinaire) ── */}
+      {/* ── Bloc 2 : Offre (générique, tous types SAUF webinaire).
+             ⚠️ Le bloc RESTE affiché pour « booking » : il porte le nom du RDV
+             et la promesse, indispensables. Seuls les champs COMMERCIAUX à
+             l'intérieur sont masqués (cf. showsPricingBlock). ── */}
       {subTab === "offre" && brief.funnelKind !== "webinar" && (
       <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
         <div className="flex items-center gap-2">
@@ -1575,9 +1636,28 @@ function OfferStep({
           <h3 className="text-sm font-black uppercase tracking-wider text-ink">Offre</h3>
         </div>
 
-        <Field label="Nom du produit ou service">
-          <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} />
+        <Field
+          label={
+            brief.funnelKind === "booking"
+              ? "Objet du rendez-vous"
+              : "Nom du produit ou service"
+          }
+        >
+          <Input
+            value={brief.offerName}
+            onChange={(e) => update("offerName", e.target.value)}
+            placeholder={
+              brief.funnelKind === "booking" ? "Appel découverte, audit gratuit…" : undefined
+            }
+          />
         </Field>
+
+        {/* 🆕 B6 — Tout le bloc commercial ci-dessous est masqué pour les types
+            dont la conversion n'est pas un achat (cf. lib/funnels/wizardFields.ts).
+            Les champs correspondants sont NETTOYÉS à la bascule de type, sinon
+            une saisie antérieure continuerait d'alimenter la génération. */}
+        {showsPricingBlock(brief.funnelKind) && (
+        <>
 
         {/* 🆕 CHALLENGE — sélecteur Gratuit / Payant.
             La saisie libre laissait passer « gratuit », « 0€ », « free »… que
@@ -1688,6 +1768,8 @@ function OfferStep({
         <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
           <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
         </Field>
+        </>
+        )}
 
         <Field label="Promesse principale">
           <Textarea
@@ -2205,6 +2287,7 @@ function GenerationStep({
   successMessage, errorMessage, errorReason,
   funnelKind, language, selectedOptionalPages, onToggleOptionalPage,
   webinarMode, webinarDate, evergreenVideoUrl,
+  bookingMode, calendarEmbedUrl,
   otoOfferName, otoPrice, otoPromise, onOtoOfferChange,
 }: {
   templateName: string; templateObjective: string;
@@ -2224,6 +2307,9 @@ function GenerationStep({
   webinarDate?: string;
   /** 🆕 Webinaire Evergreen : la vidéo pré-enregistrée est le cœur de l'expérience. */
   evergreenVideoUrl?: string;
+  /** 🆕 Prise de RDV : en mode externe, l'URL du calendrier est obligatoire. */
+  bookingMode?: "native" | "external";
+  calendarEmbedUrl?: string;
   /** 🆕 Offre de la page OTO/tripwire générique (si cochée dans l'aperçu). */
   otoOfferName?: string;
   otoPrice?: string;
@@ -2251,12 +2337,22 @@ function GenerationStep({
     webinarMode === "evergreen" &&
     !(evergreenVideoUrl && evergreenVideoUrl.trim());
 
+  // 🆕 Mode calendrier EXTERNE sans URL : sans destination de réservation, le
+  // garde anti-ancre-morte retire les CTA — le tunnel serait généré sans aucun
+  // bouton. On bloque la génération, comme pour la date de webinaire manquante.
+  const bookingUrlMissing = bookingExternalUrlMissing({
+    funnelKind,
+    bookingMode,
+    calendarEmbedUrl,
+  });
+
   const blocked =
     health?.reason === "missing-key" ||
     health?.reason === "invalid-key" ||
     health?.reason === "header-error" ||
     webinarDateMissing ||
-    evergreenVideoMissing;
+    evergreenVideoMissing ||
+    bookingUrlMissing;
 
   // ✅ FIX : titre et icône adaptés au type d'erreur
   const isStorageIssue = errorReason === "storage-full" || errorReason === "storage-error";
@@ -2297,6 +2393,20 @@ function GenerationStep({
             <p className="font-bold">Date du webinaire manquante</p>
             <p className="mt-0.5 leading-relaxed">
               Retourne à l'étape « Format » pour renseigner la date et l'heure du webinaire (obligatoire en mode Live) — sinon le compte à rebours et le copywriting ne seront pas fiables.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {bookingUrlMissing && (
+        <div className="flex items-start gap-2 rounded-lg border border-red/30 bg-red/5 p-3 text-xs text-red">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Lien du calendrier externe manquant</p>
+            <p className="mt-0.5 leading-relaxed">
+              Retourne à l&apos;étape « Format » pour coller le lien de ton calendrier
+              (Calendly, Cal.com…) — obligatoire en mode externe. Sans lui, la page
+              d&apos;accueil serait générée sans bouton de réservation.
             </p>
           </div>
         </div>
@@ -2427,7 +2537,12 @@ function PagesPreviewChecklist({
   onOtoOfferChange?: (patch: Partial<FunnelBrief>) => void;
 }) {
   const required = getRequiredPageBlueprints(funnelKind);
-  const optional = getOptionalPageBlueprints(funnelKind);
+  // 🆕 B6 — La page OTO/tripwire suppose une offre payante à greffer. Sur un
+  // tunnel dont la conversion est une réservation, elle n'a rien à vendre :
+  // la proposer produisait une page de vente sans produit.
+  const optional = getOptionalPageBlueprints(funnelKind).filter(
+    (bp) => bp.role !== "oto" || showsOtoOption(funnelKind),
+  );
 
   if (required.length === 0 && optional.length === 0) return null;
 

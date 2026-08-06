@@ -6,6 +6,8 @@ import { FUNNEL_KINDS } from "@/lib/funnels/kinds";
 import type { FunnelKind, Language } from "@/lib/funnels/types";
 import { tWizard } from "@/lib/i18n/wizard";
 import { Field, Input } from "@/components/ui/Field";
+// 🆕 B3 — Module PUR (aucun import serveur), sûr côté client.
+import { isAbsoluteHttpUrl, resolveBookingMode } from "@/lib/booking/mode";
 
 /** 🆕 LOT 4/5 — Patch complet des champs webinaire (date, urgence, lien
  *  externe, durée d'expiration du replay, mode Live/Evergreen). */
@@ -20,9 +22,14 @@ export type WebinarDetailsPatch = {
   evergreenOfferHours?: number;
 };
 
-/** 🆕 LOT 7 — Patch du champ embed calendrier (Calendly/Cal.com). */
+/** 🆕 B3/B4 — Patch des réglages de prise de RDV. */
 export type BookingDetailsPatch = {
+  /** Mode explicite (remplace la déduction fragile par présence d'URL). */
+  bookingMode?: "native" | "external";
+  /** URL du calendrier tiers (mode externe uniquement). */
   calendarEmbedUrl?: string;
+  /** Générer la page de confirmation du tunnel (défaut true). */
+  bookingConfirmationPage?: boolean;
 };
 
 /** 🆕 LOT 9 — Patch du nombre de jours du challenge + titres par jour (N3-a). */
@@ -55,8 +62,12 @@ type Props = {
   evergreenVideoUrl?: string;
   evergreenOfferHours?: number;
   onWebinarChange?: (patch: WebinarDetailsPatch) => void;
-  /** 🆕 Prise de RDV : embed calendrier natif (affiché si kind=booking) */
+  /** 🆕 Prise de RDV : mode natif/externe + confirmation (affichés si kind=booking) */
   calendarEmbedUrl?: string;
+  bookingMode?: "native" | "external";
+  bookingConfirmationPage?: boolean;
+  /** Erreur bloquante remontée par le wizard (URL externe manquante). */
+  bookingError?: string;
   onBookingChange?: (patch: BookingDetailsPatch) => void;
   /** 🆕 Challenge : nombre de jours + titres par jour (affichés si kind=challenge) */
   challengeDays?: number;
@@ -324,19 +335,27 @@ export function WebinarDetailsFields({
 export function BookingDetailsFields({
   language,
   calendarEmbedUrl,
+  bookingMode,
+  bookingConfirmationPage,
+  error,
   onChange,
 }: {
   language: Language;
   calendarEmbedUrl?: string;
+  bookingMode?: "native" | "external";
+  bookingConfirmationPage?: boolean;
+  /** Message d'erreur bloquant, levé par le wizard au clic sur « Suivant ». */
+  error?: string;
   onChange: (patch: BookingDetailsPatch) => void;
 }) {
-  // `undefined` = calendrier natif ; toute valeur (même vide) = mode externe.
-  // On bascule en mode externe avec une chaîne d'un espace, ce qui distingue
-  // « l'utilisateur a choisi l'externe mais n'a pas encore collé son lien » de
-  // « il utilise le natif », sans ajouter un champ au brief. Un espace est
-  // inoffensif en aval : `applyBookingCalendarEmbed` fait `.trim()` et ignore
-  // les valeurs vides.
-  const useExternal = calendarEmbedUrl !== undefined;
+  // 🆕 B3 — Le mode est désormais EXPLICITE. L'ancienne déduction (présence
+  // d'une URL, avec une chaîne blanche comme sentinelle) était indevinable à
+  // la relecture et cassait dès qu'un `.trim()` intervenait en amont.
+  // `resolveBookingMode` garde le repli historique pour les briefs déjà
+  // enregistrés sans `bookingMode`.
+  const useExternal = resolveBookingMode({ bookingMode, calendarEmbedUrl }) === "external";
+  // Confirmation cochée par défaut (champ absent = true).
+  const wantsConfirmation = bookingConfirmationPage !== false;
   const L = {
     title:
       language === "en"
@@ -375,6 +394,30 @@ export function BookingDetailsFields({
           ? "Se incrusta en la página de reserva. Tus prospectos salen de AutoFunnel para reservar."
           : "Intégré sur la page de RDV. Tes prospects quittent AutoFunnel pour réserver.",
     ph: "https://calendly.com/...",
+    confirmLabel:
+      language === "en"
+        ? "Generate a confirmation page"
+        : language === "es"
+          ? "Generar una página de confirmación"
+          : "Générer une page de confirmation",
+    confirmHint:
+      language === "en"
+        ? "Prospects land on your own page after booking (next steps, preparation, extra offer). Unchecked, they stay on the calendar's confirmation screen."
+        : language === "es"
+          ? "Tras reservar, aterrizan en tu propia página (próximos pasos, preparación, oferta adicional). Sin marcar, se quedan en la pantalla de confirmación del calendario."
+          : "Après réservation, le prospect atterrit sur ta page (prochaines étapes, préparation, offre complémentaire). Décoché, il reste sur l'écran de confirmation du calendrier.",
+    schemeWarning:
+      language === "en"
+        ? "Add https:// at the start — without it the link is treated as an internal path and leads to a 404."
+        : language === "es"
+          ? "Añade https:// al principio — sin él, el enlace se interpreta como una ruta interna y lleva a un 404."
+          : "Ajoute https:// au début — sans schéma, le lien est traité comme un chemin interne et mène à une page 404.",
+    externalConfirm:
+      language === "en"
+        ? "A confirmation page is always generated in this mode — paste its URL into your calendar tool as the post-booking redirect."
+        : language === "es"
+          ? "En este modo siempre se genera una página de confirmación — pega su URL en tu herramienta de calendario como redirección posterior a la reserva."
+          : "Une page de confirmation est toujours générée dans ce mode : colle son URL dans ton outil de calendrier comme redirection après réservation.",
   };
 
   return (
@@ -390,31 +433,81 @@ export function BookingDetailsFields({
             <p className="text-sm font-semibold text-ink">{L.native}</p>
             <p className="mt-1 text-xs leading-relaxed text-ink/60">{L.nativeHint}</p>
           </div>
+
+          {/* 🆕 B4 — Page de confirmation, cochée par défaut. Décochée, le
+              prospect reste sur l'écran de confirmation du calendrier natif. */}
+          <label className="flex cursor-pointer items-start gap-2 text-xs leading-relaxed text-ink/70">
+            <input
+              type="checkbox"
+              checked={wantsConfirmation}
+              onChange={(e) => onChange({ bookingConfirmationPage: e.target.checked })}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#31845C]"
+            />
+            <span>
+              <strong className="text-ink">{L.confirmLabel}</strong>
+              <br />
+              {L.confirmHint}
+            </span>
+          </label>
+
           <button
             type="button"
-            onClick={() => onChange({ calendarEmbedUrl: " " })}
+            // Bascule EXPLICITE : on pose le mode, on ne se repose plus sur la
+            // présence d'une chaîne blanche dans le champ URL.
+            onClick={() => onChange({ bookingMode: "external" })}
             className="justify-self-start text-xs font-medium text-ink/50 underline underline-offset-2 hover:text-ink/80"
           >
             {L.external}
           </button>
         </>
       ) : (
-        <Field label={L.label} hint={L.hint}>
-          <Input
-            type="url"
-            value={calendarEmbedUrl?.trim() ?? ""}
-            placeholder={L.ph}
-            autoFocus
-            onChange={(e) => onChange({ calendarEmbedUrl: e.target.value || " " })}
-          />
+        <>
+          <Field label={`${L.label} *`} hint={L.hint}>
+            <Input
+              type="url"
+              value={calendarEmbedUrl ?? ""}
+              placeholder={L.ph}
+              autoFocus
+              aria-invalid={error ? true : undefined}
+              className={error ? "border-red-400/60" : undefined}
+              onChange={(e) =>
+                onChange({ bookingMode: "external", calendarEmbedUrl: e.target.value })
+              }
+            />
+          </Field>
+
+          {/* Erreur BLOQUANTE — même motif visuel que l'étape « Ton offre ». */}
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600">
+              <span aria-hidden>⚠</span>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* AVERTISSEMENT non bloquant : une URL sans schéma devient un lien
+              RELATIF (« calendly.com/moi » → « /tunnel/xxx/calendly.com/moi »),
+              donc un 404 silencieux. On alerte sans refuser la saisie : la
+              validation de forme d'URL rejette trop de cas légitimes. */}
+          {!error && calendarEmbedUrl?.trim() && !isAbsoluteHttpUrl(calendarEmbedUrl) && (
+            <div className="flex items-start gap-2 rounded-lg border border-[#C7A436]/40 bg-[#C7A436]/10 px-3 py-2 text-xs text-ink/80">
+              <span aria-hidden>ⓘ</span>
+              <span>{L.schemeWarning}</span>
+            </div>
+          )}
+          {/* En mode externe, la page de confirmation reste TOUJOURS générée :
+              c'est la cible de redirection que l'utilisateur collera dans
+              Calendly. Pas de case à cocher, mais une explication. */}
+          <p className="rounded-md border border-[#31845C]/20 bg-white/50 p-2.5 text-[11px] leading-relaxed text-ink/60">
+            {L.externalConfirm}
+          </p>
           <button
             type="button"
-            onClick={() => onChange({ calendarEmbedUrl: undefined })}
-            className="mt-2 text-xs font-medium text-ink/50 underline underline-offset-2 hover:text-ink/80"
+            onClick={() => onChange({ bookingMode: "native", calendarEmbedUrl: undefined })}
+            className="justify-self-start text-xs font-medium text-ink/50 underline underline-offset-2 hover:text-ink/80"
           >
             {L.native}
           </button>
-        </Field>
+        </>
       )}
     </div>
   );
@@ -580,6 +673,9 @@ export function FunnelKindStep({
   evergreenOfferHours,
   onWebinarChange,
   calendarEmbedUrl,
+  bookingMode,
+  bookingConfirmationPage,
+  bookingError,
   onBookingChange,
   challengeDays,
   challengeDayTitles,
@@ -643,11 +739,14 @@ export function FunnelKindStep({
         />
       )}
 
-      {/* 🆕 LOT 7 — Prise de RDV : embed calendrier natif */}
+      {/* 🆕 B3/B4 — Prise de RDV : mode natif/externe + page de confirmation */}
       {value === "booking" && onBookingChange && (
         <BookingDetailsFields
           language={language}
           calendarEmbedUrl={calendarEmbedUrl}
+          bookingMode={bookingMode}
+          bookingConfirmationPage={bookingConfirmationPage}
+          error={bookingError}
           onChange={onBookingChange}
         />
       )}
