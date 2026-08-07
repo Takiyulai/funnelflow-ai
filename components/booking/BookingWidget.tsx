@@ -28,6 +28,7 @@ import {
   sameWallClock,
   shortZoneLabel,
 } from "@/lib/booking/timezones";
+import { readableTextOn, resolveBookingColor, withAlpha } from "@/lib/booking/colors";
 
 type Slot = { startsAt: string; endsAt: string };
 type DaySlots = { day: string; slots: Slot[] };
@@ -41,6 +42,8 @@ type EventTypeView = {
   locationValue?: string | null;
   language: string;
   timezone: string;
+  /** Couleur d'accent, déjà repliée côté serveur — jamais vide. */
+  color?: string;
 };
 
 type SlotsResponse = {
@@ -182,6 +185,13 @@ export function BookingWidget({ slug }: { slug: string }) {
   }, [firstAvailable, availableDays]);
 
   const hostTz = data?.eventType?.timezone ?? DEFAULT_TIMEZONE;
+
+  // 🆕 Couleur d'accent du calendrier. Avant, la page était figée en violet :
+  // le prospect quittait l'univers visuel du tunnel en cliquant le CTA.
+  // `resolveBookingColor` garantit une valeur exploitable même quand la colonne
+  // `color` est nulle — cas de TOUS les types créés avant cette fonctionnalité.
+  const accent = resolveBookingColor(data?.eventType?.color);
+  const onAccent = readableTextOn(accent);
   const daySlots = selectedDay ? (availableDays.get(selectedDay) ?? []) : [];
   const tzNotice = data?.eventType ? daylightSavingShortNotice(hostTz, timezone) : null;
 
@@ -288,7 +298,7 @@ export function BookingWidget({ slug }: { slug: string }) {
     <div className="mx-auto max-w-4xl">
       {/* ── En-tête : nom + durée + lieu. JAMAIS d'URL technique. ────────── */}
       {ev && (
-        <header className="mb-6">
+        <header className="mb-6 border-l-4 pl-4" style={{ borderColor: accent }}>
           <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{ev.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
             <span className="inline-flex items-center gap-1.5">
@@ -372,10 +382,13 @@ export function BookingWidget({ slug }: { slug: string }) {
                         setSelectedSlot(null);
                       }}
                       aria-pressed={isSelected}
+                      style={
+                        isSelected ? { backgroundColor: accent, color: onAccent } : undefined
+                      }
                       className={
                         "aspect-square rounded-lg text-sm transition motion-reduce:transition-none " +
                         (isSelected
-                          ? "bg-violet-400 font-bold text-zinc-950"
+                          ? "font-bold"
                           : isAvailable
                             ? "bg-white/[0.07] font-medium text-white hover:bg-white/15"
                             : "text-white/20")
@@ -450,11 +463,14 @@ export function BookingWidget({ slug }: { slug: string }) {
                               ? `${formatTimeInZone(utc, timezone)} chez toi · ${formatTimeInZone(utc, hostTz)} chez l'organisateur (${shortZoneLabel(hostTz)})`
                               : undefined
                           }
+                          style={
+                            isSel
+                              ? { backgroundColor: accent, borderColor: accent, color: onAccent }
+                              : { borderColor: withAlpha(accent, 0.25) }
+                          }
                           className={
                             "rounded-lg border py-2.5 text-sm font-medium transition motion-reduce:transition-none " +
-                            (isSel
-                              ? "border-violet-400 bg-violet-400 text-zinc-950"
-                              : "border-white/15 bg-white/[0.06] text-white hover:border-violet-400/60 hover:bg-white/[0.12]")
+                            (isSel ? "" : "bg-white/[0.06] text-white hover:bg-white/[0.12]")
                           }
                         >
                           {formatTimeInZone(utc, timezone)}
@@ -475,7 +491,8 @@ export function BookingWidget({ slug }: { slug: string }) {
           {selectedSlot && (
             <div
               ref={formRef}
-              className="mt-5 rounded-2xl border border-violet-400/25 bg-white/[0.05] p-5"
+              style={{ borderColor: withAlpha(accent, 0.3) }}
+              className="mt-5 rounded-2xl border bg-white/[0.05] p-5"
             >
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
                 <div>
@@ -541,7 +558,8 @@ export function BookingWidget({ slug }: { slug: string }) {
                 type="button"
                 onClick={submit}
                 disabled={submitting || redirecting}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-violet-300 disabled:opacity-50 motion-reduce:transition-none"
+                style={{ backgroundColor: accent, color: onAccent }}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition hover:opacity-90 disabled:opacity-50 motion-reduce:transition-none"
               >
                 {(submitting || redirecting) && (
                   <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />

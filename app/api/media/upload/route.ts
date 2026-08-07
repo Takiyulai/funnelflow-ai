@@ -11,6 +11,7 @@ import {
   uploadBuffer,
   isCloudinaryConfigured,
   CloudinaryNotConfiguredError,
+  CloudinaryConfigError,
 } from "@/lib/media/cloudinary";
 
 export const runtime = "nodejs";
@@ -194,6 +195,21 @@ export async function POST(req: NextRequest) {
       if (err instanceof CloudinaryNotConfiguredError) {
         console.error("[/api/media/upload]", err.message);
         return NextResponse.json({ error: err.message }, { status: 500 });
+      }
+      // 🆕 Identifiants présents mais REFUSÉS (cloud_name erroné, clé
+      // révoquée…). Le message générique « Échec de l'envoi » envoyait
+      // chercher un problème de fichier alors que la configuration est en
+      // cause — et le même échec se reproduira à chaque tentative.
+      if (err instanceof CloudinaryConfigError) {
+        console.error("[/api/media/upload] Configuration refusée :", err.message);
+        return NextResponse.json(
+          {
+            error:
+              `Configuration Cloudinary refusée (${err.message}). ` +
+              `Vérifie CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY et CLOUDINARY_API_SECRET.`,
+          },
+          { status: 503 },
+        );
       }
       const msg = err instanceof Error ? err.message : "Erreur inconnue";
       console.error("[/api/media/upload] Cloudinary error:", msg);

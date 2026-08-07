@@ -59,6 +59,18 @@ export type CloneErrorCode =
    * pas. Cf. lib/clone/css-completeness.ts
    */
   | "css-runtime-missing"
+  /**
+   * 🆕 Identifiants Cloudinary refusés (cloud_name / clé / secret erronés).
+   * AUCUN média ne peut être ré-hébergé : poursuivre livrerait une page dont
+   * toutes les ressources pointent dans le vide — le symptôme « clonage
+   * réussi, page blanche ». Erreur de CONFIGURATION, pas de contenu.
+   */
+  | "media-config-invalid"
+  /**
+   * 🆕 Plus de la moitié des médias n'ont pas pu être ré-hébergés. Le clone
+   * existe mais reste dépendant du site d'origine.
+   */
+  | "media-mostly-failed"
   | "parsing-failed"
   | "media-upload-failed"
   | "supabase-error"

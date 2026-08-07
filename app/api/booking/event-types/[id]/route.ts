@@ -13,6 +13,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isValidTimeZone } from "@/lib/booking/timezones";
+import { isValidHexColor } from "@/lib/booking/colors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -60,6 +61,9 @@ const patchSchema = z.object({
   timezone: z.string().optional(),
   locationKind: z.enum(["visio", "phone", "in_person", "custom"]).optional(),
   locationValue: z.string().max(300).nullable().optional(),
+  // 🆕 Couleur d'accent du calendrier public. Validée côté serveur : une valeur
+  // libre finirait dans un attribut `style` de la page publique.
+  color: z.string().max(7).nullable().optional(),
   active: z.boolean().optional(),
   availability: z.array(ruleSchema).max(60).optional(),
   exceptions: z.array(exceptionSchema).max(200).optional(),
@@ -84,6 +88,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.timezone !== undefined && !isValidTimeZone(b.timezone)) {
     return NextResponse.json(
       { ok: false, error: "invalid_timezone", message: "Fuseau horaire inconnu." },
+      { status: 400 },
+    );
+  }
+
+  // `null` est accepté (retour à la couleur de marque) ; une chaîne doit être
+  // un hex valide. Sans ce contrôle, n'importe quelle valeur atterrirait dans
+  // le `style` inline de la page publique.
+  if (b.color !== undefined && b.color !== null && !isValidHexColor(b.color)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "invalid_color",
+        message: "Couleur invalide. Format attendu : #a78bfa.",
+      },
       { status: 400 },
     );
   }
@@ -127,6 +145,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.timezone !== undefined) patch.timezone = b.timezone;
   if (b.locationKind !== undefined) patch.location_kind = b.locationKind;
   if (b.locationValue !== undefined) patch.location_value = b.locationValue?.trim() || null;
+  if (b.color !== undefined) patch.color = b.color ? b.color.trim().toLowerCase() : null;
   if (b.active !== undefined) patch.active = b.active;
 
   if (Object.keys(patch).length > 0) {

@@ -42,7 +42,62 @@ export class CloudinaryNotConfiguredError extends Error {
     super(
       "Cloudinary n'est pas configuré : CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY et CLOUDINARY_API_SECRET sont requises côté serveur.",
     );
+    this.name = "CloudinaryNotConfiguredError";
   }
+}
+
+/**
+ * 🆕 Identifiants présents mais REFUSÉS par Cloudinary.
+ *
+ * ── POURQUOI UNE ERREUR DISTINCTE ──────────────────────────────────────────
+ * Une faute de frappe dans `CLOUDINARY_CLOUD_NAME` (« elfng9bn » au lieu de
+ * « eifng9bn ») faisait échouer CHAQUE upload avec « Invalid cloud_name ».
+ * L'appelant traitait ces échecs comme des incidents isolés, non bloquants :
+ * le clonage se terminait en HTTP 200 avec une page dont AUCUN média n'avait
+ * été ré-hébergé — donc visuellement vide.
+ *
+ * Une configuration refusée n'est pas un incident : c'est une panne totale.
+ * Elle doit interrompre l'opération et remonter une consigne exploitable, pas
+ * se répéter en silence une fois par asset.
+ */
+export class CloudinaryConfigError extends Error {
+  /** Code HTTP renvoyé par Cloudinary, quand il est connu. */
+  readonly httpCode?: number;
+
+  constructor(message: string, httpCode?: number) {
+    super(message);
+    this.name = "CloudinaryConfigError";
+    this.httpCode = httpCode;
+  }
+}
+
+/**
+ * L'erreur remontée par Cloudinary est-elle une erreur de CONFIGURATION
+ * (fatale, identique pour tous les assets) plutôt qu'un problème propre à un
+ * fichier (format refusé, trop gros, corrompu) ?
+ *
+ * On se fie au message autant qu'au code : Cloudinary renvoie 401 pour un
+ * `cloud_name` inconnu comme pour une signature invalide, mais aussi 400 dans
+ * certains cas de compte désactivé.
+ */
+export function isCloudinaryConfigFailure(
+  message: string,
+  httpCode?: number,
+): boolean {
+  const m = message.toLowerCase();
+  if (
+    m.includes("invalid cloud_name") ||
+    m.includes("invalid api key") ||
+    m.includes("invalid api_key") ||
+    m.includes("unknown api_key") ||
+    m.includes("invalid signature") ||
+    m.includes("disabled account") ||
+    m.includes("account is disabled")
+  ) {
+    return true;
+  }
+  // 401 = authentification refusée : aucun asset ne passera jamais.
+  return httpCode === 401;
 }
 
 let configured = false;
@@ -150,7 +205,18 @@ export async function uploadBuffer(
         ...(opts.mime === "image/svg+xml" ? { flags: "sanitize" } : {}),
       },
       (error, result) => {
-        if (error) return reject(new Error(error.message));
+        if (error) {
+          // 🆕 On préserve `http_code`, que l'ancien `new Error(error.message)`
+          // jetait — c'est lui qui permet de distinguer « identifiants
+          // refusés » (fatal) de « ce fichier-ci pose problème » (isolé).
+          const httpCode = (error as { http_code?: number }).http_code;
+          const message = error.message ?? "Cloudinary : erreur inconnue.";
+          return reject(
+            isCloudinaryConfigFailure(message, httpCode)
+              ? new CloudinaryConfigError(message, httpCode)
+              : new Error(message),
+          );
+        }
         if (!result) return reject(new Error("Cloudinary : réponse vide."));
         resolve(result);
       },

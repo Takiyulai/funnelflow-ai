@@ -16,23 +16,49 @@
  */
 
 import type { ClonedMediaAsset } from "./types";
-import { uploadBuffer } from "@/lib/media/cloudinary";
+import {
+  CloudinaryConfigError,
+  CloudinaryNotConfiguredError,
+  uploadBuffer,
+} from "@/lib/media/cloudinary";
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const PARALLEL_UPLOADS = 5;
 
 /**
+ * Seuil au-delà duquel on considère le ré-hébergement comme RATÉ.
+ *
+ * Un clone dont plus de la moitié des médias pointent encore vers le site
+ * d'origine est cassé en pratique : hot-link bloqué, référent refusé, ou
+ * simplement des trous. Mieux vaut le dire que livrer une page vide.
+ */
+const MAX_ACCEPTABLE_FAILURE_RATIO = 0.5;
+
+export type MediaUploadSummary = {
+  uploaded: number;
+  failed: number;
+  total: number;
+  /** true si le taux d'échec dépasse le seuil acceptable. */
+  degraded: boolean;
+};
+
+/**
  * Upload tous les médias en parallèle (par batch).
  * Mute les assets en place : ajoute uploadedUrl ou uploadFailed.
+ *
+ * ⚠️ LÈVE `CloudinaryConfigError` si les identifiants sont refusés. C'est
+ * VOULU : une configuration invalide fait échouer tous les assets à
+ * l'identique, et poursuivre produirait un clone sans aucun média
+ * ré-hébergé — le symptôme « clonage réussi, page blanche ».
  */
 export async function uploadMediaAssets(
   assets: ClonedMediaAsset[],
   funnelId: string
-): Promise<{ uploaded: number; failed: number }> {
+): Promise<MediaUploadSummary> {
   if (assets.length === 0) {
     console.log("[media-uploader] No media to upload");
-    return { uploaded: 0, failed: 0 };
+    return { uploaded: 0, failed: 0, total: 0, degraded: false };
   }
 
   console.log(
@@ -48,27 +74,56 @@ export async function uploadMediaAssets(
     const results = await Promise.all(
       batch.map((asset) => uploadSingleAsset(asset, funnelId))
     );
-    results.forEach((ok) => (ok ? uploaded++ : failed++));
+
+    // 🆕 Arrêt IMMÉDIAT sur erreur de configuration. Sans ce court-circuit, on
+    // rejouait le même échec des centaines de fois — un log par asset, et
+    // autant de téléchargements inutiles depuis le site source.
+    const fatal = results.find((r) => r.fatal);
+    if (fatal?.fatal) throw fatal.fatal;
+
+    results.forEach((r) => (r.ok ? uploaded++ : failed++));
   }
 
+  const total = assets.length;
+  const degraded = failed / total > MAX_ACCEPTABLE_FAILURE_RATIO;
+
   console.log(
-    `[media-uploader] ✅ Done : ${uploaded} uploaded, ${failed} failed`
+    `[media-uploader] ✅ Done : ${uploaded} uploaded, ${failed} failed (${total} au total)`
   );
-  return { uploaded, failed };
+  if (degraded) {
+    console.warn(
+      `[media-uploader] ⚠️ ${Math.round((failed / total) * 100)} % des médias n'ont pas pu ` +
+        `être ré-hébergés. Le clone restera dépendant du site d'origine et risque ` +
+        `d'afficher des trous.`
+    );
+  }
+
+  return { uploaded, failed, total, degraded };
 }
 
+type SingleAssetResult = {
+  ok: boolean;
+  /** Erreur FATALE (config refusée) : l'appelant doit interrompre. */
+  fatal?: Error;
+};
+
 /**
- * Upload un seul asset. Retourne true si succès.
+ * Upload un seul asset.
+ *
+ * Distingue deux natures d'échec :
+ *   • config refusée → remontée telle quelle, l'opération entière est perdue ;
+ *   • échec propre à cet asset (404, timeout, format) → non fatal, on garde
+ *     l'URL d'origine en repli.
  */
 async function uploadSingleAsset(
   asset: ClonedMediaAsset,
   funnelId: string
-): Promise<boolean> {
+): Promise<SingleAssetResult> {
   try {
     const buffer = await downloadAsset(asset.sourceUrl);
     if (!buffer) {
       asset.uploadFailed = true;
-      return false;
+      return { ok: false };
     }
 
     const contentType = guessContentType(asset.sourceUrl, asset.type);
@@ -85,13 +140,18 @@ async function uploadSingleAsset(
     });
 
     asset.uploadedUrl = result.url;
-    return true;
+    return { ok: true };
   } catch (err) {
+    if (err instanceof CloudinaryConfigError || err instanceof CloudinaryNotConfiguredError) {
+      console.error(`[media-uploader] 🛑 Configuration Cloudinary refusée : ${err.message}`);
+      asset.uploadFailed = true;
+      return { ok: false, fatal: err };
+    }
     console.error(
       `[media-uploader] ❌ Exception for ${asset.sourceUrl}: ${(err as Error).message}`
     );
     asset.uploadFailed = true;
-    return false;
+    return { ok: false };
   }
 }
 

@@ -599,10 +599,21 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
         // vérification a posteriori : on voit une branche apparaître au moment
         // où on ajoute la condition qui la crée.
         //
-        // Bascule à `xl` seulement : sous 1280 px, deux colonnes rendraient le
-        // formulaire trop étroit et le graphe illisible. En dessous, l'aperçu
-        // passe simplement dessous.
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)] xl:items-start">
+        // 🐛 CORRECTIF — l'aperçu passait sous le formulaire sur la plupart des
+        // écrans réels.
+        //
+        // La bascule était fixée à `xl` (1280 px de VIEWPORT CSS). Or les
+        // portables Windows appliquent couramment une mise à l'échelle à 125 %,
+        // qui divise la largeur CSS : un écran 1366 px n'expose que ~1092 px, un
+        // 1920 px à 150 % exactement 1280 px. Une grande partie des utilisateurs
+        // passait donc sous le seuil et voyait le graphe empilé — le retour
+        // « en direct » perdait tout son intérêt puisqu'il fallait défiler pour
+        // le voir.
+        //
+        // On bascule désormais dès `lg` (1024 px) avec une colonne d'aperçu plus
+        // étroite, puis on l'élargit à `xl`. Le souci d'origine (formulaire
+        // écrasé) reste couvert : à 1024 px, le formulaire garde ~660 px.
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
           <WorkflowEditor
             draft={draft}
             setDraft={setDraft}
@@ -619,7 +630,9 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
             onCancel={closeEditor}
             onSave={save}
           />
-          <div className="min-w-0 xl:sticky xl:top-4">
+          {/* `sticky` aligné sur la même bascule que la grille : en une seule
+              colonne, un aperçu collant masquerait le formulaire au défilement. */}
+          <div className="min-w-0 lg:sticky lg:top-4">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
               Aperçu en direct
             </p>

@@ -18,6 +18,7 @@ import {
   isValidTimeZone,
   shortZoneLabel,
 } from "@/lib/booking/timezones";
+import { resolveBookingColor } from "@/lib/booking/colors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -82,6 +83,9 @@ export async function GET(
       timezone: eventType.timezone,
       timezoneLabel: shortZoneLabel(eventType.timezone),
       horizonDays: eventType.horizonDays,
+      // 🆕 Couleur d'accent, déjà repliée sur la couleur de marque côté serveur :
+      // le widget n'a aucun cas d'absence à gérer.
+      color: resolveBookingColor(eventType.color),
     },
     visitorTimezone,
     visitorTimezoneLabel: shortZoneLabel(visitorTimezone),

@@ -142,7 +142,15 @@ function mapCodeToStatus(code: CloneErrorCode): number {
     // page : c'est une indisponibilité de capacité côté service, pas une erreur
     // de l'utilisateur ni un blocage de la page cible.
     case "css-runtime-missing":
+    // 🆕 Identifiants Cloudinary refusés : panne de configuration côté service.
+    // 503 plutôt que 500 — le service est mal configuré, pas planté, et
+    // l'opération redeviendra possible sans changement de code.
+    case "media-config-invalid":
       return 503;
+    // 🆕 Le site source a majoritairement refusé de livrer ses médias : c'est
+    // la page cible qui pose problème, pas notre service.
+    case "media-mostly-failed":
+      return 502;
     case "scraping-blocked":
     case "scraping-timeout":
       return 502;

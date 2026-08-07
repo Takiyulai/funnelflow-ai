@@ -2,59 +2,75 @@
 
 // app/(app)/rendez-vous/page.tsx
 //
-// Écran de configuration du calendrier de RDV, côté hôte.
+// Écran « Rendez-vous » — routeur de sous-onglets.
 //
-// Trois blocs : le fuseau (en premier, parce que TOUT en dépend), la grille de
-// disponibilité hebdomadaire, puis les réglages fins et les fermetures.
+// ── POURQUOI CE DÉCOUPAGE ──────────────────────────────────────────────────
+// La page empilait tout verticalement : l'agenda (consulté chaque jour) et la
+// configuration (réglée une fois). Il fallait défiler devant la grille horaire
+// pour voir ses rendez-vous du lendemain.
+//
+// Les quatre sous-onglets séparent la consultation de la configuration.
+// « Réservations » est l'onglet par défaut : c'est la raison quotidienne
+// d'ouvrir cet écran.
+//
+// ── ONGLET DANS L'URL ──────────────────────────────────────────────────────
+// L'onglet actif est reflété dans `?tab=`, via `history.replaceState` plutôt
+// que `useSearchParams` : ce hook impose une frontière Suspense sous Next 15 et
+// provoquerait un rendu supplémentaire à chaque changement d'onglet. Ici on
+// veut seulement que l'URL soit partageable et survive à un rafraîchissement —
+// `replaceState` suffit, sans toucher au routeur ni à l'historique.
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Copy, Check, Plus, Trash2, Loader2 } from "lucide-react";
+import { CalendarClock, Plus, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { HostBookingList } from "@/components/booking/HostBookingList";
-import {
-  TIMEZONE_OPTIONS,
-  daylightSavingNotice,
-  detectVisitorTimeZone,
-  shortZoneLabel,
-} from "@/lib/booking/timezones";
+import { BookingTypesTab } from "@/components/booking/BookingTypesTab";
+import { BookingAvailabilityTab } from "@/components/booking/BookingAvailabilityTab";
+import { BookingSettingsTab } from "@/components/booking/BookingSettingsTab";
+import { detectVisitorTimeZone } from "@/lib/booking/timezones";
+import { isValidHexColor } from "@/lib/booking/colors";
+import type { EventType } from "@/components/booking/types";
 
-type Rule = { weekday: number; startMin: number; endMin: number };
-type Exception = { day: string; kind: "closed" | "window"; startMin?: number | null; endMin?: number | null };
+const TABS = [
+  { id: "reservations", label: "Réservations" },
+  { id: "types", label: "Types de RDV" },
+  { id: "disponibilites", label: "Disponibilités" },
+  { id: "reglages", label: "Réglages" },
+] as const;
 
-type EventType = {
-  id: string;
-  slug: string;
-  name: string;
-  description?: string | null;
-  durationMin: number;
-  bufferMin: number;
-  minNoticeMin: number;
-  horizonDays: number;
-  slotStepMin: number;
-  timezone: string;
-  locationKind: "visio" | "phone" | "in_person" | "custom";
-  locationValue?: string | null;
-  active: boolean;
-  availability: Rule[];
-  exceptions: Exception[];
-};
+type TabId = (typeof TABS)[number]["id"];
 
-const JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-
-const toHHMM = (m: number) =>
-  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-const fromHHMM = (s: string) => {
-  const [h, m] = s.split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
-};
+function isTabId(value: string | null): value is TabId {
+  return TABS.some((t) => t.id === value);
+}
 
 export default function RendezVousPage() {
+  const [tab, setTab] = useState<TabId>("reservations");
   const [types, setTypes] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Lecture de `?tab=` au montage seulement. La lire pendant le rendu
+  // provoquerait une incohérence d'hydratation (le serveur ne connaît pas
+  // l'URL du client au moment du rendu initial).
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    if (isTabId(fromUrl)) setTab(fromUrl);
+  }, []);
+
+  function selectTab(next: TabId) {
+    setTab(next);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      window.history.replaceState(null, "", url.toString());
+    } catch {
+      /* URL indisponible : l'onglet fonctionne quand même, sans partage. */
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,9 +109,6 @@ export default function RendezVousPage() {
         body: JSON.stringify({
           name: "Appel découverte",
           durationMin: 30,
-          // On propose le fuseau détecté du navigateur : dans l'immense
-          // majorité des cas c'est celui de l'hôte, et un mauvais fuseau ici
-          // décale TOUS ses créneaux sans qu'il s'en aperçoive.
           timezone: detectVisitorTimeZone(),
         }),
       });
@@ -106,6 +119,7 @@ export default function RendezVousPage() {
       }
       await load();
       setActiveId(json.id);
+      selectTab("types");
     } finally {
       setSaving(false);
     }
@@ -133,6 +147,9 @@ export default function RendezVousPage() {
           active: active.active,
           availability: active.availability,
           exceptions: active.exceptions,
+          // 🆕 Une couleur en cours de frappe (« #a7 ») n'est pas envoyée :
+          // le serveur la refuserait et bloquerait tout l'enregistrement.
+          ...(isValidHexColor(active.color) ? { color: active.color } : {}),
         }),
       });
       const json = await res.json();
@@ -148,12 +165,13 @@ export default function RendezVousPage() {
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/rdv/${active.slug}`
     : "";
 
-  const dstNotice = active ? daylightSavingNotice(active.timezone) : null;
+  // Les trois onglets de configuration n'ont de sens qu'avec un type actif.
+  const needsActiveType = tab !== "reservations";
 
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-4 py-8">
-        <header className="mb-6 flex items-center justify-between gap-4">
+        <header className="mb-5 flex items-center justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
               <CalendarClock size={22} /> Rendez-vous
@@ -172,23 +190,27 @@ export default function RendezVousPage() {
           </button>
         </header>
 
-        {/* L'agenda d'abord : c'est ce que l'hôte vient consulter au quotidien.
-            La configuration ne se règle qu'une fois. */}
-        <div className="mb-6">
-          <HostBookingList />
+        {/* Onglets — même motif que le module Emails. */}
+        <div className="mb-5 inline-flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => selectTab(t.id)}
+              aria-current={tab === t.id ? "page" : undefined}
+              className={
+                "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition " +
+                (tab === t.id ? "bg-white text-zinc-950" : "opacity-60 hover:opacity-100")
+              }
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {loading && <p className="py-10 text-center text-sm opacity-60">Chargement…</p>}
-
-        {!loading && types.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center">
-            <p className="text-sm opacity-70">
-              Aucun type de rendez-vous. Crées-en un pour obtenir ton lien de réservation.
-            </p>
-          </div>
-        )}
-
-        {types.length > 1 && (
+        {/* Sélecteur de type — affiché uniquement sur les onglets qui en
+            dépendent, et seulement s'il y a plusieurs types. */}
+        {needsActiveType && types.length > 1 && (
           <div className="mb-5 flex flex-wrap gap-2">
             {types.map((t) => (
               <button
@@ -206,278 +228,60 @@ export default function RendezVousPage() {
           </div>
         )}
 
-        {active && (
-          <div className="grid gap-5">
-            {/* Lien public */}
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">Lien public</h2>
-              <div className="mt-3 flex items-center gap-2">
-                <code className="flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-sm">
-                  {publicUrl}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(publicUrl);
-                    setCopied(active.id);
-                    setTimeout(() => setCopied(null), 1500);
-                  }}
-                  className="rounded-lg border border-white/15 p-2"
-                  aria-label="Copier le lien"
-                >
-                  {copied === active.id ? <Check size={16} /> : <Copy size={16} />}
-                </button>
-              </div>
-              <label className="mt-3 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={active.active}
-                  onChange={(e) => patchActive({ active: e.target.checked })}
-                />
-                Réservations ouvertes
-              </label>
-            </section>
+        {tab === "reservations" && <HostBookingList />}
 
-            {/* Fuseau — en premier, car tout en dépend */}
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
-                Ton fuseau horaire
-              </h2>
-              <p className="mt-1 text-xs opacity-60">
-                Les horaires que tu définis ci-dessous sont TES heures locales. Chaque visiteur
-                verra automatiquement l&apos;équivalent chez lui.
-              </p>
-              <select
-                value={active.timezone}
-                onChange={(e) => patchActive({ timezone: e.target.value })}
-                className="mt-3 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
-              >
-                {TIMEZONE_OPTIONS.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              {dstNotice && (
-                <p className="mt-3 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-100">
-                  {dstNotice}
+        {needsActiveType && (
+          <>
+            {loading && <p className="py-10 text-center text-sm opacity-60">Chargement…</p>}
+
+            {!loading && types.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center">
+                <p className="text-sm opacity-70">
+                  Aucun type de rendez-vous. Crées-en un pour obtenir ton lien de réservation.
                 </p>
-              )}
-            </section>
-
-            {/* Disponibilités */}
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
-                Disponibilités hebdomadaires
-                <span className="ml-2 font-normal normal-case opacity-70">
-                  (heure de {shortZoneLabel(active.timezone)})
-                </span>
-              </h2>
-              <div className="mt-3 grid gap-3">
-                {JOURS.map((label, weekday) => {
-                  const rules = active.availability.filter((r) => r.weekday === weekday);
-                  return (
-                    <div key={weekday} className="flex flex-wrap items-center gap-2">
-                      <span className="w-24 text-sm opacity-70">{label}</span>
-                      {rules.length === 0 && (
-                        <span className="text-xs opacity-40">Fermé</span>
-                      )}
-                      {rules.map((r, i) => (
-                        <span key={i} className="flex items-center gap-1">
-                          <input
-                            type="time"
-                            value={toHHMM(r.startMin)}
-                            onChange={(e) =>
-                              patchActive({
-                                availability: active.availability.map((x) =>
-                                  x === r ? { ...x, startMin: fromHHMM(e.target.value) } : x,
-                                ),
-                              })
-                            }
-                            className="rounded border border-white/15 bg-black/30 px-2 py-1 text-sm"
-                          />
-                          <span className="opacity-40">→</span>
-                          <input
-                            type="time"
-                            value={toHHMM(r.endMin)}
-                            onChange={(e) =>
-                              patchActive({
-                                availability: active.availability.map((x) =>
-                                  x === r ? { ...x, endMin: fromHHMM(e.target.value) } : x,
-                                ),
-                              })
-                            }
-                            className="rounded border border-white/15 bg-black/30 px-2 py-1 text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              patchActive({
-                                availability: active.availability.filter((x) => x !== r),
-                              })
-                            }
-                            className="p-1 opacity-50 hover:opacity-100"
-                            aria-label="Supprimer la plage"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          patchActive({
-                            availability: [
-                              ...active.availability,
-                              { weekday, startMin: 9 * 60, endMin: 12 * 60 },
-                            ],
-                          })
-                        }
-                        className="rounded border border-white/15 px-2 py-1 text-xs opacity-70 hover:opacity-100"
-                      >
-                        + plage
-                      </button>
-                    </div>
-                  );
-                })}
               </div>
-            </section>
+            )}
 
-            {/* Réglages fins */}
-            <section className="grid gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm">
-                Nom du rendez-vous
-                <input
-                  value={active.name}
-                  onChange={(e) => patchActive({ name: e.target.value })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                Durée (min)
-                <input
-                  type="number"
-                  min={5}
-                  max={480}
-                  value={active.durationMin}
-                  onChange={(e) => patchActive({ durationMin: Number(e.target.value) })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                Battement après (min)
-                <input
-                  type="number"
-                  min={0}
-                  max={240}
-                  value={active.bufferMin}
-                  onChange={(e) => patchActive({ bufferMin: Number(e.target.value) })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                Délai minimum avant réservation (h)
-                <input
-                  type="number"
-                  min={0}
-                  max={720}
-                  value={Math.round(active.minNoticeMin / 60)}
-                  onChange={(e) => patchActive({ minNoticeMin: Number(e.target.value) * 60 })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                Réservable jusqu&apos;à (jours)
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={active.horizonDays}
-                  onChange={(e) => patchActive({ horizonDays: Number(e.target.value) })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                Pas de la grille (min)
-                <input
-                  type="number"
-                  min={5}
-                  max={120}
-                  value={active.slotStepMin}
-                  onChange={(e) => patchActive({ slotStepMin: Number(e.target.value) })}
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-              <label className="grid gap-1 text-sm sm:col-span-2">
-                Lieu / lien de visio
-                <input
-                  value={active.locationValue ?? ""}
-                  onChange={(e) => patchActive({ locationValue: e.target.value })}
-                  placeholder="https://meet.google.com/… ou une adresse"
-                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                />
-              </label>
-            </section>
+            {active && (
+              <>
+                {tab === "types" && (
+                  <BookingTypesTab
+                    active={active}
+                    publicUrl={publicUrl}
+                    copied={copied}
+                    onCopy={() => {
+                      void navigator.clipboard.writeText(publicUrl);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                    onPatch={patchActive}
+                  />
+                )}
+                {tab === "disponibilites" && (
+                  <BookingAvailabilityTab active={active} onPatch={patchActive} />
+                )}
+                {tab === "reglages" && (
+                  <BookingSettingsTab active={active} onPatch={patchActive} />
+                )}
 
-            {/* Fermetures */}
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
-                Jours fermés
-              </h2>
-              <p className="mt-1 text-xs opacity-60">
-                Congés, fêtes, imprévus — ces dates ne proposeront aucun créneau.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {active.exceptions
-                  .filter((e) => e.kind === "closed")
-                  .map((e) => (
-                    <span
-                      key={e.day}
-                      className="flex items-center gap-1 rounded-lg border border-white/15 px-2 py-1 text-sm"
-                    >
-                      {e.day}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          patchActive({
-                            exceptions: active.exceptions.filter((x) => x.day !== e.day),
-                          })
-                        }
-                        className="opacity-50 hover:opacity-100"
-                        aria-label="Retirer"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </span>
-                  ))}
-                <input
-                  type="date"
-                  onChange={(e) => {
-                    const day = e.target.value;
-                    if (!day || active.exceptions.some((x) => x.day === day)) return;
-                    patchActive({
-                      exceptions: [...active.exceptions, { day, kind: "closed" }],
-                    });
-                    e.target.value = "";
-                  }}
-                  className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm"
-                />
-              </div>
-            </section>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={save}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-violet-400 px-5 py-2.5 text-sm font-bold text-zinc-950 disabled:opacity-50"
-              >
-                {saving && <Loader2 size={15} className="animate-spin" />}
-                Enregistrer
-              </button>
-              {msg && <span className="text-sm opacity-70">{msg}</span>}
-            </div>
-          </div>
+                {/* Barre d'enregistrement commune aux trois onglets de config :
+                    les modifications vivent dans le même état, un seul PATCH
+                    les persiste toutes. */}
+                <div className="mt-5 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={save}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-violet-400 px-5 py-2.5 text-sm font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    {saving && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />}
+                    Enregistrer
+                  </button>
+                  {msg && <span className="text-sm opacity-70">{msg}</span>}
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
     </AppShell>

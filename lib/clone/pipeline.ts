@@ -15,7 +15,11 @@
 
 import { fetchPageHtml, CloneFetchError, validateUrl } from "./fetcher";
 import { parsePage } from "./parser";
-import { uploadMediaAssets } from "./media-uploader";
+import { uploadMediaAssets, type MediaUploadSummary } from "./media-uploader";
+import {
+  CloudinaryConfigError,
+  CloudinaryNotConfiguredError,
+} from "@/lib/media/cloudinary";
 import { mapToFunnel } from "./section-mapper";
 import type { Funnel, Language } from "@/lib/funnels/types";
 import type { CloneStats } from "./types";
@@ -70,15 +74,49 @@ export async function cloneFunnelFromUrl(
   }
 
   // ─── 3. Upload médias (sauf si skip demandé) ──────────────────────────────
-  let mediaResult = { uploaded: 0, failed: 0 };
+  let mediaResult: MediaUploadSummary = {
+    uploaded: 0,
+    failed: 0,
+    total: 0,
+    degraded: false,
+  };
   if (!options.skipMediaUpload && parsed.mediaAssets.length > 0) {
     try {
       mediaResult = await uploadMediaAssets(parsed.mediaAssets, funnelId);
     } catch (err) {
+      // 🆕 CONFIGURATION REFUSÉE → FATAL.
+      //
+      // Cette branche avalait TOUTE erreur d'upload « pour continuer avec les
+      // URLs source ». Le repli est légitime pour un asset isolé, mais pas
+      // quand les identifiants Cloudinary sont faux : dans ce cas AUCUN média
+      // n'est ré-hébergé, et l'utilisateur reçoit un HTTP 200 pour une page
+      // vide — sans aucun moyen de comprendre ce qui s'est passé.
+      if (
+        err instanceof CloudinaryConfigError ||
+        err instanceof CloudinaryNotConfiguredError
+      ) {
+        throw new CloneFetchError(
+          "media-config-invalid",
+          `Le ré-hébergement des médias est impossible : ${err.message} ` +
+            `Vérifie CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY et CLOUDINARY_API_SECRET.`,
+        );
+      }
       console.error(
         `[clone-pipeline] ⚠️ Media upload failed, continuing with source URLs : ${(err as Error).message}`
       );
       // Non-fatal : on continue avec les URLs source en hot-link
+    }
+
+    // 🆕 Ré-hébergement massivement raté : on refuse plutôt que de livrer un
+    // clone troué que l'utilisateur découvrirait en l'ouvrant.
+    if (mediaResult.degraded) {
+      const pct = Math.round((mediaResult.failed / mediaResult.total) * 100);
+      throw new CloneFetchError(
+        "media-mostly-failed",
+        `${pct} % des médias (${mediaResult.failed}/${mediaResult.total}) n'ont pas pu être ` +
+          `ré-hébergés. Le clone serait incomplet. Réessaie — si le problème persiste, ` +
+          `le site source bloque probablement le téléchargement de ses images.`,
+      );
     }
   } else if (options.skipMediaUpload) {
     console.log("[clone-pipeline] Media upload skipped (option)");
