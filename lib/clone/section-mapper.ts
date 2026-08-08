@@ -357,6 +357,33 @@ function splitRawHtmlIntoSections(html: string): string[] {
   const orphans: string[] = [];
   const sections = extractTopLevelSections(inner, orphans);
 
+  // 🆕 GARDE-FOU DE DÉCOUPAGE — « clonage réussi, page coupée à 25 px ».
+  //
+  // Le découpage suppose que les <section> top-level SONT le squelette de la
+  // page. Sur une application monopage (Nuxt/Next/Vue), c'est faux : le body
+  // contient un unique conteneur applicatif (#__nuxt, #app, #root) qui porte
+  // 100 % du contenu, et les seules <section> top-level sont des fragments de
+  // popups rendus par téléportation en dehors de ce conteneur.
+  //
+  // Cas mesuré (delta360.io) : 2 <section> extraites portant « Go To Step #2 »
+  // et « We Respect Your Privacy », soit ~52 caractères — contre plusieurs
+  // milliers pour #__nuxt, relégué en orphelin. Les deux sous-sections
+  // mesuraient 41 px et 25 px ; toute la page de vente était coupée.
+  //
+  // Règle : si les nœuds hors <section> portent plus de texte visible que les
+  // <section> elles-mêmes, la prémisse du découpage est fausse. On renonce.
+  const sectionsText = sections.reduce((n, s) => n + visibleTextLength(s), 0);
+  const orphansText = orphans.reduce((n, o) => n + visibleTextLength(o), 0);
+  if (orphansText > sectionsText) {
+    console.warn(
+      `[section-mapper] ⚠️ Découpage abandonné : les nœuds hors <section> portent ` +
+        `${orphansText} caractères visibles contre ${sectionsText} pour les <section> ` +
+        `extraites. Ces <section> ne sont pas le squelette de la page (appli monopage ` +
+        `ou popups téléportés) → HTML conservé intact en une seule section.`
+    );
+    return [html];
+  }
+
   const overlayOrphans = orphans.filter(isOverlayOrphan);
   if (overlayOrphans.length > 0 && sections.length > 0) {
     console.log(
@@ -388,13 +415,58 @@ function splitRawHtmlIntoSections(html: string): string[] {
 function isOverlayOrphan(html: string): boolean {
   const h = html.trim();
   if (!h) return false;
+
+  // Scripts et styles : jamais de contenu visible, toujours sûrs à rattacher.
+  if (/^<script\b/i.test(h) || /^<style\b/i.test(h)) return true;
+
+  // ⚠️ GATE DE TAILLE, AVANT tout test lexical.
+  //
+  // Les tests ci-dessous cherchent des SOUS-CHAÎNES (« popup », « overlay »,
+  // « position:fixed ») dans un HTML de taille arbitraire. Sur un fragment de
+  // quelques centaines d'octets, c'est un signal fiable. Sur le conteneur
+  // applicatif d'une page entière, c'est une quasi-certitude de faux positif :
+  // toute page un peu riche contient quelque part une classe « …-popup » ou un
+  // « position:fixed ».
+  //
+  // C'est ce qui est arrivé : #__nuxt, portant TOUTE la page, a été pris pour
+  // un bouton flottant, enfermé dans le conteneur hors-flux 0×0, puis ignoré
+  // par measureContentHeight() — qui saute délibérément data-ff-overlays. La
+  // page était rendue en entier et coupée à 25 pixels.
+  //
+  // Un vrai overlay (bouton chat, bandeau cookie, modale) porte peu de texte
+  // visible. Au-delà de ce seuil, on a affaire à du CONTENU, pas à du décor.
+  if (visibleTextLength(h) > OVERLAY_MAX_VISIBLE_TEXT) return false;
+
   return (
     /position\s*:\s*(fixed|sticky)/i.test(h) ||
     /wa\.me|api\.whatsapp\.com|whatsapp/i.test(h) ||
-    /\b(popup|modal|overlay|lightbox|fixed-|floating|float-btn|chat-widget)\b/i.test(h) ||
-    /^<script\b/i.test(h) ||
-    /^<style\b/i.test(h)
+    /\b(popup|modal|overlay|lightbox|fixed-|floating|float-btn|chat-widget)\b/i.test(h)
   );
+}
+
+/**
+ * Seuil de texte visible au-delà duquel un orphelin top-level est considéré
+ * comme du CONTENU de page, jamais comme un overlay décoratif.
+ *
+ * 400 caractères ≈ un long paragraphe. Un bouton de chat, un bandeau cookie
+ * ou une modale de sortie restent très en dessous ; le conteneur applicatif
+ * d'une page de vente est deux ordres de grandeur au-dessus.
+ */
+const OVERLAY_MAX_VISIBLE_TEXT = 400;
+
+/**
+ * Longueur du texte réellement visible : balises, scripts et styles retirés.
+ * Sert à départager « décor » et « contenu » sur des critères de substance
+ * plutôt que sur la présence d'un mot-clé quelque part dans le balisage.
+ */
+function visibleTextLength(html: string): number {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
 }
 
 function countTopLevelSections(html: string): number {
