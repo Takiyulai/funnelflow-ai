@@ -78,7 +78,17 @@ export async function GET(
       description: eventType.description,
       durationMin: eventType.durationMin,
       locationKind: eventType.locationKind,
-      locationValue: eventType.locationValue,
+      // 🔒 `locationValue` N'EST PLUS EXPOSÉ.
+      //
+      // Ce champ contient l'URL de visioconférence ou l'adresse physique du
+      // rendez-vous. Le widget avait cessé de l'AFFICHER, mais il continuait
+      // de transiter dans la réponse d'un endpoint public et sans
+      // authentification : n'importe qui appelant /api/booking/<slug>/slots
+      // pouvait lire le lien de réunion et s'y inviter.
+      //
+      // Le lieu réel part dans l'e-mail de confirmation et le .ics, donc à la
+      // personne qui a effectivement réservé. La page publique n'a besoin que
+      // de la NATURE du rendez-vous, portée par `locationKind`.
       language: eventType.language,
       timezone: eventType.timezone,
       timezoneLabel: shortZoneLabel(eventType.timezone),
@@ -86,6 +96,14 @@ export async function GET(
       // 🆕 Couleur d'accent, déjà repliée sur la couleur de marque côté serveur :
       // le widget n'a aucun cas d'absence à gérer.
       color: resolveBookingColor(eventType.color),
+
+      // 🆕 Fiche hôte. Ces champs sont destinés à être PUBLICS : ils ne sont
+      // renseignés que pour être montrés au prospect. On les renvoie tels
+      // quels, sans repli — c'est l'absence qui commande le non-affichage.
+      hostName: eventType.hostName ?? null,
+      hostTitle: eventType.hostTitle ?? null,
+      hostAvatarUrl: eventType.hostAvatarUrl ?? null,
+      hostBio: eventType.hostBio ?? null,
     },
     visitorTimezone,
     visitorTimezoneLabel: shortZoneLabel(visitorTimezone),

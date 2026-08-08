@@ -29,6 +29,16 @@ export type BookingEventType = {
   locationValue?: string | null;
 
   color?: string | null;
+
+  // 🆕 Fiche hôte, rattachée au TYPE de rendez-vous et non au compte : un même
+  // utilisateur peut proposer « Appel découverte avec Dramane » et « Coaching
+  // avec Awa ». Tous les champs sont optionnels ; `hostName` conditionne
+  // l'affichage du bloc sur la page publique.
+  hostName?: string | null;
+  hostTitle?: string | null;
+  hostAvatarUrl?: string | null;
+  hostBio?: string | null;
+
   language: string;
   active: boolean;
   funnelId?: string | null;

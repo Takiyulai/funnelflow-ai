@@ -28,7 +28,7 @@ import { BookingTypesTab } from "@/components/booking/BookingTypesTab";
 import { BookingAvailabilityTab } from "@/components/booking/BookingAvailabilityTab";
 import { BookingSettingsTab } from "@/components/booking/BookingSettingsTab";
 import { detectVisitorTimeZone } from "@/lib/booking/timezones";
-import { isValidHexColor } from "@/lib/booking/colors";
+import { isValidHexColor, resolveBookingColor } from "@/lib/booking/colors";
 import type { EventType } from "@/components/booking/types";
 
 const TABS = [
@@ -150,6 +150,24 @@ export default function RendezVousPage() {
           // 🆕 Une couleur en cours de frappe (« #a7 ») n'est pas envoyée :
           // le serveur la refuserait et bloquerait tout l'enregistrement.
           ...(isValidHexColor(active.color) ? { color: active.color } : {}),
+
+          // 🆕 Fiche hôte. Ce corps de requête est une LISTE BLANCHE explicite :
+          // un champ absent d'ici n'est jamais persisté, quoi qu'affiche
+          // l'interface. C'est le piège de cette fonction — il faut l'alimenter
+          // à chaque nouveau champ.
+          hostName: active.hostName ?? null,
+          hostTitle: active.hostTitle ?? null,
+          hostBio: active.hostBio ?? null,
+          // Même précaution que pour la couleur : le serveur exige une URL
+          // absolue http(s). Une saisie en cours (« exemple.com ») ferait
+          // échouer TOUT l'enregistrement, y compris les disponibilités. On
+          // envoie donc soit un effacement explicite, soit une URL valide,
+          // soit rien du tout.
+          ...(() => {
+            const raw = (active.hostAvatarUrl ?? "").trim();
+            if (raw === "") return { hostAvatarUrl: null };
+            return /^https?:\/\//i.test(raw) ? { hostAvatarUrl: raw } : {};
+          })(),
         }),
       });
       const json = await res.json();
@@ -199,8 +217,18 @@ export default function RendezVousPage() {
               onClick={() => selectTab(t.id)}
               aria-current={tab === t.id ? "page" : undefined}
               className={
+                // ⚠️ L'onglet actif était `bg-white text-zinc-950` : une pastille
+                // blanche à texte noir au milieu d'une interface sombre. Le
+                // contraste est techniquement bon, mais l'inversion attire l'œil
+                // sur le fond plutôt que sur le libellé, et le noir sur blanc
+                // paraît plus terne que le blanc pur des onglets inactifs —
+                // l'onglet sélectionné semblait donc MOINS lisible que les autres.
+                // On garde désormais le texte clair et on signale la sélection
+                // par la couleur de marque et un liseré.
                 "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition " +
-                (tab === t.id ? "bg-white text-zinc-950" : "opacity-60 hover:opacity-100")
+                (tab === t.id
+                  ? "bg-violet-400/20 text-white ring-1 ring-inset ring-violet-400/60 shadow-sm"
+                  : "text-white/60 hover:text-white hover:bg-white/5")
               }
             >
               {t.label}
@@ -211,20 +239,45 @@ export default function RendezVousPage() {
         {/* Sélecteur de type — affiché uniquement sur les onglets qui en
             dépendent, et seulement s'il y a plusieurs types. */}
         {needsActiveType && types.length > 1 && (
-          <div className="mb-5 flex flex-wrap gap-2">
-            {types.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveId(t.id)}
-                className={
-                  "rounded-lg border px-3 py-1.5 text-sm " +
-                  (t.id === activeId ? "border-violet-400 bg-violet-400/15" : "border-white/15")
-                }
-              >
-                {t.name}
-              </button>
-            ))}
+          // 🆕 Le sélecteur était une rangée de pastilles plates, toutes de même
+          // poids : rien ne distinguait un type d'un autre au premier coup d'œil,
+          // et la couleur choisie pour chaque type n'apparaissait nulle part côté
+          // administration. On passe à des cartes : pastille de couleur (rappel
+          // direct de ce que verra le prospect), nom en gras, durée en second
+          // niveau, et une vraie élévation sur la carte sélectionnée.
+          <div className="mb-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {types.map((t) => {
+              const selected = t.id === activeId;
+              const dot = resolveBookingColor(t.color);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveId(t.id)}
+                  aria-pressed={selected}
+                  className={
+                    "group flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition " +
+                    (selected
+                      ? "border-violet-400/60 bg-violet-400/10 shadow-lg shadow-violet-500/10 ring-1 ring-inset ring-violet-400/30"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]")
+                  }
+                >
+                  <span
+                    aria-hidden
+                    className="mt-0.5 h-8 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: dot }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-white">
+                      {t.name}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-white/50">
+                      {t.durationMin} min
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 

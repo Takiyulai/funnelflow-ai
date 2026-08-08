@@ -64,6 +64,24 @@ const patchSchema = z.object({
   // 🆕 Couleur d'accent du calendrier public. Validée côté serveur : une valeur
   // libre finirait dans un attribut `style` de la page publique.
   color: z.string().max(7).nullable().optional(),
+
+  // 🆕 Fiche hôte. Longueurs alignées sur la contrainte SQL
+  // `booking_event_types_host_len_ck` : si les deux divergent, la base rejette
+  // ce que l'interface accepte et l'utilisateur reçoit une erreur opaque.
+  //
+  // ⚠️ `hostAvatarUrl` est validé comme une URL ABSOLUE http(s). Sans ce
+  // contrôle, une chaîne `javascript:` ou `data:` finirait dans l'attribut src
+  // d'une image de la page publique.
+  hostName: z.string().max(80).nullable().optional(),
+  hostTitle: z.string().max(120).nullable().optional(),
+  hostAvatarUrl: z
+    .string()
+    .max(2048)
+    .refine((v) => /^https?:\/\//i.test(v), "L'URL de l'avatar doit commencer par http(s)://")
+    .nullable()
+    .optional(),
+  hostBio: z.string().max(600).nullable().optional(),
+
   active: z.boolean().optional(),
   availability: z.array(ruleSchema).max(60).optional(),
   exceptions: z.array(exceptionSchema).max(200).optional(),
@@ -146,6 +164,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.locationKind !== undefined) patch.location_kind = b.locationKind;
   if (b.locationValue !== undefined) patch.location_value = b.locationValue?.trim() || null;
   if (b.color !== undefined) patch.color = b.color ? b.color.trim().toLowerCase() : null;
+
+  // 🆕 Fiche hôte. Une chaîne vidée par l'utilisateur doit REDEVENIR null, et
+  // non être stockée comme "" : c'est `hostName` qui décide de l'affichage du
+  // bloc public, et une chaîne vide passerait le test de vérité côté widget
+  // sans jamais rien afficher d'utile.
+  if (b.hostName !== undefined) patch.host_name = b.hostName?.trim() || null;
+  if (b.hostTitle !== undefined) patch.host_title = b.hostTitle?.trim() || null;
+  if (b.hostAvatarUrl !== undefined) patch.host_avatar_url = b.hostAvatarUrl?.trim() || null;
+  if (b.hostBio !== undefined) patch.host_bio = b.hostBio?.trim() || null;
+
   if (b.active !== undefined) patch.active = b.active;
 
   if (Object.keys(patch).length > 0) {

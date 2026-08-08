@@ -23,6 +23,7 @@ import type {
 const EVENT_TYPE_COLS =
   "id, user_id, slug, name, description, duration_min, buffer_min, min_notice_min, " +
   "horizon_days, slot_step_min, timezone, location_kind, location_value, color, " +
+  "host_name, host_title, host_avatar_url, host_bio, " +
   "language, active, funnel_id";
 
 function rowToEventType(r: any): BookingEventType {
@@ -43,6 +44,14 @@ function rowToEventType(r: any): BookingEventType {
     locationKind: r.location_kind,
     locationValue: r.location_value,
     color: r.color,
+    // 🆕 Fiche hôte (optionnelle). `?? null` plutôt que la valeur brute : une
+    // colonne absente renvoie `undefined`, ce qui traverserait `JSON.stringify`
+    // en disparaissant de la réponse. On normalise pour que le widget ait
+    // toujours une valeur explicite à tester.
+    hostName: r.host_name ?? null,
+    hostTitle: r.host_title ?? null,
+    hostAvatarUrl: r.host_avatar_url ?? null,
+    hostBio: r.host_bio ?? null,
     language: r.language ?? "fr",
     active: r.active,
     funnelId: r.funnel_id,

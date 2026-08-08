@@ -17,6 +17,11 @@
 // que l'API renvoie.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// Le namespace `React` n'est pas importé dans ce fichier (seuls les hooks le
+// sont) : écrire `React.CSSProperties` échouerait à la compilation. On importe
+// donc le type nommé, nécessaire pour typer la variable CSS `--ff-accent`,
+// qu'un objet CSSProperties n'accepte pas telle quelle.
+import type { CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Info, Clock, Video, Loader2 } from "lucide-react";
 import {
   DEFAULT_TIMEZONE,
@@ -44,6 +49,14 @@ type EventTypeView = {
   timezone: string;
   /** Couleur d'accent, déjà repliée côté serveur — jamais vide. */
   color?: string;
+
+  // 🆕 Fiche hôte. Tous optionnels : `hostName` est le déclencheur, les autres
+  // ne sont rendus que s'ils sont présents. Une page sans hôte renseigné doit
+  // rester rigoureusement identique à ce qu'elle était.
+  hostName?: string | null;
+  hostTitle?: string | null;
+  hostAvatarUrl?: string | null;
+  hostBio?: string | null;
 };
 
 type SlotsResponse = {
@@ -295,7 +308,15 @@ export function BookingWidget({ slug }: { slug: string }) {
   const ev = data?.eventType;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    // 🆕 La couleur d'accent devient une VARIABLE CSS portée par la racine.
+    // Auparavant elle n'était appliquée qu'aux quelques endroits où un
+    // `style={{ backgroundColor: accent }}` avait été écrit à la main : jour
+    // sélectionné, bordures de créneaux, bouton d'envoi. Tout le reste — et
+    // notamment le focus des champs — restait figé en violet (`focus:border-
+    // violet-400/60` codé en dur), si bien qu'une couleur personnalisée
+    // paraissait ignorée. Passer par une variable permet aux classes Tailwind
+    // en valeur arbitraire de suivre la couleur choisie, partout.
+    <div className="mx-auto max-w-4xl" style={{ "--ff-accent": accent } as CSSProperties}>
       {/* ── En-tête : nom + durée + lieu. JAMAIS d'URL technique. ────────── */}
       {ev && (
         <header className="mb-6 border-l-4 pl-4" style={{ borderColor: accent }}>
@@ -312,6 +333,51 @@ export function BookingWidget({ slug }: { slug: string }) {
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/70">{ev.description}</p>
           )}
         </header>
+      )}
+
+      {/* ── Fiche hôte ───────────────────────────────────────────────────
+          Réserver un créneau, c'est engager son temps avec quelqu'un. Une page
+          qui n'affiche qu'un calendrier ne dit pas À QUI l'on parle — c'est le
+          principal frein à la conversion sur une page de réservation, et la
+          raison pour laquelle Calendly place l'avatar et le nom de l'hôte
+          au-dessus du calendrier.
+
+          Bloc entièrement conditionnel : sans `hostName`, rien n'est rendu.
+          Un avatar seul ne doit pas produire une fiche anonyme, d'où le test
+          sur le nom et non sur la présence de l'un quelconque des champs. */}
+      {ev?.hostName && (
+        <section className="mb-6 flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+          {ev.hostAvatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={ev.hostAvatarUrl}
+              alt={ev.hostName}
+              width={56}
+              height={56}
+              loading="lazy"
+              className="h-14 w-14 shrink-0 rounded-full object-cover"
+              style={{ boxShadow: `0 0 0 2px ${withAlpha(accent, 0.55)}` }}
+            />
+          ) : (
+            // Repli sur l'initiale : un avatar manquant ne doit pas laisser un
+            // trou dans la mise en page ni afficher une image cassée.
+            <span
+              aria-hidden
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold"
+              style={{ backgroundColor: withAlpha(accent, 0.2), color: accent }}
+            >
+              {ev.hostName.trim().charAt(0).toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-white/35">Avec</p>
+            <p className="text-base font-semibold text-white">{ev.hostName}</p>
+            {ev.hostTitle && <p className="text-sm text-white/55">{ev.hostTitle}</p>}
+            {ev.hostBio && (
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">{ev.hostBio}</p>
+            )}
+          </div>
+        </section>
       )}
 
       {loading && (
@@ -338,7 +404,13 @@ export function BookingWidget({ slug }: { slug: string }) {
           {/* ── Deux colonnes desktop, étapes empilées mobile ───────────── */}
           <div className="grid gap-5 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
             {/* Calendrier */}
-            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            {/* Les deux cartes reçoivent une bordure teintée par la couleur du
+                type de RDV : sans cela, seuls trois éléments isolés portaient
+                l'accent et la personnalisation passait inaperçue. */}
+            <section
+              style={{ borderColor: withAlpha(accent, 0.22) }}
+              className="rounded-2xl border bg-white/[0.04] p-4"
+            >
               <div className="mb-3 flex items-center justify-between">
                 <button
                   type="button"
@@ -410,13 +482,34 @@ export function BookingWidget({ slug }: { slug: string }) {
                       setSelectedSlot(null);
                       setTimezone(e.target.value);
                     }}
-                    className="max-w-[150px] truncate rounded-md border border-white/15 bg-black/40 px-1.5 py-0.5 text-xs text-white/80"
+                    // ⚠️ LISIBILITÉ DE LA LISTE DÉROULANTE.
+                    //
+                    // Le fond était `bg-black/40`, c'est-à-dire SEMI-TRANSPARENT.
+                    // Sur le contrôle fermé, cela passe. Mais la liste native
+                    // ouverte par le navigateur hérite de cette couleur : elle
+                    // s'affichait délavée, laissant transparaître la page, avec
+                    // du texte blanc par-dessus — d'où l'impression de flou et
+                    // l'illisibilité signalées.
+                    //
+                    // Un menu natif doit être OPAQUE. On force donc une couleur
+                    // pleine sur le select ET sur chaque option : les <option>
+                    // ne sont pas mises en forme de façon fiable par les classes
+                    // du parent (chaque navigateur les rend à sa manière), il
+                    // faut leur poser les couleurs explicitement.
+                    style={{ backgroundColor: "#18181b", color: "#ffffff" }}
+                    className="max-w-[170px] truncate rounded-md border border-white/20 px-1.5 py-1 text-xs font-medium"
                   >
                     {!TIMEZONE_OPTIONS.some((t) => t.id === timezone) && (
-                      <option value={timezone}>{shortZoneLabel(timezone)}</option>
+                      <option value={timezone} style={{ backgroundColor: "#18181b", color: "#ffffff" }}>
+                        {shortZoneLabel(timezone)}
+                      </option>
                     )}
                     {TIMEZONE_OPTIONS.map((t) => (
-                      <option key={t.id} value={t.id}>
+                      <option
+                        key={t.id}
+                        value={t.id}
+                        style={{ backgroundColor: "#18181b", color: "#ffffff" }}
+                      >
                         {t.label}
                       </option>
                     ))}
@@ -442,10 +535,16 @@ export function BookingWidget({ slug }: { slug: string }) {
             </section>
 
             {/* Créneaux du jour choisi */}
-            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <section
+              style={{ borderColor: withAlpha(accent, 0.22) }}
+              className="rounded-2xl border bg-white/[0.04] p-4"
+            >
               {selectedDay ? (
                 <>
-                  <h2 className="mb-3 text-sm font-semibold capitalize text-white">
+                  <h2
+                    style={{ borderColor: accent }}
+                    className="mb-3 border-l-2 pl-2 text-sm font-semibold capitalize text-white"
+                  >
                     {formatDateInZone(new Date(daySlots[0]?.startsAt ?? Date.now()), timezone)}
                   </h2>
                   <div className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
@@ -525,7 +624,7 @@ export function BookingWidget({ slug }: { slug: string }) {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ton nom *"
                   maxLength={120}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none"
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none"
                 />
                 <input
                   value={email}
@@ -533,14 +632,14 @@ export function BookingWidget({ slug }: { slug: string }) {
                   placeholder="Ton e-mail *"
                   type="email"
                   maxLength={200}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none"
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none"
                 />
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="Téléphone (optionnel)"
                   maxLength={40}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none sm:col-span-2"
+                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none sm:col-span-2"
                 />
                 <textarea
                   value={note}
@@ -548,7 +647,7 @@ export function BookingWidget({ slug }: { slug: string }) {
                   placeholder="Un mot sur ton besoin (optionnel)"
                   rows={3}
                   maxLength={1000}
-                  className="resize-y rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-violet-400/60 motion-reduce:transition-none sm:col-span-2"
+                  className="resize-y rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none sm:col-span-2"
                 />
               </div>
 

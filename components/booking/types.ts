@@ -28,6 +28,20 @@ export type EventType = {
   locationValue?: string | null;
   /** 🆕 Couleur d'accent du calendrier public (hex). Vide → couleur de marque. */
   color?: string | null;
+
+  // 🆕 FICHE HÔTE — entièrement optionnelle, rattachée au TYPE de RDV.
+  //
+  // Calendly rattache l'avatar au profil du compte. Suffisant pour un
+  // consultant seul, insuffisant dès qu'un même compte propose « Appel
+  // découverte avec Dramane » et « Coaching avec Awa ».
+  //
+  // `hostName` est le champ DÉCLENCHEUR : sans lui, aucun bloc n'est rendu
+  // côté public. Un avatar seul ne doit pas produire une fiche anonyme.
+  hostName?: string | null;
+  hostTitle?: string | null;
+  hostAvatarUrl?: string | null;
+  hostBio?: string | null;
+
   active: boolean;
   availability: Rule[];
   exceptions: Exception[];
