@@ -77,6 +77,7 @@ export async function cloneFunnelFromUrl(
   let mediaResult: MediaUploadSummary = {
     uploaded: 0,
     failed: 0,
+    skipped: 0,
     total: 0,
     degraded: false,
   };
@@ -113,9 +114,9 @@ export async function cloneFunnelFromUrl(
       const pct = Math.round((mediaResult.failed / mediaResult.total) * 100);
       throw new CloneFetchError(
         "media-mostly-failed",
-        `${pct} % des médias (${mediaResult.failed}/${mediaResult.total}) n'ont pas pu être ` +
-          `ré-hébergés. Le clone serait incomplet. Réessaie — si le problème persiste, ` +
-          `le site source bloque probablement le téléchargement de ses images.`,
+        `${pct} % des images (${mediaResult.failed}/${mediaResult.total}) n'ont pas pu être ` +
+          `ré-hébergées. Le clone serait incomplet. Réessaie dans un instant — si le problème ` +
+          `persiste, le site source refuse probablement le téléchargement de ses images.`,
       );
     }
   } else if (options.skipMediaUpload) {

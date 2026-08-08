@@ -38,6 +38,9 @@ const MAX_ACCEPTABLE_FAILURE_RATIO = 0.5;
 export type MediaUploadSummary = {
   uploaded: number;
   failed: number;
+  /** Volontairement non ré-hébergés (polices) — hors du calcul de taux. */
+  skipped: number;
+  /** uploaded + failed, c'est-à-dire les assets réellement TENTÉS. */
   total: number;
   /** true si le taux d'échec dépasse le seuil acceptable. */
   degraded: boolean;
@@ -58,7 +61,7 @@ export async function uploadMediaAssets(
 ): Promise<MediaUploadSummary> {
   if (assets.length === 0) {
     console.log("[media-uploader] No media to upload");
-    return { uploaded: 0, failed: 0, total: 0, degraded: false };
+    return { uploaded: 0, failed: 0, skipped: 0, total: 0, degraded: false };
   }
 
   console.log(
@@ -67,6 +70,7 @@ export async function uploadMediaAssets(
 
   let uploaded = 0;
   let failed = 0;
+  let skipped = 0;
 
   // Découpe en batchs de PARALLEL_UPLOADS
   for (let i = 0; i < assets.length; i += PARALLEL_UPLOADS) {
@@ -81,14 +85,21 @@ export async function uploadMediaAssets(
     const fatal = results.find((r) => r.fatal);
     if (fatal?.fatal) throw fatal.fatal;
 
-    results.forEach((r) => (r.ok ? uploaded++ : failed++));
+    results.forEach((r) => {
+      if (r.skipped) skipped++;
+      else if (r.ok) uploaded++;
+      else failed++;
+    });
   }
 
-  const total = assets.length;
-  const degraded = failed / total > MAX_ACCEPTABLE_FAILURE_RATIO;
+  // ⚠️ Les éléments IGNORÉS sortent du dénominateur. Les compter reviendrait à
+  // pénaliser un clone pour des polices qu'on a délibérément choisi de ne pas
+  // ré-héberger — c'est précisément ce qui faisait tomber le garde-fou à tort.
+  const total = uploaded + failed;
+  const degraded = total > 0 && failed / total > MAX_ACCEPTABLE_FAILURE_RATIO;
 
   console.log(
-    `[media-uploader] ✅ Done : ${uploaded} uploaded, ${failed} failed (${total} au total)`
+    `[media-uploader] ✅ Done : ${uploaded} uploaded, ${failed} failed, ${skipped} ignorés (polices)`
   );
   if (degraded) {
     console.warn(
@@ -98,14 +109,22 @@ export async function uploadMediaAssets(
     );
   }
 
-  return { uploaded, failed, total, degraded };
+  return { uploaded, failed, skipped, total, degraded };
 }
 
 type SingleAssetResult = {
   ok: boolean;
   /** Erreur FATALE (config refusée) : l'appelant doit interrompre. */
   fatal?: Error;
+  /** Volontairement non ré-hébergé (police) : ni succès ni échec. */
+  skipped?: boolean;
 };
+
+/** Police d'écriture — à ne jamais envoyer à Cloudinary comme image. */
+function isFontAsset(url: string): boolean {
+  if (/\.(eot|woff2?|ttf|otf)(\?|#|$)/i.test(url)) return true;
+  return /\/(webfonts?|fonts?)\//i.test(url) && /\.svg(\?|#|$)/i.test(url);
+}
 
 /**
  * Upload un seul asset.
@@ -120,6 +139,18 @@ async function uploadSingleAsset(
   funnelId: string
 ): Promise<SingleAssetResult> {
   try {
+    // 🆕 Seconde barrière contre les POLICES. Le parser les écarte désormais
+    // à la collecte (cf. isFontUrl dans parser.ts), mais un clone ENREGISTRÉ
+    // AVANT ce correctif en contient encore : sans cette garde, les rejouer
+    // ferait de nouveau exploser le taux d'échec et bloquerait le clone.
+    //
+    // Ce n'est pas un échec : on ne tente simplement pas. La police reste
+    // servie par le CSS d'origine, ce qui est le comportement attendu.
+    if (isFontAsset(asset.sourceUrl)) {
+      console.log(`[media-uploader] ⏭️ Police ignorée (non ré-hébergée) : ${asset.sourceUrl}`);
+      return { ok: true, skipped: true };
+    }
+
     const buffer = await downloadAsset(asset.sourceUrl);
     if (!buffer) {
       asset.uploadFailed = true;

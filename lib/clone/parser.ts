@@ -208,8 +208,37 @@ function scanAllMedia(
 }
 
 /**
+ * Extensions de POLICES D'ÉCRITURE.
+ *
+ * ⚠️ Ne sont PAS des médias au sens du clonage. Elles arrivaient ici parce que
+ * la regex ci-dessous attrape tous les `url()` d'une feuille de style, y
+ * compris ceux des blocs `@font-face` — pas seulement les `background-image`.
+ *
+ * Conséquence mesurée sur une page réelle : 29 « médias » détectés dont 18
+ * polices (.eot, .woff, .woff2, .ttf, et les .svg de webfonts FontAwesome).
+ * Cloudinary les refusait toutes en `resource_type: "image"` → 62 % d'échec,
+ * puis blocage du clone par le garde-fou de taux. Or ces 18 « échecs »
+ * n'étaient pas des incidents : ces fichiers n'avaient rien à faire là.
+ *
+ * Les polices restent servies par le CSS conservé dans `clonedHead` : le
+ * rendu est inchangé, on cesse simplement d'essayer de les ré-héberger.
+ */
+const FONT_EXTENSIONS = /\.(eot|woff2?|ttf|otf)(\?|#|$)/i;
+
+/** URL d'une police (extension, ou .svg servi comme webfont) ? */
+function isFontUrl(url: string): boolean {
+  if (FONT_EXTENSIONS.test(url)) return true;
+  // FontAwesome sert ses webfonts en SVG avec un fragment d'identification :
+  // « …/webfonts/fa-brands-400.svg#fontawesome ». Un vrai SVG décoratif n'a
+  // pas ce motif.
+  return /\/(webfonts?|fonts?)\//i.test(url) && /\.svg(\?|#|$)/i.test(url);
+}
+
+/**
  * Extrait toutes les URLs depuis une chaîne CSS contenant des
  * background-image. Gère les guillemets normaux (" ') et échappés (&quot;).
+ *
+ * Écarte les polices : voir FONT_EXTENSIONS ci-dessus.
  */
 function extractBackgroundImageUrls(css: string): string[] {
   const urls: string[] = [];
@@ -219,7 +248,7 @@ function extractBackgroundImageUrls(css: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = regex.exec(css)) !== null) {
     const url = match[1].trim();
-    if (url && !url.startsWith("data:")) {
+    if (url && !url.startsWith("data:") && !isFontUrl(url)) {
       urls.push(url);
     }
   }
