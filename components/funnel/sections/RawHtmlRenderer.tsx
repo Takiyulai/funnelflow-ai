@@ -1086,8 +1086,103 @@ function wrapHtmlDocument(
     }
   }
 
+  // ───────────────────────────────────────────────────────────────────
+  // 🆕 CONFLIT DE CONTRASTE — « page blanche » alors que tout est rendu.
+  //
+  // Beaucoup de pages de vente sombres n'appliquent AUCUN fond à <html> ni
+  // <body> : le noir vient d'un wrapper interne. Leur texte, lui, est blanc.
+  //
+  // Le repli ff-default-canvas pose alors html,body{background:#fff} —
+  // légitime dans le cas général (un fond transparent laisse voir le canvas
+  // blanc du navigateur), catastrophique ici : texte blanc sur fond blanc.
+  // La page est intégralement rendue, simplement INVISIBLE.
+  //
+  // Cas mesuré (delta360.io) : h1 présent, hauteur non nulle, couleur
+  // rgb(255,255,255), sur un body à luminance 1. 67 % du texte visible était
+  // clair. Le wrapper noir ne couvrait que 296 px sur 2817 px de page.
+  //
+  // Le js_scenario de ScrapingBee matérialise bien le fond réel (dans le
+  // style __ff-captured-page-bg), mais Scrapingdog n'exécute pas de script :
+  // les clones qui passent par lui arrivent sans cette capture. On corrige
+  // donc ICI, au rendu, où l'on dispose d'un vrai moteur de rendu pour mesurer.
+  //
+  // ⚠️ Ni backtick, ni séquence dollar-accolade dans ce bloc : tout ce script
+  // vit à l'intérieur d'un template literal TypeScript. Un backtick de
+  // commentaire referme la chaîne, et une interpolation y est évaluée comme
+  // du code. Les deux cassent la compilation, y compris depuis un commentaire.
+  function fixContrastConflict() {
+    // ScrapingBee a déjà capturé le vrai fond : ne rien faire.
+    if (document.getElementById('__ff-captured-page-bg')) return;
+    if (document.body.getAttribute('data-ff-contrast-fixed')) return;
+
+    function luminance(color) {
+      var m = String(color).match(/rgba?\\(([^)]+)\\)/);
+      if (!m) return null;
+      var p = m[1].split(',').map(parseFloat);
+      // Transparent : ne dit rien de ce qu'on voit.
+      if (p.length >= 4 && p[3] < 0.9) return null;
+      return (0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]) / 255;
+    }
+
+    var bodyLum = luminance(getComputedStyle(document.body).backgroundColor);
+    if (bodyLum === null || bodyLum < 0.8) return; // fond déjà sombre ou absent
+
+    // Le texte visible est-il majoritairement clair ?
+    var light = 0, dark = 0;
+    var nodes = document.querySelectorAll('h1,h2,h3,h4,p,span,li,a');
+    for (var i = 0; i < nodes.length && i < 400; i++) {
+      var el = nodes[i];
+      if (!(el.textContent || '').trim()) continue;
+      if (el.offsetHeight === 0) continue;
+      var l = luminance(getComputedStyle(el).color);
+      if (l === null) continue;
+      if (l > 0.7) light++; else dark++;
+    }
+    var totalText = light + dark;
+    if (totalText < 5 || light / totalText < 0.6) return; // pas de conflit
+
+    // Fond opaque couvrant la plus grande SURFACE : c'est le fond que
+    // l'auteur de la page voulait réellement montrer.
+    var byColor = {};
+    var all = document.querySelectorAll('body *');
+    for (var j = 0; j < all.length && j < 3000; j++) {
+      var e = all[j];
+      var c = getComputedStyle(e).backgroundColor;
+      var mm = String(c).match(/rgba?\\(([^)]+)\\)/);
+      if (!mm) continue;
+      var pp = mm[1].split(',').map(parseFloat);
+      if (pp.length >= 4 && pp[3] < 0.9) continue;
+      var r = e.getBoundingClientRect();
+      var area = r.width * r.height;
+      if (area < 10000) continue; // ignore les petits badges/boutons
+      var key = 'rgb(' + pp[0] + ', ' + pp[1] + ', ' + pp[2] + ')';
+      byColor[key] = (byColor[key] || 0) + area;
+    }
+
+    var best = null, bestArea = 0;
+    for (var k in byColor) {
+      if (byColor[k] > bestArea) { bestArea = byColor[k]; best = k; }
+    }
+
+    // On n'adopte ce fond que s'il est SOMBRE : sinon on remplacerait du
+    // blanc par du blanc, sans rien résoudre.
+    var chosen = best && luminance(best) !== null && luminance(best) < 0.5
+      ? best
+      : '#111111'; // repli neutre, jamais du noir pur (trop dur)
+
+    var style = document.createElement('style');
+    style.id = '__ff-contrast-fix';
+    style.textContent = 'html,body{background-color:' + chosen + ' !important;}';
+    document.head.appendChild(style);
+    document.body.setAttribute('data-ff-contrast-fixed', 'true');
+    try {
+      console.log('[ff-contrast] Texte clair sur fond clair détecté → fond ' + chosen);
+    } catch (e) {}
+  }
+
   function init() {
     try { neutralizeHiddenInlineStyles(); } catch(e) {}
+    try { fixContrastConflict(); } catch(e) {}
     try { setupLinks(); } catch(e) {}
     try { setupDetails(); } catch(e) {}
     try { setupFaqGridUnfreeze(); } catch(e) {}
