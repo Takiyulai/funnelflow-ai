@@ -1153,8 +1153,52 @@ function wrapHtmlDocument(
   // texte gris pâle (luminance > 0,7) franchissait le seuil et se retrouvait
   // avec un fond sombre imposé. Retirer du code non validé qui peut casser
   // des pages saines vaut mieux que le garder « au cas où ».
+  // 🆕 PLANCHERS EN UNITES VIEWPORT — deuxieme barriere, cote calcul.
+  //
+  // Le bloc CSS ff-public-fullwidth neutralise deja min-height sur html/body,
+  // sur les enfants directs portant 100vh en style INLINE, et sur quelques noms
+  // de classes courants (min-h-screen, vh-100...). Il ne peut rien contre une
+  // regle de feuille de style portant un nom quelconque, du type
+  // .sc-a1b2c3 { min-height: 100vh } — or c'est exactement ce que produisent
+  // les generateurs de classes (CSS-in-JS, Tailwind compile, constructeurs
+  // visuels), et donc le cas le plus frequent sur une page clonee.
+  //
+  // On ne peut pas cibler une VALEUR en CSS : on la lit ici, apres calcul.
+  // Un plancher qui vaut la hauteur du cadre ne peut venir que d'une unite
+  // viewport, et dans un cadre auto-dimensionne il empeche la hauteur de
+  // redescendre sous celle d'un ecran. D'ou la bande vide, exactement d'un
+  // viewport, laissant voir le fond blanc du body du cadre.
+  //
+  // On ne touche QUE min-height : la hauteur reelle reste imposee par le
+  // contenu, donc aucune troncature possible.
+  function neutralizeViewportMinHeights() {
+    var vh = window.innerHeight || 0;
+    if (vh <= 0) return;
+    var cleared = 0;
+    var all = document.querySelectorAll('body, body *');
+    for (var i = 0; i < all.length && i < 4000; i++) {
+      var el = all[i];
+      if (el.getAttribute && el.getAttribute('data-ff-minh-cleared')) continue;
+      var cs;
+      try { cs = getComputedStyle(el); } catch (e) { continue; }
+      var mh = parseFloat(cs.minHeight);
+      if (!mh || isNaN(mh)) continue;
+      if (mh >= vh * 0.9) {
+        el.style.setProperty('min-height', '0', 'important');
+        el.setAttribute('data-ff-minh-cleared', '1');
+        cleared++;
+      }
+    }
+    if (cleared > 0) {
+      try {
+        console.log('[ff-height] ' + cleared + ' plancher(s) pleine-hauteur neutralise(s).');
+      } catch (e) {}
+    }
+  }
+
   function init() {
     try { neutralizeHiddenInlineStyles(); } catch(e) {}
+    try { neutralizeViewportMinHeights(); } catch(e) {}
     try { setupLinks(); } catch(e) {}
     try { setupDetails(); } catch(e) {}
     try { setupFaqGridUnfreeze(); } catch(e) {}

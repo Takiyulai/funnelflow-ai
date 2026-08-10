@@ -216,6 +216,35 @@
   color: var(--ff-footer-ink) !important;
 }
 
+/* ═══ 🆕 BANDE CLAIRE SOUS LE FOOTER — halos d'ambiance en POURCENTAGE ═══
+   Chaque gabarit pose deux halos décoratifs en pseudo-éléments absolus, dont
+   les décalages sont exprimés en pourcentage de la hauteur de .ff-page :
+
+     [data-ff-template="story-sell"]::after { height: 50%; bottom: -15%; … }
+
+   Ces pourcentages sont anodins sur une page courte. Sur un tunnel cloné de
+   7 138 px, -15 % vaut -1 071 px : le halo déborde d'autant SOUS la page et
+   gonfle la zone défilable. `.ff-page` étant sombre et le <body> de
+   l'application quasi blanc (#fafafb), ce débordement se lisait comme une
+   large bande claire sous le footer.
+
+   Mesuré sur une preview réelle : body.scrollHeight = 8209 pour un contenu de
+   7138 px, soit exactement les 1071 px du `bottom: -15%`. Aucun élément du DOM
+   ne portait cet espace — d'où sa difficulté de diagnostic : seuls les
+   pseudo-éléments le créaient.
+
+   `overflow: clip` supprime le débordement défilable SANS faire de .ff-page un
+   conteneur de défilement — contrairement à `hidden`, qui casserait un
+   `position: sticky` en descendant. Les halos restent visibles, simplement
+   rognés au bord de la page, ce qui est le rendu attendu d'un effet d'ambiance.
+
+   ⚠️ Ne pas remplacer par `overflow: hidden`. Sur Safari < 16, `clip` n'est pas
+   reconnu : la règle est ignorée et l'on retrouve l'ancien comportement, ce qui
+   est préférable à un défilement cassé. */
+[data-ff-template] {
+  overflow: clip;
+}
+
 /* 🆕 Page publiée : « sticky footer ». Si le tunnel est plus court que l'écran,
    on pousse le footer tout en bas (margin-top:auto) au lieu de laisser une
    bande blanche vide en dessous. Le vide éventuel passe AU-DESSUS du footer et
