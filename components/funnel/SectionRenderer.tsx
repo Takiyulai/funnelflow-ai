@@ -14,6 +14,7 @@ import type {
   SectionLayoutVariant,
 } from "@/lib/funnels/types";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
+import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge";
 import { BookingWidget } from "@/components/booking/BookingWidget";
 
 
@@ -82,6 +83,12 @@ if (section.type === "raw-html") {
         clonedBody={clonedBody}
         editMode={mode === "preview"}   /* 🆕 active uniquement en preview/éditeur */
       />
+      {/* 🆕 CAPTURE CLONE — Écoute les clics sur les CTA de l'iframe et ouvre le
+          formulaire de capture / défile vers l'ancre / redirige. Monté
+          uniquement en PUBLIC : en preview, le clic sert à l'édition. */}
+      {mode === "public" && (
+        <RawHtmlCtaBridge section={section} funnel={funnel} />
+      )}
     </section>
   );
 }

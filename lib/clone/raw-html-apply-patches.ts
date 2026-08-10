@@ -12,18 +12,18 @@
 //      document jsdom via globalThis avant de réutiliser cette fonction.
 
 import { walkEditable, replaceTextContentSmart, type Spot } from "./raw-html-walker";
-import type { RawHtmlBackgroundPatch } from "@/lib/funnels/types";
+import type {
+  RawHtmlBackgroundPatch,
+  RawHtmlPatch,
+} from "@/lib/funnels/types";
 
-export interface RawHtmlPatch {
-  texts?: Record<string, string>;
-  links?: Record<string, { href?: string; label?: string }>;
-  images?: Record<
-    string,
-    { src?: string; alt?: string; mediaType?: "image" | "video" | "embed" }
-  >;
-  colors?: Record<string, string>;
-  background?: RawHtmlBackgroundPatch;
-}
+// ⚠️ `RawHtmlPatch` était déclaré EN DOUBLE : ici et dans lib/funnels/types.ts.
+// Deux structures identiques mais indépendantes — la première extension d'un
+// côté seulement les faisait diverger en silence, avec un patch persisté que
+// l'applicateur ignorait. On importe désormais la définition de types.ts (déjà
+// la source de `FunnelSection.rawHtmlPatches`) et on la ré-exporte pour ne
+// casser aucun import existant qui pointe sur ce module.
+export type { RawHtmlPatch };
 
 export interface ApplyPatchesOptions {
   annotate?: boolean;
@@ -338,8 +338,20 @@ export function applyRawHtmlPatches(
       const tag = spot.element.tagName.toLowerCase();
 
       if (patch) {
-        if (typeof patch.href === "string" && patch.href && tag === "a") {
-          spot.element.setAttribute("href", patch.href);
+        // 🆕 FIX « le CTA est éditable mais le clic reste muet ».
+        //
+        // L'URL n'était écrite que sur les `<a>`. Or le walker enregistre aussi
+        // les `<button>` et les `<a href="#">` comme liens éditables (cf. « Bug
+        // #9 » dans raw-html-walker.ts) : l'éditeur proposait donc un champ URL
+        // sur un bouton, l'enregistrait dans le patch… et l'applicateur le
+        // jetait. Sur un site dont les CTA sont pilotés en JS — le cas courant
+        // d'un clone — AUCUN bouton ne redirigeait.
+        //
+        // `data-ff-href` est désormais posé sur TOUTE balise : c'est lui que lit
+        // le runtime de l'iframe pour naviguer, y compris sur un `<button>` qui
+        // n'a pas d'attribut `href`.
+        if (typeof patch.href === "string" && patch.href) {
+          if (tag === "a") spot.element.setAttribute("href", patch.href);
           spot.element.setAttribute("data-ff-href", patch.href);
         }
         if (
@@ -348,6 +360,31 @@ export function applyRawHtmlPatches(
           patch.label !== spot.label
         ) {
           replaceTextContentSmart(spot.element, patch.label);
+        }
+
+        // 🆕 CAPTURE — Action au clic (popup / ancre / redirection).
+        //
+        // ⚠️ Posé HORS du garde `annotate` : `annotate` n'est vrai qu'en mode
+        // édition (RawHtmlRenderer passe `annotate: isEditMode`). Écrire ces
+        // attributs sous ce garde les aurait rendus invisibles sur la page
+        // PUBLIÉE — c'est-à-dire précisément là où la capture doit fonctionner.
+        const action = patch.action;
+        if (action && action !== "keep") {
+          spot.element.setAttribute("data-ff-cta-action", action);
+          // L'identifiant du spot doit suivre en PUBLIC aussi : c'est la clé
+          // qui permet au parent de retrouver la config popup dans le patch.
+          // Sans lui, le clic remonterait sans dire QUEL bouton l'a émis.
+          spot.element.setAttribute("data-ff-link-id", spot.id);
+          if (action === "anchor" && patch.anchorId) {
+            spot.element.setAttribute(
+              "data-ff-cta-anchor",
+              patch.anchorId.replace(/^#/, ""),
+            );
+          }
+          // Le contenu du popup n'est PAS injecté dans l'iframe : elle est
+          // sandboxée sans `allow-same-origin` et ne doit rien savoir du
+          // formulaire. Elle signale juste le clic ; le parent, qui détient le
+          // patch, sait quoi ouvrir. Seul l'identifiant du spot transite.
         }
       }
 

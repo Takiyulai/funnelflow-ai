@@ -671,6 +671,47 @@ function wrapHtmlDocument(
     });
   }
 
+  // 🆕 CAPTURE — Pont CTA du mode PUBLIC.
+  //
+  // L'iframe est sandboxée SANS 'allow-same-origin' : elle ne peut ni monter un
+  // composant React du parent, ni écrire dans window.top.location. Elle se
+  // contente donc de signaler le clic ; c'est le parent (RawHtmlCtaBridge) qui
+  // détient le patch et décide d'ouvrir le formulaire, de défiler ou de naviguer.
+  //
+  // Ne touche QUE les éléments portant data-ff-cta-action : un CTA laissé en
+  // « keep » garde exactement le comportement du site cloné.
+  function setupCtaBridge() {
+    if (EDIT_MODE) return;
+    if (document.__ffCtaBridgeBound) return;
+    document.__ffCtaBridgeBound = true;
+
+    document.addEventListener('click', function (e) {
+      var el = e.target;
+      if (!el || !el.closest) return;
+      var cta = el.closest('[data-ff-cta-action]');
+      if (!cta) return;
+
+      var action = cta.getAttribute('data-ff-cta-action') || '';
+      if (!action || action === 'keep') return;
+
+      // On prend la main : sans ça, un <a href> naviguerait dans l'iframe et le
+      // prospect verrait le tunnel s'afficher DANS le cadre de la section.
+      e.preventDefault();
+      e.stopPropagation();
+
+      try {
+        window.parent.postMessage({
+          type: 'ff-cta-action',
+          sectionId: SECTION_ID,
+          action: action,
+          linkId: cta.getAttribute('data-ff-link-id') || '',
+          anchorId: cta.getAttribute('data-ff-cta-anchor') || '',
+          href: cta.getAttribute('data-ff-href') || cta.getAttribute('href') || ''
+        }, '*');
+      } catch (err) {}
+    }, true);
+  }
+
   function setupDetails() {
     // En mode public, on laisse les <details> fermés par défaut.
     if (!EDIT_MODE) return;
@@ -766,6 +807,10 @@ function wrapHtmlDocument(
         var candidates = target.querySelectorAll('[data-ff-spot-id], [data-ff-link-id]');
         var best = null;
         var bestArea = Infinity;
+        // 🆕 Repli n°2 : meilleur candidat sur la MÊME LIGNE que le clic, même
+        // si le curseur n'est pas dans sa boîte.
+        var nearest = null;
+        var nearestDx = Infinity;
         for (var i = 0; i < candidates.length; i++) {
           var el = candidates[i];
           var r = el.getBoundingClientRect();
@@ -776,9 +821,32 @@ function wrapHtmlDocument(
               bestArea = area;
               best = el;
             }
+          } else if (cy >= r.top && cy <= r.bottom) {
+            // Verticalement aligné : c'est la même ligne visuelle. On retient
+            // le plus proche horizontalement.
+            var dx = cx < r.left ? r.left - cx : cx - r.right;
+            if (dx < nearestDx) {
+              nearestDx = dx;
+              nearest = el;
+            }
           }
         }
-        return best;
+        if (best) return best;
+
+        // 🆕 FIX « les FAQ ne sont pas éditables au clic ».
+        //
+        // Une barre d'accordéon occupe toute la largeur : le libellé est calé à
+        // gauche, le chevron à droite, et TOUT le milieu est du vide. Cliquer
+        // sur ce vide donnait un e.target = conteneur, sans ancêtre annoté et
+        // sans descendant SOUS LE CURSEUR — l'ancien code concluait « zone
+        // neutre » et ouvrait l'éditeur de fond. L'utilisateur en déduisait,
+        // légitimement, que les FAQ ne sont pas éditables : le texte était bien
+        // dans l'inventaire, mais inatteignable au clic.
+        //
+        // On accepte donc le spot le plus proche sur la même ligne. Le seuil
+        // évite d'attraper un élément à l'autre bout d'une section large.
+        if (nearest && nearestDx <= 600) return nearest;
+        return null;
       }
       return null;
     }
@@ -1200,6 +1268,7 @@ function wrapHtmlDocument(
     try { neutralizeHiddenInlineStyles(); } catch(e) {}
     try { neutralizeViewportMinHeights(); } catch(e) {}
     try { setupLinks(); } catch(e) {}
+    try { setupCtaBridge(); } catch(e) {}
     try { setupDetails(); } catch(e) {}
     try { setupFaqGridUnfreeze(); } catch(e) {}
     try { setupMediaWrapperRelease(); } catch(e) {}

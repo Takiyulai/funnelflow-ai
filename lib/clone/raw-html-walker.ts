@@ -271,7 +271,8 @@ export function walkEditable(
     root = source;
   }
 
-  const seenLinkKeys = new Set<string>();
+  // `seenLinkKeys` a été retiré : il dédupliquait les boutons répétés et les
+  // rendait non éditables (cf. commentaire dans la branche « LINKS / BUTTONS »).
   const seenSpotIds = new Set<string>();
 
   let textCount = 0;
@@ -401,20 +402,34 @@ export function walkEditable(
           (!isTechnicalHref && label.length > 0));
 
       if (shouldRegister) {
-        const key = `${tag}::${href}::${label}`;
-        if (!seenLinkKeys.has(key)) {
-          seenLinkKeys.add(key);
-          emit({
-            kind: "link",
-            id: makeLinkId(href, label),
-            element: el,
-            href,
-            label,
-            isExternal: /^https?:\/\//i.test(href),
-            isCta,
-          });
-          linkCount++;
-        }
+        // 🆕 FIX « la plupart des CTA ne sont pas cliquables dans l'éditeur ».
+        //
+        // Les liens étaient dédupliqués sur la clé `tag::href::label`. Or un
+        // site réel répète le MÊME bouton à plusieurs endroits — header, hero,
+        // section médiane, footer. Tous partagent tag, href et libellé : un
+        // seul était enregistré, les autres ne recevaient aucun
+        // `data-ff-link-id` et restaient donc muets au clic, sans aucun moyen
+        // de leur assigner une action.
+        //
+        // Mesuré sur un clone réel : 7 liens inventoriés pour une page qui en
+        // comptait bien davantage, le CTA principal n'apparaissant qu'une fois
+        // sur quatre occurrences.
+        //
+        // La déduplication était de toute façon REDONDANTE : `emit()` résout
+        // déjà les identifiants en collision par suffixe (`-2`, `-3`…). Chaque
+        // occurrence devient donc éditable indépendamment, et la PREMIÈRE
+        // conserve son identifiant d'origine — les patches déjà enregistrés
+        // restent valides.
+        emit({
+          kind: "link",
+          id: makeLinkId(href, label),
+          element: el,
+          href,
+          label,
+          isExternal: /^https?:\/\//i.test(href),
+          isCta,
+        });
+        linkCount++;
       }
 
       for (const child of Array.from(el.children)) {

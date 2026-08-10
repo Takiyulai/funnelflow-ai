@@ -153,7 +153,11 @@ export function SectionEditor({ section, language, funnel, onChange, onFunnelCha
         {/* 🆕 Routing : si raw-html, on utilise RawHtmlContentTab pour Contenu */}
         {safeActiveTab === "content" &&
           (isRawHtml ? (
-            <RawHtmlContentTab section={section} onChange={onChange} />
+            <RawHtmlContentTab
+              section={section}
+              onChange={onChange}
+              language={language}
+            />
           ) : isBooking ? (
             <BookingContentTab section={section} onChange={onChange} />
           ) : (

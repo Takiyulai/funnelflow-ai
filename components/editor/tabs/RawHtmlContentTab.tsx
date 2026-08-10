@@ -27,6 +27,8 @@ import type {
   FunnelSection,
   RawHtmlPatch,
   RawHtmlBackgroundPatch,
+  RawHtmlCtaAction,
+  RawHtmlLinkPatch,
 } from "@/lib/funnels/types";
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
 import {
@@ -37,6 +39,8 @@ import {
   type EditableImageSpot,
   type DetectedBackground,
 } from "@/lib/clone/raw-html-editable";
+import { CloneCopyRewritePanel } from "@/components/editor/CloneCopyRewritePanel";
+import { PopupFieldsEditor } from "@/components/editor/tabs/items/PopupFieldsEditor";
 import { walkerDebug } from "@/lib/clone/raw-html-walker";
 walkerDebug.enabled = true;
 
@@ -49,6 +53,8 @@ function getMediaType(spot: EditableImageSpot): "image" | "video" | "embed" {
 type Props = {
   section: FunnelSection;
   onChange: (patch: Partial<FunnelSection>) => void;
+  /** 🆕 Langue du tunnel — utilisée par la réécriture IA du copy. */
+  language?: "fr" | "en" | "es";
 };
 
 const KIND_META: Record<
@@ -70,7 +76,14 @@ type ActiveSpot =
   | { kind: "image"; id: string; mediaType?: "image" | "video" | "embed" }
   | null;
 
-export function RawHtmlContentTab({ section, onChange }: Props) {
+export function RawHtmlContentTab({
+  section,
+  onChange,
+  // 🆕 Langue du tunnel, transmise à la réécriture IA du copy. Défaut "fr" :
+  // la très grande majorité des tunnels, et une langue erronée ne casse rien —
+  // elle produit seulement une proposition à refuser.
+  language = "fr",
+}: Props) {
   const [search, setSearch] = useState("");
   const [activeSpot, setActiveSpot] = useState<ActiveSpot>(null);
   const [showList, setShowList] = useState(false);
@@ -294,21 +307,31 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
     });
   };
 
-  const updateLink = (id: string, field: "href" | "label", value: string) => {
-    const spot = inventory.links.find((l) => l.id === id);
-    if (!spot) return;
-    const original = field === "href" ? spot.href : spot.label;
+  /**
+   * 🆕 Écriture générique d'un patch de lien.
+   *
+   * `updateLink` ne savait écrire que `href`/`label` et supprimait le patch dès
+   * que ces deux champs étaient vides — ce qui effaçait au passage une action
+   * de capture configurée. Le nettoyage tient désormais compte de TOUS les
+   * champs du patch.
+   */
+  const patchLink = (id: string, changes: Partial<RawHtmlLinkPatch>) => {
     const prev = linkPatches[id] ?? {};
-    const next: { href?: string; label?: string } = { ...prev };
+    const next: RawHtmlLinkPatch = { ...prev, ...changes };
 
-    if (value === original) {
-      delete next[field];
-    } else {
-      next[field] = value;
+    // Champs vides / neutres → on les retire pour garder un patch minimal.
+    if (!next.href) delete next.href;
+    if (!next.label) delete next.label;
+    if (!next.anchorId) delete next.anchorId;
+    if (!next.action || next.action === "keep") {
+      delete next.action;
+      // Sans action, ces réglages n'ont plus de porteur.
+      delete next.anchorId;
+      delete next.popup;
     }
 
     const nextLinks = { ...linkPatches };
-    if (!next.href && !next.label) {
+    if (Object.keys(next).length === 0) {
       delete nextLinks[id];
     } else {
       nextLinks[id] = next;
@@ -320,6 +343,14 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
         links: Object.keys(nextLinks).length > 0 ? nextLinks : undefined,
       },
     });
+  };
+
+  const updateLink = (id: string, field: "href" | "label", value: string) => {
+    const spot = inventory.links.find((l) => l.id === id);
+    if (!spot) return;
+    const original = field === "href" ? spot.href : spot.label;
+    // Revenir à la valeur d'origine efface le champ du patch (pas tout le patch).
+    patchLink(id, { [field]: value === original ? undefined : value });
   };
 
   const resetLink = (id: string) => {
@@ -518,6 +549,15 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
         )}
       </div>
 
+      {/* ────── 🆕 RÉÉCRITURE DU COPY PAR PROMPT ──────
+          Placé en tête : personnaliser d'un coup est la première chose à faire
+          sur un clone, avant de retoucher un texte à la main. */}
+      <CloneCopyRewritePanel
+        section={section}
+        language={language}
+        onChange={onChange}
+      />
+
       {/* ────── ÉDITEUR DE FOND DE SECTION ────── */}
       <BackgroundEditor
         ref={backgroundEditorRef}
@@ -639,6 +679,7 @@ export function RawHtmlContentTab({ section, onChange }: Props) {
             onChangeField={(field, v) =>
               updateLink(activeLinkSpot.id, field, v)
             }
+            onPatch={(changes) => patchLink(activeLinkSpot.id, changes)}
             onReset={() => resetLink(activeLinkSpot.id)}
             onFocus={() =>
               highlightSpotInIframe(activeLinkSpot.id, "data-ff-link-id")
@@ -1503,20 +1544,47 @@ function TextSpotEditor({
 // LinkSpotEditor
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** 🆕 Actions proposées pour un CTA cloné, dans l'ordre d'utilité réelle. */
+const CTA_ACTION_OPTIONS: { id: RawHtmlCtaAction; label: string; hint: string }[] = [
+  {
+    id: "keep",
+    label: "Inchangé",
+    hint: "Garde le comportement du site cloné. Souvent : aucun effet.",
+  },
+  {
+    id: "popup",
+    label: "Formulaire",
+    hint: "Ouvre le formulaire de capture AutoFunnel. Le lead arrive dans ton CRM.",
+  },
+  {
+    id: "anchor",
+    label: "Ancre",
+    hint: "Fait défiler jusqu'à une section de la page.",
+  },
+  {
+    id: "redirect",
+    label: "Redirection",
+    hint: "Navigue vers l'URL de destination ci-dessus.",
+  },
+];
+
 function LinkSpotEditor({
   spot,
   patch,
   isFocused,
   onChangeField,
+  onPatch,
   onReset,
   onFocus,
   onBlur,
   autoFocus,
 }: {
   spot: EditableLinkSpot;
-  patch: { href?: string; label?: string } | undefined;
+  patch: RawHtmlLinkPatch | undefined;
   isFocused: boolean;
   onChangeField: (field: "href" | "label", v: string) => void;
+  /** 🆕 Écriture des champs d'action (capture, ancre, popup). */
+  onPatch?: (changes: Partial<RawHtmlLinkPatch>) => void;
   onReset: () => void;
   onFocus: () => void;
   onBlur: () => void;
@@ -1525,6 +1593,8 @@ function LinkSpotEditor({
   const isModified = patch !== undefined;
   const currentLabel = patch?.label ?? spot.label;
   const currentHref = patch?.href ?? spot.href;
+  // Patch sans action = comportement d'origine (rétrocompatible).
+  const currentAction: RawHtmlCtaAction = patch?.action ?? "keep";
 
   const labelRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -1609,7 +1679,12 @@ function LinkSpotEditor({
           />
         </div>
 
-        {spot.href !== "" && (
+        {/* 🆕 Le champ URL n'apparaissait que si le HTML d'origine portait déjà
+            un href — donc JAMAIS sur un <button>, ni sur un <a href="#">
+            vidé. C'est précisément là qu'on a besoin d'en poser une. Il est
+            désormais affiché aussi dès que l'action « Redirection » est
+            choisie. */}
+        {(spot.href !== "" || currentAction === "redirect") && (
           <div>
             <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
               URL de destination
@@ -1623,6 +1698,112 @@ function LinkSpotEditor({
               placeholder="https://…"
               className="w-full rounded border border-white/10 bg-black/50 px-2 py-1.5 text-[11px] font-mono text-white outline-none focus:border-emerald-300/40"
             />
+          </div>
+        )}
+
+        {/* ─── 🆕 CAPTURE — Action au clic ─────────────────────────────────
+            Sans ce réglage, les CTA d'un clone pointent vers le tunnel du site
+            source (ou vers rien) : la page est fidèle mais ne collecte aucun
+            lead. C'est ici qu'on la branche sur AutoFunnel. */}
+        {onPatch && (
+          <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+            <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-1">
+              Au clic sur ce bouton
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {CTA_ACTION_OPTIONS.map((opt) => {
+                const active = currentAction === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    title={opt.hint}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onPatch({ action: opt.id })}
+                    className={[
+                      "rounded px-2 py-1 text-[10px] font-medium transition-colors",
+                      active
+                        ? "bg-emerald-300/20 text-emerald-200 ring-1 ring-emerald-300/50"
+                        : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80",
+                    ].join(" ")}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[9px] leading-relaxed text-white/35">
+              {CTA_ACTION_OPTIONS.find((o) => o.id === currentAction)?.hint}
+            </p>
+
+            {currentAction === "anchor" && (
+              <div className="mt-2">
+                <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
+                  Identifiant de l&apos;ancre (sans #)
+                </label>
+                <input
+                  type="text"
+                  value={patch?.anchorId ?? ""}
+                  onChange={(e) => onPatch({ anchorId: e.target.value })}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                  placeholder="lead-form"
+                  className="w-full rounded border border-white/10 bg-black/50 px-2 py-1.5 text-[11px] font-mono text-white outline-none focus:border-emerald-300/40"
+                />
+              </div>
+            )}
+
+            {currentAction === "popup" && (
+              <div className="mt-2 space-y-1.5">
+                <div>
+                  <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
+                    Titre du formulaire
+                  </label>
+                  <input
+                    type="text"
+                    value={patch?.popup?.title ?? ""}
+                    onChange={(e) =>
+                      onPatch({
+                        popup: { ...(patch?.popup ?? {}), title: e.target.value },
+                      })
+                    }
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    placeholder="Recevoir le guide gratuit"
+                    className="w-full rounded border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-300/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
+                    Texte d&apos;accroche (optionnel)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={patch?.popup?.body ?? ""}
+                    onChange={(e) =>
+                      onPatch({
+                        popup: { ...(patch?.popup ?? {}), body: e.target.value },
+                      })
+                    }
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    placeholder="Laisse ton email, tu le reçois immédiatement."
+                    className="w-full resize-y rounded border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-300/40"
+                  />
+                </div>
+                <PopupFieldsEditor
+                  fields={patch?.popup?.fields}
+                  onChange={(fields) =>
+                    onPatch({
+                      popup: { ...(patch?.popup ?? {}), fields },
+                    })
+                  }
+                />
+                <p className="text-[9px] leading-relaxed text-white/35">
+                  Les leads arrivent dans ton CRM.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

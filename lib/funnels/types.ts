@@ -556,9 +556,54 @@ export interface RawHtmlBackgroundPatch {
   attachment?: "scroll" | "fixed";
 }
 
+/**
+ * 🆕 CAPTURE — Action déclenchée au clic sur un CTA d'une section CLONÉE.
+ *
+ * Un tunnel cloné hérite des boutons du site source : ils pointent vers le
+ * tunnel de QUELQU'UN D'AUTRE, ou vers rien du tout (`href="#"`, `<button>`
+ * piloté par un JS qu'on n'a pas capturé). Sans ce réglage, un clone est une
+ * jolie page qui ne collecte AUCUN lead — donc inutile.
+ *
+ * - "keep"     : comportement d'origine (défaut, rétrocompatible).
+ * - "redirect" : navigue vers `href`.
+ * - "anchor"   : fait défiler jusqu'à une ancre de la page.
+ * - "popup"    : ouvre le formulaire de capture AutoFunnel (→ /api/leads).
+ */
+export type RawHtmlCtaAction = "keep" | "redirect" | "anchor" | "popup";
+
+/**
+ * 🆕 Réglages du formulaire de capture ouvert par un CTA cloné
+ * (`action: "popup"`). Champs absents → valeurs par défaut du PopupForm.
+ */
+export interface RawHtmlPopupConfig {
+  title?: string;
+  body?: string;
+  reassurance?: string;
+  fields?: FormFieldItem[];
+  captureTags?: string[];
+}
+
+/**
+ * 🆕 Patch d'un lien/bouton cloné.
+ *
+ * ⚠️ `href` seul ne suffisait pas : un `<button>` n'a pas d'attribut `href`, et
+ * un `<a href="#">` reste muet. C'est `action` qui décide de ce qui se passe au
+ * clic — `href` n'est plus qu'un paramètre du mode "redirect".
+ */
+export interface RawHtmlLinkPatch {
+  href?: string;
+  label?: string;
+  /** Absent = "keep" (comportement d'origine du site cloné). */
+  action?: RawHtmlCtaAction;
+  /** Cible du mode "anchor", sans le `#`. */
+  anchorId?: string;
+  /** Réglages du mode "popup". */
+  popup?: RawHtmlPopupConfig;
+}
+
 export interface RawHtmlPatch {
   texts?: Record<string, string>;
-  links?: Record<string, { href?: string; label?: string }>;
+  links?: Record<string, RawHtmlLinkPatch>;
   /**
    * 🆕 Phase 1B : `mediaType` permet de CONVERTIR un média (ex : remplacer une
    * image — y compris un GIF animé — par une vraie vidéo `<video>` ou un embed

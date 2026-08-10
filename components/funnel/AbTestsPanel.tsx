@@ -330,6 +330,27 @@ export function AbTestsPanel({
   }
 
   async function applyWinner(id: string, winner: "a" | "b") {
+    // 🆕 GARDE-FOU. Ce bouton CLÔTURE le test et, pour B, écrase les sections
+    // de la page. Il était déclenché au premier clic, sans confirmation, alors
+    // que « Supprimer » en avait une — et il voisinait des liens d'aperçu
+    // portant le MÊME libellé (« Variante A » / « Variante B »). Un utilisateur
+    // qui voulait prévisualiser a cloturé son test par erreur, sans retour
+    // possible. La confirmation nomme l'effet réel avant d'agir.
+    const label = winner.toUpperCase();
+    const consequence =
+      winner === "b"
+        ? "Les textes de la variante B remplaceront ceux de la page."
+        : "La page garde ses textes actuels.";
+    if (
+      !window.confirm(
+        `Retenir la variante ${label} et terminer ce test ?\n\n` +
+          `${consequence}\n\n` +
+          `Le test passera en « terminé » et la répartition du trafic s'arrêtera. ` +
+          `Pour seulement VOIR une variante, utilise les liens d'aperçu.`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -543,7 +564,11 @@ export function AbTestsPanel({
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 font-semibold text-ink transition hover:border-accent"
                       >
-                        <Eye size={11} /> Variante {v.toUpperCase()}
+                        {/* 🆕 « Voir A » et non « Variante A » : le libellé était
+                            identique à celui du bouton de clôture juste en
+                            dessous. Deux actions aux conséquences opposées ne
+                            peuvent pas porter le même nom. */}
+                        <Eye size={11} /> Voir {v.toUpperCase()}
                       </a>
                     ))}
                     <span className="opacity-70">(aperçu, non compté)</span>
@@ -553,13 +578,16 @@ export function AbTestsPanel({
                 {/* Choix du gagnant */}
                 {test.status !== "finished" && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-muted">Retenir :</span>
+                    <span className="text-[11px] text-muted">
+                      Terminer le test en retenant :
+                    </span>
                     {(["a", "b"] as const).map((v) => (
                       <button
                         key={v}
                         type="button"
                         onClick={() => applyWinner(test.id, v)}
                         disabled={busy}
+                        title={`Clôture le test et retient définitivement la variante ${v.toUpperCase()}`}
                         className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] font-semibold text-ink transition hover:border-accent disabled:opacity-50"
                       >
                         <Trophy size={11} /> Variante {v.toUpperCase()}
@@ -570,6 +598,27 @@ export function AbTestsPanel({
                         (moins de {MIN_VIEWS_PER_VARIANT} visiteurs par variante)
                       </span>
                     )}
+                  </div>
+                )}
+
+                {/* 🆕 SORTIE DE SECOURS. Un test clôturé masquait tout choix :
+                    une erreur de clic était sans retour. On peut le rouvrir en
+                    pause pour re-décider. Attention : rouvrir ne défait PAS
+                    l'installation d'une variante B déjà appliquée à la page —
+                    il rend seulement le choix à nouveau possible. */}
+                {test.status === "finished" && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => patchTest(test.id, { status: "paused" })}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] font-semibold text-ink transition hover:border-accent disabled:opacity-50"
+                    >
+                      <Play size={11} /> Rouvrir le test
+                    </button>
+                    <span className="text-[11px] text-muted">
+                      pour changer de variante retenue
+                    </span>
                   </div>
                 )}
 

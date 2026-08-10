@@ -54,6 +54,19 @@ type Props = {
   buttonClassName?: string;
   buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   customFields?: FormFieldItem[];
+  /**
+   * 🆕 CAPTURE CLONE — Mode CONTRÔLÉ.
+   *
+   * Un CTA de section clonée vit dans une iframe sandboxée : on ne peut pas y
+   * monter le `<button>` React de ce composant sans détruire le design capturé.
+   * Le bouton reste donc celui du clone, et le popup est piloté depuis le
+   * parent.
+   *
+   * `controlledOpen` non défini = comportement historique (le composant rend
+   * son propre bouton déclencheur et gère son ouverture).
+   */
+  controlledOpen?: boolean;
+  onControlledClose?: () => void;
 };
 
 type SubmitState =
@@ -120,6 +133,8 @@ export function PopupForm({
   buttonClassName,
   buttonProps,
   customFields,
+  controlledOpen,
+  onControlledClose,
 }: Props) {
   // ─── Cas Systeme.io : on délègue à la popup SIO native ─────────────
   if (cta.popupProvider === "systeme" && cta.systemePopupId) {
@@ -160,6 +175,8 @@ export function PopupForm({
       buttonClassName={buttonClassName}
       buttonProps={buttonProps}
       customFields={customFields}
+      controlledOpen={controlledOpen}
+      onControlledClose={onControlledClose}
     />
   );
 }
@@ -172,6 +189,8 @@ function InternalPopup({
   buttonClassName,
   buttonProps,
   customFields,
+  controlledOpen,
+  onControlledClose,
 }: Props) {
   const pathname = usePathname();
   const { funnelSlug, pageSlug } = useMemo(
@@ -180,7 +199,17 @@ function InternalPopup({
   );
   const isPreview = !funnelSlug;
 
-  const [open, setOpen] = useState(false);
+  // 🆕 Mode contrôlé : l'ouverture vient du parent (CTA cloné dans une iframe).
+  const isControlled = controlledOpen !== undefined;
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (v: boolean) => {
+    if (isControlled) {
+      if (!v) onControlledClose?.();
+      return;
+    }
+    setUncontrolledOpen(v);
+  };
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
   // 🆕 Variables de branding capturées à l'ouverture (pour le portail).
   const [themeStyle, setThemeStyle] = useState<React.CSSProperties>({});
@@ -362,15 +391,20 @@ function InternalPopup({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={buttonClassName ?? ""}
-        data-ff-cta
-        {...buttonProps}
-      >
-        {cta.label}
-      </button>
+      {/* 🆕 En mode contrôlé, le déclencheur est le CTA du site cloné (dans son
+          iframe) : rendre un second bouton ici en afficherait un orphelin sous
+          la section. */}
+      {!isControlled && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={buttonClassName ?? ""}
+          data-ff-cta
+          {...buttonProps}
+        >
+          {cta.label}
+        </button>
+      )}
 
       {open && typeof document !== "undefined" && createPortal(
         <div

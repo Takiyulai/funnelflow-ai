@@ -48,9 +48,16 @@ const inputSchema = z.object({
   name: z.string().optional(),
   instruction: z.string().max(800).optional(),
   language: z.enum(["fr", "en", "es"]).optional(),
+  // 🆕 Contexte enrichi de la page d'accueil. ⚠️ Toute clé absente de ce
+  // schéma serait retirée SILENCIEUSEMENT par zod avant d'atteindre le
+  // générateur — le piège déjà rencontré sur challengeDayTitles et les prix
+  // barrés. Les champs ci-dessous sont produits par extractHomeContext().
   homeContext: z
     .object({
-      headline: z.string().optional(),
+      headline: z.string().max(300).optional(),
+      subheadline: z.string().max(600).optional(),
+      sectionTitles: z.array(z.string().max(300)).max(8).optional(),
+      ctaLabels: z.array(z.string().max(120)).max(6).optional(),
       primaryCtaLabel: z.string().optional(),
     })
     .optional(),

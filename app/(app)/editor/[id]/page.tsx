@@ -653,9 +653,22 @@ export default function EditorPage() {
 
   // 🆕 Applique une régénération de PAGE (toutes les sections) issue de l'IA.
   const handleRegeneratePageApply = useCallback(
-    (sections: FunnelSection[]) => {
+    (sections: FunnelSection[], role?: FunnelPage["role"]) => {
       if (!funnel || !activePage) return;
-      pushHistory(updatePageSections(funnel, activePage.id, sections));
+      let next = updatePageSections(funnel, activePage.id, sections);
+      // 🆕 Le rôle choisi dans le panneau est POSÉ sur la page. Une page ajoutée
+      // depuis l'éditeur naît en "custom", rôle pour lequel aucun blueprint
+      // n'existe : sans cette écriture, aucune convention ne s'appliquerait —
+      // ni maintenant, ni à la régénération suivante.
+      if (role && role !== activePage.role) {
+        next = {
+          ...next,
+          pages: (next.pages ?? []).map((p) =>
+            p.id === activePage.id ? { ...p, role } : p,
+          ),
+        };
+      }
+      pushHistory(next);
       setSelectedSectionId(sections[0]?.id ?? null);
     },
     [funnel, activePage, pushHistory],
