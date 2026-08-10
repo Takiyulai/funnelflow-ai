@@ -15,6 +15,9 @@ import {
   getHeroMediaPolicy,
   type CopywritingFramework,
 } from "@/lib/funnels/pageCatalogs";
+// 🆕 Défaut de durée du challenge, PARTAGÉ avec le générateur : le copywriting
+// doit annoncer exactement le nombre de pages « Jour N » réellement produites.
+import { resolveChallengeDays } from "@/lib/funnels/challenge";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de langue
@@ -90,17 +93,27 @@ function productRuleBlock(brief: FunnelBrief): string {
   // n'était jamais transmis au rédactionnel : la landing d'un challenge de
   // 7 jours ne mentionnait nulle part « 7 jours », alors que la durée est
   // justement l'argument de vente central de ce format.
-  if (brief.funnelKind === "challenge" && brief.challengeDays && brief.challengeDays > 1) {
-    lines.push(
-      tr(
-        {
-          fr: `- Durée du challenge : ${brief.challengeDays} jours. MENTIONNE explicitement cette durée dans le titre principal et les bénéfices (ex. « en ${brief.challengeDays} jours »). C'est l'argument central de ce format.`,
-          en: `- Challenge duration: ${brief.challengeDays} days. EXPLICITLY mention this duration in the headline and benefits (e.g. "in ${brief.challengeDays} days"). It is the core selling point of this format.`,
-          es: `- Duración del reto: ${brief.challengeDays} días. MENCIONA explícitamente esta duración en el titular y los beneficios (ej. «en ${brief.challengeDays} días»). Es el argumento central de este formato.`,
-        },
-        lang,
-      ),
-    );
+  //
+  // 🆕 D — La condition testait `brief.challengeDays` en truthy : un brief sans
+  // durée explicite (parcours Express IA, ou champ jamais affiché) ne poussait
+  // AUCUNE ligne de durée, pendant que le générateur produisait quand même
+  // `DEFAULT_CHALLENGE_DAYS` pages « Jour N ». La landing annonçait donc autre
+  // chose que le tunnel livré. On résout la durée avec la MÊME fonction que le
+  // générateur : les deux ne peuvent plus diverger.
+  if (brief.funnelKind === "challenge") {
+    const challengeDays = resolveChallengeDays(brief.challengeDays);
+    if (challengeDays > 1) {
+      lines.push(
+        tr(
+          {
+            fr: `- Durée du challenge : ${challengeDays} jours. MENTIONNE explicitement cette durée dans le titre principal et les bénéfices (ex. « en ${challengeDays} jours »). C'est l'argument central de ce format.`,
+            en: `- Challenge duration: ${challengeDays} days. EXPLICITLY mention this duration in the headline and benefits (e.g. "in ${challengeDays} days"). It is the core selling point of this format.`,
+            es: `- Duración del reto: ${challengeDays} días. MENCIONA explícitamente esta duración en el titular y los beneficios (ej. «en ${challengeDays} días»). Es el argumento central de este formato.`,
+          },
+          lang,
+        ),
+      );
+    }
   }
 
   return [header, ...lines].join("\n");

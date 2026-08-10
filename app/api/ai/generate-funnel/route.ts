@@ -13,6 +13,10 @@ import { consumeQuota } from "@/lib/billing/usage";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { ensureBookingEventType } from "@/lib/booking/autoProvision";
 import { usesNativeBookingEngine } from "@/lib/booking/mode";
+// 🆕 Bornes de durée du challenge — source unique, partagée avec le wizard et
+// le générateur. La route REJETTE hors bornes ; le générateur clampe en
+// ceinture. Voir lib/funnels/challenge.ts.
+import { MAX_CHALLENGE_DAYS, MIN_CHALLENGE_DAYS } from "@/lib/funnels/challenge";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60 secondes pour la génération multi-pages
@@ -76,6 +80,12 @@ const briefSchema = z.object({
   brandName: z.string().optional(),
   offerName: z.string().min(1),
   price: z.string().min(1),
+  // 🆕 Prix d'ancrage (barré) de l'offre PRINCIPALE. ⚠️ Absent du schéma
+  // jusqu'ici → zod le retirait SILENCIEUSEMENT du brief (même piège que
+  // brandColors/authorName, cf. commentaires plus bas) : le champ « Prix barré »
+  // du wizard n'a donc JAMAIS eu d'effet. Lu par applyMainOfferPrice
+  // (lib/ai/generate.ts, writePricingOn → PricingPlanItem.originalPrice).
+  anchorPrice: z.string().max(40).optional(),
   // 🆕 Offres OTO optionnelles (upsell/downsell) fixées par l'utilisateur.
   upsellPrice: z.string().max(40).optional(),
   downsellPrice: z.string().max(40).optional(),
@@ -97,7 +107,27 @@ const briefSchema = z.object({
   // 🆕 B4 — Générer la page de confirmation du tunnel (défaut : true).
   bookingConfirmationPage: z.boolean().optional(),
   // 🆕 LOT 9 — Nombre de jours du challenge (génère jour-1..jour-N).
-  challengeDays: z.number().int().min(1).max(30).optional(),
+  // ⚠️ La borne haute était `30` alors que le wizard et le générateur
+  // plafonnent à 14 : une requête à 20 jours passait la validation puis était
+  // tronquée EN SILENCE. Elle est désormais rejetée franchement.
+  challengeDays: z
+    .number()
+    .int()
+    .min(MIN_CHALLENGE_DAYS)
+    .max(MAX_CHALLENGE_DAYS)
+    .optional(),
+  // 🆕 N3-a — Titres des jours du challenge (index 0 = Jour 1). ⚠️ Absents du
+  // schéma jusqu'ici → zod les retirait SILENCIEUSEMENT : applyChallengeMultiDay
+  // recevait toujours `undefined`, applyDayTitle sortait immédiatement, et les
+  // jours 2..N restaient des clones stricts du Jour 1. C'est LE défaut qui
+  // rendait le challenge multi-jours inutilisable.
+  // Longueur bornée à MAX_CHALLENGE_DAYS : le wizard tronque déjà le tableau à
+  // la durée choisie, un dépassement signale un bug client qu'il vaut mieux
+  // voir échouer que subir.
+  challengeDayTitles: z
+    .array(z.string().max(200))
+    .max(MAX_CHALLENGE_DAYS)
+    .optional(),
   // 🆕 Offre de la page OTO/tripwire générique ("oto"), cochable sur tous les
   // types de tunnel. Voir commentaire FunnelBrief (lib/funnels/types.ts).
   otoOfferName: z.string().max(200).optional(),
@@ -122,12 +152,20 @@ const briefSchema = z.object({
   postWebinarOfferName: z.string().max(200).optional(),
   postWebinarPrice: z.string().max(40).optional(),
   postWebinarPromise: z.string().max(300).optional(),
+  // 🆕 Prix barré de l'offre post-webinaire. Même piège que `anchorPrice`
+  // ci-dessus : exposé par le wizard, absent du schéma, donc jamais reçu.
+  // Lu par secondaryOfferOf → applySecondaryOfferPrice (lib/ai/generate.ts).
+  postWebinarAnchorPrice: z.string().max(40).optional(),
   // 🆕 Challenge — offre vendue à la CLÔTURE du challenge (pitch final).
   // Symétrique des champs post-webinaire ci-dessus : sans `challengeOfferName`,
   // la page « Pitch final » n'est pas générée.
   challengeOfferName: z.string().max(200).optional(),
   challengeOfferPrice: z.string().max(40).optional(),
   challengeOfferPromise: z.string().max(300).optional(),
+  // 🆕 Prix barré de l'offre de clôture. Même piège que les deux `anchorPrice`
+  // ci-dessus : lu par secondaryOfferOf (lib/ai/generate.ts) et exposé par le
+  // wizard, mais supprimé par ce schéma jusqu'ici.
+  challengeOfferAnchorPrice: z.string().max(40).optional(),
   targetAudience: z.string().min(1),
   mainPain: z.string().min(1),
   promise: z.string().min(1),

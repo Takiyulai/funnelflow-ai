@@ -56,6 +56,9 @@ import {
   filterSectionsByBlueprint,
 } from "@/lib/funnels/pageGenerator";
 import { normalizeFunnelKind } from "@/lib/funnels/kinds";
+// 🆕 Défaut + bornes de durée du challenge, partagés avec le wizard, le schéma
+// zod de la route et le prompt. Voir lib/funnels/challenge.ts.
+import { resolveChallengeDays } from "@/lib/funnels/challenge";
 // 🆕 B3 — Résolution du mode de réservation (natif / externe). Module PUR :
 // aucun accès base, importable côté serveur comme côté client.
 import { externalCalendarUrl, resolveBookingMode } from "@/lib/booking/mode";
@@ -6055,10 +6058,10 @@ function applyChallengeMultiDay(funnel: Funnel, brief: FunnelBrief): void {
   const dayIdx = funnel.pages.findIndex((p) => p.role === "challenge-day");
   if (dayIdx === -1) return;
 
-  // Borne ramenée de 30 à 14 : au-delà, le tunnel dépassait 16 pages, lourd à
-  // générer comme à éditer, pour un format de challenge qui n'existe pas dans
-  // la pratique.
-  const totalDays = Math.max(1, Math.min(14, Math.round(brief.challengeDays ?? 5)));
+  // Borne et défaut partagés (lib/funnels/challenge.ts) : le prompt annonce
+  // EXACTEMENT cette durée dans le copywriting. Deux littéraux divergents ici
+  // et là-bas faisaient mentir la landing sur le nombre de jours réel.
+  const totalDays = resolveChallengeDays(brief.challengeDays);
   const templatePage = funnel.pages[dayIdx];
 
   // 🆕 N3-a — Titre propre à chaque jour, saisi au wizard.
@@ -6148,7 +6151,7 @@ function applyChallengeEmailDeliveryNotice(funnel: Funnel, brief: FunnelBrief): 
   const SECTION_ID = "challenge-email-delivery";
   if (confirmation.sections?.some((s) => s.id === SECTION_ID)) return;
 
-  const days = Math.max(1, Math.min(14, Math.round(brief.challengeDays ?? 5)));
+  const days = resolveChallengeDays(brief.challengeDays);
   const lang = brief.language;
 
   const copy = {

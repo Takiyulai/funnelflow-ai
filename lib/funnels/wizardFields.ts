@@ -46,6 +46,41 @@ export function showsOtoOption(kind: FunnelKind | undefined): boolean {
 }
 
 /**
+ * Types dont l'étape « Format » affiche des CHAMPS COMPLÉMENTAIRES sous les
+ * cartes de type : date/mode du webinaire, calendrier de RDV, durée et titres
+ * du challenge.
+ *
+ * ⚠️ Ces types ne doivent PAS déclencher l'avance automatique au step suivant
+ * après la sélection. Le bloc de champs est rendu sur le MÊME step, juste sous
+ * les cartes : avancer le démonte avant que l'utilisateur ait pu le voir, et
+ * il repart avec les valeurs par défaut sans jamais savoir que le champ
+ * existait.
+ *
+ * Le symptôme a d'abord été corrigé pour « webinar » (l'utilisateur ne voyait
+ * jamais le champ date, donc aucun compte à rebours) par une exception écrite
+ * en dur ; il était strictement identique pour « challenge » (durée + titres
+ * des jours) et « booking » (mode natif/externe + page de confirmation).
+ *
+ * Effet de bord VOULU pour « booking » : le passage obligé par le bouton
+ * « Suivant » fait désormais traverser la validation `bookingExternalUrlMissing`,
+ * que l'avance automatique court-circuitait.
+ */
+const KINDS_WITH_FORMAT_STEP_FIELDS: FunnelKind[] = [
+  "webinar",
+  "booking",
+  "challenge",
+];
+
+/**
+ * L'étape « Format » affiche-t-elle des champs complémentaires pour ce type ?
+ * Si oui, la sélection du type ne doit pas avancer automatiquement.
+ */
+export function hasFormatStepFields(kind: FunnelKind | undefined): boolean {
+  if (!kind) return false;
+  return KINDS_WITH_FORMAT_STEP_FIELDS.includes(kind);
+}
+
+/**
  * Champs du brief à NETTOYER quand on bascule vers un type qui ne les affiche
  * plus.
  *

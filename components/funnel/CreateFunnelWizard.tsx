@@ -16,6 +16,7 @@ import { LogoUploader } from "@/components/funnel/LogoUploader";
 import { FunnelKindStep, WebinarDetailsFields } from "@/components/funnel/wizard/FunnelKindStep";
 // 🆕 B6 — Quels blocs du wizard afficher selon le type de tunnel.
 import {
+  hasFormatStepFields,
   PRICING_BLOCK_FIELDS,
   showsOtoOption,
   showsPricingBlock,
@@ -743,9 +744,15 @@ export function CreateFunnelWizard() {
     // 🆕 BUG CORRIGÉ : l'avance automatique au step suivant masquait
     // instantanément le bloc date/heure + urgence du webinaire (affiché sur ce
     // MÊME step, juste sous les cartes de type) — l'utilisateur n'avait donc
-    // jamais l'occasion de le voir ni de le remplir. Pour "webinar", on laisse
-    // l'utilisateur cliquer lui-même sur "Suivant" une fois les champs remplis.
-    if (kind === "webinar") return;
+    // jamais l'occasion de le voir ni de le remplir.
+    //
+    // 🆕 La même exception vaut pour TOUT type qui affiche des champs sous les
+    // cartes : « challenge » (durée + titres des jours) et « booking » (mode
+    // natif/externe + page de confirmation) souffraient exactement du même
+    // symptôme. La règle est désormais nommée dans lib/funnels/wizardFields.ts
+    // au lieu d'être une exception en dur, pour que le prochain type qui ajoute
+    // des champs ici ne réintroduise pas le bug.
+    if (hasFormatStepFields(kind)) return;
     setStep((v) => Math.min(v + 1, steps.length - 1));
   }
 

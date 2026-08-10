@@ -8,6 +8,14 @@ import { tWizard } from "@/lib/i18n/wizard";
 import { Field, Input } from "@/components/ui/Field";
 // 🆕 B3 — Module PUR (aucun import serveur), sûr côté client.
 import { isAbsoluteHttpUrl, resolveBookingMode } from "@/lib/booking/mode";
+// 🆕 Bornes/défaut de durée du challenge — source unique, partagée avec le
+// schéma zod de la route API et le générateur (module PUR, cf. son en-tête).
+import {
+  DEFAULT_CHALLENGE_DAYS,
+  MAX_CHALLENGE_DAYS,
+  MIN_CHALLENGE_DAYS,
+  resolveChallengeDays,
+} from "@/lib/funnels/challenge";
 
 /** 🆕 LOT 4/5 — Patch complet des champs webinaire (date, urgence, lien
  *  externe, durée d'expiration du replay, mode Live/Evergreen). */
@@ -38,10 +46,11 @@ export type ChallengeDetailsPatch = {
   challengeDayTitles?: string[];
 };
 
-/** Borne haute du nombre de jours. Ramenée de 30 à 14 : au-delà, le tunnel
- *  dépasse 16 pages — lourd à générer comme à éditer, pour un format qui
- *  n'existe pas dans la pratique. */
-export const MAX_CHALLENGE_DAYS = 14;
+/** Ré-export conservé : la borne était définie ici avant d'être centralisée
+ *  dans `lib/funnels/challenge.ts` (partagée avec la route API et le
+ *  générateur). Les imports existants qui pointent sur ce module continuent
+ *  de fonctionner. */
+export { MAX_CHALLENGE_DAYS };
 
 /** Durées courantes, proposées en raccourci. La saisie libre reste possible
  *  dans la limite ci-dessus. */
@@ -526,7 +535,9 @@ export function ChallengeDetailsFields({
   challengeDayTitles?: string[];
   onChange: (patch: ChallengeDetailsPatch) => void;
 }) {
-  const days = Math.max(1, Math.min(MAX_CHALLENGE_DAYS, challengeDays ?? 5));
+  // Même normalisation que le générateur et le prompt : un seul défaut, une
+  // seule borne. Voir `lib/funnels/challenge.ts`.
+  const days = resolveChallengeDays(challengeDays);
   const titles = challengeDayTitles ?? [];
 
   const L = {
@@ -613,17 +624,21 @@ export function ChallengeDetailsFields({
           </div>
           <Input
             type="number"
-            min={1}
+            min={MIN_CHALLENGE_DAYS}
             max={MAX_CHALLENGE_DAYS}
             value={days}
-            onChange={(e) =>
+            onChange={(e) => {
+              // Champ vidé → on retombe sur le défaut PARTAGÉ (et non sur la
+              // borne basse), pour que l'affichage corresponde à ce que le
+              // générateur produirait si l'utilisateur s'arrêtait là.
+              const raw = e.target.value.trim();
               onChange({
-                challengeDays: Math.max(
-                  1,
-                  Math.min(MAX_CHALLENGE_DAYS, Number(e.target.value) || 5),
-                ),
-              })
-            }
+                challengeDays:
+                  raw === ""
+                    ? DEFAULT_CHALLENGE_DAYS
+                    : resolveChallengeDays(Number(raw)),
+              });
+            }}
           />
         </div>
       </Field>

@@ -88,16 +88,15 @@ const LEAD_MAGNET: FunnelBlueprint = {
       role: "thankyou",
       slug: "merci",
       name: "Page de remerciement",
-      // next-steps → process, reminder → about
-      defaultSectionTypes: ["hero", "process", "about", "cta"],
-      allowedSectionTypes: [
-        "hero", "process", "about", "cta",
-        "testimonials", "video", "thank_you",
-      ],
+      // 🆕 PAGE MERCI ÉPURÉE — voir la note « Sobriété post-conversion » plus bas.
+      // next-steps → process. Ni "about" ni "testimonials" : le visiteur vient de
+      // convertir, il n'a plus à être convaincu.
+      defaultSectionTypes: ["hero", "process", "cta"],
+      allowedSectionTypes: ["hero", "process", "cta", "video", "thank_you"],
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 3,
+      minSections: 2,
       publiclyLinked: false,
     },
     // ⚠️ La page « Accès » / « Livraison » (role: "delivery") a été RETIRÉE du
@@ -134,6 +133,9 @@ const WEBINAR: FunnelBlueprint = {
       role: "confirmation",
       slug: "confirmation",
       name: "Page de confirmation",
+      // 🆕 Sobriété post-conversion : "program" est conservé — avant un webinaire
+      // ou un challenge, savoir ce qui sera couvert fait VENIR l'inscrit. C'est
+      // de l'information utile, pas du remplissage.
       defaultSectionTypes: ["hero", "process", "about", "program", "cta"],
       allowedSectionTypes: [
         "hero", "process", "about", "program", "cta",
@@ -142,7 +144,7 @@ const WEBINAR: FunnelBlueprint = {
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 4,
+      minSections: 3,
       publiclyLinked: false,
     },
     {
@@ -288,17 +290,19 @@ const DIGITAL_PRODUCT: FunnelBlueprint = {
       role: "thankyou",
       slug: "merci",
       name: "Page de remerciement",
-      // 🆕 Sous-étape D/F : PAS de "about" ici (déjà sur la page de vente) pour
-      // éviter la duplication inter-pages. next-steps → process, download → offer.
+      // Pas de "about" ici : il est déjà sur la page de vente (duplication
+      // inter-pages). next-steps → process, download → offer.
+      // 🆕 PAGE MERCI ÉPURÉE — voir « Sobriété post-conversion ». "offer" est
+      // conservé : il porte ici le LIEN DE TÉLÉCHARGEMENT, pas une relance.
       defaultSectionTypes: ["hero", "process", "offer", "cta"],
       allowedSectionTypes: [
         "hero", "process", "offer", "cta",
-        "video", "testimonials", "thank_you",
+        "video", "thank_you",
       ],
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 3,
+      minSections: 2,
       publiclyLinked: false,
     },
     // ⚠️ La page « Accès au produit » (role: "access") a été RETIRÉE du
@@ -379,15 +383,18 @@ const BOOKING: FunnelBlueprint = {
       role: "confirmation",
       slug: "confirmation",
       name: "Confirmation du rendez-vous",
+      // 🆕 Sobriété post-conversion : plus de "testimonials". "about" est
+      // conservé — sur une confirmation de RDV ou de candidature, il dit QUI le
+      // prospect va rencontrer, ce qui est une information, pas une relance.
       defaultSectionTypes: ["hero", "process", "about", "cta"],
       allowedSectionTypes: [
         "hero", "process", "about", "cta",
-        "video", "testimonials", "thank_you",
+        "video", "thank_you",
       ],
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 4,
+      minSections: 3,
       publiclyLinked: false,
     },
   ],
@@ -459,15 +466,18 @@ const COACHING_HIGH_TICKET: FunnelBlueprint = {
       role: "confirmation",
       slug: "merci",
       name: "Candidature reçue",
+      // 🆕 Sobriété post-conversion : plus de "testimonials". "about" est
+      // conservé — sur une confirmation de RDV ou de candidature, il dit QUI le
+      // prospect va rencontrer, ce qui est une information, pas une relance.
       defaultSectionTypes: ["hero", "process", "about", "cta"],
       allowedSectionTypes: [
         "hero", "process", "about", "cta",
-        "video", "testimonials", "thank_you",
+        "video", "thank_you",
       ],
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 4,
+      minSections: 3,
       publiclyLinked: false,
     },
     {
@@ -513,6 +523,9 @@ const CHALLENGE: FunnelBlueprint = {
       role: "confirmation",
       slug: "confirmation",
       name: "Confirmation d'inscription",
+      // 🆕 Sobriété post-conversion : "program" est conservé — avant un webinaire
+      // ou un challenge, savoir ce qui sera couvert fait VENIR l'inscrit. C'est
+      // de l'information utile, pas du remplissage.
       defaultSectionTypes: ["hero", "process", "about", "program", "cta"],
       allowedSectionTypes: [
         "hero", "process", "about", "program", "cta",
@@ -521,7 +534,7 @@ const CHALLENGE: FunnelBlueprint = {
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 4,
+      minSections: 3,
       publiclyLinked: false,
     },
     {
@@ -603,15 +616,13 @@ const THANK_YOU_LEGACY: FunnelBlueprint = {
       role: "thankyou",
       slug: "merci",
       name: "Page de remerciement",
-      defaultSectionTypes: ["hero", "process", "about", "cta"],
-      allowedSectionTypes: [
-        "hero", "process", "about", "cta",
-        "testimonials", "video", "thank_you",
-      ],
+      // 🆕 PAGE MERCI ÉPURÉE — aligné sur les blueprints actifs.
+      defaultSectionTypes: ["hero", "process", "cta"],
+      allowedSectionTypes: ["hero", "process", "cta", "video", "thank_you"],
       copywritingFramework: "REASSURANCE",
       secondaryFrameworks: ["NEXT-STEPS"],
       heroMediaPolicy: "single-only",
-      minSections: 3,
+      minSections: 2,
       publiclyLinked: false,
     },
   ],
@@ -717,6 +728,37 @@ export function getPageBlueprint(
 ): PageBlueprint | undefined {
   return getFunnelBlueprint(kind).pages.find((p) => p.role === role);
 }
+
+/* ------------------------------------------------------------------ */
+/*  🆕 SOBRIÉTÉ POST-CONVERSION — pourquoi les pages « merci » sont nues */
+/* ------------------------------------------------------------------ */
+//
+// SYMPTÔME : les pages de remerciement générées arrivaient garnies de
+// témoignages, d'une présentation de l'auteur et d'un copy générique.
+//
+// CAUSE : ce fichier, et lui seul. `allowedSectionTypes` listait
+// explicitement "testimonials" sur les pages merci/confirmation, et
+// `minSections` — lu uniquement par lib/ai/prompts.ts, où il devient
+// « minimum N sections riches » — en réclamait 3 à 4. Le modèle faisait donc
+// exactement ce qu'on lui demandait : remplir. Aucun filtre en aval n'était
+// nécessaire ; il fallait cesser de commander le remplissage.
+//
+// PRINCIPE : après conversion, le visiteur n'a plus à être convaincu. Un
+// témoignage, une garantie ou un traitement d'objection à ce stade ne sert
+// plus la vente — il retarde l'action utile et fait douter. Ne restent que :
+// la confirmation (hero), la marche à suivre (process), et l'action ou le
+// canal à rejoindre (cta). Le reste est du bruit.
+//
+// CE QUI RESTE AUTORISÉ, ET POURQUOI :
+//   • "offer"   sur une page merci de produit → porte le lien de
+//               téléchargement, pas une relance commerciale ;
+//   • "about"   sur une confirmation de RDV ou de candidature → dit QUI le
+//               prospect va rencontrer ;
+//   • "program" sur une confirmation de webinaire ou de challenge → savoir ce
+//               qui sera couvert fait effectivement VENIR l'inscrit.
+//
+// PORTÉE : rôles post-conversion uniquement. Les pages de vente gardent tout
+// leur arsenal — c'est là qu'il sert.
 
 export function getAllowedSectionTypes(
   kind: FunnelKind,
