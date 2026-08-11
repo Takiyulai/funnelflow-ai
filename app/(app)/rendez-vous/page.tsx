@@ -188,13 +188,18 @@ export default function RendezVousPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <header className="mb-5 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <CalendarClock size={22} /> Rendez-vous
+      {/* 🆕 RESPONSIVE : padding réduit sous 640 px — `px-4` fixe rognait déjà
+          32 px sur un écran de 360 px de large. */}
+      <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-8">
+        {/* 🆕 Le header était `flex items-center justify-between` sans repli :
+            sur mobile, le titre et le bouton se disputaient la même ligne et le
+            bouton finissait tronqué. Il passe dessous sous 640 px. */}
+        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="flex items-center gap-2 text-xl font-bold text-ink sm:text-2xl">
+              <CalendarClock size={22} className="shrink-0" /> Rendez-vous
             </h1>
-            <p className="mt-1 text-sm opacity-60">
+            <p className="mt-1 text-sm text-muted">
               Partage un lien, tes prospects réservent un créneau libre.
             </p>
           </div>
@@ -202,14 +207,21 @@ export default function RendezVousPage() {
             type="button"
             onClick={createType}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-400 px-3 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-violet-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50 sm:self-auto"
           >
             <Plus size={15} /> Nouveau type
           </button>
         </header>
 
-        {/* Onglets — même motif que le module Emails. */}
-        <div className="mb-5 inline-flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1">
+        {/* Onglets — même motif que le module Emails.
+            🆕 THÈME : les couleurs étaient codées en dur pour un fond sombre
+            (`text-white`, `text-white/60`, `bg-white/5`). En mode CLAIR, les
+            onglets inactifs devenaient blanc sur blanc — donc invisibles, comme
+            signalé. On passe aux jetons `text-ink` / `text-muted` /
+            `border-line`, qui basculent avec le thème.
+            🆕 RESPONSIVE : `flex` au lieu de `inline-flex w-fit`, pour que la
+            barre occupe la largeur disponible et défile proprement. */}
+        <div className="mb-5 flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line bg-canvas p-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -217,18 +229,19 @@ export default function RendezVousPage() {
               onClick={() => selectTab(t.id)}
               aria-current={tab === t.id ? "page" : undefined}
               className={
-                // ⚠️ L'onglet actif était `bg-white text-zinc-950` : une pastille
-                // blanche à texte noir au milieu d'une interface sombre. Le
-                // contraste est techniquement bon, mais l'inversion attire l'œil
-                // sur le fond plutôt que sur le libellé, et le noir sur blanc
-                // paraît plus terne que le blanc pur des onglets inactifs —
-                // l'onglet sélectionné semblait donc MOINS lisible que les autres.
-                // On garde désormais le texte clair et on signale la sélection
-                // par la couleur de marque et un liseré.
-                "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition " +
+                // L'onglet actif est signalé par la couleur de marque et un
+                // liseré, pas par une inversion de fond : une pastille blanche
+                // à texte noir attirait l'œil sur le fond plutôt que sur le
+                // libellé.
+                "shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 " +
+                // ⚠️ Pas de variante `dark:` ici : le thème sombre est scopé par
+                // la classe `.ff-theme-dark` sur le wrapper d'AppShell, et
+                // `darkMode` n'est pas configuré dans tailwind.config.ts — une
+                // classe `dark:*` ne s'appliquerait jamais. `text-ink` bascule
+                // tout seul avec la rampe.
                 (tab === t.id
-                  ? "bg-violet-400/20 text-white ring-1 ring-inset ring-violet-400/60 shadow-sm"
-                  : "text-white/60 hover:text-white hover:bg-white/5")
+                  ? "bg-violet-500/15 text-ink ring-1 ring-inset ring-violet-500/50 shadow-sm"
+                  : "text-muted hover:bg-surface hover:text-ink")
               }
             >
               {t.label}
@@ -258,8 +271,8 @@ export default function RendezVousPage() {
                   className={
                     "group flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition " +
                     (selected
-                      ? "border-violet-400/60 bg-violet-400/10 shadow-lg shadow-violet-500/10 ring-1 ring-inset ring-violet-400/30"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]")
+                      ? "border-violet-500/60 bg-violet-500/10 shadow-lg shadow-violet-500/10 ring-1 ring-inset ring-violet-500/30"
+                      : "border-line bg-surface hover:border-violet-500/40 hover:bg-canvas")
                   }
                 >
                   <span
@@ -268,10 +281,10 @@ export default function RendezVousPage() {
                     style={{ backgroundColor: dot }}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-white">
+                    <span className="block truncate text-sm font-semibold text-ink">
                       {t.name}
                     </span>
-                    <span className="mt-0.5 block text-xs text-white/50">
+                    <span className="mt-0.5 block text-xs text-muted">
                       {t.durationMin} min
                     </span>
                   </span>
@@ -285,11 +298,13 @@ export default function RendezVousPage() {
 
         {needsActiveType && (
           <>
-            {loading && <p className="py-10 text-center text-sm opacity-60">Chargement…</p>}
+            {loading && (
+              <p className="py-10 text-center text-sm text-muted">Chargement…</p>
+            )}
 
             {!loading && types.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center">
-                <p className="text-sm opacity-70">
+              <div className="rounded-2xl border border-dashed border-line p-6 text-center sm:p-10">
+                <p className="text-sm text-muted">
                   Aucun type de rendez-vous. Crées-en un pour obtenir ton lien de réservation.
                 </p>
               </div>

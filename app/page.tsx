@@ -9,6 +9,7 @@ import {
   Target, Wand2, FileCode2, Gauge, MousePointerClick, Settings2,
   Send, LineChart, Menu, X, Search, PenTool, Handshake,
 } from "lucide-react";
+import { ChatWidget } from "@/components/chatbot/ChatWidget";
 
 
 // ── Scroll animation wrapper ──────────────────────────────────────────────────
@@ -1795,6 +1796,15 @@ export default function LandingPage() {
           <p className="ff-body" style={{ fontSize: 12.5, color: "rgba(255,255,255,0.3)" }}>© 2026 AutoFunnel AI</p>
         </div>
       </footer>
+
+      {/* 🆕 CHATBOT SUR LA LANDING.
+          Il n'était monté que dans AppShell, donc réservé aux utilisateurs
+          DÉJÀ connectés — c'est-à-dire à ceux qui ont le moins de questions.
+          Un visiteur qui hésite avant de créer un compte n'avait aucun moyen
+          de demander si l'outil répond à son besoin.
+          Le widget est autonome (état interne, appel à /api/chat) : il n'a
+          besoin ni de session ni de contexte d'application. */}
+      <ChatWidget />
     </main>
   );
 }

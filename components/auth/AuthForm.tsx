@@ -45,6 +45,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  /**
+   * 🆕 ÉCRAN NOIR APRÈS CONNEXION.
+   *
+   * `router.push()` ne bloque pas : le `finally` remettait `isLoading` à false
+   * dans la foulée, alors que la navigation vers /dashboard commençait à peine.
+   * Le formulaire redevenait donc inerte — bouton normal, aucun indicateur —
+   * pendant tout le temps de chargement du Server Component et de ses données.
+   * L'utilisateur voyait l'écran s'assombrir sans comprendre ce qui se passait,
+   * et pouvait re-cliquer.
+   *
+   * Cet état reste VRAI jusqu'au démontage du composant par la navigation :
+   * c'est la seule façon de couvrir un délai dont on ne contrôle pas la fin.
+   */
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,8 +71,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
 
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) setMessage(friendlyAuthMessage(error.message));
-        else router.push(postAuthDestination());
+        if (error) {
+          setMessage(friendlyAuthMessage(error.message));
+        } else {
+          // Posé AVANT le push : le `finally` ne doit pas pouvoir rendre la
+          // main à l'utilisateur pendant que la navigation se prépare.
+          setIsRedirecting(true);
+          router.push(postAuthDestination());
+        }
         return;
       }
 
@@ -68,8 +88,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
           password,
           options: { data: { name } },
         });
-        if (error) setMessage(friendlyAuthMessage(error.message));
-        else router.push(postAuthDestination());
+        if (error) {
+          setMessage(friendlyAuthMessage(error.message));
+        } else {
+          setIsRedirecting(true);
+          router.push(postAuthDestination());
+        }
         return;
       }
 
@@ -122,12 +146,37 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
 
   return (
     <div className="w-full">
+      {/* 🆕 Voile de transition — comble le vide entre l'authentification
+          réussie et l'affichage du tableau de bord. Sans lui, l'écran
+          s'assombrissait sans explication pendant le chargement du Server
+          Component, et rien n'empêchait un second clic. */}
+      {isRedirecting && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 px-6 text-center"
+          style={{ background: "rgba(11, 18, 32, 0.92)", backdropFilter: "blur(3px)" }}
+        >
+          <span
+            aria-hidden
+            className="h-9 w-9 animate-spin rounded-full border-2 border-white/25 motion-reduce:animate-none"
+            style={{ borderTopColor: "#C7A436" }}
+          />
+          <div>
+            <p className="text-sm font-bold text-white">Connexion réussie</p>
+            <p className="mt-1 text-xs text-white/60">
+              Ouverture de ton espace…
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Bouton Google - uniquement pour signup et login */}
       {!isForgot && (
         <>
           <button
             onClick={signInWithGoogle}
-            disabled={isLoading}
+            disabled={isLoading || isRedirecting}
             className="flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
             style={{
               background: "#fff",
@@ -265,7 +314,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
         {/* Bouton principal */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || isRedirecting}
           className="w-full rounded-xl py-2.5 font-bold transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
           style={{
             background: "#C7A436",

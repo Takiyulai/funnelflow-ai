@@ -304,25 +304,32 @@ export function ContactsTable({
 
       <Card className="p-0 overflow-hidden">
         {/* Filtres (navigation GET native) */}
+        {/* 🆕 RESPONSIVE : les quatre <select> étaient sans contrainte de
+            largeur dans un flex-wrap. Un <select> ne rétrécit PAS sous la
+            largeur de sa plus longue option — un nom de tunnel un peu long
+            poussait donc la barre hors de l'écran sur mobile. Ils passent en
+            pleine largeur sous 640 px, largeur naturelle au-delà.
+            🆕 THÈME : `bg-[#F8F9FB]` et `bg-white` étaient codés en dur et
+            restaient clairs en mode sombre. */}
         <form
           method="GET"
-          className="flex flex-wrap items-center gap-3 p-4 border-b border-line bg-[#F8F9FB]"
+          className="flex flex-wrap items-center gap-2 p-3 sm:gap-3 sm:p-4 border-b border-line bg-canvas"
         >
-          <div className="flex-1 relative min-w-[200px]">
+          <div className="relative w-full min-w-0 sm:flex-1 sm:min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               type="text"
               name="q"
               defaultValue={filters.q}
               placeholder="Rechercher (nom, email, téléphone)…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-line bg-surface text-ink text-sm focus:outline-none focus:border-[#08498D]"
             />
           </div>
           {funnels.length > 0 && (
             <select
               name="funnel"
               defaultValue={filters.funnel ?? ""}
-              className="px-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+              className="w-full min-w-0 sm:w-auto px-3 py-2 rounded-lg border border-line bg-surface text-ink text-sm focus:outline-none focus:border-[#08498D]"
             >
               <option value="">Tous tunnels</option>
               {funnels.map((f) => (
@@ -334,7 +341,7 @@ export function ContactsTable({
             <select
               name="list"
               defaultValue={filters.list ?? ""}
-              className="px-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+              className="w-full min-w-0 sm:w-auto px-3 py-2 rounded-lg border border-line bg-surface text-ink text-sm focus:outline-none focus:border-[#08498D]"
             >
               <option value="">Toutes les listes</option>
               {lists.map((l) => (
@@ -345,7 +352,7 @@ export function ContactsTable({
           <select
             name="tag"
             defaultValue={filters.tag}
-            className="px-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+            className="w-full min-w-0 sm:w-auto px-3 py-2 rounded-lg border border-line bg-surface text-ink text-sm focus:outline-none focus:border-[#08498D]"
           >
             <option value="">Tous les tags</option>
             {tags.map((t) => (
@@ -355,7 +362,7 @@ export function ContactsTable({
           <select
             name="status"
             defaultValue={filters.status}
-            className="px-3 py-2 rounded-lg border border-line bg-white text-sm focus:outline-none focus:border-[#08498D]"
+            className="w-full min-w-0 sm:w-auto px-3 py-2 rounded-lg border border-line bg-surface text-ink text-sm focus:outline-none focus:border-[#08498D]"
           >
             <option value="">Tous statuts</option>
             {(Object.keys(STATUS_LABEL) as LeadStatus[]).map((s) => (

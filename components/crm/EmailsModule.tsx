@@ -50,10 +50,15 @@ export function EmailsModule({
     <button
       type="button"
       onClick={() => setTab(value)}
-      className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+      // 🆕 `shrink-0` + `whitespace-nowrap` : sans eux, les onglets se
+      // comprimaient et leur libellé passait à la ligne dans une barre déjà
+      // trop étroite.
+      // ⚠️ `bg-ink text-white` : en mode sombre, `ink` devient CLAIR et le
+      // texte blanc disparaît. `bg-inverse text-inverse-ink` bascule en paire.
+      className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
         tab === value
-          ? "bg-ink text-white"
-          : "text-muted hover:bg-black/5 hover:text-ink"
+          ? "bg-inverse text-inverse-ink"
+          : "text-muted hover:bg-canvas hover:text-ink"
       }`}
     >
       <Icon size={15} />
@@ -73,7 +78,13 @@ export function EmailsModule({
       {/* 🆕 Bandeau de statistiques (calculées automatiquement). */}
       <EmailStatsBand stats={emailStats} />
 
-      <div className="inline-flex w-fit gap-1 rounded-xl border border-line/60 bg-white/50 p-1">
+      {/* 🆕 RESPONSIVE : `inline-flex w-fit` laissait la barre prendre la
+          largeur de ses trois libellés (« Newsletter / Diffusions »,
+          « Séquences », « Expéditeur ») et déborder de l'écran sur mobile,
+          sans aucun moyen d'atteindre le troisième onglet. Elle défile
+          désormais horizontalement.
+          🆕 THÈME : `bg-white/50` restait clair en mode sombre. */}
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-line/60 bg-canvas p-1">
         {tabBtn("newsletter", "Newsletter / Diffusions", Mail)}
         {tabBtn("sequences", "Séquences", Workflow)}
         {tabBtn("expediteur", "Expéditeur", AtSign)}

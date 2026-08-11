@@ -60,16 +60,30 @@ export function HostBookingList() {
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">Mes rendez-vous</h2>
-        <div className="flex gap-1 rounded-lg border border-white/10 p-0.5 text-xs">
+    // 🆕 THÈME : `bg-white/5` + `border-white/10` supposaient un fond sombre.
+    // En mode clair, la carte devenait blanche sur blanc et le bloc de
+    // réservation (`bg-black/20`, plus bas) virait au gris illisible.
+    // Les jetons `bg-surface` / `border-line` / `text-ink` basculent seuls.
+    // 🆕 RESPONSIVE : padding réduit sous 640 px.
+    <section className="rounded-2xl border border-line bg-surface p-3 sm:p-5">
+      {/* L'en-tête se replie sous 640 px : titre et sélecteur ne tiennent pas
+          sur une seule ligne en 360 px de large. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+          Mes rendez-vous
+        </h2>
+        <div className="flex shrink-0 gap-1 self-start rounded-lg border border-line p-0.5 text-xs sm:self-auto">
           {(["upcoming", "past"] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setScope(s)}
-              className={"rounded-md px-2.5 py-1 " + (scope === s ? "bg-white/15 font-semibold" : "opacity-60")}
+              className={
+                "rounded-md px-2.5 py-1 transition " +
+                (scope === s
+                  ? "bg-canvas font-semibold text-ink"
+                  : "text-muted hover:text-ink")
+              }
             >
               {s === "upcoming" ? "À venir" : "Passés"}
             </button>
@@ -77,10 +91,10 @@ export function HostBookingList() {
         </div>
       </div>
 
-      {loading && <p className="py-6 text-center text-sm opacity-50">Chargement…</p>}
+      {loading && <p className="py-6 text-center text-sm text-muted">Chargement…</p>}
 
       {!loading && rows.length === 0 && (
-        <p className="py-6 text-center text-sm opacity-50">
+        <p className="py-6 text-center text-sm text-muted">
           {scope === "upcoming" ? "Aucun rendez-vous à venir." : "Aucun rendez-vous passé."}
         </p>
       )}
@@ -92,8 +106,9 @@ export function HostBookingList() {
             <li
               key={b.id}
               className={
-                "rounded-xl border border-white/10 bg-black/20 p-3 text-sm " +
-                (isCancelled ? "opacity-45" : "")
+                // `bg-black/20` donnait un bloc gris illisible en mode clair.
+                "rounded-xl border border-line bg-canvas p-3 text-sm text-ink " +
+                (isCancelled ? "opacity-50" : "")
               }
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -101,9 +116,12 @@ export function HostBookingList() {
                   <p className={"font-semibold " + (isCancelled ? "line-through" : "")}>
                     {b.whenHost}
                   </p>
-                  <p className="mt-0.5 opacity-70">
+                  <p className="mt-0.5 break-words text-muted">
                     {b.eventName} · {b.visitorName}{" "}
-                    <a href={`mailto:${b.visitorEmail}`} className="underline underline-offset-2">
+                    <a
+                      href={`mailto:${b.visitorEmail}`}
+                      className="break-all underline underline-offset-2"
+                    >
                       {b.visitorEmail}
                     </a>
                     {b.visitorPhone ? ` · ${b.visitorPhone}` : ""}
@@ -111,9 +129,11 @@ export function HostBookingList() {
                   {/* Rappel de l'heure vue par le participant : c'est ce qu'il
                       a noté dans son agenda, et donc ce dont il parlera. */}
                   {b.visitorTimeLabel && !isCancelled && (
-                    <p className="mt-0.5 text-xs opacity-50">{b.visitorTimeLabel}</p>
+                    <p className="mt-0.5 text-xs text-muted">{b.visitorTimeLabel}</p>
                   )}
-                  {b.note && <p className="mt-1 text-xs opacity-60">« {b.note} »</p>}
+                  {b.note && (
+                    <p className="mt-1 break-words text-xs text-muted">« {b.note} »</p>
+                  )}
                 </div>
 
                 {!isCancelled && scope === "upcoming" && (
@@ -123,7 +143,7 @@ export function HostBookingList() {
                         type="button"
                         onClick={() => cancel(b.manageToken)}
                         disabled={cancelling === b.manageToken}
-                        className="rounded-lg bg-red-400 px-2.5 py-1 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                        className="rounded-lg bg-red-500 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-red-600 disabled:opacity-50"
                       >
                         {cancelling === b.manageToken ? (
                           <Loader2 size={13} className="animate-spin" />

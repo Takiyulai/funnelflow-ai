@@ -75,7 +75,9 @@ export function EmailStatsBand({ stats }: { stats: EmailStats }) {
       {tiles.map((t) => (
         <div
           key={t.label}
-          className="rounded-xl border border-line bg-white p-3.5 shadow-sm"
+          // `bg-white` en dur restait blanc en mode sombre — texte `text-ink`
+          // clair sur fond blanc, donc illisible. `bg-surface` bascule.
+          className="rounded-xl border border-line bg-surface p-3 shadow-sm sm:p-3.5"
         >
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted">

@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Users2, Flag, Loader2, ArrowRight, ExternalLink, Heart } from "lucide-react";
+import { Sparkles, Users2, Flag, Loader2, ArrowRight, ExternalLink, Heart, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import { queueCelebration } from "@/components/ui/Celebration";
@@ -94,6 +94,10 @@ export default function GaleriePage() {
   // 🆕 Likes : ids likés par l'utilisateur + compteurs (init depuis la liste).
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  // 🆕 MODÉRATION — Affichage seul. Le droit réel est revérifié côté serveur à
+  // chaque suppression : forcer ce booléen ne donne accès à rien.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -110,7 +114,47 @@ export default function GaleriePage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setLiked(new Set((d?.likedIds as string[]) ?? [])))
       .catch(() => {});
+    // Commandes de modération.
+    fetch("/api/admin/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsAdmin(d?.isAdmin === true))
+      .catch(() => {});
   }, []);
+
+  /** 🆕 Retire définitivement un modèle de la galerie (admins). */
+  async function removeTemplate(id: string, name: string) {
+    if (
+      !window.confirm(
+        `Supprimer « ${name} » de la galerie ?\n\n` +
+          `Le modèle ne sera plus visible ni utilisable par personne. ` +
+          `Cette action est définitive.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(id);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/admin/templates/${id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setNotice(
+          json?.error === "forbidden"
+            ? "Action réservée aux administrateurs."
+            : "Suppression impossible. Réessaie.",
+        );
+        return;
+      }
+      // Retrait local immédiat : recharger toute la galerie pour une ligne
+      // ferait clignoter la grille entière.
+      setTemplates((list) => (list ?? []).filter((t) => t.id !== id));
+      setNotice(`« ${name} » a été retiré de la galerie.`);
+    } catch {
+      setNotice("Erreur réseau. Réessaie.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function toggleLike(id: string) {
     // Optimiste : on bascule tout de suite, on réconcilie avec la réponse.
@@ -313,6 +357,26 @@ export default function GaleriePage() {
                   >
                     <Flag size={14} />
                   </button>
+
+                  {/* 🆕 MODÉRATION — Retrait définitif, administrateurs seuls.
+                      Distinct du signalement : celui-ci remonte un problème,
+                      celui-là tranche. Visuellement séparé (rouge plein) parce
+                      qu'il est irréversible. */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => removeTemplate(t.id, t.name)}
+                      disabled={deletingId === t.id}
+                      title="Supprimer ce modèle de la galerie (admin)"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-300 bg-red-50 text-red-600 transition hover:bg-red-100 disabled:opacity-40"
+                    >
+                      {deletingId === t.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
