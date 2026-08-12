@@ -19,6 +19,7 @@ import {
   shortZoneLabel,
 } from "@/lib/booking/timezones";
 import { resolveBookingColor } from "@/lib/booking/colors";
+import { ensureEmailField, resolveBookingFields } from "@/lib/booking/formFields";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -104,6 +105,13 @@ export async function GET(
       hostTitle: eventType.hostTitle ?? null,
       hostAvatarUrl: eventType.hostAvatarUrl ?? null,
       hostBio: eventType.hostBio ?? null,
+
+      // 🆕 Champs du formulaire, RÉSOLUS côté serveur : le widget n'a pas à
+      // connaître la règle de repli, et un type de RDV sans personnalisation
+      // reçoit la liste par défaut au lieu de `null` à interpréter.
+      // `ensureEmailField` garantit qu'une adresse est toujours demandée —
+      // sans elle, ni confirmation ni annulation ne sont possibles.
+      formFields: ensureEmailField(resolveBookingFields(eventType)),
     },
     visitorTimezone,
     visitorTimezoneLabel: shortZoneLabel(visitorTimezone),

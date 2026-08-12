@@ -4,6 +4,8 @@
 // Extraits de l'ancienne page monolithique pour que chaque onglet soit un
 // composant autonome et que la page ne soit plus qu'un routeur.
 
+import type { FormFieldItem } from "@/lib/funnels/types";
+
 export type Rule = { weekday: number; startMin: number; endMin: number };
 
 export type Exception = {
@@ -41,6 +43,9 @@ export type EventType = {
   hostTitle?: string | null;
   hostAvatarUrl?: string | null;
   hostBio?: string | null;
+
+  /** 🆕 Champs du formulaire de réservation. Null/vide → champs par défaut. */
+  formFields?: FormFieldItem[] | null;
 
   active: boolean;
   availability: Rule[];

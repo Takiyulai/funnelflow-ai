@@ -2,6 +2,9 @@
 // Types partagés du module « Calendrier de RDV natif ».
 
 import type { TimeZoneId } from "./timezones";
+// Le module RDV réutilise le type de champ de formulaire du reste de
+// l'application : un seul modèle de champ, donc un seul éditeur (PopupFieldsEditor).
+import type { FormFieldItem } from "@/lib/funnels/types";
 
 export type LocationKind = "visio" | "phone" | "in_person" | "custom";
 export type BookingStatus = "confirmed" | "cancelled" | "no_show" | "completed";
@@ -39,10 +42,38 @@ export type BookingEventType = {
   hostAvatarUrl?: string | null;
   hostBio?: string | null;
 
+  /**
+   * 🆕 Champs du formulaire de réservation, définis par l'hôte.
+   *
+   * Le formulaire public était figé : prénom, email, téléphone, note. Un
+   * coach qui a besoin du budget, du niveau ou du lien LinkedIn devait le
+   * demander après coup, par email — c'est-à-dire perdre la moitié des
+   * réponses.
+   *
+   * Absent ou vide → champs par défaut (voir DEFAULT_BOOKING_FIELDS). Le
+   * comportement des types de RDV existants est donc inchangé.
+   *
+   * ⚠️ Un champ de type "email" reste OBLIGATOIRE dans la liste : sans
+   * adresse, ni la confirmation ni le fichier agenda ne peuvent partir.
+   */
+  formFields?: FormFieldItem[] | null;
+
   language: string;
   active: boolean;
   funnelId?: string | null;
 };
+
+/**
+ * 🆕 Champs demandés quand l'hôte n'a rien personnalisé. Reproduit à
+ * l'identique le formulaire historique, pour que rien ne change sur les types
+ * de rendez-vous déjà créés.
+ */
+export const DEFAULT_BOOKING_FIELDS: FormFieldItem[] = [
+  { name: "name", type: "text", label: "Prénom et nom", placeholder: "Votre nom", required: true, width: "full" },
+  { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "full" },
+  { name: "phone", type: "tel", label: "Téléphone", placeholder: "Optionnel", required: false, width: "full" },
+  { name: "note", type: "textarea", label: "Un mot sur votre demande", placeholder: "Optionnel", required: false, width: "full" },
+];
 
 /**
  * Plage récurrente hebdomadaire, en HEURES LOCALES DE L'HÔTE.
@@ -103,6 +134,12 @@ export type BookingRecord = {
   visitorEmail: string;
   visitorPhone?: string | null;
   note?: string | null;
+  /**
+   * 🆕 Réponses aux champs personnalisés, indexées par `name` de champ.
+   * Ne contient QUE les champs hors nom/email/téléphone/note, qui ont déjà
+   * leurs colonnes dédiées — pas de donnée en double.
+   */
+  answers?: Record<string, string | boolean> | null;
   status: BookingStatus;
   manageToken: string;
 };

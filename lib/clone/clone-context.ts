@@ -52,9 +52,24 @@ function extractRawHtml(body: string | undefined): string | null {
   return body.slice(idx + RAW_HTML_BODY_MARKER.length);
 }
 
-/** La section est-elle un clone exploitable ? */
+/**
+ * La section provient-elle d'un clonage ?
+ *
+ * ⚠️ Critère volontairement LARGE : le type suffit, sans exiger que le body
+ * porte le marqueur `[[RAW_HTML]]`.
+ *
+ * C'est une fonction de PROTECTION : elle décide si l'on a le droit d'écraser
+ * une page. Exiger en plus un body exploitable créerait un angle mort — une
+ * section `raw-html` au body inattendu (troncature, migration, clone partiel)
+ * passerait pour « non clonée » et redeviendrait écrasable. Le sur-classement
+ * est sans risque : au pire, une section vide est protégée à tort.
+ *
+ * Pour savoir si le HTML est réellement EXPLOITABLE (réécriture du copy,
+ * extraction de contexte), c'est `extractCloneContext` qui tranche — elle
+ * renvoie null quand il n'y a rien à lire.
+ */
 export function isClonedSection(section: FunnelSection): boolean {
-  return section.type === "raw-html" && !!extractRawHtml(section.body);
+  return section.type === "raw-html";
 }
 
 /**

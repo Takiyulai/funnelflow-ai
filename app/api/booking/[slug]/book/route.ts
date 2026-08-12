@@ -27,6 +27,12 @@ import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/booking/timezones";
 import { sendBookingEmails } from "@/lib/booking/emails";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import {
+  ensureEmailField,
+  resolveBookingFields,
+  validateBookingAnswers,
+  type BookingFormValues,
+} from "@/lib/booking/formFields";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,8 +40,18 @@ export const runtime = "nodejs";
 const schema = z.object({
   startsAt: z.string().min(10),
   timezone: z.string().optional(),
-  name: z.string().min(1).max(120),
-  email: z.string().email().max(200),
+
+  // 🆕 Formulaire piloté par la configuration de l'hôte : on reçoit un sac de
+  // valeurs indexées par nom de champ, dont on ne connaît pas la forme à
+  // l'avance. La répartition (nom/email/téléphone/note vs réponses libres) et
+  // le contrôle des champs obligatoires se font ensuite, à partir de la
+  // définition ENREGISTRÉE — jamais à partir de ce que le client envoie.
+  values: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
+
+  // Anciens champs, conservés pour compatibilité : un onglet ouvert avant le
+  // déploiement, ou une intégration tierce, continue de fonctionner.
+  name: z.string().max(120).optional(),
+  email: z.string().email().max(200).optional(),
   phone: z.string().max(40).optional(),
   note: z.string().max(1000).optional(),
 });
@@ -81,6 +97,36 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   }
   const body = parsed.data;
 
+  // 🆕 Validation du formulaire à partir de la définition ENREGISTRÉE du type
+  // de rendez-vous. C'est la seule barrière qui compte : la validation du
+  // widget est un confort, un POST direct l'ignore.
+  //
+  // Les anciens champs à plat sont repliés dans `values` quand `values` est
+  // absent, pour qu'un onglet ouvert avant le déploiement continue de marcher.
+  const submittedValues: BookingFormValues =
+    body.values ?? {
+      name: body.name ?? "",
+      email: body.email ?? "",
+      phone: body.phone ?? "",
+      note: body.note ?? "",
+    };
+
+  const fields = ensureEmailField(resolveBookingFields(eventType));
+  const form = validateBookingAnswers(fields, submittedValues);
+  if (!form.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "invalid_input",
+        message:
+          form.missing.length === 1
+            ? `Le champ « ${form.missing[0]} » est obligatoire.`
+            : `Champs obligatoires manquants : ${form.missing.join(", ")}.`,
+      },
+      { status: 400 },
+    );
+  }
+
   const startMs = Date.parse(body.startsAt);
   if (!Number.isFinite(startMs)) {
     return NextResponse.json(
@@ -123,10 +169,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const leadId = await upsertLeadForBooking({
     userId: eventType.userId,
     funnelId: eventType.funnelId,
-    email: body.email,
-    name: body.name,
-    phone: body.phone,
+    email: form.visitorEmail,
+    name: form.visitorName,
+    phone: form.visitorPhone ?? undefined,
     language: eventType.language,
+    // 🆕 Les réponses aux champs personnalisés remontent dans le CRM. Un RDV
+    // pris est un prospect qualifié : laisser « budget : 15 000 € » enfermé
+    // dans le module Rendez-vous obligerait à ressaisir l'information pour
+    // segmenter ou relancer.
+    answers: form.answers,
   });
 
   // ── Barrière 3 : l'écriture, arbitrée par l'index unique ─────────────────
@@ -135,10 +186,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
     visitorTimezone,
-    visitorName: body.name.trim(),
-    visitorEmail: body.email.toLowerCase().trim(),
-    visitorPhone: body.phone,
-    note: body.note,
+    visitorName: form.visitorName.trim(),
+    visitorEmail: form.visitorEmail.toLowerCase().trim(),
+    visitorPhone: form.visitorPhone,
+    note: form.note,
+    answers: form.answers,
     leadId,
   });
 
@@ -184,12 +236,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       endsAt,
       hostTimezone: eventType.timezone,
       visitorTimezone,
-      visitorName: body.name.trim(),
-      visitorEmail: body.email.toLowerCase().trim(),
+      // ⚠️ Les valeurs VALIDÉES, pas le corps brut : `body.name` est désormais
+      // optionnel et vaut `undefined` dès que le formulaire est personnalisé —
+      // `.trim()` dessus lèverait une exception, et l'e-mail ne partirait pas.
+      visitorName: form.visitorName.trim(),
+      visitorEmail: form.visitorEmail.toLowerCase().trim(),
       hostName,
       hostEmail,
       locationLabel: locationLabel(eventType.locationKind, eventType.locationValue),
-      note: body.note,
+      note: form.note,
+      answers: form.answers,
       manageUrl,
       language: eventType.language,
     },

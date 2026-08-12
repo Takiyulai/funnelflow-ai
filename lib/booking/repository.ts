@@ -24,6 +24,10 @@ const EVENT_TYPE_COLS =
   "id, user_id, slug, name, description, duration_min, buffer_min, min_notice_min, " +
   "horizon_days, slot_step_min, timezone, location_kind, location_value, color, " +
   "host_name, host_title, host_avatar_url, host_bio, " +
+  // 🆕 Champs de formulaire personnalisés. ⚠️ Une colonne absente de cette
+  // liste n'est jamais lue : le champ existerait en base et resterait
+  // invisible côté application, sans la moindre erreur.
+  "form_fields, " +
   "language, active, funnel_id";
 
 function rowToEventType(r: any): BookingEventType {
@@ -52,6 +56,10 @@ function rowToEventType(r: any): BookingEventType {
     hostTitle: r.host_title ?? null,
     hostAvatarUrl: r.host_avatar_url ?? null,
     hostBio: r.host_bio ?? null,
+    // 🆕 Tableau de champs, ou null → le widget applique les champs par défaut.
+    // On vérifie le type : un jsonb mal formé (édition manuelle en base,
+    // import) ne doit pas faire planter le rendu du formulaire public.
+    formFields: Array.isArray(r.form_fields) ? r.form_fields : null,
     language: r.language ?? "fr",
     active: r.active,
     funnelId: r.funnel_id,
@@ -229,6 +237,8 @@ export type CreateBookingInput = {
   visitorEmail: string;
   visitorPhone?: string | null;
   note?: string | null;
+  /** 🆕 Réponses aux champs personnalisés, indexées par `name` de champ. */
+  answers?: Record<string, string | boolean> | null;
   leadId?: string | null;
 };
 
@@ -259,6 +269,12 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       visitor_email: input.visitorEmail,
       visitor_phone: input.visitorPhone ?? null,
       note: input.note ?? null,
+      // 🆕 Objet vide normalisé en null : `{}` en base laisserait croire à des
+      // réponses, et compliquerait les filtres jsonb.
+      answers:
+        input.answers && Object.keys(input.answers).length > 0
+          ? input.answers
+          : null,
       status: "confirmed",
       lead_id: input.leadId ?? null,
       funnel_id: input.eventType.funnelId ?? null,
@@ -349,21 +365,38 @@ export async function upsertLeadForBooking(args: {
   name?: string | null;
   phone?: string | null;
   language?: string;
+  /**
+   * 🆕 Réponses aux champs personnalisés du formulaire de réservation.
+   * Rangées dans `metadata` : ce sont des données ouvertes, propres à chaque
+   * type de RDV, qui n'ont pas de colonne dédiée dans `leads`.
+   */
+  answers?: Record<string, string | boolean> | null;
 }): Promise<string | null> {
   const admin = getSupabaseAdmin();
   const email = args.email.toLowerCase().trim();
+  const hasAnswers = !!args.answers && Object.keys(args.answers).length > 0;
   try {
     const { data: existing } = await admin
       .from("leads")
-      .select("id")
+      .select("id, metadata")
       .eq("user_id", args.userId)
       .eq("email", email)
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<{ id: string; metadata: Record<string, unknown> | null }>();
 
     if (existing?.id) {
+      // 🆕 Fusion, jamais remplacement : un contact qui reprend rendez-vous ne
+      // doit pas perdre les réponses de la première fois. Les nouvelles
+      // valeurs gagnent sur les anciennes pour une même clé.
+      const mergedMetadata = hasAnswers
+        ? { ...(existing.metadata ?? {}), ...args.answers }
+        : undefined;
       await admin
         .from("leads")
-        .update({ name: args.name || undefined, phone: args.phone || undefined })
+        .update({
+          name: args.name || undefined,
+          phone: args.phone || undefined,
+          metadata: mergedMetadata,
+        })
         .eq("id", existing.id);
       return existing.id as string;
     }
@@ -380,7 +413,7 @@ export async function upsertLeadForBooking(args: {
         source: "booking",
         consent: true,
         language: args.language ?? "fr",
-        metadata: {},
+        metadata: hasAnswers ? args.answers : {},
       })
       .select("id")
       .maybeSingle<{ id: string }>();

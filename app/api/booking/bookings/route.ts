@@ -28,6 +28,7 @@ type HostBookingRow = {
   visitor_email: string;
   visitor_phone: string | null;
   note: string | null;
+  answers: Record<string, string | boolean> | null;
   status: string;
   manage_token: string;
 };
@@ -56,7 +57,9 @@ export async function GET(req: Request) {
     .from("bookings")
     .select(
       "id, event_type_id, starts_at, ends_at, visitor_timezone, host_timezone, " +
-        "visitor_name, visitor_email, visitor_phone, note, status, manage_token",
+        // 🆕 `answers` : réponses aux champs personnalisés. Une colonne absente
+        // de ce select n'existe tout simplement pas côté application.
+        "visitor_name, visitor_email, visitor_phone, note, answers, status, manage_token",
     )
     .eq("user_id", userId)
     .limit(200);
@@ -97,6 +100,9 @@ export async function GET(req: Request) {
         visitorEmail: r.visitor_email,
         visitorPhone: r.visitor_phone,
         note: r.note,
+        // 🆕 Objet normalisé : un `null` obligerait chaque appelant à tester
+        // avant d'itérer.
+        answers: r.answers ?? {},
         manageToken: r.manage_token,
         // Formaté côté serveur dans le fuseau de l'HÔTE : c'est son agenda.
         // Le fuseau du visiteur est rappelé à part, pour qu'il sache à quelle

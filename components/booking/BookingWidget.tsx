@@ -34,6 +34,12 @@ import {
   shortZoneLabel,
 } from "@/lib/booking/timezones";
 import { readableTextOn, resolveBookingColor, withAlpha } from "@/lib/booking/colors";
+import {
+  validateBookingAnswers,
+  type BookingFormValues,
+} from "@/lib/booking/formFields";
+import { DEFAULT_BOOKING_FIELDS } from "@/lib/booking/types";
+import type { FormFieldItem } from "@/lib/funnels/types";
 
 type Slot = { startsAt: string; endsAt: string };
 type DaySlots = { day: string; slots: Slot[] };
@@ -57,6 +63,16 @@ type EventTypeView = {
   hostTitle?: string | null;
   hostAvatarUrl?: string | null;
   hostBio?: string | null;
+
+  /**
+   * 🆕 Champs du formulaire, déjà RÉSOLUS par le serveur (repli sur les champs
+   * par défaut + garantie d'un champ email inclus). Le widget n'a donc aucune
+   * règle métier à connaître : il rend ce qu'il reçoit.
+   *
+   * Optionnel pour rester compatible avec une réponse d'API antérieure au
+   * déploiement de cette fonctionnalité — un onglet resté ouvert, un cache.
+   */
+  formFields?: FormFieldItem[];
 };
 
 type SlotsResponse = {
@@ -124,10 +140,16 @@ export function BookingWidget({ slug }: { slug: string }) {
   const [month, setMonth] = useState<{ y: number; m: number } | null>(null);
   const [tzDetailOpen, setTzDetailOpen] = useState(false);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [note, setNote] = useState("");
+  /**
+   * 🆕 Valeurs saisies, indexées par `name` de champ.
+   *
+   * Remplace les quatre états figés (name/email/phone/note) : le formulaire
+   * est désormais défini par l'hôte, et le nombre de champs n'est plus connu
+   * à l'écriture du composant.
+   */
+  const [values, setValues] = useState<BookingFormValues>({});
+  const setValue = (fieldName: string, v: string | boolean) =>
+    setValues((prev) => ({ ...prev, [fieldName]: v }));
   const [submitting, setSubmitting] = useState(false);
   /** Navigation vers la page de confirmation du tunnel en cours. */
   const [redirecting, setRedirecting] = useState(false);
@@ -233,10 +255,20 @@ export function BookingWidget({ slug }: { slug: string }) {
 
   async function submit() {
     if (!selectedSlot || submitting) return;
-    if (!name.trim() || !email.trim()) {
-      setFormError("Renseigne ton nom et ton e-mail.");
+
+    // 🆕 Validation pilotée par la CONFIGURATION, plus par une liste de champs
+    // écrite en dur. Même fonction que le serveur (lib/booking/formFields) :
+    // ce qui est refusé ici est refusé là-bas, et réciproquement.
+    const check = validateBookingAnswers(formFields, values);
+    if (!check.ok) {
+      setFormError(
+        check.missing.length === 1
+          ? `Renseigne « ${check.missing[0]} ».`
+          : `Champs obligatoires manquants : ${check.missing.join(", ")}.`,
+      );
       return;
     }
+
     setSubmitting(true);
     setFormError(null);
     try {
@@ -246,10 +278,11 @@ export function BookingWidget({ slug }: { slug: string }) {
         body: JSON.stringify({
           startsAt: selectedSlot.startsAt,
           timezone,
-          name: name.trim(),
-          email: email.trim(),
-          phone: phone.trim() || undefined,
-          note: note.trim() || undefined,
+          // ⚠️ On envoie les VALEURS BRUTES, pas la répartition calculée ici :
+          // le serveur refait la validation et la répartition à partir de la
+          // définition enregistrée. Sinon il suffirait de retirer `required`
+          // dans la requête pour contourner une obligation.
+          values,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -306,6 +339,20 @@ export function BookingWidget({ slug }: { slug: string }) {
   }
 
   const ev = data?.eventType;
+
+  /**
+   * 🆕 Champs à rendre. Le serveur les résout déjà (repli sur les champs par
+   * défaut + garantie d'un champ email) ; le repli local ne couvre que les
+   * réponses d'API antérieures à cette fonctionnalité — onglet resté ouvert,
+   * cache — pour ne jamais afficher un formulaire sans aucun champ.
+   *
+   * Déclaré ICI et pas plus haut : `ev` dépend de `data`, qui n'existe qu'à ce
+   * point du composant.
+   */
+  const formFields: FormFieldItem[] =
+    ev?.formFields && ev.formFields.length > 0
+      ? ev.formFields
+      : DEFAULT_BOOKING_FIELDS;
 
   return (
     // 🆕 La couleur d'accent devient une VARIABLE CSS portée par la racine.
@@ -618,37 +665,93 @@ export function BookingWidget({ slug }: { slug: string }) {
                 </button>
               </div>
 
+              {/* 🆕 FORMULAIRE PILOTÉ PAR LA CONFIGURATION.
+                  Les quatre champs étaient écrits en dur : un hôte qui avait
+                  besoin du budget, du niveau ou d'un lien devait le demander
+                  après coup par email — et en perdait la moitié. La liste vient
+                  maintenant du type de RDV (repli sur les champs par défaut si
+                  l'hôte n'a rien personnalisé). */}
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ton nom *"
-                  maxLength={120}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none"
-                />
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Ton e-mail *"
-                  type="email"
-                  maxLength={200}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none"
-                />
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Téléphone (optionnel)"
-                  maxLength={40}
-                  className="rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none sm:col-span-2"
-                />
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Un mot sur ton besoin (optionnel)"
-                  rows={3}
-                  maxLength={1000}
-                  className="resize-y rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none sm:col-span-2"
-                />
+                {formFields.map((field) => {
+                  const raw = values[field.name];
+                  // `half` occupe une colonne, tout le reste s'étend sur deux :
+                  // un texte long ou une liste dans une demi-largeur est
+                  // pénible à remplir sur mobile comme sur desktop.
+                  const span =
+                    field.width === "half" && field.type !== "textarea"
+                      ? ""
+                      : "sm:col-span-2";
+                  const label = field.label || field.name;
+                  const inputClass =
+                    "w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-[color:var(--ff-accent)] motion-reduce:transition-none";
+
+                  if (field.type === "checkbox") {
+                    return (
+                      <label
+                        key={field.name}
+                        className={`flex items-start gap-2 text-sm text-white/80 ${span}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={raw === true}
+                          onChange={(e) => setValue(field.name, e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer"
+                        />
+                        <span>
+                          {label}
+                          {field.required && <span className="text-red-400"> *</span>}
+                        </span>
+                      </label>
+                    );
+                  }
+
+                  if (field.type === "textarea") {
+                    return (
+                      <textarea
+                        key={field.name}
+                        value={typeof raw === "string" ? raw : ""}
+                        onChange={(e) => setValue(field.name, e.target.value)}
+                        placeholder={`${field.placeholder || label}${field.required ? " *" : ""}`}
+                        rows={3}
+                        maxLength={1000}
+                        className={`resize-y ${inputClass} ${span}`}
+                      />
+                    );
+                  }
+
+                  if (field.type === "select") {
+                    return (
+                      <select
+                        key={field.name}
+                        value={typeof raw === "string" ? raw : ""}
+                        onChange={(e) => setValue(field.name, e.target.value)}
+                        className={`${inputClass} ${span}`}
+                      >
+                        <option value="">
+                          {field.placeholder || label}
+                          {field.required ? " *" : ""}
+                        </option>
+                        {(field.options ?? []).map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  }
+
+                  return (
+                    <input
+                      key={field.name}
+                      type={field.type}
+                      value={typeof raw === "string" ? raw : ""}
+                      onChange={(e) => setValue(field.name, e.target.value)}
+                      placeholder={`${field.placeholder || label}${field.required ? " *" : ""}`}
+                      maxLength={200}
+                      className={`${inputClass} ${span}`}
+                    />
+                  );
+                })}
               </div>
 
               {formError && <p className="mt-3 text-xs text-red-300">{formError}</p>}

@@ -12,6 +12,9 @@ import {
   resolveBookingColor,
 } from "@/lib/booking/colors";
 import type { EventType } from "./types";
+// Le même éditeur de champs que les formulaires de capture : un seul modèle de
+// champ dans l'application, donc une seule interface à apprendre.
+import { PopupFieldsEditor } from "@/components/editor/tabs/items/PopupFieldsEditor";
 
 export function BookingTypesTab({
   active,
@@ -286,6 +289,34 @@ export function BookingTypesTab({
             </div>
           </div>
         )}
+      </section>
+
+      {/* 🆕 CHAMPS DU FORMULAIRE. Le formulaire de réservation était figé
+          dans le code — prénom, email, téléphone, note. L'hôte qui a besoin du
+          budget, du niveau ou d'un lien devait le demander après coup par
+          email, donc perdre une partie des réponses et qualifier ses
+          rendez-vous à la main. */}
+      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+          Formulaire de réservation
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          Ce que le participant remplit avant de valider son créneau. Les
+          réponses arrivent dans « Mes rendez-vous », dans l&apos;email de
+          confirmation, et sur la fiche du contact dans le CRM.
+        </p>
+        <div className="mt-3">
+          <PopupFieldsEditor
+            fields={active.formFields ?? undefined}
+            onChange={(fields) => onPatch({ formFields: fields ?? null })}
+          />
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          Un champ <strong className="text-ink">Email</strong> est toujours
+          demandé, même si tu le retires : sans adresse, ni la confirmation ni
+          le fichier agenda ne peuvent partir, et le participant ne peut plus
+          annuler.
+        </p>
       </section>
 
       {/* 🆕 Couleur d'accent. La colonne `color` existait en base sans jamais

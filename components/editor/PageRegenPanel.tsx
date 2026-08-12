@@ -17,7 +17,7 @@ import type {
   PageRole,
 } from "@/lib/funnels/types";
 import { handlePlanGate } from "@/lib/billing/planGate";
-import { extractHomeContext } from "@/lib/clone/clone-context";
+import { extractHomeContext, isClonedSection } from "@/lib/clone/clone-context";
 
 const SUGGESTIONS = [
   "Rends le copy plus percutant",
@@ -74,6 +74,29 @@ export function PageRegenPanel({
   const [proposal, setProposal] = useState<FunnelSection[] | null>(null);
   const [role, setRole] = useState<PageRole>(page.role ?? "custom");
 
+  /**
+   * 🆕 GARDE ABSOLUE — Page CLONÉE.
+   *
+   * ── CE QUI EST ARRIVÉ ─────────────────────────────────────────────────────
+   * Ce panneau remplace TOUTES les sections de la page par des sections
+   * générées (hero, benefits, cta…). Sur une page clonée, dont l'unique
+   * section est un `raw-html` contenant le site capturé, cela SUPPRIME le
+   * clone : le design, la mise en page et les médias disparaissent d'un coup,
+   * remplacés par un gabarit standard portant le nouveau copy.
+   *
+   * L'utilisateur ne demandait qu'une réécriture du texte. Il a perdu la seule
+   * chose pour laquelle il avait cloné la page.
+   *
+   * ── POURQUOI UN REFUS, PAS UN AVERTISSEMENT ──────────────────────────────
+   * Il n'existe aucune façon correcte d'exécuter cette action sur un clone :
+   * le générateur ne sait produire que des sections structurées, et un clone
+   * n'en a pas. Un simple avertissement laisserait la porte ouverte à la même
+   * perte. La réécriture du copy d'un clone a son propre outil, qui applique
+   * un patch de texte par-dessus le HTML capturé sans jamais le modifier
+   * (`CloneCopyRewritePanel`, dans l'éditeur de la section).
+   */
+  const hasClonedSection = (page.sections ?? []).some(isClonedSection);
+
   // 🆕 Contexte éditorial de la page d'accueil — clonée OU native.
   // Recalculé à l'ouverture du panneau : sur un clone, il vient du HTML
   // capturé et suit donc les personnalisations déjà appliquées.
@@ -100,6 +123,9 @@ export function PageRegenPanel({
 
   async function regenerate() {
     if (busy) return;
+    // Ceinture : l'interface n'expose plus le bouton sur un clone, mais cette
+    // fonction ne doit pas pouvoir s'exécuter par un autre chemin.
+    if (hasClonedSection) return;
     setBusy(true);
     setError(null);
     setProposal(null);
@@ -164,6 +190,9 @@ export function PageRegenPanel({
 
   function apply() {
     if (!proposal) return;
+    // Dernière barrière avant l'écriture : appliquer des sections générées sur
+    // une page clonée détruirait le HTML capturé.
+    if (hasClonedSection) return;
     // Le rôle part avec les sections : sans lui, la page resterait "custom" et
     // la régénération suivante retomberait dans le même défaut.
     onApply(carryMedia(proposal), role);
@@ -172,31 +201,63 @@ export function PageRegenPanel({
     setOpen(false);
   }
 
+  // 🆕 PAGE CLONÉE — le panneau ne propose plus l'action, il oriente vers le
+  // bon outil. Régénérer ici remplacerait la section clonée par un gabarit
+  // standard : le design capturé, la mise en page et les médias seraient
+  // perdus, ce qui est exactement l'inverse de ce qu'on attend d'un clone.
+  if (hasClonedSection) {
+    return (
+      // ⚠️ `text-amber-100` serait invisible sur fond clair : ce panneau vit
+      // dans la colonne de l'éditeur, qui suit le thème de l'application.
+      <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2.5">
+        <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ink">
+          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <strong className="font-semibold">Page clonée : design protégé.</strong>{" "}
+            La régénération de page reconstruit des sections standard et
+            effacerait le design capturé. Pour réécrire le texte sans toucher à
+            la mise en page, aux couleurs ni aux médias, ouvre la section
+            ci-dessous et utilise{" "}
+            <strong className="font-semibold">
+              « Réécrire tout le copy avec l&apos;IA »
+            </strong>
+            .
+          </span>
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-violet-300/25 bg-violet-300/[0.05]">
+    // 🆕 THÈME : `text-violet-200` sur `bg-violet-300/[0.05]` était pensé pour
+    // un fond sombre. En mode CLAIR, ce panneau devenait un rectangle presque
+    // blanc au libellé illisible — visible sur la colonne gauche de l'éditeur.
+    // `text-ink` bascule ; l'icône garde la couleur de marque, lisible sur les
+    // deux fonds.
+    <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.08]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-violet-200"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-ink"
       >
-        <Sparkles className="h-4 w-4" />
+        <Sparkles className="h-4 w-4 shrink-0 text-violet-500" />
         Régénérer toute la page avec l&apos;IA
-        <span className="ml-auto text-[10px] font-normal text-white/40">
+        <span className="ml-auto text-[10px] font-normal text-muted">
           {open ? "Réduire" : "Ouvrir"}
         </span>
       </button>
 
       {open && (
         <div className="grid gap-3 border-t border-violet-300/15 p-3">
-          <p className="text-[11px] leading-relaxed text-white/50">
-            Régénère le copy de <b className="text-white/70">toutes les sections</b> de
+          <p className="text-[11px] leading-relaxed text-muted">
+            Régénère le copy de <b className="text-ink">toutes les sections</b> de
             cette page (« {page.name} »). Le reste du tunnel n&apos;est pas touché, et
             les images/vidéos sont conservées.
           </p>
 
           {/* 🆕 Type de page — décide des conventions appliquées. */}
           <div>
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
               Type de page
             </p>
             <div className="flex flex-wrap gap-1">
@@ -208,15 +269,15 @@ export function PageRegenPanel({
                   className={[
                     "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                     role === opt.id
-                      ? "bg-violet-400/25 text-violet-100 ring-1 ring-violet-300/50"
-                      : "border border-white/10 text-white/60 hover:text-white",
+                      ? "bg-violet-500/20 text-ink ring-1 ring-violet-500/50"
+                      : "border border-line text-muted hover:text-ink",
                   ].join(" ")}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-white/35">
+            <p className="mt-1 text-[10px] leading-relaxed text-muted">
               Détermine les sections autorisées. Une page de remerciement reste
               sobre : ni témoignages, ni argumentaire de vente.
             </p>
@@ -224,9 +285,9 @@ export function PageRegenPanel({
 
           {/* 🆕 Contexte repris de la page d'accueil, y compris clonée. */}
           {homeContext?.headline && (
-            <p className="rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px] leading-relaxed text-white/45">
+            <p className="rounded border border-line bg-canvas px-2 py-1.5 text-[10px] leading-relaxed text-muted">
               Contexte repris de l&apos;accueil :{" "}
-              <span className="text-white/70">
+              <span className="text-ink">
                 « {homeContext.headline.slice(0, 90)}
                 {homeContext.headline.length > 90 ? "…" : ""} »
               </span>
@@ -239,7 +300,7 @@ export function PageRegenPanel({
                 key={s}
                 type="button"
                 onClick={() => setPrompt(s)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/70 hover:border-violet-300/40 hover:text-violet-200"
+                className="rounded-full border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-violet-500/50 hover:text-ink"
               >
                 {s}
               </button>
@@ -252,14 +313,14 @@ export function PageRegenPanel({
             rows={2}
             maxLength={800}
             placeholder="Instruction facultative (ex. « ton plus direct »). Laisse vide pour une simple régénération."
-            className="w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-white outline-none focus:border-violet-300/50"
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-violet-500/50"
           />
 
           <button
             type="button"
             onClick={regenerate}
             disabled={busy}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-xs font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {busy ? "Génération…" : "Régénérer la page"}
@@ -268,15 +329,15 @@ export function PageRegenPanel({
           {error && <p className="text-xs text-red-300">{error}</p>}
 
           {proposal && (
-            <div className="grid gap-2 rounded-lg border border-white/10 bg-zinc-950/60 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+            <div className="grid gap-2 rounded-lg border border-line bg-zinc-950/60 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
                 Aperçu — {proposal.length} section(s) régénérée(s)
               </p>
               <ul className="grid gap-1">
                 {proposal.map((s, i) => (
                   <li key={i} className="text-xs text-emerald-200">
-                    <span className="text-white/40">{s.type} — </span>
-                    {s.headline || <span className="text-white/40">(sans titre)</span>}
+                    <span className="text-muted">{s.type} — </span>
+                    {s.headline || <span className="text-muted">(sans titre)</span>}
                   </li>
                 ))}
               </ul>
@@ -284,7 +345,7 @@ export function PageRegenPanel({
                 <button
                   type="button"
                   onClick={() => setProposal(null)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/5"
+                  className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-white/5"
                 >
                   <X className="h-3.5 w-3.5" /> Annuler
                 </button>

@@ -173,24 +173,27 @@ export function CloneCopyRewritePanel({
   if (!rawHtml) return null;
 
   return (
-    <div className="rounded-lg border border-violet-300/25 bg-violet-300/[0.04]">
+    // 🆕 THÈME : ce panneau vit dans la colonne de l'éditeur, qui suit le thème
+    // de l'application. Les teintes claires codées en dur (`text-violet-100`,
+    // `text-white/40`) disparaissaient en mode CLAIR.
+    <div className="rounded-lg border border-violet-500/30 bg-violet-500/[0.07]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-300" />
-        <span className="flex-1 text-xs font-semibold text-violet-100">
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+        <span className="flex-1 text-xs font-semibold text-ink">
           Réécrire tout le copy avec l&apos;IA
         </span>
-        <span className="text-[10px] text-white/40">
+        <span className="text-[10px] text-muted">
           {open ? "Fermer" : `${items.length} textes`}
         </span>
       </button>
 
       {open && (
-        <div className="space-y-2 border-t border-violet-300/15 px-3 py-2.5">
-          <p className="text-[10px] leading-relaxed text-white/45">
+        <div className="space-y-2 border-t border-violet-500/20 px-3 py-2.5">
+          <p className="text-[10px] leading-relaxed text-muted">
             Le squelette, la mise en page, les couleurs, les images et les liens
             de redirection ne changent pas. Seul le texte est réécrit.
           </p>
@@ -200,7 +203,7 @@ export function CloneCopyRewritePanel({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Décris ton activité et le ton voulu. Ex : coach business pour freelances, ton direct, promesse = doubler ses tarifs."
-            className="w-full resize-y rounded border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-300/40"
+            className="w-full resize-y rounded border border-line bg-surface px-2 py-1.5 text-xs text-ink outline-none focus:border-violet-500/50"
           />
 
           <div className="flex flex-wrap gap-1">
@@ -209,7 +212,7 @@ export function CloneCopyRewritePanel({
                 key={s}
                 type="button"
                 onClick={() => setPrompt(s)}
-                className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                className="rounded border border-line px-2 py-0.5 text-[10px] text-muted transition-colors hover:border-violet-500/50 hover:text-ink"
               >
                 {s}
               </button>
@@ -228,7 +231,7 @@ export function CloneCopyRewritePanel({
                 type="button"
                 onClick={run}
                 disabled={busy || items.length === 0}
-                className="inline-flex items-center gap-1.5 rounded bg-violet-400/20 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition-colors hover:bg-violet-400/30 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded bg-violet-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-violet-600 disabled:opacity-50"
               >
                 {busy ? (
                   <>
@@ -246,7 +249,7 @@ export function CloneCopyRewritePanel({
                 <button
                   type="button"
                   onClick={resetTexts}
-                  className="inline-flex items-center gap-1 text-[10px] text-white/40 transition-colors hover:text-white/80"
+                  className="inline-flex items-center gap-1 text-[10px] text-muted transition-colors hover:text-ink"
                 >
                   <RotateCcw className="h-2.5 w-2.5" />
                   Restaurer les textes d&apos;origine
@@ -257,7 +260,7 @@ export function CloneCopyRewritePanel({
 
           {proposal && (
             <div className="space-y-2">
-              <p className="text-[10px] text-white/55">
+              <p className="text-[10px] text-muted">
                 <strong className="text-violet-200">
                   {diffRows.length} texte{diffRows.length > 1 ? "s" : ""}
                 </strong>{" "}
@@ -269,13 +272,13 @@ export function CloneCopyRewritePanel({
 
               {/* Relecture avant application : c'est ici que l'utilisateur
                   attrape une promesse inventée ou un titre à rallonge. */}
-              <div className="max-h-64 space-y-1.5 overflow-y-auto rounded border border-white/10 bg-black/30 p-1.5">
+              <div className="max-h-64 space-y-1.5 overflow-y-auto rounded border border-line bg-canvas p-1.5">
                 {diffRows.map((row) => (
-                  <div key={row.id} className="rounded bg-black/40 p-1.5">
-                    <p className="text-[10px] leading-snug text-white/35 line-through">
+                  <div key={row.id} className="rounded border border-line bg-surface p-1.5">
+                    <p className="text-[10px] leading-snug text-muted line-through">
                       {row.before}
                     </p>
-                    <p className="mt-0.5 text-[10px] leading-snug text-emerald-200">
+                    <p className="mt-0.5 text-[10px] font-medium leading-snug text-emerald-600">
                       {row.after}
                     </p>
                   </div>
@@ -294,7 +297,7 @@ export function CloneCopyRewritePanel({
                 <button
                   type="button"
                   onClick={() => setProposal(null)}
-                  className="inline-flex items-center gap-1.5 rounded bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/10"
+                  className="inline-flex items-center gap-1.5 rounded border border-line px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:text-ink"
                 >
                   <X className="h-3 w-3" />
                   Annuler

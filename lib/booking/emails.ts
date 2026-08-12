@@ -37,6 +37,8 @@ export type BookingEmailContext = {
   hostEmail?: string | null;
   locationLabel?: string | null;
   note?: string | null;
+  /** 🆕 Réponses aux champs personnalisés, indexées par nom de champ. */
+  answers?: Record<string, string | boolean> | null;
   manageUrl: string;
   language?: string;
 };
@@ -150,6 +152,18 @@ export function buildHostNotification(ctx: BookingEmailContext): { subject: stri
     ["Participant", `${esc(ctx.visitorName)}<br><span style="font-weight:400;color:#64748b">${esc(ctx.visitorEmail)}</span>`],
   ];
   if (ctx.note) rows.push(["Message", esc(ctx.note)]);
+
+  // 🆕 Réponses aux champs personnalisés du formulaire. L'hôte les reçoit dans
+  // la notification : il prépare souvent son entretien depuis sa boîte mail,
+  // sans rouvrir l'application.
+  if (ctx.answers) {
+    for (const [key, value] of Object.entries(ctx.answers)) {
+      const label = key.replace(/_/g, " ");
+      const text =
+        typeof value === "boolean" ? (value ? "Oui" : "Non") : String(value);
+      if (text.trim()) rows.push([esc(label), esc(text)]);
+    }
+  }
 
   const html = shell(
     "Nouveau rendez-vous réservé",

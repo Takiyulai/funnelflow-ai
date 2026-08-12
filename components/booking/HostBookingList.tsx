@@ -15,6 +15,8 @@ type HostBooking = {
   visitorEmail: string;
   visitorPhone?: string | null;
   note?: string | null;
+  /** 🆕 Réponses aux champs personnalisés du formulaire de réservation. */
+  answers?: Record<string, string | boolean> | null;
   manageToken: string;
   whenHost: string;
   visitorTimeLabel: string | null;
@@ -133,6 +135,29 @@ export function HostBookingList() {
                   )}
                   {b.note && (
                     <p className="mt-1 break-words text-xs text-muted">« {b.note} »</p>
+                  )}
+
+                  {/* 🆕 Réponses aux champs personnalisés. Affichées ICI, sur
+                      la ligne du rendez-vous : c'est le moment où l'hôte
+                      prépare son entretien. Les aller chercher dans le CRM
+                      serait une étape de trop. */}
+                  {b.answers && Object.keys(b.answers).length > 0 && (
+                    <dl className="mt-1.5 grid gap-0.5 border-t border-line pt-1.5 text-xs">
+                      {Object.entries(b.answers).map(([key, value]) => (
+                        <div key={key} className="flex flex-wrap gap-x-1.5">
+                          <dt className="font-medium text-muted">
+                            {key.replace(/_/g, " ")} :
+                          </dt>
+                          <dd className="min-w-0 break-words text-ink">
+                            {typeof value === "boolean"
+                              ? value
+                                ? "Oui"
+                                : "Non"
+                              : value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
                   )}
                 </div>
 

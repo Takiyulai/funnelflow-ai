@@ -655,6 +655,17 @@ export default function EditorPage() {
   const handleRegeneratePageApply = useCallback(
     (sections: FunnelSection[], role?: FunnelPage["role"]) => {
       if (!funnel || !activePage) return;
+      // 🆕 GARDE — Ne JAMAIS écraser une page clonée par des sections
+      // générées. Le HTML capturé est irremplaçable : il ne peut pas être
+      // reconstruit à partir du brief, contrairement à des sections standard.
+      // Cette vérification est au point d'écriture, donc valable quel que soit
+      // l'appelant, présent ou futur.
+      if ((activePage.sections ?? []).some((s) => s.type === "raw-html")) {
+        console.warn(
+          "[editor] Régénération de page ignorée : la page contient une section clonée.",
+        );
+        return;
+      }
       let next = updatePageSections(funnel, activePage.id, sections);
       // 🆕 Le rôle choisi dans le panneau est POSÉ sur la page. Une page ajoutée
       // depuis l'éditeur naît en "custom", rôle pour lequel aucun blueprint

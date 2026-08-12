@@ -82,6 +82,34 @@ const patchSchema = z.object({
     .optional(),
   hostBio: z.string().max(600).nullable().optional(),
 
+  // 🆕 Champs du formulaire de réservation. ⚠️ Sans cette entrée, zod
+  // retirerait la clé en silence et l'utilisateur enregistrerait ses champs
+  // sans qu'ils atteignent jamais la base — le piège déjà rencontré sur
+  // challengeDayTitles et les prix barrés.
+  formFields: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(40),
+        label: z.string().max(120).optional(),
+        placeholder: z.string().max(160).optional(),
+        type: z.enum([
+          "text",
+          "email",
+          "tel",
+          "number",
+          "textarea",
+          "select",
+          "checkbox",
+        ]),
+        required: z.boolean().optional(),
+        width: z.enum(["full", "half"]).optional(),
+        options: z.array(z.string().max(120)).max(30).optional(),
+      }),
+    )
+    .max(20)
+    .nullable()
+    .optional(),
+
   active: z.boolean().optional(),
   availability: z.array(ruleSchema).max(60).optional(),
   exceptions: z.array(exceptionSchema).max(200).optional(),
@@ -173,6 +201,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.hostTitle !== undefined) patch.host_title = b.hostTitle?.trim() || null;
   if (b.hostAvatarUrl !== undefined) patch.host_avatar_url = b.hostAvatarUrl?.trim() || null;
   if (b.hostBio !== undefined) patch.host_bio = b.hostBio?.trim() || null;
+
+  // 🆕 Liste vidée → null, et non `[]` : c'est null qui déclenche le repli sur
+  // les champs par défaut. Un tableau vide produirait un formulaire sans aucun
+  // champ, donc une réservation impossible.
+  if (b.formFields !== undefined) {
+    patch.form_fields =
+      Array.isArray(b.formFields) && b.formFields.length > 0 ? b.formFields : null;
+  }
 
   if (b.active !== undefined) patch.active = b.active;
 
