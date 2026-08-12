@@ -27,6 +27,8 @@ import { HostBookingList } from "@/components/booking/HostBookingList";
 import { BookingTypesTab } from "@/components/booking/BookingTypesTab";
 import { BookingAvailabilityTab } from "@/components/booking/BookingAvailabilityTab";
 import { BookingSettingsTab } from "@/components/booking/BookingSettingsTab";
+import { NewBookingTypeDialog } from "@/components/booking/NewBookingTypeDialog";
+import type { BookingPreset } from "@/lib/booking/presets";
 import { detectVisitorTimeZone } from "@/lib/booking/timezones";
 import { isValidHexColor, resolveBookingColor } from "@/lib/booking/colors";
 import type { EventType } from "@/components/booking/types";
@@ -52,6 +54,8 @@ export default function RendezVousPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** 🆕 Popup de création : choix du préréglage, puis nom et durée. */
+  const [newTypeOpen, setNewTypeOpen] = useState(false);
 
   // Lecture de `?tab=` au montage seulement. La lire pendant le rendu
   // provoquerait une incohérence d'hydratation (le serveur ne connaît pas
@@ -100,15 +104,75 @@ export default function RendezVousPage() {
     setTypes((prev) => prev.map((t) => (t.id === activeId ? { ...t, ...patch } : t)));
   }
 
-  async function createType() {
+  /**
+   * 🆕 Supprime le type de RDV sélectionné.
+   *
+   * Le serveur REFUSE tant qu'il reste des rendez-vous confirmés à venir — des
+   * gens se présenteraient sinon à un rendez-vous qui n'existe plus nulle part.
+   * On relaie son message tel quel plutôt que d'inventer le nôtre : c'est lui
+   * qui connaît le nombre exact.
+   */
+  async function deleteActiveType() {
+    if (!active) return;
+    if (
+      !window.confirm(
+        `Supprimer « ${active.name} » ?\n\n` +
+          `Le lien public cessera de fonctionner et l'historique des ` +
+          `réservations sera perdu. Cette action est définitive.`,
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/booking/event-types/${active.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        window.alert(
+          json?.message ??
+            "Suppression impossible. Réessaie dans un instant.",
+        );
+        return;
+      }
+      // On retire localement et on bascule sur un autre type : garder l'ancien
+      // identifiant actif afficherait un écran vide sans explication.
+      const remaining = types.filter((t) => t.id !== active.id);
+      setTypes(remaining);
+      setActiveId(remaining[0]?.id ?? null);
+      if (remaining.length === 0) setTab("reservations");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * 🆕 Création à partir d'un PRÉRÉGLAGE.
+   *
+   * Avant, cette fonction créait toujours « Appel découverte / 30 min », quel
+   * que soit l'usage : un audit de 90 minutes et un appel de 15 minutes
+   * naissaient identiques, et tout était à refaire dans trois onglets.
+   *
+   * Le préréglage porte la durée, le battement, le délai minimum, l'horizon,
+   * le lieu — et surtout les CHAMPS DU FORMULAIRE, qui sont la seule vraie
+   * différence de fond entre un appel de qualification et un audit payant.
+   */
+  async function createType(preset: BookingPreset, name: string, durationMin: number) {
     setSaving(true);
     try {
       const res = await fetch("/api/booking/event-types", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Appel découverte",
-          durationMin: 30,
+          name,
+          durationMin,
+          bufferMin: preset.bufferMin,
+          minNoticeMin: preset.minNoticeMin,
+          horizonDays: preset.horizonDays,
+          slotStepMin: preset.slotStepMin,
+          locationKind: preset.locationKind,
+          formFields: preset.formFields,
           timezone: detectVisitorTimeZone(),
         }),
       });
@@ -119,6 +183,7 @@ export default function RendezVousPage() {
       }
       await load();
       setActiveId(json.id);
+      setNewTypeOpen(false);
       selectTab("types");
     } finally {
       setSaving(false);
@@ -158,6 +223,14 @@ export default function RendezVousPage() {
           hostName: active.hostName ?? null,
           hostTitle: active.hostTitle ?? null,
           hostBio: active.hostBio ?? null,
+
+          // 🆕 Champs du formulaire de réservation. ⚠️ C'EST LE PIÈGE DÉCRIT
+          // JUSTE AU-DESSUS : l'éditeur de champs a été ajouté sans alimenter
+          // cette liste blanche. L'utilisateur ajoutait un champ, l'interface
+          // l'affichait, « Enregistrer » répondait OK — et rien n'était envoyé.
+          // Aucun message d'erreur, aucune trace : le champ disparaissait au
+          // rechargement.
+          formFields: active.formFields ?? null,
           // Même précaution que pour la couleur : le serveur exige une URL
           // absolue http(s). Une saisie en cours (« exemple.com ») ferait
           // échouer TOUT l'enregistrement, y compris les disponibilités. On
@@ -171,7 +244,14 @@ export default function RendezVousPage() {
         }),
       });
       const json = await res.json();
-      setMsg(json.ok ? "Enregistré." : (json.message ?? "Enregistrement impossible."));
+      // 🆕 Le serveur peut réussir PARTIELLEMENT : les champs de formulaire
+      // exigent la migration 03. On relaie son avertissement plutôt que
+      // d'afficher « Enregistré » alors qu'une partie n'a pas été prise.
+      setMsg(
+        json.ok
+          ? (json.warning ? json.message : "Enregistré.")
+          : (json.message ?? "Enregistrement impossible."),
+      );
     } catch {
       setMsg("Connexion impossible.");
     } finally {
@@ -205,7 +285,7 @@ export default function RendezVousPage() {
           </div>
           <button
             type="button"
-            onClick={createType}
+            onClick={() => setNewTypeOpen(true)}
             disabled={saving}
             className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-violet-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50 sm:self-auto"
           >
@@ -323,6 +403,7 @@ export default function RendezVousPage() {
                       setTimeout(() => setCopied(false), 1500);
                     }}
                     onPatch={patchActive}
+                    onDelete={() => void deleteActiveType()}
                   />
                 )}
                 {tab === "disponibilites" && (
@@ -352,6 +433,18 @@ export default function RendezVousPage() {
           </>
         )}
       </div>
+
+      {/* 🆕 Création par préréglage. Monté au niveau de la page (et non dans un
+          onglet) : on peut créer un type depuis n'importe quel onglet, y
+          compris quand la liste est vide. */}
+      <NewBookingTypeDialog
+        open={newTypeOpen}
+        busy={saving}
+        onClose={() => setNewTypeOpen(false)}
+        onCreate={(preset, name, durationMin) => {
+          void createType(preset, name, durationMin);
+        }}
+      />
     </AppShell>
   );
 }

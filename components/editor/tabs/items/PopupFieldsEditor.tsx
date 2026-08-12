@@ -30,22 +30,8 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
  * l'utilisateur parte de ce qu'il voit déjà, au lieu d'une liste vide.
  */
 export const DEFAULT_POPUP_FIELDS: FormFieldItem[] = [
-  {
-    name: "name",
-    type: "text",
-    label: "Prénom",
-    placeholder: "Votre prénom",
-    required: true,
-    width: "full",
-  },
-  {
-    name: "email",
-    type: "email",
-    label: "Email",
-    placeholder: "vous@exemple.com",
-    required: true,
-    width: "full",
-  },
+  { name: "name", type: "text", label: "Prénom", placeholder: "Votre prénom", required: true, width: "half" },
+  { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "half" },
 ];
 
 /** Nom technique du champ, dérivé du libellé. Sert de clé côté /api/leads. */

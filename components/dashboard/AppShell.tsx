@@ -74,26 +74,25 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="lg:flex lg:items-stretch">
-        {/* 🆕 Colonne sidebar qui s'étire sur TOUTE la hauteur (fond sombre),
-            pour éviter le « trou » clair sous la sidebar sticky quand le contenu
-            de la page est plus long que l'écran. La sidebar reste sticky à
-            l'intérieur. Sur mobile, l'aside est `fixed` → ce wrapper n'a aucun
-            impact visuel. */}
-        <div className="lg:shrink-0 lg:bg-[#0D1628]">
-          <Sidebar
-            mobileOpen={mobileOpen}
-            onClose={() => setMobileOpen(false)}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-          />
-        </div>
+      {/* 🆕 La sidebar est désormais `fixed` (hors du flux) : plus de colonne
+          flex à sa gauche, plus de wrapper de fond à étirer, et surtout plus
+          de bande vide sous le menu quand le contenu de droite est court.
+          Le décalage se fait par `lg:pl-72`, qui vaut exactement la largeur de
+          la sidebar (w-72). */}
+      <Sidebar
+        mobileOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
+      <div className="lg:pl-72">
         {/* overflow-x-clip (et non hidden) : empêche le débordement horizontal
             SANS faire de <main> un conteneur de défilement — sinon les éléments
             `sticky top-0` (topbar de l'éditeur) collaient au bord du padding et
-            le contenu passait par-dessus. */}
-        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+            le contenu passait par-dessus. Le défilement reste celui de la page,
+            donc la sidebar fixe ne bouge pas pendant qu'on parcourt le contenu. */}
+        <main className="min-w-0 overflow-x-clip px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
           {children}
         </main>
       </div>

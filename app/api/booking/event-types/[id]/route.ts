@@ -213,7 +213,41 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.active !== undefined) patch.active = b.active;
 
   if (Object.keys(patch).length > 0) {
-    const { error } = await admin.from("booking_event_types").update(patch).eq("id", id);
+    let { error } = await admin.from("booking_event_types").update(patch).eq("id", id);
+
+    // 🆕 La colonne `form_fields` vient de la migration 03. Si elle n'est pas
+    // appliquée, l'UPDATE ENTIER échoue — l'utilisateur voyait donc ses
+    // horaires, sa couleur et sa fiche hôte refusés à cause d'un champ de
+    // formulaire, sans comprendre pourquoi. Et s'il n'ajoutait qu'un champ,
+    // « ça ne s'affiche pas » sans le moindre message.
+    //
+    // On réessaie sans la colonne, et on le DIT explicitement : un échec
+    // silencieux est pire qu'un refus.
+    const missingColumn =
+      error &&
+      (error.code === "42703" ||
+        /column .* does not exist/i.test(error.message ?? "") ||
+        /could not find the '.*' column/i.test(error.message ?? ""));
+
+    if (missingColumn && "form_fields" in patch) {
+      const { form_fields: _dropped, ...rest } = patch;
+      if (Object.keys(rest).length > 0) {
+        ({ error } = await admin.from("booking_event_types").update(rest).eq("id", id));
+      } else {
+        error = null;
+      }
+      if (!error) {
+        return NextResponse.json({
+          ok: true,
+          warning: "form_fields_unavailable",
+          message:
+            "Les autres réglages sont enregistrés, mais les champs du formulaire " +
+            "nécessitent la migration 03_booking_form_fields.sql, qui n'est pas " +
+            "encore appliquée sur cette base.",
+        });
+      }
+    }
+
     if (error) {
       return NextResponse.json(
         { ok: false, error: "update_failed", message: error.message },

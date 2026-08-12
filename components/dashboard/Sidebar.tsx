@@ -149,7 +149,17 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col overflow-y-auto border-r border-white/5 px-4 py-5 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        // 🆕 SIDEBAR RÉELLEMENT FIXE.
+        //
+        // Elle était `lg:sticky` : elle suit le flux du document, donc sa
+        // hauteur dépend du conteneur parent. Dès que le contenu de droite
+        // était plus court que l'écran, ou pendant un chargement, une bande
+        // vide apparaissait sous le menu.
+        //
+        // `fixed` la sort du flux : elle occupe toujours exactement la hauteur
+        // de la fenêtre, quoi qu'il arrive à droite. Le décalage du contenu est
+        // repris par `lg:pl-72` sur le conteneur principal (AppShell).
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col overflow-y-auto border-r border-white/5 px-4 py-5 text-white transition-transform lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         style={{ background: "#0D1628" }}

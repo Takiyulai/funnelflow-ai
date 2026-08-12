@@ -69,10 +69,12 @@ export type BookingEventType = {
  * de rendez-vous déjà créés.
  */
 export const DEFAULT_BOOKING_FIELDS: FormFieldItem[] = [
-  { name: "name", type: "text", label: "Prénom et nom", placeholder: "Votre nom", required: true, width: "full" },
-  { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "full" },
-  { name: "phone", type: "tel", label: "Téléphone", placeholder: "Optionnel", required: false, width: "full" },
-  { name: "note", type: "textarea", label: "Un mot sur votre demande", placeholder: "Optionnel", required: false, width: "full" },
+  // Strictement le minimum : un prénom pour personnaliser, une adresse pour
+  // confirmer. Téléphone et message ont été RETIRÉS des valeurs par défaut —
+  // chaque champ facultatif de plus fait baisser le taux de réservation, et
+  // celui qui en a besoin l'ajoute en deux clics.
+  { name: "name", type: "text", label: "Prénom", placeholder: "Votre prénom", required: true, width: "half" },
+  { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "half" },
 ];
 
 /**

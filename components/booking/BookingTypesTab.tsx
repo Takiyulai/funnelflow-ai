@@ -22,12 +22,15 @@ export function BookingTypesTab({
   copied,
   onCopy,
   onPatch,
+  onDelete,
 }: {
   active: EventType;
   publicUrl: string;
   copied: boolean;
   onCopy: () => void;
   onPatch: (patch: Partial<EventType>) => void;
+  /** 🆕 Supprime définitivement ce type de RDV. Absent → bouton masqué. */
+  onDelete?: () => void;
 }) {
   const color = resolveBookingColor(active.color);
 
@@ -119,6 +122,30 @@ export function BookingTypesTab({
           />
           Réservations ouvertes
         </label>
+
+        {/* 🆕 SUPPRESSION. La route DELETE existait déjà côté serveur, avec sa
+            garde (refus tant qu'il reste des rendez-vous confirmés à venir),
+            mais aucun bouton ne l'appelait : un type de RDV créé par erreur
+            restait là pour toujours.
+            Placé sous « Réservations ouvertes » et visuellement discret :
+            désactiver est presque toujours le bon geste, supprimer est le
+            dernier recours. */}
+        {onDelete && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
+            >
+              <Trash2 size={13} />
+              Supprimer ce type de RDV
+            </button>
+            <span className="text-[11px] text-muted">
+              Impossible s&apos;il reste des rendez-vous à venir — décoche
+              « Réservations ouvertes » à la place.
+            </span>
+          </div>
+        )}
       </section>
 
       {/* 🆕 FICHE HÔTE — entièrement optionnelle.

@@ -52,6 +52,24 @@ const createSchema = z.object({
   locationValue: z.string().max(300).optional(),
   language: z.string().max(5).default("fr"),
   funnelId: z.string().uuid().optional(),
+  // 🆕 Champs du formulaire, transmis par le préréglage choisi à la création.
+  // ⚠️ Sans cette entrée, zod les retirerait en silence et tous les
+  // préréglages naîtraient avec le formulaire par défaut — c'est-à-dire sans
+  // la seule chose qui les distingue vraiment les uns des autres.
+  formFields: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(40),
+        label: z.string().max(120).optional(),
+        placeholder: z.string().max(160).optional(),
+        type: z.enum(["text", "email", "tel", "number", "textarea", "select", "checkbox"]),
+        required: z.boolean().optional(),
+        width: z.enum(["full", "half"]).optional(),
+        options: z.array(z.string().max(120)).max(30).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export async function POST(req: Request) {
@@ -94,29 +112,56 @@ export async function POST(req: Request) {
     slug = `${base}-${i}`;
   }
 
-  const { data, error } = await admin
-    .from("booking_event_types")
-    .insert({
-      user_id: userId,
-      slug,
-      name: b.name.trim(),
-      description: b.description?.trim() || null,
-      duration_min: b.durationMin,
-      buffer_min: b.bufferMin,
-      min_notice_min: b.minNoticeMin,
-      horizon_days: b.horizonDays,
-      slot_step_min: b.slotStepMin,
-      timezone: b.timezone,
-      location_kind: b.locationKind,
-      location_value: b.locationValue?.trim() || null,
-      language: b.language,
-      funnel_id: b.funnelId ?? null,
-      active: true,
-    })
-    // Type explicite : sans base typée générée, l'inférence de supabase-js
-    // peut retomber sur GenericStringError et bloquer l'accès aux colonnes.
-    .select("id, slug")
-    .maybeSingle<{ id: string; slug: string }>();
+  const baseRow = {
+    user_id: userId,
+    slug,
+    name: b.name.trim(),
+    description: b.description?.trim() || null,
+    duration_min: b.durationMin,
+    buffer_min: b.bufferMin,
+    min_notice_min: b.minNoticeMin,
+    horizon_days: b.horizonDays,
+    slot_step_min: b.slotStepMin,
+    timezone: b.timezone,
+    location_kind: b.locationKind,
+    location_value: b.locationValue?.trim() || null,
+    language: b.language,
+    funnel_id: b.funnelId ?? null,
+    active: true,
+  };
+
+  const insert = (row: Record<string, unknown>) =>
+    admin
+      .from("booking_event_types")
+      .insert(row)
+      // Type explicite : sans base typée générée, l'inférence de supabase-js
+      // peut retomber sur GenericStringError et bloquer l'accès aux colonnes.
+      .select("id, slug")
+      .maybeSingle<{ id: string; slug: string }>();
+
+  // 🆕 `form_fields` vient de la migration 03. Tant qu'elle n'est pas
+  // appliquée, l'insert échouerait ENTIÈREMENT : impossible de créer le
+  // moindre type de RDV. On retombe sur la création sans les champs
+  // personnalisés — le préréglage perd sa qualification, mais l'utilisateur
+  // n'est pas bloqué.
+  let { data, error } =
+    b.formFields && b.formFields.length > 0
+      ? await insert({ ...baseRow, form_fields: b.formFields })
+      : await insert(baseRow);
+
+  const missingColumn =
+    error &&
+    (error.code === "42703" ||
+      /column .* does not exist/i.test(error.message ?? "") ||
+      /could not find the '.*' column/i.test(error.message ?? ""));
+
+  if (missingColumn) {
+    console.warn(
+      "[booking] Colonne form_fields absente — migration 03 non appliquée. " +
+        "Type créé sans les champs du préréglage.",
+    );
+    ({ data, error } = await insert(baseRow));
+  }
 
   if (error || !data) {
     return NextResponse.json(

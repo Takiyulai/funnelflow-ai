@@ -33,10 +33,18 @@ export function BookingAvailabilityTab({
           Les horaires que tu définis ci-dessous sont TES heures locales. Chaque visiteur
           verra automatiquement l&apos;équivalent chez lui.
         </p>
+        {/* 🆕 LISIBILITÉ DE LA LISTE DÉROULANTE.
+            Les <option> d'un <select> natif sont dessinées par le SYSTÈME, pas
+            par la page : aucune classe Tailwind ne les atteint. Sur un fond
+            sombre, Windows rendait un menu gris pâle sur gris — d'où l'aspect
+            flou et presque illisible, avec 40 fuseaux à parcourir.
+            `color-scheme` est la seule propriété que le système écoute : elle
+            lui fait dessiner un menu sombre natif, contrasté et net. */}
         <select
           value={active.timezone}
           onChange={(e) => onPatch({ timezone: e.target.value })}
-          className="mt-3 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
+          style={{ colorScheme: "dark" }}
+          className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
         >
           {TIMEZONE_OPTIONS.map((t) => (
             <option key={t.id} value={t.id}>
