@@ -9,6 +9,33 @@ import type { FormFieldItem } from "@/lib/funnels/types";
 export type LocationKind = "visio" | "phone" | "in_person" | "custom";
 export type BookingStatus = "confirmed" | "cancelled" | "no_show" | "completed";
 
+/**
+ * 🆕 MODE d'un type de rendez-vous.
+ *
+ * Ce n'est pas une étiquette : deux axes de STRUCTURE changent selon le mode.
+ *
+ *   • QUI FIXE LA DATE — le client parmi les disponibilités (consultation,
+ *     recurring), ou l'hôte qui publie des séances datées (event, classroom).
+ *   • LA CAPACITÉ — un créneau accueille 1 personne (consultation, recurring)
+ *     ou N inscrits (event, classroom).
+ *
+ * La capacité n'est pas une règle applicative : elle vient de l'index unique
+ * `bookings_no_double_booking_uidx`. C'est pourquoi les modes collectifs ont
+ * demandé une migration (04) et pas un simple préréglage.
+ */
+export type BookingMode = "consultation" | "event" | "classroom" | "recurring";
+
+/** Le mode accepte-t-il plusieurs inscrits sur un même créneau ? */
+export function isGroupMode(mode: BookingMode | undefined | null): boolean {
+  return mode === "event" || mode === "classroom";
+}
+
+/** Le mode repose-t-il sur des séances DATÉES par l'hôte, plutôt que sur des
+ *  disponibilités hebdomadaires ? */
+export function usesFixedSessions(mode: BookingMode | undefined | null): boolean {
+  return mode === "event";
+}
+
 /** Un type de rendez-vous proposé par l'hôte (« Appel découverte 30 min »). */
 export type BookingEventType = {
   id: string;
@@ -58,9 +85,35 @@ export type BookingEventType = {
    */
   formFields?: FormFieldItem[] | null;
 
+  /** 🆕 Mode. Absent → "consultation" (comportement historique). */
+  mode?: BookingMode | null;
+  /**
+   * 🆕 Places par créneau. NULL/1 → rendez-vous individuel.
+   * N'a de sens que pour les modes collectifs (event, classroom).
+   */
+  capacity?: number | null;
+
   language: string;
   active: boolean;
   funnelId?: string | null;
+};
+
+/**
+ * 🆕 Séance datée, pour le mode `event`.
+ *
+ * Un atelier n'a pas de « disponibilités » : il a des dates. Chacune porte sa
+ * propre limite d'inscrits, qui peut différer de celle du type (une session
+ * d'ouverture à 100 places, les suivantes à 30).
+ */
+export type BookingSession = {
+  id: string;
+  eventTypeId: string;
+  startsAt: string;
+  endsAt: string;
+  /** Surcharge `BookingEventType.capacity`. NULL → capacité du type. */
+  capacity?: number | null;
+  /** Inscrits confirmés — calculé, jamais stocké. */
+  bookedCount?: number;
 };
 
 /**

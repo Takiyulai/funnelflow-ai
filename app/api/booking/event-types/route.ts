@@ -70,6 +70,19 @@ const createSchema = z.object({
     )
     .max(20)
     .optional(),
+  // 🆕 Migration 04 — mode structurel + capacité + séances datées.
+  mode: z.enum(["consultation", "event", "classroom", "recurring"]).optional(),
+  capacity: z.number().int().min(1).max(10000).optional(),
+  sessions: z
+    .array(
+      z.object({
+        startsAt: z.string().min(10),
+        endsAt: z.string().min(10),
+        capacity: z.number().int().min(1).max(10000).nullable().optional(),
+      }),
+    )
+    .max(200)
+    .optional(),
 });
 
 export async function POST(req: Request) {
@@ -144,9 +157,17 @@ export async function POST(req: Request) {
   // moindre type de RDV. On retombe sur la création sans les champs
   // personnalisés — le préréglage perd sa qualification, mais l'utilisateur
   // n'est pas bloqué.
+  // Colonnes ajoutées par les migrations 03 et 04. Regroupées ici : si l'une
+  // manque, le repli les retire toutes d'un coup plutôt que d'essayer chaque
+  // combinaison.
+  const extraCols: Record<string, unknown> = {};
+  if (b.formFields && b.formFields.length > 0) extraCols.form_fields = b.formFields;
+  if (b.mode) extraCols.mode = b.mode;
+  if (b.capacity) extraCols.capacity = b.capacity;
+
   let { data, error } =
-    b.formFields && b.formFields.length > 0
-      ? await insert({ ...baseRow, form_fields: b.formFields })
+    Object.keys(extraCols).length > 0
+      ? await insert({ ...baseRow, ...extraCols })
       : await insert(baseRow);
 
   const missingColumn =
@@ -155,11 +176,13 @@ export async function POST(req: Request) {
       /column .* does not exist/i.test(error.message ?? "") ||
       /could not find the '.*' column/i.test(error.message ?? ""));
 
+  let degraded = false;
   if (missingColumn) {
     console.warn(
-      "[booking] Colonne form_fields absente — migration 03 non appliquée. " +
-        "Type créé sans les champs du préréglage.",
+      "[booking] Colonnes form_fields/mode/capacity absentes — migrations 03 " +
+        "et/ou 04 non appliquées. Type créé en mode consultation simple.",
     );
+    degraded = true;
     ({ data, error } = await insert(baseRow));
   }
 
@@ -170,14 +193,48 @@ export async function POST(req: Request) {
     );
   }
 
-  // Disponibilité de départ : lundi→vendredi 9h-12h et 14h-17h. Un type de RDV
-  // créé sans aucune plage n'afficherait AUCUN créneau — l'hôte croirait le
-  // module cassé alors qu'il n'a simplement rien configuré.
-  const rows = [1, 2, 3, 4, 5].flatMap((weekday) => [
-    { event_type_id: data.id, weekday, start_min: 9 * 60, end_min: 12 * 60 },
-    { event_type_id: data.id, weekday, start_min: 14 * 60, end_min: 17 * 60 },
-  ]);
-  await admin.from("booking_availability").insert(rows);
+  const isEventMode = b.mode === "event" && !degraded;
 
-  return NextResponse.json({ ok: true, id: data.id, slug: data.slug });
+  if (isEventMode) {
+    // 🆕 MODE `event` — des SÉANCES datées, pas des disponibilités.
+    // Publier aussi des plages hebdomadaires produirait deux sources de vérité
+    // pour un même calendrier : le widget afficherait des créneaux qui
+    // n'existent pas.
+    if (b.sessions && b.sessions.length > 0) {
+      const { error: sessionError } = await admin.from("booking_sessions").insert(
+        b.sessions.map((s) => ({
+          event_type_id: data.id,
+          starts_at: s.startsAt,
+          ends_at: s.endsAt,
+          capacity: s.capacity ?? null,
+        })),
+      );
+      if (sessionError) {
+        console.warn("[booking] séances non créées :", sessionError.message);
+      }
+    }
+  } else {
+    // Disponibilité de départ : lundi→vendredi 9h-12h et 14h-17h. Un type de RDV
+    // créé sans aucune plage n'afficherait AUCUN créneau — l'hôte croirait le
+    // module cassé alors qu'il n'a simplement rien configuré.
+    const rows = [1, 2, 3, 4, 5].flatMap((weekday) => [
+      { event_type_id: data.id, weekday, start_min: 9 * 60, end_min: 12 * 60 },
+      { event_type_id: data.id, weekday, start_min: 14 * 60, end_min: 17 * 60 },
+    ]);
+    await admin.from("booking_availability").insert(rows);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    id: data.id,
+    slug: data.slug,
+    ...(degraded
+      ? {
+          warning: "migrations_pending",
+          message:
+            "Type créé, mais les modes et champs personnalisés nécessitent les " +
+            "migrations 03 et 04, non appliquées sur cette base.",
+        }
+      : {}),
+  });
 }

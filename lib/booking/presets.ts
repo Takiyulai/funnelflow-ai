@@ -21,10 +21,24 @@
 // création, tout reste modifiable dans les onglets existants.
 
 import type { FormFieldItem } from "@/lib/funnels/types";
-import type { LocationKind } from "./types";
+import type { BookingMode, LocationKind } from "./types";
 
 export interface BookingPreset {
   id: string;
+  /**
+   * 🆕 Mode STRUCTUREL du type de rendez-vous.
+   *
+   * Deux préréglages qui ne partagent pas le même mode ne configurent pas la
+   * même chose : ils changent qui fixe la date et combien de personnes tiennent
+   * sur un créneau. C'est ce qui justifie un parcours en étapes plutôt qu'un
+   * formulaire unique — l'étape « quand ? » dépend réellement de ce choix.
+   */
+  mode: BookingMode;
+  /**
+   * Places par créneau. `undefined` → individuel (1).
+   * Renseigné uniquement pour les modes collectifs.
+   */
+  capacity?: number;
   /** Libellé de la carte dans le sélecteur. */
   label: string;
   /** Une phrase : à qui ça sert, pas ce que ça configure. */
@@ -61,8 +75,9 @@ const MINIMAL_FIELDS: FormFieldItem[] = [
 export const BOOKING_PRESETS: BookingPreset[] = [
   {
     id: "discovery",
+    mode: "consultation",
     label: "Appel découverte",
-    hint: "Premier contact court. Objectif : qualifier, pas conclure.",
+    hint: "Premier contact court, en tête à tête. Le client choisit son créneau.",
     defaultName: "Appel découverte",
     durationMin: 15,
     bufferMin: 5,
@@ -76,8 +91,9 @@ export const BOOKING_PRESETS: BookingPreset[] = [
   },
   {
     id: "coaching",
+    mode: "consultation",
     label: "Session de coaching",
-    hint: "Séance de travail avec un client déjà engagé.",
+    hint: "Séance de travail en tête à tête, avec un client déjà engagé.",
     defaultName: "Session de coaching",
     durationMin: 60,
     bufferMin: 15,
@@ -99,6 +115,7 @@ export const BOOKING_PRESETS: BookingPreset[] = [
   },
   {
     id: "audit",
+    mode: "consultation",
     label: "Audit / diagnostic",
     hint: "Séance longue et payante. À qualifier avant d'accepter.",
     defaultName: "Audit stratégique",
@@ -140,8 +157,9 @@ export const BOOKING_PRESETS: BookingPreset[] = [
   },
   {
     id: "demo",
+    mode: "consultation",
     label: "Démo produit",
-    hint: "Présentation d'un outil ou d'un service à un prospect.",
+    hint: "Présentation individuelle d'un outil ou d'un service.",
     defaultName: "Démo produit",
     durationMin: 30,
     bufferMin: 10,
@@ -171,8 +189,9 @@ export const BOOKING_PRESETS: BookingPreset[] = [
   },
   {
     id: "consultation",
+    mode: "consultation",
     label: "Consultation",
-    hint: "Rendez-vous conseil ponctuel, souvent payant.",
+    hint: "Rendez-vous conseil ponctuel, en tête à tête.",
     defaultName: "Consultation",
     durationMin: 45,
     bufferMin: 15,
@@ -192,8 +211,53 @@ export const BOOKING_PRESETS: BookingPreset[] = [
       },
     ],
   },
+  // ── MODES COLLECTIFS ─────────────────────────────────────────────────────
+  // Ceux-ci ne sont PAS des variantes de réglages : plusieurs personnes
+  // s'inscrivent sur un même créneau, ce que l'index anti-double-réservation
+  // interdisait jusqu'à la migration 04.
+  {
+    id: "workshop",
+    mode: "event",
+    capacity: 30,
+    label: "Atelier / webinaire",
+    hint: "TU fixes la date. Plusieurs participants s'inscrivent au même créneau.",
+    defaultName: "Atelier en ligne",
+    durationMin: 60,
+    bufferMin: 0,
+    minNoticeMin: 60,
+    horizonDays: 90,
+    slotStepMin: 30,
+    locationKind: "visio",
+    formFields: [
+      ...MINIMAL_FIELDS,
+      {
+        name: "attente",
+        type: "textarea",
+        label: "Qu'espères-tu de cet atelier ?",
+        placeholder: "Optionnel, mais ça m'aide à préparer",
+        required: false,
+        width: "full",
+      },
+    ],
+  },
+  {
+    id: "classroom",
+    mode: "classroom",
+    capacity: 12,
+    label: "Cours récurrent",
+    hint: "Même créneau chaque semaine, plusieurs participants inscrits.",
+    defaultName: "Cours hebdomadaire",
+    durationMin: 60,
+    bufferMin: 0,
+    minNoticeMin: 120,
+    horizonDays: 60,
+    slotStepMin: 30,
+    locationKind: "visio",
+    formFields: MINIMAL_FIELDS,
+  },
   {
     id: "custom",
+    mode: "consultation",
     label: "Sur mesure",
     hint: "Pars d'une base neutre et règle tout toi-même.",
     defaultName: "Rendez-vous",

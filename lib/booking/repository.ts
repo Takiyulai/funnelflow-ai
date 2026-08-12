@@ -15,6 +15,7 @@ import type {
   AvailabilityException,
   AvailabilityRule,
   BookingEventType,
+  BookingSession,
   BusyInterval,
 } from "./types";
 
@@ -46,7 +47,7 @@ const EVENT_TYPE_COLS_BASE =
  * effet est que les champs personnalisés restent invisibles jusqu'à la
  * migration — au lieu de tout casser.
  */
-const EVENT_TYPE_COLS = `${EVENT_TYPE_COLS_BASE}, form_fields`;
+const EVENT_TYPE_COLS = `${EVENT_TYPE_COLS_BASE}, form_fields, mode, capacity`;
 
 /** Code PostgREST « colonne inconnue » (undefined_column côté PostgreSQL). */
 function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
@@ -88,6 +89,10 @@ function rowToEventType(r: any): BookingEventType {
     // On vérifie le type : un jsonb mal formé (édition manuelle en base,
     // import) ne doit pas faire planter le rendu du formulaire public.
     formFields: Array.isArray(r.form_fields) ? r.form_fields : null,
+    // 🆕 Migration 04. Repli sur "consultation" : c'est le comportement
+    // historique, et le seul que le moteur de créneaux savait produire avant.
+    mode: r.mode ?? "consultation",
+    capacity: typeof r.capacity === "number" ? r.capacity : null,
     language: r.language ?? "fr",
     active: r.active,
     funnelId: r.funnel_id,
@@ -132,6 +137,163 @@ export async function listEventTypes(userId: string): Promise<BookingEventType[]
     ({ data } = await run(EVENT_TYPE_COLS_BASE));
   }
   return (data ?? []).map(rowToEventType);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 🆕 SÉANCES DATÉES (mode `event`)
+//
+// Un atelier n'a pas de disponibilités hebdomadaires : il a des dates, fixées
+// par l'hôte. Chacune porte sa propre limite d'inscrits, qui peut différer de
+// celle du type — une session d'ouverture à 100 places, les suivantes à 30.
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Séances d'un type de RDV, avec le NOMBRE D'INSCRITS de chacune.
+ *
+ * Le comptage est fait ici, en une seule requête, plutôt que côté appelant :
+ * c'est lui qui décide si une séance est complète, et le laisser à la charge
+ * de chaque écran garantirait des divergences.
+ *
+ * ⚠️ Seules les réservations `confirmed` comptent. Une annulation doit libérer
+ * la place immédiatement, sinon un atelier se remplit de fantômes.
+ */
+export async function getSessions(
+  eventTypeId: string,
+  opts: { fromNow?: boolean } = {},
+): Promise<BookingSession[]> {
+  const admin = getSupabaseAdmin();
+
+  let q = admin
+    .from("booking_sessions")
+    .select("id, event_type_id, starts_at, ends_at, capacity")
+    .eq("event_type_id", eventTypeId)
+    .order("starts_at", { ascending: true });
+
+  // Le public ne doit voir que les séances à venir ; l'hôte veut tout son
+  // historique pour dupliquer une date passée.
+  if (opts.fromNow) q = q.gte("starts_at", new Date().toISOString());
+
+  const { data, error } = await q;
+  if (error || !data) return [];
+
+  const sessions = data as any[];
+  if (sessions.length === 0) return [];
+
+  const { data: counts } = await admin
+    .from("bookings")
+    .select("session_id")
+    .in("session_id", sessions.map((s) => s.id))
+    .eq("status", "confirmed");
+
+  const bookedBySession = new Map<string, number>();
+  for (const row of (counts ?? []) as { session_id: string | null }[]) {
+    if (!row.session_id) continue;
+    bookedBySession.set(row.session_id, (bookedBySession.get(row.session_id) ?? 0) + 1);
+  }
+
+  return sessions.map((s) => ({
+    id: s.id,
+    eventTypeId: s.event_type_id,
+    startsAt: s.starts_at,
+    endsAt: s.ends_at,
+    capacity: typeof s.capacity === "number" ? s.capacity : null,
+    bookedCount: bookedBySession.get(s.id) ?? 0,
+  }));
+}
+
+/**
+ * Remplace TOUTES les séances d'un type de RDV.
+ *
+ * Remplacement et non fusion : l'éditeur envoie la liste complète, et
+ * raisonner en delta demanderait des identifiants stables côté client pour un
+ * gain nul à cette échelle.
+ *
+ * ⚠️ Les séances déjà RÉSERVÉES sont préservées : les supprimer effacerait en
+ * cascade les inscriptions (`on delete set null` sur bookings.session_id), et
+ * des participants se présenteraient à un atelier que plus personne n'a en
+ * base. Une séance qu'on tente de retirer alors qu'elle a des inscrits est
+ * donc conservée.
+ */
+export async function replaceSessions(
+  eventTypeId: string,
+  sessions: { id?: string; startsAt: string; endsAt: string; capacity?: number | null }[],
+): Promise<void> {
+  const admin = getSupabaseAdmin();
+
+  const existing = await getSessions(eventTypeId);
+  const keptIds = new Set(sessions.map((s) => s.id).filter(Boolean) as string[]);
+
+  const protectedIds = existing
+    .filter((s) => (s.bookedCount ?? 0) > 0)
+    .map((s) => s.id);
+
+  const toDelete = existing
+    .filter((s) => !keptIds.has(s.id) && (s.bookedCount ?? 0) === 0)
+    .map((s) => s.id);
+
+  if (toDelete.length > 0) {
+    await admin.from("booking_sessions").delete().in("id", toDelete);
+  }
+
+  for (const s of sessions) {
+    if (s.id) {
+      await admin
+        .from("booking_sessions")
+        .update({
+          starts_at: s.startsAt,
+          ends_at: s.endsAt,
+          capacity: s.capacity ?? null,
+        })
+        .eq("id", s.id);
+    } else {
+      await admin.from("booking_sessions").insert({
+        event_type_id: eventTypeId,
+        starts_at: s.startsAt,
+        ends_at: s.endsAt,
+        capacity: s.capacity ?? null,
+      });
+    }
+  }
+
+  if (protectedIds.length > 0) {
+    console.log(
+      `[booking] ${protectedIds.length} séance(s) conservée(s) : des inscrits y sont rattachés.`,
+    );
+  }
+}
+
+/**
+ * Une place reste-t-elle sur cette séance ?
+ *
+ * Vérifié au moment de la réservation, par COMPTAGE — un index unique ne sait
+ * pas exprimer « au plus N ». Deux inscriptions simultanées sur la dernière
+ * place peuvent donc théoriquement passer toutes les deux. C'est un compromis
+ * assumé : sur un atelier, une place en trop est un désagrément ; sur un
+ * rendez-vous individuel, ce serait une collision, et c'est justement pour ça
+ * que ce cas-là reste protégé par l'index unique.
+ */
+export async function sessionHasRoom(
+  sessionId: string,
+  fallbackCapacity: number | null | undefined,
+): Promise<{ ok: boolean; remaining: number }> {
+  const admin = getSupabaseAdmin();
+
+  const { data: session } = await admin
+    .from("booking_sessions")
+    .select("capacity")
+    .eq("id", sessionId)
+    .maybeSingle<{ capacity: number | null }>();
+
+  const capacity = session?.capacity ?? fallbackCapacity ?? 1;
+
+  const { count } = await admin
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", sessionId)
+    .eq("status", "confirmed");
+
+  const remaining = Math.max(0, capacity - (count ?? 0));
+  return { ok: remaining > 0, remaining };
 }
 
 export async function getAvailability(eventTypeId: string): Promise<AvailabilityRule[]> {
@@ -280,6 +442,8 @@ export type CreateBookingInput = {
   note?: string | null;
   /** 🆕 Réponses aux champs personnalisés, indexées par `name` de champ. */
   answers?: Record<string, string | boolean> | null;
+  /** 🆕 Séance rattachée (mode `event`). Null pour un rendez-vous individuel. */
+  sessionId?: string | null;
   leadId?: string | null;
 };
 
@@ -313,6 +477,9 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     status: "confirmed",
     lead_id: input.leadId ?? null,
     funnel_id: input.eventType.funnelId ?? null,
+    // 🆕 Décide de quelle règle d'unicité s'applique : null → index
+    // anti-double-réservation (1 personne), renseigné → plafond par comptage.
+    session_id: input.sessionId ?? null,
   };
 
   // 🆕 Objet vide normalisé en null : `{}` en base laisserait croire à des

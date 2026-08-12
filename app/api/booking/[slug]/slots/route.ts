@@ -20,6 +20,8 @@ import {
 } from "@/lib/booking/timezones";
 import { resolveBookingColor } from "@/lib/booking/colors";
 import { ensureEmailField, resolveBookingFields } from "@/lib/booking/formFields";
+import { getSessions } from "@/lib/booking/repository";
+import { usesFixedSessions } from "@/lib/booking/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,6 +54,54 @@ export async function GET(
   const fromDay = url.searchParams.get("from") ?? undefined;
 
   const now = new Date();
+
+  // 🆕 MODE `event` — les créneaux ne sont pas CALCULÉS, ils sont PUBLIÉS.
+  //
+  // Un atelier n'a pas de disponibilités hebdomadaires : l'hôte fixe des dates.
+  // On court-circuite donc entièrement le moteur de créneaux et on renvoie les
+  // séances telles quelles, avec leurs places restantes — c'est cette
+  // information qui décide de l'inscription, pas l'heure.
+  if (usesFixedSessions(eventType.mode)) {
+    const sessions = await getSessions(eventType.id, { fromNow: true });
+    const defaultCapacity = eventType.capacity ?? 1;
+
+    return NextResponse.json({
+      ok: true,
+      eventType: {
+        slug: eventType.slug,
+        name: eventType.name,
+        description: eventType.description,
+        durationMin: eventType.durationMin,
+        locationKind: eventType.locationKind,
+        color: resolveBookingColor(eventType.color),
+        hostName: eventType.hostName ?? null,
+        hostTitle: eventType.hostTitle ?? null,
+        hostAvatarUrl: eventType.hostAvatarUrl ?? null,
+        hostBio: eventType.hostBio ?? null,
+        formFields: ensureEmailField(resolveBookingFields(eventType)),
+        mode: eventType.mode ?? "consultation",
+      },
+      visitorTimezone,
+      visitorTimezoneLabel: shortZoneLabel(visitorTimezone),
+      daylightNotice: daylightSavingNotice(eventType.timezone, eventType.language),
+      // Contrat distinct de `days` : le widget sait qu'en mode event il affiche
+      // une LISTE DE SÉANCES, pas une grille de jours.
+      sessions: sessions.map((s) => {
+        const capacity = s.capacity ?? defaultCapacity;
+        const booked = s.bookedCount ?? 0;
+        return {
+          id: s.id,
+          startsAt: s.startsAt,
+          endsAt: s.endsAt,
+          capacity,
+          remaining: Math.max(0, capacity - booked),
+          full: booked >= capacity,
+        };
+      }),
+      days: [],
+    });
+  }
+
   const to = new Date(now.getTime() + eventType.horizonDays * 24 * 60 * 60_000);
   const { rules, exceptions, busy } = await loadSchedulingContext(eventType, now, to);
 

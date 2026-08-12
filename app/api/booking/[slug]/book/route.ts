@@ -20,8 +20,10 @@ import {
   getEventTypeBySlug,
   loadSchedulingContext,
   resolveConfirmationUrl,
+  sessionHasRoom,
   upsertLeadForBooking,
 } from "@/lib/booking/repository";
+import { usesFixedSessions } from "@/lib/booking/types";
 import { isSlotBookable } from "@/lib/booking/slots";
 import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/booking/timezones";
 import { sendBookingEmails } from "@/lib/booking/emails";
@@ -40,6 +42,10 @@ export const runtime = "nodejs";
 const schema = z.object({
   startsAt: z.string().min(10),
   timezone: z.string().optional(),
+  // 🆕 Mode `event` : le visiteur s'inscrit à une SÉANCE publiée, pas à un
+  // créneau calculé. C'est l'identifiant de séance qui fait foi — `startsAt`
+  // est alors redondant, mais conservé pour un contrat de requête unique.
+  sessionId: z.string().uuid().optional(),
 
   // 🆕 Formulaire piloté par la configuration de l'hôte : on reçoit un sac de
   // valeurs indexées par nom de champ, dont on ne connaît pas la forme à
@@ -141,27 +147,60 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
 
   // ── Barrière 2 : revalidation complète côté serveur ──────────────────────
   const now = new Date();
-  const to = new Date(now.getTime() + eventType.horizonDays * 24 * 60 * 60_000);
-  const { rules, exceptions, busy } = await loadSchedulingContext(eventType, now, to);
 
-  const check = isSlotBookable(startsAt.toISOString(), {
-    hostTimezone: eventType.timezone,
-    visitorTimezone,
-    durationMin: eventType.durationMin,
-    bufferMin: eventType.bufferMin,
-    minNoticeMin: eventType.minNoticeMin,
-    horizonDays: eventType.horizonDays,
-    slotStepMin: eventType.slotStepMin,
-    rules,
-    exceptions,
-    busy,
-    now,
-  });
-  if (!check.ok) {
-    return NextResponse.json(
-      { ok: false, error: "slot_unavailable", message: check.reason },
-      { status: 409 },
-    );
+  // 🆕 MODE `event` — la validation ne porte pas sur les disponibilités mais
+  // sur les PLACES RESTANTES de la séance choisie.
+  //
+  // Le moteur de créneaux serait inopérant ici : il n'existe aucune règle
+  // hebdomadaire, et un atelier accepte plusieurs personnes sur la même heure.
+  // C'est aussi pourquoi l'index anti-double-réservation exclut désormais les
+  // inscriptions rattachées à une séance (migration 04).
+  if (usesFixedSessions(eventType.mode)) {
+    if (!body.sessionId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "session_required",
+          message: "Choisis une séance avant de valider ton inscription.",
+        },
+        { status: 400 },
+      );
+    }
+    const room = await sessionHasRoom(body.sessionId, eventType.capacity);
+    if (!room.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "session_full",
+          message:
+            "Cette séance vient d'afficher complet. Choisis une autre date.",
+        },
+        { status: 409 },
+      );
+    }
+  } else {
+    const to = new Date(now.getTime() + eventType.horizonDays * 24 * 60 * 60_000);
+    const { rules, exceptions, busy } = await loadSchedulingContext(eventType, now, to);
+
+    const check = isSlotBookable(startsAt.toISOString(), {
+      hostTimezone: eventType.timezone,
+      visitorTimezone,
+      durationMin: eventType.durationMin,
+      bufferMin: eventType.bufferMin,
+      minNoticeMin: eventType.minNoticeMin,
+      horizonDays: eventType.horizonDays,
+      slotStepMin: eventType.slotStepMin,
+      rules,
+      exceptions,
+      busy,
+      now,
+    });
+    if (!check.ok) {
+      return NextResponse.json(
+        { ok: false, error: "slot_unavailable", message: check.reason },
+        { status: 409 },
+      );
+    }
   }
 
   // Le lead est créé AVANT la réservation pour pouvoir l'y rattacher, mais son
@@ -191,6 +230,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     visitorPhone: form.visitorPhone,
     note: form.note,
     answers: form.answers,
+    // 🆕 Rattache l'inscription à sa séance. C'est aussi ce qui la fait sortir
+    // de l'index anti-double-réservation : sans `session_id`, la deuxième
+    // inscription au même atelier serait rejetée comme un doublon.
+    sessionId: usesFixedSessions(eventType.mode) ? body.sessionId ?? null : null,
     leadId,
   });
 

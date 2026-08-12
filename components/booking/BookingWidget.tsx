@@ -73,12 +73,32 @@ type EventTypeView = {
    * déploiement de cette fonctionnalité — un onglet resté ouvert, un cache.
    */
   formFields?: FormFieldItem[];
+  /** 🆕 Mode. Absent → "consultation" (grille de créneaux classique). */
+  mode?: string;
+};
+
+/**
+ * 🆕 Séance publiée par l'hôte (mode `event`).
+ *
+ * `remaining` et `full` sont calculés côté SERVEUR : le widget ne doit pas
+ * déduire la disponibilité d'un compte d'inscrits qu'il aurait reçu, sinon
+ * deux onglets ouverts afficheraient des chiffres différents.
+ */
+type SessionView = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  remaining: number;
+  full: boolean;
 };
 
 type SlotsResponse = {
   ok: boolean;
   eventType?: EventTypeView;
   days?: DaySlots[];
+  /** Renseigné uniquement en mode `event`. */
+  sessions?: SessionView[];
   message?: string;
 };
 
@@ -147,6 +167,8 @@ export function BookingWidget({ slug }: { slug: string }) {
    * est désormais défini par l'hôte, et le nombre de champs n'est plus connu
    * à l'écriture du composant.
    */
+  /** 🆕 Séance choisie (mode `event`). C'est elle qui fait foi côté serveur. */
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [values, setValues] = useState<BookingFormValues>({});
   const setValue = (fieldName: string, v: string | boolean) =>
     setValues((prev) => ({ ...prev, [fieldName]: v }));
@@ -277,6 +299,9 @@ export function BookingWidget({ slug }: { slug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           startsAt: selectedSlot.startsAt,
+          // 🆕 En mode `event`, c'est l'identifiant de séance qui détermine la
+          // place, pas l'heure : deux séances peuvent commencer au même moment.
+          ...(selectedSessionId ? { sessionId: selectedSessionId } : {}),
           timezone,
           // ⚠️ On envoie les VALEURS BRUTES, pas la répartition calculée ici :
           // le serveur refait la validation et la répartition à partir de la
@@ -353,6 +378,14 @@ export function BookingWidget({ slug }: { slug: string }) {
     ev?.formFields && ev.formFields.length > 0
       ? ev.formFields
       : DEFAULT_BOOKING_FIELDS;
+
+  /**
+   * 🆕 Mode `event` : l'hôte a publié des séances datées. On n'affiche pas une
+   * grille de jours mais une liste de dates, avec les places restantes — c'est
+   * cette information qui décide de l'inscription.
+   */
+  const sessions = data?.sessions ?? [];
+  const isEventMode = ev?.mode === "event";
 
   return (
     // 🆕 La couleur d'accent devient une VARIABLE CSS portée par la racine.
@@ -446,7 +479,75 @@ export function BookingWidget({ slug }: { slug: string }) {
         </p>
       )}
 
-      {!loading && !error && availableDays.size > 0 && (
+      {/* ── 🆕 MODE `event` — liste de séances, pas de calendrier ──────────
+          L'hôte a fixé les dates : un calendrier mensuel où seuls trois jours
+          sont cliquables ferait chercher l'information au lieu de la donner.
+          On liste donc les séances, avec les places restantes — c'est ce qui
+          décide de l'inscription, et ce qui crée l'urgence. */}
+      {!loading && !error && isEventMode && (
+        <div className="grid gap-2">
+          {sessions.length === 0 && (
+            <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm text-white/60">
+              Aucune séance programmée pour le moment.
+            </p>
+          )}
+
+          {sessions.map((s) => {
+            const start = new Date(s.startsAt);
+            const selected = selectedSlot?.startsAt === s.startsAt;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={s.full}
+                onClick={() => {
+                  setSelectedSessionId(s.id);
+                  pickSlot({ startsAt: s.startsAt, endsAt: s.endsAt });
+                }}
+                aria-pressed={selected}
+                style={
+                  selected ? { borderColor: accent, backgroundColor: withAlpha(accent, 0.12) } : undefined
+                }
+                className={
+                  "flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-left transition motion-reduce:transition-none " +
+                  (s.full
+                    ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-50"
+                    : selected
+                      ? "border-transparent"
+                      : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]")
+                }
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold capitalize text-white">
+                    {formatDateInZone(start, timezone)}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-white/55">
+                    {formatTimeInZone(start, timezone)} –{" "}
+                    {formatTimeInZone(new Date(s.endsAt), timezone)} (
+                    {shortZoneLabel(timezone)})
+                  </span>
+                </span>
+                <span
+                  className={
+                    "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold " +
+                    (s.full
+                      ? "bg-white/10 text-white/50"
+                      : s.remaining <= 3
+                        ? "bg-red-500/20 text-red-200"
+                        : "bg-white/10 text-white/70")
+                  }
+                >
+                  {s.full
+                    ? "Complet"
+                    : `${s.remaining} place${s.remaining > 1 ? "s" : ""}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!loading && !error && !isEventMode && availableDays.size > 0 && (
         <>
           {/* ── Deux colonnes desktop, étapes empilées mobile ───────────── */}
           <div className="grid gap-5 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">

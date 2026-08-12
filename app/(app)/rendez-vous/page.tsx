@@ -27,8 +27,10 @@ import { HostBookingList } from "@/components/booking/HostBookingList";
 import { BookingTypesTab } from "@/components/booking/BookingTypesTab";
 import { BookingAvailabilityTab } from "@/components/booking/BookingAvailabilityTab";
 import { BookingSettingsTab } from "@/components/booking/BookingSettingsTab";
-import { NewBookingTypeDialog } from "@/components/booking/NewBookingTypeDialog";
-import type { BookingPreset } from "@/lib/booking/presets";
+import {
+  NewBookingTypeDialog,
+  type NewTypePayload,
+} from "@/components/booking/NewBookingTypeDialog";
 import { detectVisitorTimeZone } from "@/lib/booking/timezones";
 import { isValidHexColor, resolveBookingColor } from "@/lib/booking/colors";
 import type { EventType } from "@/components/booking/types";
@@ -158,9 +160,20 @@ export default function RendezVousPage() {
    * le lieu — et surtout les CHAMPS DU FORMULAIRE, qui sont la seule vraie
    * différence de fond entre un appel de qualification et un audit payant.
    */
-  async function createType(preset: BookingPreset, name: string, durationMin: number) {
+  async function createType(payload: NewTypePayload) {
+    const { preset, name, durationMin, capacity, sessions } = payload;
     setSaving(true);
     try {
+      // Les séances sont saisies en date + heure LOCALES de l'hôte. On les
+      // convertit en instants absolus ici : la base stocke du timestamptz, et
+      // un participant à Douala doit voir l'heure de Paris correctement
+      // traduite, pas la chaîne brute.
+      const isoSessions = (sessions ?? []).map((s) => {
+        const start = new Date(`${s.day}T${s.time}:00`);
+        const end = new Date(start.getTime() + s.durationMin * 60_000);
+        return { startsAt: start.toISOString(), endsAt: end.toISOString() };
+      });
+
       const res = await fetch("/api/booking/event-types", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,10 +186,15 @@ export default function RendezVousPage() {
           slotStepMin: preset.slotStepMin,
           locationKind: preset.locationKind,
           formFields: preset.formFields,
+          mode: preset.mode,
+          ...(capacity ? { capacity } : {}),
+          ...(isoSessions.length > 0 ? { sessions: isoSessions } : {}),
           timezone: detectVisitorTimeZone(),
         }),
       });
       const json = await res.json();
+      // Le serveur peut réussir en mode DÉGRADÉ si les migrations manquent.
+      if (json.ok && json.warning) setMsg(json.message);
       if (!json.ok) {
         setMsg(json.message ?? "Création impossible.");
         return;
@@ -441,8 +459,8 @@ export default function RendezVousPage() {
         open={newTypeOpen}
         busy={saving}
         onClose={() => setNewTypeOpen(false)}
-        onCreate={(preset, name, durationMin) => {
-          void createType(preset, name, durationMin);
+        onCreate={(payload) => {
+          void createType(payload);
         }}
       />
     </AppShell>
