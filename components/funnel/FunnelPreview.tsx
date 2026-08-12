@@ -60,6 +60,7 @@ import { FunnelSectionWrapper } from "@/components/funnel/FunnelSectionWrapper";
 import { getTemplateSkin } from "@/components/funnel/templates/skins";
 import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
+import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -1961,7 +1962,8 @@ function RawHtmlSectionBlock({
   section,
   funnel,
   editMode,
-}: Pick<SectionBlockProps, "section" | "funnel" | "editMode">) {
+  activePage,
+}: Pick<SectionBlockProps, "section" | "funnel" | "editMode" | "activePage">) {
   const clonedMeta = funnel.meta as
     | {
         clonedHead?: string;
@@ -1982,6 +1984,24 @@ function RawHtmlSectionBlock({
         clonedBody={clonedMeta?.clonedBody}
         editMode={editMode}
       />
+      {/* 🆕 CAPTURE CLONE — Pont CTA.
+          ⚠️ Il était monté UNIQUEMENT dans SectionRenderer, en supposant que
+          c'était le chemin de rendu public. C'est faux : la page publiée
+          (/tunnel/[slug] → PublishedFunnelView) rend via CE composant, pour
+          garantir la parité aperçu ↔ publié. Le pont n'existait donc sur AUCUN
+          chemin réellement emprunté, et les CTA d'un clone restaient muets même
+          après publication.
+          Hors édition seulement : en mode édition, le clic sert à sélectionner
+          l'élément, pas à déclencher son action. */}
+      {!editMode && (
+        <RawHtmlCtaBridge
+          section={section}
+          funnel={funnel}
+          // La page courante permet la redirection post-capture vers la page
+          // suivante du tunnel (typiquement : accueil → remerciement).
+          page={activePage}
+        />
+      )}
     </section>
   );
 }
@@ -2003,6 +2023,7 @@ function SectionBlock(props: SectionBlockProps) {
         section={props.section}
         funnel={props.funnel}
         editMode={props.editMode}
+        activePage={props.activePage}
       />
     );
   }

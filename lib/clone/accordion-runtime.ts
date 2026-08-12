@@ -160,11 +160,59 @@ const RUNTIME_BODY = `
       a.style.setProperty('clip-path', 'none', 'important');
       a.style.setProperty('transform', 'none', 'important');
       a.style.setProperty('pointer-events', 'auto', 'important');
+
+      // 🆕 AÉRATION. Un accordéon replié l'est très souvent avec
+      // padding zéro en plus de max-height zéro — c'est ce qui fait
+      // disparaître l'espace en même temps que la hauteur. En rouvrant, on
+      // rendait la hauteur mais PAS le padding : la réponse réapparaissait
+      // collée aux bords de son fond, « crispée » dans un bloc trop étroit.
+      //
+      // On ne pose un espacement QUE s'il est nul : un site qui a prévu son
+      // propre padding le garde intact.
+      try {
+        var cs = getComputedStyle(a);
+        var pt = parseFloat(cs.paddingTop) || 0;
+        var pb = parseFloat(cs.paddingBottom) || 0;
+        var pl = parseFloat(cs.paddingLeft) || 0;
+        var pr = parseFloat(cs.paddingRight) || 0;
+        if (pt < 2) a.style.setProperty('padding-top', '12px', 'important');
+        if (pb < 2) a.style.setProperty('padding-bottom', '16px', 'important');
+        // Horizontal : on s'aligne sur la question pour que la réponse ne soit
+        // pas décalée par rapport à son titre.
+        if (pl < 2) a.style.setProperty('padding-left', '0', 'important');
+        if (pr < 2) a.style.setProperty('padding-right', '0', 'important');
+        // Interlignage : certains thèmes écrasent line-height à 0 pour animer
+        // le repli. Un texte à interligne nul est illisible.
+        var lh = parseFloat(cs.lineHeight) || 0;
+        if (lh < 8) a.style.setProperty('line-height', '1.6', 'important');
+      } catch (e) {}
+
+      // 🆕 Le panneau n'est pas toujours l'élément contraint : le bloc
+      // « accordion-item » qui l'englobe porte fréquemment la max-height
+      // animée. Sans libérer ces ancêtres, la réponse s'affiche mais reste
+      // rognée par son parent.
+      try {
+        var up = a.parentElement;
+        for (var d = 0; d < 3 && up; d++) {
+          var ucs = getComputedStyle(up);
+          var mh = ucs.maxHeight;
+          if (mh && mh !== 'none' && parseFloat(mh) < 100000) {
+            up.style.setProperty('max-height', 'none', 'important');
+            up.style.setProperty('overflow', 'visible', 'important');
+          }
+          up = up.parentElement;
+        }
+      } catch (e) {}
     } else {
       a.style.setProperty('display', 'none', 'important');
       a.style.setProperty('height', '0', 'important');
       a.style.setProperty('max-height', '0', 'important');
       a.style.setProperty('overflow', 'hidden', 'important');
+      // 🆕 On retire l'espacement de confort posé à l'ouverture : le laisser
+      // créerait une bande vide sous une question refermée.
+      a.style.removeProperty('padding-top');
+      a.style.removeProperty('padding-bottom');
+      a.style.removeProperty('line-height');
     }
     q.setAttribute('data-ff-faq-open', open ? 'true' : 'false');
 
@@ -192,13 +240,37 @@ const RUNTIME_BODY = `
     if (q.setAttribute) q.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
+  // 🆕 En MODE ÉDITION, tous les accordéons démarrent OUVERTS.
+  //
+  // Une réponse repliée est invisible, donc impossible à cliquer : l'éditeur
+  // n'ouvrait « pas toujours » de conteneur d'édition parce que la moitié des
+  // textes n'était tout simplement pas à l'écran. Un correctif CSS
+  // (#ff-faq-fix) tentait de les déplier par sélecteurs de classe, mais il ne
+  // couvre que les thèmes dont les classes contiennent « accordion », « faq »
+  // ou « panel ». Ouvrir via le runtime marche quel que soit le thème, puisque
+  // c'est lui qui a identifié la paire question/réponse.
+  //
+  // Sans effet sur la page publique : les accordéons y restent fermés.
+  // Le drapeau passe par un ATTRIBUT du document, pas par une variable
+  // partagée : le script d'interactivité déclare son EDIT_MODE à l'intérieur
+  // d'une IIFE, donc invisible ici. Un attribut est lisible par les deux, sans
+  // couplage ni ordre d'exécution à respecter.
+  var FF_EDIT_MODE = false;
+  try {
+    FF_EDIT_MODE =
+      document.documentElement.getAttribute('data-ff-edit-mode') === 'true';
+  } catch (e) {}
+
   function bind(q, a, adapter, startOpen) {
     if (!q || !a) return false;
     if (q.getAttribute('data-ff-faq-question') === 'true') return false;
     q.setAttribute('data-ff-faq-question', 'true');
     q.style.cursor = 'pointer';
-    setOpen(q, a, !!startOpen, adapter);
+    setOpen(q, a, FF_EDIT_MODE || !!startOpen, adapter);
     q.addEventListener('click', function (ev) {
+      // En édition, le clic sert à SÉLECTIONNER un texte, pas à replier la
+      // question : refermer masquerait la réponse qu'on vient de cliquer.
+      if (FF_EDIT_MODE) return;
       ev.preventDefault();
       ev.stopPropagation();
       setOpen(q, a, q.getAttribute('data-ff-faq-open') !== 'true', adapter);

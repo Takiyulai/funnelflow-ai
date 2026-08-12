@@ -20,15 +20,43 @@ import type {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const EVENT_TYPE_COLS =
+/**
+ * Colonnes présentes depuis toujours. Une requête bâtie sur cette liste
+ * fonctionne quel que soit l'état des migrations.
+ */
+const EVENT_TYPE_COLS_BASE =
   "id, user_id, slug, name, description, duration_min, buffer_min, min_notice_min, " +
   "horizon_days, slot_step_min, timezone, location_kind, location_value, color, " +
   "host_name, host_title, host_avatar_url, host_bio, " +
-  // 🆕 Champs de formulaire personnalisés. ⚠️ Une colonne absente de cette
-  // liste n'est jamais lue : le champ existerait en base et resterait
-  // invisible côté application, sans la moindre erreur.
-  "form_fields, " +
   "language, active, funnel_id";
+
+/**
+ * 🆕 Avec les champs de formulaire personnalisés (migration 03).
+ *
+ * ⚠️ POURQUOI DEUX LISTES, ET UN REPLI.
+ *
+ * PostgREST rejette la requête ENTIÈRE si une seule colonne demandée n'existe
+ * pas. Ajouter `form_fields` au select sans que la migration soit appliquée ne
+ * dégrade donc pas la fonctionnalité : elle vide l'écran « Rendez-vous » en
+ * entier — plus aucun type, plus aucune réservation.
+ *
+ * Le code ne peut pas présumer de l'ordre de déploiement : sur Vercel, le code
+ * part avant que la migration soit jouée à la main. On tente donc la liste
+ * complète, et on retombe sur la liste de base si la colonne manque. Le seul
+ * effet est que les champs personnalisés restent invisibles jusqu'à la
+ * migration — au lieu de tout casser.
+ */
+const EVENT_TYPE_COLS = `${EVENT_TYPE_COLS_BASE}, form_fields`;
+
+/** Code PostgREST « colonne inconnue » (undefined_column côté PostgreSQL). */
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    /column .* does not exist/i.test(error.message ?? "") ||
+    /could not find the '.*' column/i.test(error.message ?? "")
+  );
+}
 
 function rowToEventType(r: any): BookingEventType {
   return {
@@ -67,29 +95,42 @@ function rowToEventType(r: any): BookingEventType {
 }
 
 export async function getEventTypeBySlug(slug: string): Promise<BookingEventType | null> {
-  const { data } = await getSupabaseAdmin()
-    .from("booking_event_types")
-    .select(EVENT_TYPE_COLS)
-    .ilike("slug", slug)
-    .maybeSingle();
+  const admin = getSupabaseAdmin();
+  const run = (cols: string) =>
+    admin.from("booking_event_types").select(cols).ilike("slug", slug).maybeSingle();
+
+  let { data, error } = await run(EVENT_TYPE_COLS);
+  if (isMissingColumnError(error)) ({ data } = await run(EVENT_TYPE_COLS_BASE));
   return data ? rowToEventType(data) : null;
 }
 
 export async function getEventTypeById(id: string): Promise<BookingEventType | null> {
-  const { data } = await getSupabaseAdmin()
-    .from("booking_event_types")
-    .select(EVENT_TYPE_COLS)
-    .eq("id", id)
-    .maybeSingle();
+  const admin = getSupabaseAdmin();
+  const run = (cols: string) =>
+    admin.from("booking_event_types").select(cols).eq("id", id).maybeSingle();
+
+  let { data, error } = await run(EVENT_TYPE_COLS);
+  if (isMissingColumnError(error)) ({ data } = await run(EVENT_TYPE_COLS_BASE));
   return data ? rowToEventType(data) : null;
 }
 
 export async function listEventTypes(userId: string): Promise<BookingEventType[]> {
-  const { data } = await getSupabaseAdmin()
-    .from("booking_event_types")
-    .select(EVENT_TYPE_COLS)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
+  const admin = getSupabaseAdmin();
+  const run = (cols: string) =>
+    admin
+      .from("booking_event_types")
+      .select(cols)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+
+  let { data, error } = await run(EVENT_TYPE_COLS);
+  if (isMissingColumnError(error)) {
+    console.warn(
+      "[booking] Colonne form_fields absente — migration 03 non appliquée. " +
+        "Les champs de formulaire personnalisés sont ignorés jusque-là.",
+    );
+    ({ data } = await run(EVENT_TYPE_COLS_BASE));
+  }
   return (data ?? []).map(rowToEventType);
 }
 
@@ -256,31 +297,48 @@ export type CreateBookingResult =
  * message utilisable plutôt qu'une erreur base brute.
  */
 export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("bookings")
-    .insert({
-      event_type_id: input.eventType.id,
-      user_id: input.eventType.userId,
-      starts_at: input.startsAt,
-      ends_at: input.endsAt,
-      visitor_timezone: input.visitorTimezone,
-      host_timezone: input.eventType.timezone,
-      visitor_name: input.visitorName,
-      visitor_email: input.visitorEmail,
-      visitor_phone: input.visitorPhone ?? null,
-      note: input.note ?? null,
-      // 🆕 Objet vide normalisé en null : `{}` en base laisserait croire à des
-      // réponses, et compliquerait les filtres jsonb.
-      answers:
-        input.answers && Object.keys(input.answers).length > 0
-          ? input.answers
-          : null,
-      status: "confirmed",
-      lead_id: input.leadId ?? null,
-      funnel_id: input.eventType.funnelId ?? null,
-    })
-    .select("id, manage_token")
-    .maybeSingle<{ id: string; manage_token: string }>();
+  const admin = getSupabaseAdmin();
+
+  const baseRow = {
+    event_type_id: input.eventType.id,
+    user_id: input.eventType.userId,
+    starts_at: input.startsAt,
+    ends_at: input.endsAt,
+    visitor_timezone: input.visitorTimezone,
+    host_timezone: input.eventType.timezone,
+    visitor_name: input.visitorName,
+    visitor_email: input.visitorEmail,
+    visitor_phone: input.visitorPhone ?? null,
+    note: input.note ?? null,
+    status: "confirmed",
+    lead_id: input.leadId ?? null,
+    funnel_id: input.eventType.funnelId ?? null,
+  };
+
+  // 🆕 Objet vide normalisé en null : `{}` en base laisserait croire à des
+  // réponses, et compliquerait les filtres jsonb.
+  const answers =
+    input.answers && Object.keys(input.answers).length > 0 ? input.answers : null;
+
+  const insert = (row: Record<string, unknown>) =>
+    admin
+      .from("bookings")
+      .insert(row)
+      .select("id, manage_token")
+      .maybeSingle<{ id: string; manage_token: string }>();
+
+  // ⚠️ La colonne `answers` vient de la migration 03. Si elle n'est pas encore
+  // appliquée, l'insert échouerait — et le visiteur perdrait sa réservation
+  // pour une raison qui ne le concerne pas. On réessaie sans, en perdant les
+  // réponses plutôt que le rendez-vous.
+  let { data, error } = await insert({ ...baseRow, answers });
+  if (isMissingColumnError(error)) {
+    console.warn(
+      "[booking] Colonne answers absente — migration 03 non appliquée. " +
+        "Réservation enregistrée SANS les réponses personnalisées.",
+    );
+    ({ data, error } = await insert(baseRow));
+  }
 
   if (error) {
     if (error.code === "23505") {

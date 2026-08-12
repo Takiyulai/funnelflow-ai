@@ -622,7 +622,19 @@ function wrapHtmlDocument(
   // et les deux avaient divergé. Elle échouait par ailleurs sur deux markups
   // très répandus : Divi (titre <h5> sans icône enfant) et les questions
   // décorées d'un emoji après le « ? ».
-  const faqRuntimeScript = !editMode ? ACCORDION_RUNTIME_SCRIPT : "";
+  // 🆕 Le runtime accordéon est désormais injecté DANS LES DEUX MODES.
+  //
+  // Il était réservé au mode public, l'édition comptant sur le seul CSS
+  // #ff-faq-fix pour révéler les réponses. Or ce CSS cible des noms de classe
+  // (« accordion », « faq », « panel »…) : sur un thème qui n'en utilise
+  // aucun, les réponses restaient repliées — donc invisibles, donc
+  // impossibles à cliquer pour les éditer. C'est la cause du « le clic
+  // n'ouvre pas toujours de conteneur d'édition ».
+  //
+  // Le runtime, lui, identifie les paires question/réponse par structure. En
+  // édition il les ouvre TOUTES (voir FF_EDIT_MODE dans accordion-runtime) et
+  // neutralise le repli au clic.
+  const faqRuntimeScript = ACCORDION_RUNTIME_SCRIPT;
 
   const editModeFlag = editMode ? "true" : "false";
   const interactivityScript = `
@@ -1325,8 +1337,12 @@ function wrapHtmlDocument(
   // N'a d'effet que lorsque rien d'autre ne peint le fond.
   const defaultCanvasStyle = `<style id="ff-default-canvas">html,body{background-color:#ffffff;}</style>`;
 
+  // 🆕 `data-ff-edit-mode` sur <html> : c'est par cet attribut que le runtime
+  // accordéon sait s'il doit ouvrir toutes les réponses. Un attribut plutôt
+  // qu'une variable JS, parce que les deux scripts vivent dans des IIFE
+  // séparées et ne partagent aucune portée.
   return `<!DOCTYPE html>
-<html>
+<html data-ff-edit-mode="${editModeFlag}">
 <head>
 ${defaultCanvasStyle}
 ${head}

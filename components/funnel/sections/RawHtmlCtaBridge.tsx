@@ -51,6 +51,17 @@ type CtaActionMessage = {
 type Props = {
   section: FunnelSection;
   funnel?: Funnel;
+  /**
+   * Page COURANTE du tunnel.
+   *
+   * ⚠️ Indispensable à la redirection après capture. `resolveNextDestination`
+   * cherche la destination dans cet ordre : `section.formConfig`, puis
+   * `section.cta`, puis `page.nextPageId`, puis la page suivante du tunnel. Une
+   * section clonée n'ayant ni `formConfig` ni `cta`, les deux premières pistes
+   * sont toujours vides : sans `page`, la fonction renvoyait `null` et le
+   * prospect restait sur place après avoir laissé son email — la page de
+   * remerciement n'était jamais atteinte.
+   */
   page?: FunnelPage;
 };
 

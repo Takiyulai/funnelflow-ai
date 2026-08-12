@@ -53,23 +53,38 @@ export async function GET(req: Request) {
   const nowIso = new Date().toISOString();
 
   const admin = getSupabaseAdmin();
-  let query = admin
-    .from("bookings")
-    .select(
-      "id, event_type_id, starts_at, ends_at, visitor_timezone, host_timezone, " +
-        // 🆕 `answers` : réponses aux champs personnalisés. Une colonne absente
-        // de ce select n'existe tout simplement pas côté application.
-        "visitor_name, visitor_email, visitor_phone, note, answers, status, manage_token",
-    )
-    .eq("user_id", userId)
-    .limit(200);
 
-  query =
-    scope === "upcoming"
-      ? query.gte("starts_at", nowIso).order("starts_at", { ascending: true })
-      : query.lt("starts_at", nowIso).order("starts_at", { ascending: false });
+  const BASE_COLS =
+    "id, event_type_id, starts_at, ends_at, visitor_timezone, host_timezone, " +
+    "visitor_name, visitor_email, visitor_phone, note, status, manage_token";
+  // 🆕 `answers` (migration 03). ⚠️ PostgREST rejette la requête ENTIÈRE si une
+  // seule colonne demandée n'existe pas : demander `answers` avant que la
+  // migration soit jouée ne masquait pas les réponses, cela vidait la liste des
+  // rendez-vous. Le code ne peut pas présumer de l'ordre de déploiement, d'où
+  // le repli explicite ci-dessous.
+  const FULL_COLS = `${BASE_COLS}, answers`;
 
-  const { data, error } = await query;
+  const build = (cols: string) => {
+    const q = admin.from("bookings").select(cols).eq("user_id", userId).limit(200);
+    return scope === "upcoming"
+      ? q.gte("starts_at", nowIso).order("starts_at", { ascending: true })
+      : q.lt("starts_at", nowIso).order("starts_at", { ascending: false });
+  };
+
+  let { data, error } = await build(FULL_COLS);
+  if (
+    error &&
+    (error.code === "42703" ||
+      /column .* does not exist/i.test(error.message ?? "") ||
+      /could not find the '.*' column/i.test(error.message ?? ""))
+  ) {
+    console.warn(
+      "[booking] Colonne answers absente — migration 03 non appliquée. " +
+        "Les réponses personnalisées ne sont pas affichées.",
+    );
+    ({ data, error } = await build(BASE_COLS));
+  }
+
   if (error) {
     return NextResponse.json(
       { ok: false, error: "db_error", message: error.message },
