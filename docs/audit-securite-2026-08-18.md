@@ -99,14 +99,24 @@ l'en-tête qui le documente. **À confirmer avant de clore ce point.**
 *Correction :* passer le token en en-tête HTTP si Chariow le permet, et le faire
 tourner.
 
-**4. Fonctions `SECURITY DEFINER` appelables par `anon`**
+**4. Fonctions `SECURITY DEFINER` appelables par `anon` / `authenticated`**
 Advisor Supabase — `handle_new_user()`, `log_custom_code_audit()`,
-`rls_auto_enable()` sont exposées via `/rest/v1/rpc/…` au rôle anonyme.
+`rls_auto_enable()` sont exposées via `/rest/v1/rpc/…` au rôle anonyme,
+et `consume_usage(...)` au rôle authentifié.
+
 `rls_auto_enable()` est la plus préoccupante : une fonction qui manipule des
 politiques RLS ne devrait être appelable par personne depuis l'API publique.
-*Correction :* `revoke execute on function public.rls_auto_enable() from anon, authenticated;`
-et de même pour les deux autres — ce sont des fonctions de trigger, elles n'ont
-aucune raison d'être appelées en RPC.
+
+**Ajout du 18/08/2026 — `consume_usage(...)` doit être révoquée aussi.**
+Elle était laissée de côté par prudence, faute de savoir si l'application
+l'appelait en RPC. Vérification faite : un seul appel dans tout le dépôt,
+`lib/billing/usage.ts:46`, via `getSupabaseAdmin()` (ligne 44) — donc par la
+`service_role`, qui contourne les grants. La révoquer ne casse rien.
+Or elle est `SECURITY DEFINER` et exposée à `authenticated` : tout utilisateur
+connecté peut l'invoquer directement avec les paramètres de son choix, dont
+`p_user` et `p_amount`. C'est une exposition de la mécanique de quotas.
+
+*Correction :* voir `supabase/migrations/07_security_hardening.sql`, bloc 1.
 
 **5. Protection « mots de passe compromis » désactivée**
 Advisor Supabase — la vérification HaveIBeenPwned est inactive.
@@ -119,8 +129,15 @@ atterrit sur `/dashboard` sans être connecté.
 
 ### 🟢 Améliorations
 
-- **`search_path` mutable sur 8 fonctions** (advisor Supabase). Sur une fonction
-  `SECURITY DEFINER`, c'est un vecteur d'élévation de privilèges connu.
+- **`search_path` mutable sur 9 fonctions** (advisor Supabase).
+  **Correction du 18/08/2026, après vérification en base :** ces 9 fonctions ne
+  sont **pas** `SECURITY DEFINER` (`pg_proc.prosecdef = false`). Elles
+  s'exécutent avec les droits de l'appelant : détourner leur résolution de noms
+  ne donne accès à rien de plus. Ce n'est donc **pas** un vecteur d'élévation de
+  privilèges, contrairement à ce que la première version de ce rapport
+  affirmait. Défense en profondeur, rétrogradé de ⚠️ à 🟢.
+  Symétriquement, les 3 fonctions qui *sont* `SECURITY DEFINER` avaient déjà un
+  `search_path` défini — elles n'ont jamais eu ce problème.
   Correction : `alter function … set search_path = public, pg_temp;`
 - **Erreur Supabase brute renvoyée en repli** — `AuthForm.tsx:26`.
 - **Email complet dans les logs** — `lib/platform/emails.ts:188`. Tronquer, ou
