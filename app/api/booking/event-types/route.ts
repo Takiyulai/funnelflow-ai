@@ -52,6 +52,29 @@ const createSchema = z.object({
   locationValue: z.string().max(300).optional(),
   language: z.string().max(5).default("fr"),
   funnelId: z.string().uuid().optional(),
+  // 🆕 Couleur choisie dans le wizard. Sans cette entrée, zod la retirerait en
+  // silence et tous les rendez-vous naîtraient violets.
+  color: z.string().max(9).optional(),
+  // 🆕 Semaine type saisie à l'étape 3. Absente → plages par défaut.
+  availability: z
+    .array(
+      z.object({
+        weekday: z.number().int().min(0).max(6),
+        startMin: z.number().int().min(0).max(1439),
+        endMin: z.number().int().min(1).max(1440),
+      }),
+    )
+    .max(60)
+    .optional(),
+  // 🆕 Fiche de l'animateur, rattachée au RENDEZ-VOUS et non au compte.
+  hostName: z.string().max(80).optional(),
+  hostTitle: z.string().max(120).optional(),
+  hostBio: z.string().max(600).optional(),
+  hostAvatarUrl: z
+    .string()
+    .max(2048)
+    .refine((v) => !v || /^https?:\/\//i.test(v), "L'URL de l'avatar doit être absolue")
+    .optional(),
   // 🆕 Champs du formulaire, transmis par le préréglage choisi à la création.
   // ⚠️ Sans cette entrée, zod les retirerait en silence et tous les
   // préréglages naîtraient avec le formulaire par défaut — c'est-à-dire sans
@@ -73,6 +96,15 @@ const createSchema = z.object({
   // 🆕 Migration 04 — mode structurel + capacité + séances datées.
   mode: z.enum(["consultation", "event", "classroom", "recurring"]).optional(),
   capacity: z.number().int().min(1).max(10000).optional(),
+  // 🆕 Migration 05 — paiement Chariow. `priceAmount` est en CENTIMES.
+  paymentRequired: z.boolean().optional(),
+  priceAmount: z.number().int().min(0).max(100_000_000).optional(),
+  currency: z.string().max(8).optional(),
+  paymentUrl: z
+    .string()
+    .max(2048)
+    .refine((v) => !v || /^https?:\/\//i.test(v), "Le lien doit commencer par http(s)://")
+    .optional(),
   sessions: z
     .array(
       z.object({
@@ -140,6 +172,15 @@ export async function POST(req: Request) {
     location_value: b.locationValue?.trim() || null,
     language: b.language,
     funnel_id: b.funnelId ?? null,
+    // `color` existe depuis l'origine : pas de repli de migration à prévoir.
+    color: b.color?.trim().toLowerCase() || null,
+    // 🆕 Fiche animateur. Une chaîne vidée devient null : c'est `host_name` qui
+    // décide de l'affichage du bloc public, et "" passerait le test de vérité
+    // côté widget sans rien afficher d'utile.
+    host_name: b.hostName?.trim() || null,
+    host_title: b.hostTitle?.trim() || null,
+    host_bio: b.hostBio?.trim() || null,
+    host_avatar_url: b.hostAvatarUrl?.trim() || null,
     active: true,
   };
 
@@ -164,6 +205,16 @@ export async function POST(req: Request) {
   if (b.formFields && b.formFields.length > 0) extraCols.form_fields = b.formFields;
   if (b.mode) extraCols.mode = b.mode;
   if (b.capacity) extraCols.capacity = b.capacity;
+  // 🆕 Migration 05. Le paiement n'est activé QUE si un lien produit est
+  // fourni : `payment_required` seul produirait un bouton « Payer » sans
+  // destination, donc une page de réservation inutilisable.
+  if (b.paymentRequired && b.paymentUrl) {
+    extraCols.payment_required = true;
+    extraCols.payment_url = b.paymentUrl.trim();
+    extraCols.payment_provider = "chariow";
+    if (typeof b.priceAmount === "number") extraCols.price_amount = b.priceAmount;
+    if (b.currency) extraCols.currency = b.currency.toUpperCase();
+  }
 
   let { data, error } =
     Object.keys(extraCols).length > 0
@@ -214,13 +265,22 @@ export async function POST(req: Request) {
       }
     }
   } else {
-    // Disponibilité de départ : lundi→vendredi 9h-12h et 14h-17h. Un type de RDV
-    // créé sans aucune plage n'afficherait AUCUN créneau — l'hôte croirait le
-    // module cassé alors qu'il n'a simplement rien configuré.
-    const rows = [1, 2, 3, 4, 5].flatMap((weekday) => [
-      { event_type_id: data.id, weekday, start_min: 9 * 60, end_min: 12 * 60 },
-      { event_type_id: data.id, weekday, start_min: 14 * 60, end_min: 17 * 60 },
-    ]);
+    // 🆕 Disponibilités : celles SAISIES DANS LE WIZARD si elles existent,
+    // sinon le repli historique (lundi→vendredi 9h-12h et 14h-17h). Un type de
+    // RDV créé sans aucune plage n'afficherait AUCUN créneau — l'hôte croirait
+    // le module cassé alors qu'il n'a simplement rien configuré.
+    const rows =
+      b.availability && b.availability.length > 0
+        ? b.availability.map((r) => ({
+            event_type_id: data.id,
+            weekday: r.weekday,
+            start_min: r.startMin,
+            end_min: r.endMin,
+          }))
+        : [1, 2, 3, 4, 5].flatMap((weekday) => [
+            { event_type_id: data.id, weekday, start_min: 9 * 60, end_min: 12 * 60 },
+            { event_type_id: data.id, weekday, start_min: 14 * 60, end_min: 17 * 60 },
+          ]);
     await admin.from("booking_availability").insert(rows);
   }
 

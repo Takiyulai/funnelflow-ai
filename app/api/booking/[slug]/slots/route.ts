@@ -21,7 +21,7 @@ import {
 import { resolveBookingColor } from "@/lib/booking/colors";
 import { ensureEmailField, resolveBookingFields } from "@/lib/booking/formFields";
 import { getSessions } from "@/lib/booking/repository";
-import { usesFixedSessions } from "@/lib/booking/types";
+import { usesFixedSessions, formatBookingPrice } from "@/lib/booking/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -79,6 +79,14 @@ export async function GET(
         hostAvatarUrl: eventType.hostAvatarUrl ?? null,
         hostBio: eventType.hostBio ?? null,
         formFields: ensureEmailField(resolveBookingFields(eventType)),
+        // 🆕 Paiement. `paymentUrl` est PUBLIC par nature : c'est la page de
+        // vente Chariow, faite pour être partagée. Rien de sensible ici,
+        // contrairement à `locationValue` qui reste masqué.
+        paymentRequired: eventType.paymentRequired === true,
+        priceLabel: eventType.paymentRequired
+          ? formatBookingPrice(eventType.priceAmount, eventType.currency)
+          : null,
+        paymentUrl: eventType.paymentRequired ? eventType.paymentUrl : null,
         mode: eventType.mode ?? "consultation",
       },
       visitorTimezone,

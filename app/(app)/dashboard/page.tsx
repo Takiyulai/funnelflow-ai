@@ -80,6 +80,20 @@ export default function DashboardPage() {
     fetch("/api/auth/stamp-login", { method: "POST" }).catch(() => {});
   }, []);
 
+  // 🆕 Email de bienvenue, envoyé une seule fois par compte.
+  //
+  // Pourquoi ici : l'inscription se fait en client pur (AuthForm →
+  // supabase.auth.signUp), sans aucune route serveur à nous où se brancher.
+  // Ce montage est le premier moment côté serveur qui suit l'inscription,
+  // et il couvre aussi bien l'email/mot de passe que Google.
+  //
+  // La route est idempotente (verrou `welcome_email_sent_at` en base) : le
+  // double montage de React en mode strict n'enverra pas deux messages.
+  // Fire-and-forget, comme stamp-login : jamais bloquant.
+  useEffect(() => {
+    fetch("/api/auth/welcome", { method: "POST" }).catch(() => {});
+  }, []);
+
   // 🆕 Stats de paiement (commandes payées).
   const [payStats, setPayStats] = useState<{
     payments: number;

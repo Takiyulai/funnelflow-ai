@@ -21,7 +21,10 @@
 // `replaceState` suffit, sans toucher au routeur ni à l'historique.
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Plus, Loader2 } from "lucide-react";
+import {
+  CalendarClock, Plus, Loader2, MoreVertical, Pencil, Copy,
+  ExternalLink, Power, Trash2, ArrowLeft,
+} from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { HostBookingList } from "@/components/booking/HostBookingList";
 import { BookingTypesTab } from "@/components/booking/BookingTypesTab";
@@ -58,6 +61,16 @@ export default function RendezVousPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   /** 🆕 Popup de création : choix du préréglage, puis nom et durée. */
   const [newTypeOpen, setNewTypeOpen] = useState(false);
+  /** 🆕 Menu « ⋯ » ouvert, par identifiant de rendez-vous. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  /**
+   * 🆕 Mode ÉDITION d'un rendez-vous existant.
+   *
+   * La liste est l'écran par défaut ; les panneaux de réglages ne s'affichent
+   * que lorsqu'on a explicitement choisi « Modifier ». Avant, ils étaient
+   * toujours visibles et redemandaient ce que le wizard avait déjà collecté.
+   */
+  const [editing, setEditing] = useState(false);
 
   // Lecture de `?tab=` au montage seulement. La lire pendant le rendu
   // provoquerait une incohérence d'hydratation (le serveur ne connaît pas
@@ -161,7 +174,12 @@ export default function RendezVousPage() {
    * différence de fond entre un appel de qualification et un audit payant.
    */
   async function createType(payload: NewTypePayload) {
-    const { preset, name, durationMin, capacity, sessions } = payload;
+    const {
+      preset, name, durationMin, capacity, sessions,
+      paymentRequired, priceAmount, currency, paymentUrl,
+      color, formFields, timezone, availability,
+      hostName, hostTitle, hostBio, hostAvatarUrl,
+    } = payload;
     setSaving(true);
     try {
       // Les séances sont saisies en date + heure LOCALES de l'hôte. On les
@@ -185,11 +203,21 @@ export default function RendezVousPage() {
           horizonDays: preset.horizonDays,
           slotStepMin: preset.slotStepMin,
           locationKind: preset.locationKind,
-          formFields: preset.formFields,
+          // Les champs viennent du WIZARD (l'utilisateur a pu les ajuster),
+          // avec le préréglage comme repli.
+          formFields: formFields ?? preset.formFields,
+          ...(color ? { color } : {}),
           mode: preset.mode,
           ...(capacity ? { capacity } : {}),
           ...(isoSessions.length > 0 ? { sessions: isoSessions } : {}),
-          timezone: detectVisitorTimeZone(),
+          ...(paymentRequired && paymentUrl
+            ? { paymentRequired: true, paymentUrl, priceAmount, currency }
+            : {}),
+          ...(availability && availability.length > 0 ? { availability } : {}),
+          ...(hostName ? { hostName, hostTitle, hostBio, hostAvatarUrl } : {}),
+          // Le fuseau vient du wizard ; la détection navigateur n'est qu'un
+          // repli si l'étape a été sautée (mode event).
+          timezone: timezone || detectVisitorTimeZone(),
         }),
       });
       const json = await res.json();
@@ -202,6 +230,10 @@ export default function RendezVousPage() {
       await load();
       setActiveId(json.id);
       setNewTypeOpen(false);
+      // On retombe sur la LISTE, pas sur les réglages : le wizard a tout
+      // collecté, il n'y a rien à compléter. Afficher un formulaire ici
+      // laisserait croire le contraire.
+      setEditing(false);
       selectTab("types");
     } finally {
       setSaving(false);
@@ -307,7 +339,7 @@ export default function RendezVousPage() {
             disabled={saving}
             className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-violet-500 px-3 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50 sm:self-auto"
           >
-            <Plus size={15} /> Nouveau type
+            <Plus size={15} /> Nouveau rendez-vous
           </button>
         </header>
 
@@ -347,9 +379,151 @@ export default function RendezVousPage() {
           ))}
         </div>
 
+        {/* 🆕 LISTE DES RENDEZ-VOUS — écran d'accueil de l'onglet.
+            Chaque carte porte un menu « ⋯ » : modifier, copier le lien, ouvrir
+            la page publique, supprimer. L'utilisateur n'a plus à deviner que
+            « sélectionner un type puis aller dans un onglet » est la façon de
+            le modifier. */}
+        {tab === "types" && (
+          <div className="mb-5 grid gap-2">
+            {types.length === 0 && !loading && (
+              <div className="rounded-2xl border border-dashed border-line p-6 text-center sm:p-10">
+                <p className="text-sm text-muted">
+                  Aucun rendez-vous. Crées-en un pour obtenir ton lien de
+                  réservation.
+                </p>
+              </div>
+            )}
+
+            {types.map((t) => {
+              const dot = resolveBookingColor(t.color);
+              const url = `${typeof window !== "undefined" ? window.location.origin : ""}/rdv/${t.slug}`;
+              const open = menuFor === t.id;
+              return (
+                <div
+                  key={t.id}
+                  className={
+                    "relative flex items-center gap-3 rounded-xl border px-3.5 py-3 transition " +
+                    (activeId === t.id
+                      ? "border-violet-500/50 bg-violet-500/[0.06]"
+                      : "border-line bg-surface")
+                  }
+                >
+                  <span
+                    aria-hidden
+                    className="h-9 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: dot }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveId(t.id);
+                      setEditing(true);
+                    }}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate text-sm font-semibold text-ink">
+                      {t.name}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted">
+                      {t.durationMin} min
+                      {t.active ? "" : " · désactivé"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-label="Actions"
+                    aria-expanded={open}
+                    onClick={() => setMenuFor(open ? null : t.id)}
+                    className="shrink-0 rounded-lg p-2 text-muted transition hover:bg-canvas hover:text-ink"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+
+                  {open && (
+                    <>
+                      {/* Voile transparent : ferme le menu au clic ailleurs,
+                          sans écouteur global à nettoyer. */}
+                      <button
+                        type="button"
+                        aria-hidden
+                        tabIndex={-1}
+                        onClick={() => setMenuFor(null)}
+                        className="fixed inset-0 z-10 cursor-default"
+                      />
+                      <div className="absolute right-2 top-12 z-20 w-56 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
+                        {[
+                          {
+                            label: "Modifier",
+                            icon: <Pencil size={14} />,
+                            run: () => {
+                              setActiveId(t.id);
+                              setEditing(true);
+                            },
+                          },
+                          {
+                            label: copied ? "Lien copié" : "Copier le lien",
+                            icon: <Copy size={14} />,
+                            run: () => {
+                              void navigator.clipboard.writeText(url);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 1500);
+                            },
+                          },
+                          {
+                            label: "Ouvrir la page publique",
+                            icon: <ExternalLink size={14} />,
+                            run: () => window.open(url, "_blank", "noopener"),
+                          },
+                          {
+                            label: t.active ? "Fermer les réservations" : "Rouvrir les réservations",
+                            icon: <Power size={14} />,
+                            run: () => {
+                              setActiveId(t.id);
+                              patchActive({ active: !t.active });
+                            },
+                          },
+                        ].map((a) => (
+                          <button
+                            key={a.label}
+                            type="button"
+                            onClick={() => {
+                              a.run();
+                              setMenuFor(null);
+                            }}
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs font-medium text-ink transition hover:bg-canvas"
+                          >
+                            {a.icon}
+                            {a.label}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveId(t.id);
+                            setMenuFor(null);
+                            // Laisse React appliquer activeId avant la
+                            // confirmation, sinon on supprimerait le précédent.
+                            setTimeout(() => void deleteActiveType(), 0);
+                          }}
+                          className="flex w-full items-center gap-2.5 border-t border-line px-3 py-2.5 text-left text-xs font-medium text-red-500 transition hover:bg-red-500/10"
+                        >
+                          <Trash2 size={14} />
+                          Supprimer
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Sélecteur de type — affiché uniquement sur les onglets qui en
             dépendent, et seulement s'il y a plusieurs types. */}
-        {needsActiveType && types.length > 1 && (
+        {needsActiveType && tab !== "types" && types.length > 1 && (
           // 🆕 Le sélecteur était une rangée de pastilles plates, toutes de même
           // poids : rien ne distinguait un type d'un autre au premier coup d'œil,
           // et la couleur choisie pour chaque type n'apparaissait nulle part côté
@@ -394,7 +568,22 @@ export default function RendezVousPage() {
 
         {tab === "reservations" && <HostBookingList />}
 
-        {needsActiveType && (
+        {/* 🆕 Barre de retour, visible seulement en édition : elle dit d'où on
+            vient et comment revenir à la liste. */}
+        {tab === "types" && editing && active && (
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-muted transition hover:text-ink"
+          >
+            <ArrowLeft size={13} />
+            Retour à mes rendez-vous — modification de « {active.name} »
+          </button>
+        )}
+
+        {/* Les panneaux de réglages ne s'affichent plus par défaut sur l'onglet
+            « Types » : la liste est l'écran d'accueil, l'édition est un choix. */}
+        {needsActiveType && (tab !== "types" || editing) && (
           <>
             {loading && (
               <p className="py-10 text-center text-sm text-muted">Chargement…</p>
@@ -410,25 +599,40 @@ export default function RendezVousPage() {
 
             {active && (
               <>
-                {tab === "types" && (
-                  <BookingTypesTab
-                    active={active}
-                    publicUrl={publicUrl}
-                    copied={copied}
-                    onCopy={() => {
-                      void navigator.clipboard.writeText(publicUrl);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                    onPatch={patchActive}
-                    onDelete={() => void deleteActiveType()}
-                  />
-                )}
-                {tab === "disponibilites" && (
-                  <BookingAvailabilityTab active={active} onPatch={patchActive} />
-                )}
-                {tab === "reglages" && (
-                  <BookingSettingsTab active={active} onPatch={patchActive} />
+                {/* 🆕 ÉDITION COMPLÈTE SUR UN SEUL ÉCRAN.
+                    « Modifier » n'ouvrait que le panneau « Types » : l'hôte ne
+                    retrouvait ni ses horaires, ni son fuseau, ni ses réglages —
+                    donc « juste quelques champs » alors que le wizard en avait
+                    collecté trois fois plus. Les trois panneaux sont désormais
+                    empilés, dans le même ordre que le wizard, et le bouton
+                    « Enregistrer » les persiste tous d'un coup (ils partagent
+                    le même état et le même PATCH). */}
+                {tab === "types" && editing ? (
+                  <div className="grid gap-5">
+                    <BookingTypesTab
+                      active={active}
+                      publicUrl={publicUrl}
+                      copied={copied}
+                      onCopy={() => {
+                        void navigator.clipboard.writeText(publicUrl);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                      }}
+                      onPatch={patchActive}
+                      onDelete={() => void deleteActiveType()}
+                    />
+                    <BookingAvailabilityTab active={active} onPatch={patchActive} />
+                    <BookingSettingsTab active={active} onPatch={patchActive} />
+                  </div>
+                ) : (
+                  <>
+                    {tab === "disponibilites" && (
+                      <BookingAvailabilityTab active={active} onPatch={patchActive} />
+                    )}
+                    {tab === "reglages" && (
+                      <BookingSettingsTab active={active} onPatch={patchActive} />
+                    )}
+                  </>
                 )}
 
                 {/* Barre d'enregistrement commune aux trois onglets de config :

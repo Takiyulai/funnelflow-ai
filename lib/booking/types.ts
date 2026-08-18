@@ -85,6 +85,26 @@ export type BookingEventType = {
    */
   formFields?: FormFieldItem[] | null;
 
+  /**
+   * 🆕 PAIEMENT (migration 05) — approche « payer puis réserver ».
+   *
+   * `paymentUrl` est l'URL publique d'un produit Chariow. Le `redirect_url`
+   * de CE produit doit pointer vers la page de réservation : c'est ce
+   * aller-retour qui fait que seuls les payeurs atteignent le calendrier.
+   *
+   * ⚠️ `priceAmount` sert à l'AFFICHAGE uniquement. Le montant réellement
+   * encaissé est celui configuré dans Chariow. Les deux peuvent diverger si
+   * l'utilisateur change son prix d'un côté seulement — d'où le rappel dans
+   * l'interface plutôt qu'une synchronisation qu'on ne peut pas garantir
+   * (l'API Chariow n'est pas connectée côté application).
+   */
+  paymentRequired?: boolean;
+  /** Montant en CENTIMES. Entier : pas d'arrondi flottant sur de l'argent. */
+  priceAmount?: number | null;
+  currency?: string | null;
+  paymentUrl?: string | null;
+  paymentProvider?: "chariow" | "external" | null;
+
   /** 🆕 Mode. Absent → "consultation" (comportement historique). */
   mode?: BookingMode | null;
   /**
@@ -112,9 +132,41 @@ export type BookingSession = {
   endsAt: string;
   /** Surcharge `BookingEventType.capacity`. NULL → capacité du type. */
   capacity?: number | null;
+  /**
+   * 🆕 Prix propre à cette séance, en centimes. NULL → prix du type.
+   * Permet une séance d'ouverture gratuite dans un cycle payant.
+   */
+  priceAmount?: number | null;
+  /** 🆕 Produit Chariow propre à cette séance. NULL → celui du type. */
+  paymentUrl?: string | null;
   /** Inscrits confirmés — calculé, jamais stocké. */
   bookedCount?: number;
 };
+
+/**
+ * 🆕 Formate un montant en centimes pour l'affichage.
+ * Gratuit explicite : « 0 € » se lit mal, « Gratuit » se comprend.
+ */
+export function formatBookingPrice(
+  amountInCents: number | null | undefined,
+  currency: string | null | undefined,
+): string {
+  if (amountInCents === null || amountInCents === undefined) return "";
+  if (amountInCents === 0) return "Gratuit";
+  const code = (currency || "EUR").toUpperCase();
+  try {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: code,
+      // Les prix ronds sont la règle sur ce type d'offre : « 50 € » plutôt
+      // que « 50,00 € ».
+      minimumFractionDigits: amountInCents % 100 === 0 ? 0 : 2,
+    }).format(amountInCents / 100);
+  } catch {
+    // Devise inconnue d'Intl : on n'échoue pas sur un affichage.
+    return `${(amountInCents / 100).toFixed(2)} ${code}`;
+  }
+}
 
 /**
  * 🆕 Champs demandés quand l'hôte n'a rien personnalisé. Reproduit à

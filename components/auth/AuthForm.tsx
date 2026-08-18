@@ -6,6 +6,15 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+/**
+ * 🔒 Réponse UNIQUE de l'inscription, que l'email existe déjà ou non.
+ *
+ * Elle doit rester strictement identique dans les deux cas : c'est la seule
+ * garantie qu'aucun signal ne distingue un compte existant d'un nouveau.
+ */
+const SIGNUP_NEUTRAL_MESSAGE =
+  "✉️ Vérifiez votre boîte mail pour continuer (pensez aux spams).";
+
 function friendlyAuthMessage(message: string) {
   if (message.toLowerCase().includes("rate limit")) {
     return "Trop de tentatives. Veuillez patienter quelques minutes.";
@@ -13,17 +22,45 @@ function friendlyAuthMessage(message: string) {
   if (message.toLowerCase().includes("invalid login credentials")) {
     return "Email ou mot de passe incorrect.";
   }
+  // 🔒 AUDIT 18/08/2026 — plus d'énumération de comptes.
+  //
+  // Ce cas répondait « Cet email est déjà utilisé ». Un attaquant testait une
+  // liste d'adresses et savait lesquelles avaient un compte — première étape
+  // d'une attaque ciblée par mot de passe.
+  //
+  // Le message est désormais IDENTIQUE à celui d'une inscription réussie
+  // (voir le point d'appel), et il est cohérent avec la confirmation par email :
+  // dans les deux cas, la suite se passe dans la boîte mail.
+  //
+  // Le coût est réel : quelqu'un qui a oublié qu'il avait un compte ne
+  // l'apprend plus ici. C'est l'arbitrage assumé — la page de connexion
+  // propose « mot de passe oublié », qui reste le bon chemin.
   if (message.toLowerCase().includes("user already registered")) {
-    return "Cet email est déjà utilisé. Connectez-vous plutôt.";
+    return SIGNUP_NEUTRAL_MESSAGE;
   }
   if (message.toLowerCase().includes("password")) {
     return "Mot de passe trop faible. Minimum 8 caractères.";
   }
   const low = message.toLowerCase();
+  // 🔒 AUDIT 18/08/2026 — plus aucun détail interne ne remonte au client.
+  //
+  // Deux fuites corrigées ici :
+  //   • ce cas citait NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
+  //     à l'écran. Ces noms renseignent un attaquant sur notre pile technique,
+  //     et n'ont de toute façon aucun sens pour la personne qui essaie de se
+  //     connecter — c'était un message d'exploitation affiché à un client ;
+  //   • le repli renvoyait l'erreur Supabase BRUTE, dont on ne maîtrise ni le
+  //     contenu ni l'évolution. Une future version de leur SDK pourrait y
+  //     glisser un identifiant interne ou une trace.
+  //
+  // Le détail reste disponible pour le diagnostic, mais dans la console du
+  // navigateur, pas dans l'interface.
   if (low.includes("invalid value") || low.includes("failed to fetch")) {
-    return "Problème de configuration Supabase (URL ou clé invalide). Vérifie NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel — sans espace ni retour-ligne.";
+    console.error("[auth] Configuration Supabase invalide :", message);
+    return "Service momentanément indisponible. Réessayez dans quelques instants.";
   }
-  return message;
+  console.error("[auth] Erreur non catégorisée :", message);
+  return "Une erreur est survenue. Réessayez, ou contactez-nous si cela persiste.";
 }
 
 /** Après auth : si un plan est passé en query (?plan=pro), file vers l'abonnement. */
@@ -83,17 +120,39 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "forgot" }) {
       }
 
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { name } },
         });
+
+        // 🔒 AUDIT 18/08/2026 — deux corrections dans ce bloc.
+        //
+        // 1) AUCUNE REDIRECTION SANS SESSION VÉRIFIÉE.
+        //    On poussait vers /dashboard quoi qu'il arrive. Quand la
+        //    confirmation par email est active, `signUp` ne renvoie PAS de
+        //    session : l'inscrit atterrissait sur un tableau de bord auquel il
+        //    n'avait pas accès. Pire, cette redirection était un signal
+        //    observable — elle n'avait pas lieu quand le compte existait déjà,
+        //    ce qui trahissait l'information qu'on cherche justement à cacher.
+        //
+        // 2) MESSAGE IDENTIQUE DANS LES DEUX CAS.
+        //    Succès et « compte déjà existant » renvoient exactement la même
+        //    phrase. Le chemin de code est le même, donc le temps de réponse
+        //    l'est aussi, à la latence réseau près.
         if (error) {
           setMessage(friendlyAuthMessage(error.message));
-        } else {
+          return;
+        }
+
+        if (data.session) {
+          // Confirmation désactivée : la session existe, on peut entrer.
           setIsRedirecting(true);
           router.push(postAuthDestination());
+          return;
         }
+
+        setMessage(SIGNUP_NEUTRAL_MESSAGE);
         return;
       }
 

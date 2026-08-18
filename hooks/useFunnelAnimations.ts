@@ -15,6 +15,112 @@ import { useEffect, type RefObject } from "react";
  * quand des nœuds sont ajoutés/retirés, pour que les nouveaux [data-reveal],
  * [data-tilt], [data-faq-item] et [data-cd] restent fonctionnels sans reload.
  */
+/* ------------------------------------------------------------------ */
+/*  🆕 AUTO-INSTRUMENTATION DES BLOCS STANDARD                         */
+/* ------------------------------------------------------------------ */
+//
+// ── LE BUG ──────────────────────────────────────────────────────────────────
+// Ce runtime cherche des `[data-reveal]`. Or cet attribut n'était émis QUE par
+// les 9 templates bespoke (components/funnel/templates/*) et les skins. Les
+// blocs standard de components/funnel/sections/ n'en contenaient AUCUN, et le
+// CSS `[data-reveal]{opacity:0}` vivait dans le <style> de chaque template,
+// jamais en global. Un tunnel généré avec les blocs standard — le cas par
+// défaut — n'avait donc strictement rien à animer : le hook s'exécutait, ne
+// trouvait rien, et la page restait figée au scroll.
+//
+// ── LE CHOIX ────────────────────────────────────────────────────────────────
+// Plutôt que d'ajouter `data-reveal` à la main dans chaque composant de
+// section — invasif, et garanti d'être oublié au prochain bloc ajouté — on
+// instrumente le DOM au moment du câblage. Un seul endroit, qui couvre les
+// blocs actuels, ceux à venir, et le HTML cloné.
+//
+// ── LA SÉPARATION QUI COMPTE ────────────────────────────────────────────────
+// Le CSS injecté cible `[data-auto-reveal]`, PAS `[data-reveal]`. Les
+// templates bespoke gardent donc intégralement leur propre style : aucun
+// risque de doubler ou d'écraser leurs transitions. Et une section qui
+// contient déjà un `[data-reveal]` n'est jamais instrumentée.
+
+const AUTO_STAGGER_MS = 90;
+const AUTO_MAX_DELAY_MS = 360;
+const REVEAL_STYLE_ID = "ff-auto-reveal-css";
+
+/** Enfants éléments directs. */
+function elementChildren(el: HTMLElement): HTMLElement[] {
+  return Array.from(el.children).filter(
+    (n): n is HTMLElement => n instanceof HTMLElement,
+  );
+}
+
+/**
+ * Injecte le CSS de révélation, une seule fois par document.
+ *
+ * Il vit ici et non dans globals.css pour rester solidaire du runtime : les
+ * deux moitiés (attribut + transition) doivent arriver ensemble, sinon on
+ * obtient soit du contenu invisible sans animation, soit l'inverse.
+ */
+function ensureRevealCss(root: HTMLElement): void {
+  const doc = root.ownerDocument;
+  if (!doc || doc.getElementById(REVEAL_STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = REVEAL_STYLE_ID;
+  style.textContent = [
+    "[data-auto-reveal]{opacity:0;transform:translateY(24px);",
+    "transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}",
+    "[data-auto-reveal].is-in{opacity:1;transform:none}",
+    // Respect de la préférence système : pas de mouvement, et surtout pas de
+    // contenu bloqué à opacity 0 si le runtime ne s'exécutait pas.
+    "@media (prefers-reduced-motion:reduce){",
+    "[data-auto-reveal]{opacity:1;transform:none;transition:none}}",
+  ].join("");
+  (doc.head || doc.documentElement).appendChild(style);
+}
+
+/**
+ * Marque les blocs standard pour qu'ils se révèlent au scroll.
+ *
+ * On descend d'un niveau tant qu'il n'y a qu'un seul enfant : les sections
+ * sont souvent enveloppées dans un conteneur de largeur. Sans cette descente,
+ * la section entière apparaîtrait d'un bloc au lieu de cascader.
+ */
+function autoInstrument(root: HTMLElement): void {
+  // Le ref d'animation pointe souvent sur un conteneur d'habillage, pas
+  // directement sur la liste des sections. Sans cette descente, ce conteneur
+  // serait pris POUR une section : les vraies sections deviendraient ses
+  // « enfants à cascader » et s'animeraient toutes ensemble au chargement,
+  // au lieu de se révéler une par une au scroll.
+  let host = root;
+  let depth = 0;
+  while (elementChildren(host).length === 1 && depth++ < 3) {
+    const only = elementChildren(host)[0];
+    if (elementChildren(only).length === 0) break;
+    host = only;
+  }
+
+  for (const section of elementChildren(host)) {
+    // Déjà animé (template bespoke, skin, HTML cloné instrumenté) : on ne
+    // touche à rien. C'est ce test qui garantit la non-régression.
+    if (section.hasAttribute("data-reveal") || section.querySelector("[data-reveal]")) {
+      continue;
+    }
+    // Échappatoire explicite pour un bloc qui ne doit pas bouger.
+    if (section.hasAttribute("data-no-reveal")) continue;
+
+    let level: HTMLElement[] = elementChildren(section);
+    let guard = 0;
+    while (level.length === 1 && elementChildren(level[0]).length > 1 && guard++ < 3) {
+      level = elementChildren(level[0]);
+    }
+    const targets = level.length > 0 ? level : [section];
+
+    targets.forEach((el, i) => {
+      el.setAttribute("data-reveal", "");
+      el.setAttribute("data-auto-reveal", "");
+      const delay = Math.min(i * AUTO_STAGGER_MS, AUTO_MAX_DELAY_MS);
+      if (delay > 0) el.setAttribute("data-delay", String(delay));
+    });
+  }
+}
+
 function getScrollParent(el: HTMLElement | null): HTMLElement | null {
   let p = el?.parentElement || null;
   while (p) {
@@ -42,6 +148,11 @@ export function useFunnelAnimations(ref: RefObject<HTMLElement | null>): void {
 
     const wire = () => {
       runCleanups();
+
+      // 🆕 Instrumentation AVANT la collecte : sans elle, `reveals` est vide sur
+      // tout tunnel construit avec les blocs standard, et la page reste figée.
+      ensureRevealCss(root);
+      autoInstrument(root);
 
       const reveals = Array.from(
         root.querySelectorAll<HTMLElement>("[data-reveal]:not(.is-in)"),

@@ -23,7 +23,14 @@ const ALLOWED_MIMES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
-  "image/svg+xml",
+  // 🔒 AUDIT 18/08/2026 — `image/svg+xml` CONSERVÉ, mais ASSAINI.
+  //
+  // Un SVG est un document XML que le navigateur exécute : il peut porter
+  // <script>, des attributs d'événement, des URI `javascript:` et du HTML
+  // arbitraire via <foreignObject>. Le retirer aurait privé les utilisateurs
+  // de leurs logos vectoriels — un vrai besoin. Il passe donc par
+  // `sanitizeSvg()` (lib/media/sanitize-svg.ts) AVANT tout stockage, et le
+  // fichier envoyé à Cloudinary est la version nettoyée, jamais l'originale.
   "image/avif",
   "image/bmp",
   "image/tiff",
@@ -170,6 +177,37 @@ export async function POST(req: NextRequest) {
         { error: "Impossible de lire le contenu du fichier." },
         { status: 500 },
       );
+    }
+
+    // 4 bis) 🔒 SVG → assainissement OBLIGATOIRE avant stockage.
+    //
+    // Placé APRÈS la lecture du buffer et AVANT l'envoi : c'est le seul endroit
+    // où l'on tient le contenu et où rien n'est encore parti. Le buffer est
+    // REMPLACÉ par la version nettoyée — l'original n'est jamais stocké.
+    //
+    // Fail-closed : si l'assainisseur est indisponible (dépendance absente),
+    // on refuse le fichier. Un SVG non nettoyé ne doit jamais passer, même au
+    // prix d'un envoi refusé.
+    //
+    // Les autres formats ne traversent pas ce bloc.
+    if (mime === "image/svg+xml") {
+      const { sanitizeSvg } = await import("@/lib/media/sanitize-svg");
+      const result = await sanitizeSvg(buffer.toString("utf8"));
+
+      if (!result.ok) {
+        console.warn(`[/api/media/upload] SVG refusé (${result.reason})`);
+        return NextResponse.json(
+          { error: result.message },
+          { status: result.reason === "unavailable" ? 503 : 400 },
+        );
+      }
+
+      if (result.removed > 0) {
+        console.log(
+          `[/api/media/upload] SVG assaini : ${result.removed} octet(s) retiré(s).`,
+        );
+      }
+      buffer = Buffer.from(result.svg, "utf8");
     }
 
     // 5) Upload → CLOUDINARY (et non plus Supabase Storage).

@@ -225,7 +225,67 @@ export async function enrollContact(
     customFields: (contact.custom_fields as Record<string, unknown> | null) ?? null,
   };
 
-  const rows = seq.emails
+  // ── 🆕 ÉVÉNEMENT DÉJÀ PASSÉ → BASCULE EN MODE REPLAY ──────────────────────
+  //
+  // Une séquence de webinaire mélange deux natures d'emails :
+  //   • ceux ancrés à une DATE ABSOLUE  (« C'est CE SOIR à 21h ») ;
+  //   • ceux à DÉCALAGE RELATIF depuis l'inscription (J+1, J+5).
+  //
+  // Jusqu'ici, seuls les premiers étaient écartés quand leur date était passée.
+  // Les seconds partaient quand même. Un inscrit du 4 août pour un webinaire
+  // du 26 juillet recevait donc « votre place est confirmée » pour une session
+  // déjà tenue, puis « le replay est disponible » cinq jours plus tard.
+  // Constaté en production : contact e2c2fef9, séquence 19df5c36 — les trois
+  // emails portent le même created_at, ce sont bien les enfants d'une seule
+  // inscription tardive, et non une séquence qui se serait relancée seule.
+  //
+  // Règle : si la dernière date absolue de la séquence est passée, l'événement
+  // a eu lieu. On ne garde alors que les emails situés APRÈS le dernier email
+  // daté — le bloc d'après-événement, replay compris — et on rebase leurs
+  // délais sur l'inscription pour que le premier parte immédiatement. Le lead
+  // reste capturé et ne reçoit que ce qui a encore du sens.
+  //
+  // Une séquence SANS aucune date absolue (aimant à leads, onboarding…) n'est
+  // pas concernée : `lastFixedMs` reste null et le comportement est inchangé.
+  const ordered = [...seq.emails].sort((a, b) => a.position - b.position);
+
+  const fixedMsOf = (em: (typeof ordered)[number]): number | null => {
+    const t = em.send_at ? new Date(em.send_at).getTime() : NaN;
+    return Number.isFinite(t) ? t : null;
+  };
+
+  const lastDatedIdx = ordered.reduce(
+    (acc, em, i) => (fixedMsOf(em) !== null ? i : acc),
+    -1,
+  );
+  const lastFixedMs = lastDatedIdx >= 0 ? fixedMsOf(ordered[lastDatedIdx]) : null;
+  const eventPassed = lastFixedMs !== null && lastFixedMs <= now;
+
+  let scope = ordered;
+  // Décalage à retrancher pour que le premier email d'après-événement parte
+  // tout de suite : un inscrit tardif n'a aucune raison d'attendre cinq jours
+  // le replay d'une session déjà passée.
+  let rebaseMs = 0;
+
+  if (eventPassed && lastFixedMs !== null) {
+    scope = ordered.slice(lastDatedIdx + 1);
+    if (scope.length === 0) {
+      console.log(
+        `[sequences] Événement passé et aucun email d'après-événement dans ${sequenceId} — aucun envoi.`,
+      );
+      return { scheduled: 0 };
+    }
+    rebaseMs =
+      Math.max(0, scope[0].delay_days) * DAY_MS +
+      Math.max(0, scope[0].delay_hours ?? 0) * HOUR_MS;
+    console.log(
+      `[sequences] Mode replay pour ${sequenceId} : événement du ` +
+        `${new Date(lastFixedMs).toISOString()} déjà passé — ` +
+        `${scope.length} email(s) d'après-événement sur ${ordered.length}.`,
+    );
+  }
+
+  const rows = scope
     .map((em) => {
       // 🆕 DATE FIXE : si l'email porte un send_at, il part à cet instant absolu
       // (indépendant de l'heure d'inscription). Si cette date est DÉJÀ PASSÉE au
@@ -236,11 +296,15 @@ export async function enrollContact(
       if (Number.isFinite(fixedMs)) {
         scheduledMs = fixedMs <= now ? null : fixedMs;
       } else {
-        // Mode relatif historique : inscription + délai.
-        scheduledMs =
+        // Mode relatif : inscription + délai, moins le rebase du mode replay
+        // (nul hors mode replay). Jamais avant `startAt`.
+        scheduledMs = Math.max(
+          startAt,
           startAt +
-          Math.max(0, em.delay_days) * DAY_MS +
-          Math.max(0, em.delay_hours ?? 0) * HOUR_MS;
+            Math.max(0, em.delay_days) * DAY_MS +
+            Math.max(0, em.delay_hours ?? 0) * HOUR_MS -
+            rebaseMs,
+        );
       }
       if (scheduledMs === null) return null;
       return {

@@ -47,7 +47,7 @@ const EVENT_TYPE_COLS_BASE =
  * effet est que les champs personnalisés restent invisibles jusqu'à la
  * migration — au lieu de tout casser.
  */
-const EVENT_TYPE_COLS = `${EVENT_TYPE_COLS_BASE}, form_fields, mode, capacity`;
+const EVENT_TYPE_COLS = `${EVENT_TYPE_COLS_BASE}, form_fields, mode, capacity, payment_required, price_amount, currency, payment_url, payment_provider`;
 
 /** Code PostgREST « colonne inconnue » (undefined_column côté PostgreSQL). */
 function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
@@ -93,6 +93,14 @@ function rowToEventType(r: any): BookingEventType {
     // historique, et le seul que le moteur de créneaux savait produire avant.
     mode: r.mode ?? "consultation",
     capacity: typeof r.capacity === "number" ? r.capacity : null,
+    // 🆕 Migration 05. Le paiement n'est considéré actif que si une URL de
+    // produit existe : un `payment_required` orphelin bloquerait la
+    // réservation sans offrir de moyen de payer.
+    paymentRequired: r.payment_required === true && !!r.payment_url,
+    priceAmount: typeof r.price_amount === "number" ? r.price_amount : null,
+    currency: r.currency ?? "EUR",
+    paymentUrl: r.payment_url ?? null,
+    paymentProvider: r.payment_provider ?? "chariow",
     language: r.language ?? "fr",
     active: r.active,
     funnelId: r.funnel_id,

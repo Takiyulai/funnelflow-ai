@@ -5,11 +5,11 @@
 // classé selon ce qu'il expose RÉELLEMENT :
 //
 //   • balance  → le fournisseur publie un solde/quota vérifiable (OpenRouter,
-//                Scrapingdog, ScrapingBee). On l'affiche tel quel.
-//   • counted  → aucun endpoint de solde public (Resend). On mesure la
-//                consommation DEPUIS NOS PROPRES DONNÉES (table
-//                `scheduled_emails`) — c'est explicitement libellé comme un
-//                comptage AutoFunnel, pas comme une facturation fournisseur.
+//                Scrapingdog, ScrapingBee, Cloudinary). On l'affiche tel quel.
+//   • counted  → le fournisseur publie ses envois mais pas son plafond
+//                (Resend) : on compte les envois réels et on n'affiche de
+//                jauge que si l'exploitant a renseigné le plafond de son
+//                forfait. Libellé comme un comptage, pas comme une facturation.
 //   • unknown  → clé absente, ou fournisseur interrogeable mais injoignable.
 //
 // Aucune clé n'est jamais renvoyée au client : uniquement un aperçu masqué
@@ -289,20 +289,110 @@ async function readScrapingBee(): Promise<ApiKeyStatus> {
 // suivi ici.
 
 /* ------------------------------------------------------------------ */
-/*  Resend — envoi d'emails (COMPTAGE LOCAL)                           */
+/*  Resend — envoi d'emails                                            */
 /* ------------------------------------------------------------------ */
 //
-// Resend ne publie aucun endpoint de quota : le plafond dépend du forfait et se
-// consulte sur leur tableau de bord. On mesure donc la consommation depuis NOS
-// données — la table `scheduled_emails`, qui porte déjà chaque envoi.
-// C'est un comptage AutoFunnel, PAS une facturation Resend : l'UI le dit.
+// ── POURQUOI CETTE CARTE A CHANGÉ ───────────────────────────────────────────
+// Elle comptait `scheduled_emails`, donc UNIQUEMENT les séquences. Or trois
+// familles d'emails partent par la même clé Resend, et donc sur le même quota :
+//   • séquences et workflows        → table scheduled_emails ;
+//   • confirmations de rendez-vous  → lib/booking/emails.ts, envoi direct ;
+//   • email de bienvenue            → lib/platform/emails.ts, envoi direct.
+// Les deux dernières ne passent par aucune table d'envois : le chiffre affiché
+// SOUS-ESTIMAIT donc la consommation réelle — exactement l'erreur à ne pas
+// faire sur la ressource la plus contrainte de la plateforme.
+//
+// Resend expose bien la liste de ses envois (GET /emails). On compte donc
+// depuis LA SOURCE, toutes familles confondues. Le comptage local reste en
+// repli si l'endpoint est injoignable, et le dit alors clairement.
+//
+// ── SUR LE QUOTA ────────────────────────────────────────────────────────────
+// Resend ne renvoie pas le forfait du compte. Afficher « 100/jour » d'office
+// reviendrait à inventer un plafond — ce que ce fichier s'interdit. Le plafond
+// est donc lu dans RESEND_DAILY_LIMIT / RESEND_MONTHLY_LIMIT si l'exploitant
+// les renseigne ; sinon, on affiche les consommations sans jauge.
+
+type ResendEmail = { id?: unknown; created_at?: unknown };
+
+/**
+ * Compte les envois Resend sur une fenêtre, en paginant.
+ *
+ * Déduplication par id : la sémantique exacte du curseur `after` n'est pas
+ * garantie stable d'une version d'API à l'autre, et un curseur mal interprété
+ * ferait recompter la même page. Un Set rend le double comptage impossible,
+ * quoi que fasse la pagination.
+ */
+async function countResendSends(
+  key: string,
+  sinceMs: number,
+): Promise<{ total: number; last24h: number; truncated: boolean; error?: string }> {
+  const MAX_PAGES = 30; // 30 × 100 = 3 000, le plafond mensuel du forfait gratuit.
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  const seen = new Set<string>();
+  let last24h = 0;
+  let cursor: string | null = null;
+  let reachedWindowEdge = false;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url =
+      `https://api.resend.com/emails?limit=100` +
+      (cursor ? `&after=${encodeURIComponent(cursor)}` : "");
+    const res = await timedJson(url, { headers: { Authorization: `Bearer ${key}` } });
+    if (!res.ok) {
+      return {
+        total: seen.size,
+        last24h,
+        truncated: true,
+        error: res.error ?? `HTTP ${res.status}`,
+      };
+    }
+
+    const items = (res.json as { data?: unknown } | null)?.data;
+    if (!Array.isArray(items) || items.length === 0) {
+      reachedWindowEdge = true;
+      break;
+    }
+
+    let added = 0;
+    let oldestMs = Infinity;
+    for (const raw of items as ResendEmail[]) {
+      const id = typeof raw.id === "string" ? raw.id : null;
+      const at =
+        typeof raw.created_at === "string" ? new Date(raw.created_at).getTime() : NaN;
+      if (!id || Number.isNaN(at)) continue;
+      oldestMs = Math.min(oldestMs, at);
+      if (at < sinceMs) continue; // hors fenêtre : ignoré, mais sert de borne d'arrêt
+      if (seen.has(id)) continue;
+      seen.add(id);
+      added++;
+      if (at >= dayAgo) last24h++;
+    }
+
+    // Sortie propre : soit la page déborde déjà de la fenêtre, soit la
+    // pagination n'apporte plus rien (curseur qui n'avance pas).
+    if (oldestMs < sinceMs || added === 0) {
+      reachedWindowEdge = true;
+      break;
+    }
+
+    const lastItem = items[items.length - 1] as ResendEmail;
+    const next = typeof lastItem?.id === "string" ? lastItem.id : null;
+    if (!next || next === cursor) {
+      reachedWindowEdge = true;
+      break;
+    }
+    cursor = next;
+  }
+
+  return { total: seen.size, last24h, truncated: !reachedWindowEdge };
+}
 
 async function readResend(sb: SupabaseClient): Promise<ApiKeyStatus> {
   const key = process.env.RESEND_API_KEY;
   const base: ApiKeyStatus = {
     id: "resend",
     label: "Resend (emails)",
-    role: "Séquences, workflows et emails de livraison",
+    role: "Séquences, rendez-vous et emails de compte — tous sur la même clé",
     envKey: "RESEND_API_KEY",
     configured: Boolean(key),
     keyPreview: maskKey(key),
@@ -317,29 +407,191 @@ async function readResend(sb: SupabaseClient): Promise<ApiKeyStatus> {
 
   if (!key) return { ...base, sourceKind: "unknown", note: "Clé absente — aucun email ne part." };
 
-  // Emails réellement envoyés sur les 30 derniers jours.
-  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-  const { count, error } = await sb
-    .from("scheduled_emails")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "sent")
-    .gte("sent_at", since);
+  // Variable vide ou non numérique → aucun plafond, pas un plafond de 0
+  // (`Number("")` vaut 0, ce qui afficherait une jauge saturée en permanence).
+  const envLimit = (name: string): number | null => {
+    const raw = process.env[name]?.trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const dailyLimit = envLimit("RESEND_DAILY_LIMIT");
+  const monthlyLimit = envLimit("RESEND_MONTHLY_LIMIT");
+  const since = Date.now() - 30 * 24 * 3600 * 1000;
 
-  if (error) {
+  const counted = await countResendSends(key, since);
+
+  if (counted.error && counted.total === 0) {
+    // Repli : le comptage local, en disant qu'il est PARTIEL. Un chiffre
+    // présenté comme complet alors qu'il ignore les emails de rendez-vous
+    // donnerait une fausse sécurité sur le quota.
+    const { count, error } = await sb
+      .from("scheduled_emails")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "sent")
+      .gte("sent_at", new Date(since).toISOString());
+
+    if (error) {
+      return {
+        ...base,
+        sourceKind: "unknown",
+        error: `${counted.error} — repli local en échec : ${error.message}`,
+        note: "Ni l'API Resend ni le comptage local ne sont exploitables.",
+      };
+    }
+
     return {
       ...base,
-      sourceKind: "unknown",
-      error: error.message,
-      note: "Comptage local impossible (lecture de scheduled_emails en échec).",
+      used: count ?? 0,
+      total: monthlyLimit,
+      remaining: monthlyLimit !== null ? monthlyLimit - (count ?? 0) : null,
+      totalLabel: "Quota / mois",
+      error: `API Resend injoignable : ${counted.error}`,
+      note:
+        "⚠️ Chiffre PARTIEL : comptage local sur 30 jours (scheduled_emails), qui " +
+        "ignore les emails de rendez-vous et de bienvenue. La consommation réelle " +
+        "est supérieure.",
     };
+  }
+
+  // Le forfait gratuit se heurte au plafond QUOTIDIEN bien avant le mensuel :
+  // c'est donc lui qu'on met en avant dans la jauge.
+  const used = counted.last24h;
+  const suffix = counted.truncated ? " (au moins)" : "";
+
+  const notes = [
+    `Envois réels lus depuis Resend (GET /emails), toutes familles confondues : ` +
+      `séquences, rendez-vous et emails de compte. ${counted.total}${suffix} sur 30 jours.`,
+  ];
+  if (!dailyLimit && !monthlyLimit) {
+    notes.push(
+      "Plafond non renseigné : Resend ne publie pas le forfait du compte. " +
+        "Renseigner RESEND_DAILY_LIMIT (100 sur le forfait gratuit) et " +
+        "RESEND_MONTHLY_LIMIT (3 000) pour activer la jauge.",
+    );
+  }
+  if (monthlyLimit !== null && counted.total >= monthlyLimit * 0.8) {
+    notes.push(
+      `⚠️ ${counted.total} envois sur 30 jours pour un plafond mensuel de ${monthlyLimit}.`,
+    );
+  }
+  if (counted.error) {
+    // Panne survenue APRÈS avoir déjà compté des envois : on garde le chiffre
+    // obtenu, mais il faut dire qu'il s'arrête là. Le présenter comme complet
+    // masquerait une consommation supérieure.
+    notes.push(`⚠️ Comptage interrompu (${counted.error}) : chiffres partiels.`);
+  } else if (counted.truncated) {
+    notes.push("Comptage arrêté à 3 000 envois : le total sur 30 jours est un minimum.");
   }
 
   return {
     ...base,
-    used: count ?? 0,
+    used,
+    total: dailyLimit,
+    remaining: dailyLimit !== null ? dailyLimit - used : null,
+    totalLabel: "Quota / jour",
+    note: notes.join(" "),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Cloudinary — hébergement des médias                                */
+/* ------------------------------------------------------------------ */
+//
+// Ajouté après l'incident de saturation du stockage : les médias des tunnels
+// clonés vivent ici depuis l'abandon de Supabase Storage, et rien dans
+// l'application ne montrait ce qu'ils consomment. Un quota qui sature sans
+// témoin, c'est précisément ce qui s'est déjà produit une fois.
+//
+// Cloudinary expose un vrai relevé : GET /v1_1/{cloud}/usage (auth Basic
+// clé:secret). Le compteur qui compte est `credits` — un crédit ≈ 1 000
+// transformations, ou 1 Go de stockage, ou 1 Go de bande passante. Le forfait
+// gratuit en accorde 25 par mois.
+
+async function readCloudinary(): Promise<ApiKeyStatus> {
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  const base: ApiKeyStatus = {
+    id: "cloudinary",
+    label: "Cloudinary (médias)",
+    role: "Images et vidéos des tunnels — hébergement et transformations",
+    envKey: "CLOUDINARY_API_KEY",
+    configured: Boolean(cloud && apiKey && apiSecret),
+    keyPreview: maskKey(apiKey),
+    sourceKind: "unknown",
+    used: null,
+    remaining: null,
+    total: null,
+    unit: "crédits",
+    error: null,
+    note: "",
+  };
+
+  if (!cloud || !apiKey || !apiSecret) {
+    return {
+      ...base,
+      note:
+        "Configuration incomplète (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, " +
+        "CLOUDINARY_API_SECRET) — aucun média ne peut être hébergé.",
+    };
+  }
+
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
+  const res = await timedJson(`https://api.cloudinary.com/v1_1/${cloud}/usage`, {
+    headers: { Authorization: `Basic ${auth}` },
+  });
+
+  if (!res.ok) {
+    return {
+      ...base,
+      error: res.error ?? `HTTP ${res.status}`,
+      note:
+        res.status === 401
+          ? "Cloudinary refuse les identifiants (401) — vérifier la paire clé/secret."
+          : "Relevé Cloudinary injoignable (endpoint /usage).",
+    };
+  }
+
+  const d = (res.json ?? {}) as Record<string, unknown>;
+  const section = (name: string): Record<string, unknown> =>
+    (d[name] as Record<string, unknown> | undefined) ?? {};
+
+  const credits = section("credits");
+  const used = num(credits.usage);
+  const total = num(credits.limit);
+  const storageBytes = num(section("storage").usage);
+  const bandwidthBytes = num(section("bandwidth").usage);
+  const transformations = num(section("transformations").usage);
+  const plan = typeof d.plan === "string" ? d.plan : null;
+
+  const mb = (bytes: number | null) =>
+    bytes === null ? "?" : `${(bytes / 1024 / 1024).toFixed(0)} Mo`;
+
+  const detail = [
+    plan ? `Forfait ${plan}.` : null,
+    `Stockage ${mb(storageBytes)}`,
+    `bande passante ${mb(bandwidthBytes)}`,
+    transformations !== null ? `${transformations.toLocaleString("fr-FR")} transformations` : null,
+    num(d.resources) !== null ? `${num(d.resources)} fichiers` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return {
+    ...base,
+    sourceKind: used !== null || total !== null ? "balance" : "unknown",
+    used,
+    total,
+    remaining: total !== null && used !== null ? total - used : null,
+    totalLabel: "Crédits / mois",
     note:
-      "Comptage AutoFunnel sur 30 jours (table scheduled_emails). Resend n'expose " +
-      "pas de quota par API — le plafond du forfait se vérifie sur resend.com.",
+      `Relevé réel Cloudinary (/usage). ${detail}. Un crédit ≈ 1 000 ` +
+      "transformations, ou 1 Go stocké, ou 1 Go de bande passante. Le compteur " +
+      "se réinitialise chaque mois, sauf le stockage, qui est cumulatif : c'est " +
+      "lui qui finit par saturer si les médias des tunnels supprimés ne sont " +
+      "jamais purgés.",
   };
 }
 
@@ -357,11 +609,18 @@ export async function getApiKeyStatuses(sb: SupabaseClient): Promise<ApiKeyStatu
     readScrapingdog(),
     readScrapingBee(),
     readResend(sb),
+    readCloudinary(),
   ]);
 
   return results.map((r, i) => {
     if (r.status === "fulfilled") return r.value;
-    const fallbackIds = ["openrouter", "scrapingdog", "scrapingbee", "resend"];
+    const fallbackIds = [
+      "openrouter",
+      "scrapingdog",
+      "scrapingbee",
+      "resend",
+      "cloudinary",
+    ];
     return {
       id: fallbackIds[i] ?? `provider-${i}`,
       label: fallbackIds[i] ?? "Fournisseur",

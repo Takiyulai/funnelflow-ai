@@ -74,15 +74,37 @@ export function scheduleLine(
 }
 
 function shell(title: string, bodyHtml: string, footer?: string): string {
+  // 🆕 LARGEUR ET RESPIRATION
+  //
+  // La carte était plafonnée à 560 px avec 24 px de marge sur le <body>. Sur
+  // mobile, ces marges mangeaient 48 px de largeur utile sur un écran qui n'en
+  // a que 360 — d'où l'impression d'un contenu tassé alors que la place
+  // existe. Sur grand écran, 560 px laissaient une large bande grise vide.
+  //
+  // 640 px est le compromis retenu : au-delà, les lignes de texte deviennent
+  // trop longues pour un email et la lecture se dégrade. Les marges tombent à
+  // 12 px sous 600 px de large via la media query ci-dessous.
+  //
+  // Cette media query est un BONUS, pas une béquille : les clients qui la
+  // suppriment (certains webmails) affichent la version par défaut, qui reste
+  // correcte. Rien ne dépend d'elle pour être lisible.
   return `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
-    <tr><td style="padding:28px 28px 8px">
-      <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3">${esc(title)}</h1>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@media only screen and (max-width:600px){
+  .ff-wrap{padding:12px !important}
+  .ff-body{padding:22px 18px 6px !important}
+  .ff-foot{padding:14px 18px 22px !important}
+  .ff-title{font-size:19px !important}
+}
+</style></head>
+<body class="ff-wrap" style="margin:0;padding:20px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
+    <tr><td class="ff-body" style="padding:28px 28px 8px">
+      <h1 class="ff-title" style="margin:0 0 16px;font-size:21px;line-height:1.3">${esc(title)}</h1>
       ${bodyHtml}
     </td></tr>
-    <tr><td style="padding:16px 28px 28px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6">
+    <tr><td class="ff-foot" style="padding:16px 28px 28px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6">
       ${footer ?? "Envoyé via AutoFunnel AI."}
     </td></tr>
   </table>
@@ -90,12 +112,33 @@ function shell(title: string, bodyHtml: string, footer?: string): string {
 }
 
 function detailsTable(rows: Array<[string, string]>): string {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 20px;font-size:14px;line-height:1.6">
+  // 🆕 LIBELLÉ AU-DESSUS DE LA VALEUR, PLUS EN COLONNE.
+  //
+  // ── CE QUI CASSAIT ─────────────────────────────────────────────────────────
+  // La colonne de libellés avait une largeur FIXE de 110 px, et les deux
+  // cellules n'avaient aucun écart horizontal. Sur mobile, deux défauts
+  // visibles à l'œil nu :
+  //   • le tableau se comprime sous 110 px et « Rendez-vous » se coupe en
+  //     « Rendez- / vous » ;
+  //   • sans padding entre les colonnes, « Participant » et « DRAMANE » se
+  //     touchent et se lisent comme un seul mot.
+  //
+  // ── POURQUOI EMPILER PLUTÔT QUE CORRIGER LA LARGEUR ────────────────────────
+  // Passer en pourcentage repousserait le problème sans le régler : un libellé
+  // plus long ou une police plus grande le ferait revenir. Empiler supprime la
+  // contrainte à la racine — la valeur dispose de TOUTE la largeur, ce qui est
+  // exactement ce qui manquait, et aucune media query n'est nécessaire.
+  //
+  // `word-break` protège les valeurs insécables : une adresse email longue
+  // débordait de la carte au lieu de passer à la ligne.
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0 22px;font-size:15px;line-height:1.55">
 ${rows
   .map(
     ([k, v]) =>
-      `<tr><td style="padding:6px 0;color:#64748b;width:110px;vertical-align:top">${esc(k)}</td>` +
-      `<td style="padding:6px 0;font-weight:600">${v}</td></tr>`,
+      `<tr><td style="padding:0 0 14px">` +
+      `<div style="color:#64748b;font-size:12px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 3px">${esc(k)}</div>` +
+      `<div style="font-weight:600;word-break:break-word">${v}</div>` +
+      `</td></tr>`,
   )
   .join("")}
 </table>`;

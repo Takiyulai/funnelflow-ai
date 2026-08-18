@@ -178,7 +178,7 @@ export function renderSequenceEmailHtml(
   const body = toHtmlBody(personalize(content, r), accent);
 
   const header = brand
-    ? `<div style="background:${INK};border-radius:16px 16px 0 0;padding:26px 36px;text-align:center;">` +
+    ? `<div class="ff-head" style="background:${INK};border-radius:16px 16px 0 0;padding:26px 36px;text-align:center;">` +
       `<span style="display:inline-block;color:#ffffff;font-size:19px;font-weight:bold;letter-spacing:0.4px;">${escapeHtmlText(brand)}</span>` +
       `<div style="margin:12px auto 0;width:44px;height:3px;background:${accent};border-radius:2px;"></div>` +
       `</div>`
@@ -189,15 +189,36 @@ export function renderSequenceEmailHtml(
       `Vous recevez cet email de la part de ${escapeHtmlText(brand)}.</p>`
     : "";
 
+  // 🆕 LARGEUR UTILE — même correctif que les emails de rendez-vous
+  // (lib/booking/emails.ts), pour la même raison.
+  //
+  // Le calcul qui posait problème, sur un écran de 360 px :
+  //   360 − 32 (marges du <body>) − 72 (padding du bloc blanc) = 256 px
+  // Il restait donc 256 px pour le texte, sur un écran qui en offre 360. Le
+  // gabarit se serrait tout seul là où la place existait, et aucune media
+  // query ne venait relâcher ces marges en petite largeur.
+  //
+  // Le padding intérieur tombe à 18 px sous 600 px de large, ce qui rend
+  // ~292 px au texte — un tiers de largeur gagné sans rien changer au
+  // rendu sur ordinateur. La carte passe de 600 à 640 px : au-delà, les
+  // lignes deviennent trop longues pour rester confortables à lire.
+  //
+  // La media query est un bonus : un client qui supprime le <style> affiche
+  // les valeurs par défaut, qui restent correctes.
   return (
     `<!doctype html><html><head><meta charset="utf-8" />` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1" /></head>` +
-    `<body style="margin:0;background:#eef0f3;padding:32px 16px;` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
+    `<style>@media only screen and (max-width:600px){` +
+    `.ff-wrap{padding:14px 10px !important}` +
+    `.ff-head{padding:22px 18px !important}` +
+    `.ff-body{padding:24px 18px 22px !important}` +
+    `}</style></head>` +
+    `<body class="ff-wrap" style="margin:0;background:#eef0f3;padding:28px 16px;` +
     `font-family:Arial,Helvetica,sans-serif;color:#26303f;">` +
-    `<div style="max-width:600px;margin:0 auto;">` +
+    `<div style="max-width:640px;margin:0 auto;">` +
     header +
-    `<div style="background:#ffffff;border-radius:0 0 16px 16px;` +
-    `padding:36px 36px 30px;font-size:15px;line-height:1.75;">${body}</div>` +
+    `<div class="ff-body" style="background:#ffffff;border-radius:0 0 16px 16px;` +
+    `padding:32px 32px 28px;font-size:15px;line-height:1.75;">${body}</div>` +
     footer +
     `</div>` +
     `</body></html>`
