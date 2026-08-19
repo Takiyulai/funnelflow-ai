@@ -358,8 +358,17 @@ export function NewBookingTypeDialog({
     // popup apparaissait décalé vers la gauche — centré sur l'écran, donc
     // décentré par rapport à ce que l'utilisateur regarde. On reprend le même
     // décalage que le contenu.
+    //
+    // ── POURQUOI PLUS DE « FEUILLE » COLLÉE EN BAS SUR MOBILE ────────────────
+    // La version précédente utilisait `items-end` + `rounded-t-2xl` : le modal
+    // était plaqué contre le bord inférieur de l'écran, façon bottom sheet
+    // native. Le motif se défend pour une action courte (choisir, confirmer),
+    // pas pour un formulaire de cinq étapes : le contenu poussait les boutons
+    // de navigation sous la barre de gestes du téléphone, et l'en-tête
+    // « Étape N sur 5 » se retrouvait à mi-hauteur, loin du regard.
+    // On centre donc à toutes les tailles, avec une marge sur les quatre côtés.
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4 lg:pl-72"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-4 lg:pl-72"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) {
           reset();
@@ -370,7 +379,7 @@ export function NewBookingTypeDialog({
       <div
         role="dialog"
         aria-modal="true"
-        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-line bg-surface p-4 shadow-2xl sm:rounded-2xl sm:p-6"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6"
       >
         {/* ── En-tête + progression ── */}
         <div className="flex items-start justify-between gap-3">
@@ -476,7 +485,12 @@ export function NewBookingTypeDialog({
                       key={i}
                       className="flex flex-wrap items-end gap-2 rounded-lg border border-line bg-canvas p-2"
                     >
-                      <div className="min-w-0 flex-1">
+                      {/* 🆕 `basis-full` sur mobile. Partagée avec Heure (96 px),
+                          Durée (80 px) et la corbeille, la colonne Date tombait
+                          sous 60 px — or un `input[type=date]` a une largeur
+                          minimale intrinsèque bien supérieure et débordait à
+                          droite au lieu de se comprimer. */}
+                      <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                         <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted">
                           Date
                         </label>
@@ -646,7 +660,11 @@ export function NewBookingTypeDialog({
                         (d.open ? "border-line bg-canvas" : "border-line bg-canvas opacity-55")
                       }
                     >
-                      <label className="flex w-32 shrink-0 cursor-pointer items-center gap-2 text-xs font-medium text-ink">
+                      {/* 🆕 `w-24` sur mobile, `w-32` au-delà. À 128 px fixes, le
+                          libellé du jour ne laissait que ~150 px aux deux champs
+                          horaires, qui en réclament ~190 : le second débordait à
+                          DROITE, hors du modal. */}
+                      <label className="flex w-24 shrink-0 cursor-pointer items-center gap-2 text-xs font-medium text-ink sm:w-32">
                         <input
                           type="checkbox"
                           checked={d.open}
@@ -663,7 +681,12 @@ export function NewBookingTypeDialog({
                       </label>
 
                       {d.open ? (
-                        <div className="flex items-center gap-1.5">
+                        // 🆕 `basis-full` sur mobile : le couple d'horaires passe
+                        // sous le nom du jour et dispose de toute la largeur, au
+                        // lieu de se battre pour le reliquat sur la même ligne.
+                        // `flex-wrap` protège le message « Fin avant début », qui
+                        // s'ajoute en bout de ligne quand la plage est invalide.
+                        <div className="flex basis-full flex-wrap items-center gap-1.5 sm:basis-auto">
                           <input
                             type="time"
                             value={toHHMM(d.startMin)}
@@ -897,10 +920,20 @@ export function NewBookingTypeDialog({
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* ⚠️ NE PAS REMETTRE `!hostName.trim()` DANS `disabled`.
+                        C'était un bouton MORT : le bloc photo est placé au-dessus
+                        des champs nom/titre, donc l'utilisateur clique
+                        « Ajouter une photo » AVANT d'avoir tapé quoi que ce soit.
+                        Le bouton était grisé, aucun sélecteur de fichier ne
+                        s'ouvrait, et rien n'expliquait pourquoi — le seul indice
+                        était un `opacity-50` invisible sur fond sombre. Le nom
+                        reste requis pour AFFICHER la fiche côté public (voir le
+                        garde dans `submit`), mais il n'a aucune raison de bloquer
+                        le téléversement. */}
                     <button
                       type="button"
                       onClick={() => avatarInputRef.current?.click()}
-                      disabled={uploadingAvatar || !hostName.trim()}
+                      disabled={uploadingAvatar}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-violet-500/50 disabled:opacity-50"
                     >
                       {uploadingAvatar ? (
@@ -923,6 +956,15 @@ export function NewBookingTypeDialog({
                   <p className="mt-1 text-[10px] text-muted">
                     JPG, PNG ou WebP — 5 Mo maximum.
                   </p>
+                  {/* La photo est téléversée, mais `submit` ne l'envoie que si un
+                      nom est renseigné : sans avertissement, elle disparaîtrait
+                      silencieusement à la création. */}
+                  {hostAvatarUrl && !hostName.trim() && (
+                    <p className="mt-1 text-[11px] font-medium text-amber-400">
+                      Renseigne un nom ci-dessous, sinon cette photo ne
+                      s&apos;affichera pas sur ta page.
+                    </p>
+                  )}
                   {avatarError && (
                     <p className="mt-1 text-[11px] font-medium text-red-400">{avatarError}</p>
                   )}
@@ -967,10 +1009,13 @@ export function NewBookingTypeDialog({
                 disabled={!hostName.trim()}
                 className="mt-2 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-violet-500/50 disabled:opacity-50"
               />
+              {/* 🆕 La phrase « La photo s'ajoute ensuite dans l'onglet du
+                  rendez-vous » a été retirée : elle datait d'avant l'ajout du
+                  téléversement ci-dessus et contredisait le bouton juste au-dessus
+                  d'elle. */}
               <p className="mt-1.5 text-[10px] leading-relaxed text-muted">
                 Sans nom renseigné, aucun bloc « Avec… » n&apos;apparaît sur ta
-                page. La photo s&apos;ajoute ensuite dans l&apos;onglet du
-                rendez-vous.
+                page.
               </p>
             </div>
 
@@ -1072,13 +1117,19 @@ export function NewBookingTypeDialog({
           </div>
         )}
 
-        {/* ── Navigation ── */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        {/* ── Navigation ──
+            🆕 `flex-col-reverse` sur mobile. Côte à côte, « Retour » et
+            « Créer mon rendez-vous » réclamaient ~270 px sur une ligne qui en
+            offre 272 : le libellé du bouton principal se faisait rogner (on
+            lisait « Créer le… »). Empilés, chacun occupe toute la largeur, et
+            `-reverse` garde l'action principale EN HAUT — donc sous le pouce et
+            au-dessus de la barre de gestes. */}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => (step === 0 ? (reset(), onClose()) : setStep((s) => s - 1))}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-muted transition hover:text-ink disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-muted transition hover:text-ink disabled:opacity-50"
           >
             {step === 0 ? "Annuler" : (<><ArrowLeft size={14} /> Retour</>)}
           </button>
@@ -1088,7 +1139,7 @@ export function NewBookingTypeDialog({
               type="button"
               onClick={() => setStep((s) => s + 1)}
               disabled={busy || !canContinue}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50"
             >
               Continuer <ArrowRight size={14} />
             </button>
@@ -1097,7 +1148,7 @@ export function NewBookingTypeDialog({
               type="button"
               onClick={submit}
               disabled={busy || !canContinue}
-              className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-600 disabled:opacity-50"
             >
               {busy && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />}
               Créer mon rendez-vous

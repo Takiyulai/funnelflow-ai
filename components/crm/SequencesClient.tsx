@@ -373,14 +373,20 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-black text-ink">Mes séquences</h2>
             <button type="button" onClick={resetForm}
-              className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-black/5">
+              className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
               <FilePlus2 size={14} /> Nouvelle
             </button>
           </div>
           <div className="grid gap-2">
             {sequences.map((s) => (
               <div key={s.id}
-                className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${editingId === s.id ? "border-[#08498D] bg-[#08498D]/5" : "border-line bg-white"}`}>
+                // 🆕 La ligne non sélectionnée n'avait AUCUN survol : rien
+                // n'indiquait qu'elle était cliquable. On teinte la bordure à
+                // l'or de marque (`--ff-accent`), jamais en blanc — sur le thème
+                // sombre, un survol clair « éteint » la ligne au lieu de la
+                // désigner. L'état SÉLECTIONNÉ garde le bleu de marque, pour
+                // qu'on distingue « je survole » de « c'est ouvert ».
+                className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${editingId === s.id ? "border-[#08498D] bg-[#08498D]/5" : "border-line bg-white hover:border-[color:var(--ff-accent)]"}`}>
                 <button type="button" onClick={() => loadSequence(s.id)} className="min-w-0 flex-1 text-left">
                   <div className="truncate text-sm font-semibold text-ink">{s.name}</div>
                   <div className="text-xs text-muted">
@@ -397,7 +403,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   </div>
                 </button>
                 <button type="button" onClick={() => removeSequence(s.id)}
-                  className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-300 hover:bg-red-50">
+                  className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-500/50 hover:bg-red-500/10">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -450,11 +456,11 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={() => moveRole(i, -1)} disabled={i === 0}
-                    className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronUp size={14} /></button>
+                    className="rounded-md border border-line p-1.5 text-muted hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-30"><ChevronUp size={14} /></button>
                   <button type="button" onClick={() => moveRole(i, 1)} disabled={i === roles.length - 1}
-                    className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronDown size={14} /></button>
+                    className="rounded-md border border-line p-1.5 text-muted hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-30"><ChevronDown size={14} /></button>
                   <button type="button" onClick={() => removeRole(i)} disabled={roles.length <= 1}
-                    className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-30"><Trash2 size={14} /></button>
+                    className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-500/50 hover:bg-red-500/10 disabled:opacity-30"><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}
@@ -472,7 +478,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
             )}
             <button type="button" onClick={addRole}
               disabled={roles.length >= 10 || (pendingRoleType === "autre" && !pendingCustomLabel.trim())}
-              className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-black/5 disabled:opacity-40">
+              className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-40">
               <Plus size={14} /> Ajouter un type
             </button>
           </div>
@@ -495,7 +501,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
           </Button>
           {!emails && (
             <button type="button" onClick={startManual}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-black/5">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
               <FilePlus2 size={15} /> Rédiger moi-même
             </button>
           )}
@@ -509,7 +515,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
             <input className={`${inputCls} max-w-xs font-semibold`} value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Nom de la séquence" />
             <div className="flex items-center gap-2">
               <button type="button" onClick={addEmail}
-                className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-black/5">
+                className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
                 <Plus size={14} /> Ajouter un email
               </button>
               <Button onClick={save} disabled={saving}>
@@ -527,22 +533,22 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => regenerateEmail(i)} disabled={regenIdx !== null}
                       title="Régénérer uniquement cet email avec l'IA"
-                      className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:bg-black/5 disabled:opacity-40">
+                      className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-40">
                       {regenIdx === i ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                       {regenIdx === i ? "…" : "Régénérer"}
                     </button>
                     {em.id && (
                       <button type="button" onClick={() => testSend(em.id!)} title="Envoyer un test"
-                        className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:bg-black/5">
+                        className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
                         <SendHorizonal size={13} /> Test
                       </button>
                     )}
                     <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                      className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronUp size={14} /></button>
+                      className="rounded-md border border-line p-1.5 text-muted hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-30"><ChevronUp size={14} /></button>
                     <button type="button" onClick={() => move(i, 1)} disabled={i === emails.length - 1}
-                      className="rounded-md border border-line p-1.5 text-muted hover:bg-black/5 disabled:opacity-30"><ChevronDown size={14} /></button>
+                      className="rounded-md border border-line p-1.5 text-muted hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-30"><ChevronDown size={14} /></button>
                     <button type="button" onClick={() => remove(i)}
-                      className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-300 hover:bg-red-50"><Trash2 size={14} /></button>
+                      className="rounded-md border border-line p-1.5 text-red-500 hover:border-red-500/50 hover:bg-red-500/10"><Trash2 size={14} /></button>
                   </div>
                 </div>
 
