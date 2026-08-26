@@ -199,10 +199,10 @@ function Badge({ text }: { text: string }) {
   );
 }
 
-function TierCard({ tier, mode }: { tier: PriceTier; mode?: "preview" | "public" }) {
+function TierCard({ tier, mode, index = 0 }: { tier: PriceTier; mode?: "preview" | "public"; index?: number }) {
   void mode;
   return (
-    <div style={tierCardStyle(tier.highlighted)}>
+    <div data-ff-anim="fade-up" data-ff-anim-index={index} style={tierCardStyle(tier.highlighted)}>
       {tier.highlighted && <Badge text={tier.badge || "Populaire"} />}
       <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--ff-ink)" }}>{tier.name}</h3>
       {tier.description && (
@@ -227,9 +227,7 @@ function PricingSingleCardSpotlight({ section, tiers, mode }: PricingPatternProp
   return (
     <div style={{ maxWidth: 520, margin: "0 auto" }}>
       <Header section={section} />
-      <div data-ff-anim="fade-up">
-        <TierCard tier={{ ...tier, highlighted: true }} mode={mode} />
-      </div>
+      <TierCard tier={{ ...tier, highlighted: true }} mode={mode} />
     </div>
   );
 }
@@ -245,11 +243,10 @@ function PricingComparison3Tiers({ section, tiers, mode }: PricingPatternProps) 
       <Header section={section} />
       <div
         className="ff-pricing-grid3"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(list.length, 3)}, 1fr)`, gap: 20, alignItems: "stretch" }}
       >
         {list.map((t, i) => (
-          <TierCard key={i} tier={{ ...t, highlighted: t.highlighted || (!hasHi && i === mid) }} mode={mode} />
+          <TierCard key={i} tier={{ ...t, highlighted: t.highlighted || (!hasHi && i === mid) }} mode={mode} index={i} />
         ))}
       </div>
     </div>
@@ -264,11 +261,12 @@ function PricingSplitGuaranteeEmphasis({ section, tiers, mode }: PricingPatternP
       <Header section={section} />
       <div
         className="ff-pricing-split"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26, alignItems: "center" }}
       >
         <TierCard tier={{ ...tier, highlighted: true }} mode={mode} />
         <div
+          data-ff-anim="fade-up"
+          data-ff-anim-index={1}
           style={{
             background: "color-mix(in srgb, var(--ff-accent) 8%, transparent)",
             border: "1px solid color-mix(in srgb, var(--ff-accent) 26%, transparent)",

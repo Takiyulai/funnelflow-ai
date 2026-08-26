@@ -21,9 +21,11 @@ import type { Funnel, FunnelPage } from "@/lib/funnels/types";
 
 export default function PublishedFunnelView({
   funnel,
+  funnelSlug,
   activePage,
 }: {
   funnel: Funnel;
+  funnelSlug: string;
   activePage?: FunnelPage;
 }) {
   return (
@@ -42,6 +44,7 @@ export default function PublishedFunnelView({
     >
       <FunnelPreview
         funnel={funnel}
+        funnelSlug={funnelSlug}
         activePage={activePage}
         showToolbar={false}
         viewportHeight="auto"

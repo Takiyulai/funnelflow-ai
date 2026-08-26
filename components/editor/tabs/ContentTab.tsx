@@ -11,6 +11,7 @@ import { GuaranteeEditor } from "./items/GuaranteeEditor";
 import { IconPicker, getIconByName } from "../IconPicker";
 import { FormFieldsEditor } from "./items/FormFieldsEditor";
 import { CaptureTagsEditor } from "./items/CaptureTagsEditor";
+import { CaptureListsEditor } from "./items/CaptureListsEditor";
 import { TextColorButton } from "../TextColorButton";
 import { TimerEditor } from "./items/TimerEditor";
 
@@ -41,7 +42,7 @@ export function ContentTab({ section, onChange }: Props) {
     );
   }
 
-  if (section.type === "proof") {
+  if (section.type === "proof" || section.type === "testimonials") {
     return (
       <div className="space-y-4">
         <GenericTextFields section={section} onChange={onChange} hideBullets hideTimer />
@@ -106,6 +107,10 @@ if (section.type === "form") {
       {/* 🆕 Tags CRM appliqués automatiquement aux leads de ce formulaire */}
       <div className="border-t border-white/10 pt-4">
         <CaptureTagsEditor section={section} onChange={onChange} />
+      </div>
+
+      <div className="border-t border-white/10 pt-4">
+        <CaptureListsEditor section={section} onChange={onChange} />
       </div>
 
       {timerBlock}

@@ -1,5 +1,5 @@
 // lib/ai/generate.ts
-import { z } from "zod";
+import { z, type ZodIssue } from "zod";
 import type {
   Funnel,
   FunnelBrief,
@@ -798,12 +798,25 @@ export type AiErrorReason =
 export class AiGenerationError extends Error {
   reason: AiErrorReason;
   details?: string;
+  /**
+   * Issues Zod conservées côté serveur pour produire un message utilisateur
+   * sûr. Elles ne doivent jamais être sérialisées directement dans une réponse
+   * API : la route se charge d'en extraire uniquement un libellé et une raison
+   * en français simple.
+   */
+  validationIssues?: ZodIssue[];
 
-  constructor(reason: AiErrorReason, message: string, details?: string) {
+  constructor(
+    reason: AiErrorReason,
+    message: string,
+    details?: string,
+    validationIssues?: ZodIssue[],
+  ) {
     super(message);
     this.name = "AiGenerationError";
     this.reason = reason;
     this.details = details;
+    this.validationIssues = validationIssues;
   }
 }
 
@@ -3805,6 +3818,7 @@ export async function generateMultiPageFunnelWithAI(brief: FunnelBrief): Promise
       "schema-mismatch",
       "La page principale générée ne respecte pas la structure attendue",
       JSON.stringify(mainParsed.error.flatten().fieldErrors).slice(0, 500),
+      mainParsed.error.issues,
     );
   }
 

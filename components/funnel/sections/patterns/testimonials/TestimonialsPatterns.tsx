@@ -7,7 +7,7 @@
 // Contenu SEUL : la <section>/fond/padding viennent du wrapper de FunnelPreview.
 
 import { useRef, type ComponentType, type CSSProperties } from "react";
-import type { FunnelSection } from "@/lib/funnels/types";
+import type { FunnelSection, TestimonialMedia } from "@/lib/funnels/types";
 import { RichText } from "@/components/funnel/RichText";
 
 export type TItem = {
@@ -16,6 +16,7 @@ export type TItem = {
   authorRole?: string;
   avatarUrl?: string;
   rating?: number;
+  medias?: TestimonialMedia[];
   videoUrl?: string;
 };
 
@@ -50,6 +51,28 @@ function Stars({ n = 5 }: { n?: number }) {
   );
 }
 
+function getItemState(it: TItem) {
+  const medias = (it.medias ?? []).filter((media) => Boolean(media.url?.trim()));
+  const hasQuote = Boolean(it.quote?.trim());
+  const hasRating = typeof it.rating === "number" && it.rating > 0;
+  const hasAuthor = Boolean(it.authorName?.trim());
+  const hasAvatar = Boolean(it.avatarUrl?.trim());
+  const hasRole = Boolean(it.authorRole?.trim());
+  const hasAttribution = hasAuthor || hasAvatar || hasRole;
+  const hasMedia = medias.length > 0;
+  return {
+    medias,
+    hasQuote,
+    hasRating,
+    hasAuthor,
+    hasAvatar,
+    hasRole,
+    hasAttribution,
+    hasMedia,
+    isMediaOnly: hasMedia && !hasQuote && !hasRating && !hasAttribution,
+  };
+}
+
 function Avatar({ name, url }: { name?: string; url?: string }) {
   if (url) {
     return (
@@ -62,7 +85,8 @@ function Avatar({ name, url }: { name?: string; url?: string }) {
       />
     );
   }
-  const initials = (name || "?")
+  if (!name?.trim()) return null;
+  const initials = name
     .split(" ")
     .map((s) => s[0])
     .filter(Boolean)
@@ -92,17 +116,19 @@ function Avatar({ name, url }: { name?: string; url?: string }) {
 }
 
 function Attribution({ it }: { it: TItem }) {
+  const { hasAuthor, hasAvatar, hasRole, hasAttribution } = getItemState(it);
+  if (!hasAttribution) return null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
-      <Avatar name={it.authorName} url={it.avatarUrl} />
-      <div style={{ minWidth: 0 }}>
+      {(hasAvatar || hasAuthor) && <Avatar name={it.authorName} url={it.avatarUrl} />}
+      {(hasAuthor || hasRole) && <div style={{ minWidth: 0 }}>
         {it.authorName && (
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ff-ink)" }}>{it.authorName}</div>
         )}
         {it.authorRole && (
           <div style={{ fontSize: 12.5, color: "var(--ff-ink)", opacity: 0.6 }}>{it.authorRole}</div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -117,7 +143,14 @@ const card: React.CSSProperties = {
   flexDirection: "column",
 };
 
+function cardStyle(it: TItem): React.CSSProperties {
+  return getItemState(it).isMediaOnly
+    ? { ...card, padding: 0, overflow: "hidden" }
+    : card;
+}
+
 function Quote({ children }: { children: string }) {
+  if (!children.trim()) return null;
   return (
     <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, color: "var(--ff-ink)", opacity: 0.88, fontStyle: "italic" }}>
       « {children} »
@@ -130,10 +163,11 @@ function Testimonials3CardsGrid({ section, items }: TestimonialsPatternProps) {
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <Header section={section} />
-      <div className="ff-tm-grid3" data-ff-anim="fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+      <div className="ff-tm-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
         {items.map((it, i) => (
-          <div key={i} style={card}>
-            {it.rating ? <div style={{ marginBottom: 12 }}><Stars n={it.rating} /></div> : null}
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={cardStyle(it)} className={getItemState(it).isMediaOnly ? "ff-testimonial-card--media-only" : undefined}>
+            {getItemState(it).isMediaOnly && <PatternMediaGallery medias={getItemState(it).medias} />}
+            {getItemState(it).hasRating ? <div style={{ marginBottom: 12 }}><Stars n={it.rating} /></div> : null}
             <Quote>{it.quote}</Quote>
             <Attribution it={it} />
           </div>
@@ -148,13 +182,16 @@ function Testimonials2x2StarsDate({ section, items }: TestimonialsPatternProps) 
   return (
     <div style={{ maxWidth: 940, margin: "0 auto" }}>
       <Header section={section} />
-      <div className="ff-tm-grid2" data-ff-anim="fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+      <div className="ff-tm-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
         {items.map((it, i) => (
-          <div key={i} style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-              <Stars n={it.rating ?? 5} />
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ff-accent)", opacity: 0.85 }}>Avis vérifié ✓</span>
-            </div>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={cardStyle(it)} className={getItemState(it).isMediaOnly ? "ff-testimonial-card--media-only" : undefined}>
+            {getItemState(it).isMediaOnly && <PatternMediaGallery medias={getItemState(it).medias} />}
+            {getItemState(it).hasRating && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                <Stars n={it.rating} />
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ff-accent)", opacity: 0.85 }}>Avis vérifié ✓</span>
+              </div>
+            )}
             <Quote>{it.quote}</Quote>
             <Attribution it={it} />
           </div>
@@ -169,20 +206,28 @@ function TestimonialsListQuotes({ section, items }: TestimonialsPatternProps) {
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
       <Header section={section} />
-      <div data-ff-anim="fade-up" style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
         {items.map((it, i) => (
           <blockquote
             key={i}
-            style={{
-              margin: 0,
-              padding: "0 0 0 22px",
-              borderLeft: "3px solid var(--ff-accent)",
-            }}
+            data-ff-anim="fade-up"
+            data-ff-anim-index={i}
+            className={getItemState(it).isMediaOnly ? "ff-testimonial-card--media-only" : undefined}
+            style={getItemState(it).isMediaOnly
+              ? { margin: 0, padding: 0, overflow: "hidden", borderRadius: 16 }
+              : {
+                  margin: 0,
+                  padding: "0 0 0 22px",
+                  borderLeft: "3px solid var(--ff-accent)",
+                }}
           >
-            {it.rating ? <div style={{ marginBottom: 10 }}><Stars n={it.rating} /></div> : null}
-            <p style={{ margin: 0, fontSize: 19, lineHeight: 1.55, color: "var(--ff-ink)", fontWeight: 500 }}>
-              « {it.quote} »
-            </p>
+            {getItemState(it).isMediaOnly && <PatternMediaGallery medias={getItemState(it).medias} />}
+            {getItemState(it).hasRating ? <div style={{ marginBottom: 10 }}><Stars n={it.rating} /></div> : null}
+            {getItemState(it).hasQuote && (
+              <p style={{ margin: 0, fontSize: 19, lineHeight: 1.55, color: "var(--ff-ink)", fontWeight: 500 }}>
+                « {it.quote} »
+              </p>
+            )}
             <Attribution it={it} />
           </blockquote>
         ))}
@@ -203,11 +248,74 @@ function embedSrc(url: string): { kind: "iframe" | "file"; src: string } | null 
   return { kind: "iframe", src: u };
 }
 
-function VideoCard({ it }: { it: TItem }) {
+function PatternMediaGallery({ medias }: { medias: TestimonialMedia[] }) {
+  const list = medias.filter((media) => Boolean(media.url?.trim()));
+  if (list.length === 0) return null;
+  const colsClass = list.length === 1
+    ? "ff-tm-cols-1"
+    : list.length === 2
+      ? "ff-tm-cols-2"
+      : "ff-tm-cols-3";
+
+  return (
+    <div className={`ff-testimonial-media-gallery ${colsClass}`}>
+      {list.map((media, index) => {
+        if (media.kind === "image") {
+          return (
+            <div key={media.id} className="ff-testimonial-media ff-testimonial-media--image" data-ff-anim="zoom-in" data-ff-anim-index={index}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={media.url} alt={media.alt || ""} loading="lazy" />
+            </div>
+          );
+        }
+
+        const parsed = embedSrc(media.url);
+        if (!parsed) return null;
+        return (
+          <div key={media.id} className="ff-testimonial-media ff-testimonial-media--video" data-ff-anim="zoom-in" data-ff-anim-index={index}>
+            {parsed.kind === "file" ? (
+              <video controls preload="metadata" poster={media.posterUrl}>
+                <source src={parsed.src} />
+              </video>
+            ) : (
+              <div className="ff-testimonial-media-frame">
+                <iframe
+                  src={parsed.src}
+                  title={media.alt || "Témoignage vidéo"}
+                  loading="lazy"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VideoCard({ it, index }: { it: TItem; index: number }) {
+  const state = getItemState(it);
   const v = it.videoUrl ? embedSrc(it.videoUrl) : null;
   return (
-    <div style={{ ...card, scrollSnapAlign: "start", flex: "0 0 300px", width: 300, padding: 14, gap: 12 }}>
-      <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 10", borderRadius: 12, overflow: "hidden", background: "color-mix(in srgb, var(--ff-ink) 12%, transparent)" }}>
+    <div
+      data-ff-anim="fade-up"
+      data-ff-anim-index={index}
+      className={state.isMediaOnly ? "ff-testimonial-card--media-only" : undefined}
+      style={{
+        ...card,
+        scrollSnapAlign: "start",
+        flex: "0 0 300px",
+        width: 300,
+        padding: state.isMediaOnly ? 0 : 14,
+        gap: state.isMediaOnly ? 0 : 12,
+        ...(state.isMediaOnly ? { overflow: "hidden" } : {}),
+      }}
+    >
+      {state.isMediaOnly ? (
+        <PatternMediaGallery medias={state.medias} />
+      ) : v ? <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 10", borderRadius: 12, overflow: "hidden", background: "color-mix(in srgb, var(--ff-ink) 12%, transparent)" }}>
         {v?.kind === "iframe" ? (
           <iframe
             src={v.src}
@@ -224,8 +332,12 @@ function VideoCard({ it }: { it: TItem }) {
         ) : (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ff-accent)", fontSize: 30 }}>▶</div>
         )}
-      </div>
-      {it.quote && (
+      </div> : (
+        <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 10", borderRadius: 12, overflow: "hidden", background: "color-mix(in srgb, var(--ff-ink) 12%, transparent)" }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ff-accent)", fontSize: 30 }}>▶</div>
+        </div>
+      )}
+      {state.hasQuote && (
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: "var(--ff-ink)", opacity: 0.85, fontStyle: "italic" }}>« {it.quote} »</p>
       )}
       <Attribution it={it} />
@@ -253,11 +365,10 @@ function TestimonialsCarouselVideo({ section, items }: TestimonialsPatternProps)
       </div>
       <div
         ref={trackRef}
-        data-ff-anim="fade-up"
         style={{ display: "flex", gap: 18, overflowX: "auto", scrollSnapType: "x mandatory", paddingBottom: 8, scrollbarWidth: "none" }}
       >
         {items.map((it, i) => (
-          <VideoCard key={i} it={it} />
+          <VideoCard key={i} it={it} index={i} />
         ))}
       </div>
     </div>

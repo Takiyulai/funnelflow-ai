@@ -31,20 +31,29 @@ type Props = {
   onChange: (patch: Partial<FunnelSection>) => void;
 };
 
+type TestimonialSectionItem = Extract<SectionItem, { kind: "testimonial" }>;
+type TestimonialEntry = {
+  item: TestimonialSectionItem;
+  sectionIndex: number;
+};
+
 // Limites d'upload (alignées sur MediaTab.tsx)
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB en entrée, compressé ensuite
 
 export function TestimonialsEditor({ section, onChange }: Props) {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
-  const items = (section.items || []).filter(
-    (it): it is SectionItem & { kind: "testimonial" } =>
-      it.kind === "testimonial",
+  const sectionItems = section.items ?? [];
+  const testimonialEntries = sectionItems.reduce<TestimonialEntry[]>(
+    (entries, item, sectionIndex) => {
+      if (item.kind === "testimonial") entries.push({ item, sectionIndex });
+      return entries;
+    },
+    [],
   );
-
-  const updateItems = (next: typeof items) => onChange({ items: next });
+  const items = testimonialEntries.map(({ item }) => item);
 
   const addItem = () => {
-    const newItem: SectionItem = {
+    const newItem: TestimonialSectionItem = {
       kind: "testimonial",
       data: {
         quote: "",
@@ -55,28 +64,43 @@ export function TestimonialsEditor({ section, onChange }: Props) {
         medias: [],
       },
     };
-    updateItems([...items, newItem]);
+    onChange({ items: [...sectionItems, newItem] });
     setOpenIdx(items.length);
   };
 
   const updateItem = (idx: number, patch: Partial<TestimonialItem>) => {
-    const next = items.map((it, i) =>
-      i === idx ? { ...it, data: { ...it.data, ...patch } } : it,
+    const entry = testimonialEntries[idx];
+    if (!entry) return;
+    const next = sectionItems.map((item, sectionIndex) =>
+      sectionIndex === entry.sectionIndex
+        ? { ...entry.item, data: { ...entry.item.data, ...patch } }
+        : item,
     );
-    updateItems(next);
+    onChange({ items: next });
   };
 
   const removeItem = (idx: number) => {
-    updateItems(items.filter((_, i) => i !== idx));
+    const entry = testimonialEntries[idx];
+    if (!entry) return;
+    onChange({
+      items: sectionItems.filter((_, sectionIndex) => sectionIndex !== entry.sectionIndex),
+    });
     if (openIdx === idx) setOpenIdx(null);
+    else if (openIdx !== null && openIdx > idx) setOpenIdx(openIdx - 1);
   };
 
   const moveItem = (idx: number, dir: -1 | 1) => {
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= items.length) return;
-    const next = [...items];
-    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
-    updateItems(next);
+    const currentEntry = testimonialEntries[idx];
+    const targetEntry = testimonialEntries[newIdx];
+    const next = [...sectionItems];
+    [next[currentEntry.sectionIndex], next[targetEntry.sectionIndex]] = [
+      next[targetEntry.sectionIndex],
+      next[currentEntry.sectionIndex],
+    ];
+    onChange({ items: next });
+    if (openIdx === idx) setOpenIdx(newIdx);
   };
 
   // ─── Helpers médias ────────────────────────────────────────────────

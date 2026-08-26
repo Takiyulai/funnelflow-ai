@@ -1,7 +1,7 @@
 // app/api/ai/generate-funnel/route.ts
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { z } from "zod";
+import { z, type ZodIssue } from "zod";
 import {
   generateMultiPageFunnelWithAI,
   AiGenerationError,
@@ -268,6 +268,151 @@ function statusForReason(reason: string): number {
   }
 }
 
+type UserValidationError = {
+  field: string;
+  reason: string;
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  brandName: "nom de la marque",
+  offerName: "nom de l'offre",
+  price: "prix",
+  anchorPrice: "prix barré",
+  targetAudience: "audience cible",
+  mainPain: "problème principal",
+  promise: "promesse",
+  tone: "ton rédactionnel",
+  funnelType: "type de tunnel",
+  funnelKind: "format du tunnel",
+  designStyle: "style visuel",
+  language: "langue",
+  primaryCta: "bouton principal",
+  label: "texte du bouton",
+  mode: "mode du bouton",
+  url: "lien",
+  target: "destination du lien",
+  medias: "médias",
+  sections: "sections de la page",
+  type: "type de section",
+  headline: "titre",
+  subheadline: "sous-titre",
+  body: "texte principal",
+  bullets: "liste à puces",
+  items: "éléments de la section",
+  kind: "type d'élément",
+  question: "question de FAQ",
+  answer: "réponse de FAQ",
+  quote: "citation d'avis",
+  authorName: "nom de l'auteur de l'avis",
+  authorRole: "rôle de l'auteur de l'avis",
+  avatarUrl: "avatar de l'avis",
+  rating: "note d'avis",
+  features: "caractéristiques de l'offre",
+  image: "image",
+  video: "vidéo",
+  provider: "fournisseur vidéo",
+  visible: "visibilité de la section",
+  design: "paramètres visuels",
+  seo: "référencement",
+  emails: "emails",
+  thankYouPage: "page de remerciement",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  string: "texte",
+  number: "nombre",
+  integer: "nombre entier",
+  boolean: "valeur oui/non",
+  array: "liste",
+  object: "objet structuré",
+  date: "date",
+  null: "valeur vide",
+  undefined: "champ absent",
+  unknown: "valeur inconnue",
+};
+
+const GENERATION_SYSTEM_USER_MESSAGE =
+  "Une erreur technique est survenue pendant la génération. Réessaie dans un instant.";
+
+function fieldLabel(path: Array<string | number>, source: "brief" | "generated"): string {
+  const leaf = [...path].reverse().find((part): part is string => typeof part === "string");
+  const base = (leaf && FIELD_LABELS[leaf]) ||
+    (source === "brief" ? "champ du brief" : "champ de la page");
+
+  if (source !== "generated") return base;
+
+  const sectionPos = path.indexOf("sections");
+  const sectionIndex = sectionPos >= 0 ? path[sectionPos + 1] : undefined;
+  const itemsPos = path.indexOf("items");
+  const itemIndex = itemsPos >= 0 ? path[itemsPos + 1] : undefined;
+  const location: string[] = [];
+  if (typeof sectionIndex === "number") location.push(`section ${sectionIndex + 1}`);
+  if (typeof itemIndex === "number") location.push(`élément ${itemIndex + 1}`);
+
+  return location.length > 0 ? `${base} (${location.join(", ")})` : base;
+}
+
+function typeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? "format attendu";
+}
+
+function issueReason(issue: ZodIssue, field: string): string {
+  switch (issue.code) {
+    case "invalid_type":
+      if (issue.received === "undefined") return `${field} est obligatoire`;
+      return `${field} doit être au format ${typeLabel(issue.expected)}, mais la valeur reçue est au format ${typeLabel(issue.received)}`;
+    case "invalid_enum_value":
+      return `${field} contient une valeur non reconnue`;
+    case "invalid_string":
+      if (issue.validation === "email") return `${field} doit être une adresse e-mail valide`;
+      if (issue.validation === "url") return `${field} doit être un lien valide`;
+      if (issue.validation === "uuid") return `${field} contient un identifiant invalide`;
+      return `${field} contient un texte invalide`;
+    case "too_small":
+      if (issue.type === "string") return `${field} doit contenir au moins ${issue.minimum} caractère(s)`;
+      if (issue.type === "array") return `${field} doit contenir au moins ${issue.minimum} élément(s)`;
+      return `${field} doit être supérieur ou égal à ${issue.minimum}`;
+    case "too_big":
+      if (issue.type === "string") return `${field} ne peut pas dépasser ${issue.maximum} caractère(s)`;
+      if (issue.type === "array") return `${field} ne peut pas dépasser ${issue.maximum} élément(s)`;
+      return `${field} doit être inférieur ou égal à ${issue.maximum}`;
+    case "invalid_union":
+      return `${field} n'a pas le format attendu`;
+    case "unrecognized_keys":
+      return `${field} contient une information non reconnue`;
+    default:
+      return `${field} n'est pas valide`;
+  }
+}
+
+function userValidationPayload(
+  issues: ZodIssue[],
+  source: "brief" | "generated",
+): { userMessage: string; fieldErrors: UserValidationError[] } {
+  const unique = new Map<string, UserValidationError>();
+  for (const issue of issues) {
+    const field = fieldLabel(issue.path, source);
+    const reason = issueReason(issue, field);
+    unique.set(`${field}:${reason}`, { field, reason });
+    if (unique.size >= 3) break;
+  }
+
+  const fieldErrors = [...unique.values()];
+  const reasons = fieldErrors.map((error) => error.reason);
+  const prefix = source === "brief"
+    ? "Certaines informations du brief sont invalides"
+    : "La page générée contient un ou plusieurs champs invalides";
+  const action = source === "brief"
+    ? "Corrige ces informations puis relance la génération."
+    : "Relance la génération.";
+  const detail = reasons.length > 0 ? ` : ${reasons.join(" ; ")}.` : ".";
+
+  return {
+    userMessage: `${prefix}${detail} ${action}`,
+    fieldErrors,
+  };
+}
+
 export async function POST(request: Request) {
   // Garde abonnement + quota de tunnels du plan.
   const guard = await guardApiAccess();
@@ -308,11 +453,14 @@ export async function POST(request: Request) {
   const parsed = briefSchema.safeParse(json);
   if (!parsed.success) {
     console.error("[generate-funnel] validation failed:", parsed.error.format());
+    const validation = userValidationPayload(parsed.error.issues, "brief");
     return NextResponse.json(
       {
         error: "invalid-brief",
-        message: "Le brief envoyé est incomplet ou invalide",
-        details: parsed.error.flatten().fieldErrors,
+        reason: "invalid-brief",
+        message: validation.userMessage,
+        userMessage: validation.userMessage,
+        fieldErrors: validation.fieldErrors,
       },
       { status: 400 }
     );
@@ -387,11 +535,25 @@ export async function POST(request: Request) {
           extra: { durationMs: duration },
         });
       }
+      if (error.reason === "schema-mismatch") {
+        const validation = userValidationPayload(error.validationIssues ?? [], "generated");
+        return NextResponse.json(
+          {
+            error: "ai-generation-failed",
+            reason: error.reason,
+            message: validation.userMessage,
+            userMessage: validation.userMessage,
+            fieldErrors: validation.fieldErrors,
+          },
+          { status: statusForReason(error.reason) },
+        );
+      }
+
       return NextResponse.json(
         {
           error: "ai-generation-failed",
           reason: error.reason,
-          message: error.message,
+          message: GENERATION_SYSTEM_USER_MESSAGE,
         },
         { status: statusForReason(error.reason) },
       );
@@ -406,8 +568,7 @@ export async function POST(request: Request) {
       {
         error: "ai-generation-failed",
         reason: "unknown",
-        message:
-          "Une erreur inattendue est survenue pendant la génération. Réessayez dans un instant",
+        message: GENERATION_SYSTEM_USER_MESSAGE,
       },
       { status: 500 },
     );

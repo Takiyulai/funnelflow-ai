@@ -42,7 +42,6 @@ import { useEffect, type RefObject } from "react";
 
 const AUTO_STAGGER_MS = 90;
 const AUTO_MAX_DELAY_MS = 360;
-const REVEAL_STYLE_ID = "ff-auto-reveal-css";
 
 /** Enfants éléments directs. */
 function elementChildren(el: HTMLElement): HTMLElement[] {
@@ -51,28 +50,19 @@ function elementChildren(el: HTMLElement): HTMLElement[] {
   );
 }
 
-/**
- * Injecte le CSS de révélation, une seule fois par document.
- *
- * Il vit ici et non dans globals.css pour rester solidaire du runtime : les
- * deux moitiés (attribut + transition) doivent arriver ensemble, sinon on
- * obtient soit du contenu invisible sans animation, soit l'inverse.
- */
-function ensureRevealCss(root: HTMLElement): void {
-  const doc = root.ownerDocument;
-  if (!doc || doc.getElementById(REVEAL_STYLE_ID)) return;
-  const style = doc.createElement("style");
-  style.id = REVEAL_STYLE_ID;
-  style.textContent = [
-    "[data-auto-reveal]{opacity:0;transform:translateY(24px);",
-    "transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}",
-    "[data-auto-reveal].is-in{opacity:1;transform:none}",
-    // Respect de la préférence système : pas de mouvement, et surtout pas de
-    // contenu bloqué à opacity 0 si le runtime ne s'exécutait pas.
-    "@media (prefers-reduced-motion:reduce){",
-    "[data-auto-reveal]{opacity:1;transform:none;transition:none}}",
-  ].join("");
-  (doc.head || doc.documentElement).appendChild(style);
+/** Convertit les anciens marqueurs des skins vers le contrat progressif sûr. */
+function normalizeLegacyReveals(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("[data-reveal]").forEach((el, index) => {
+    const rawDelay = Number.parseInt(el.getAttribute("data-delay") || "", 10);
+    const staggerIndex = Number.isFinite(rawDelay)
+      ? Math.round(rawDelay / AUTO_STAGGER_MS)
+      : index % 5;
+    el.setAttribute("data-ff-anim", "fade-up");
+    el.setAttribute("data-ff-anim-index", String(staggerIndex));
+    el.removeAttribute("data-reveal");
+    el.removeAttribute("data-auto-reveal");
+    el.classList.remove("is-in");
+  });
 }
 
 /**
@@ -99,7 +89,10 @@ function autoInstrument(root: HTMLElement): void {
   for (const section of elementChildren(host)) {
     // Déjà animé (template bespoke, skin, HTML cloné instrumenté) : on ne
     // touche à rien. C'est ce test qui garantit la non-régression.
-    if (section.hasAttribute("data-reveal") || section.querySelector("[data-reveal]")) {
+    if (
+      section.hasAttribute("data-ff-anim") ||
+      section.querySelector("[data-ff-anim]")
+    ) {
       continue;
     }
     // Échappatoire explicite pour un bloc qui ne doit pas bouger.
@@ -113,10 +106,12 @@ function autoInstrument(root: HTMLElement): void {
     const targets = level.length > 0 ? level : [section];
 
     targets.forEach((el, i) => {
-      el.setAttribute("data-reveal", "");
-      el.setAttribute("data-auto-reveal", "");
       const delay = Math.min(i * AUTO_STAGGER_MS, AUTO_MAX_DELAY_MS);
-      if (delay > 0) el.setAttribute("data-delay", String(delay));
+      el.setAttribute("data-ff-anim", "fade-up");
+      el.setAttribute(
+        "data-ff-anim-index",
+        String(Math.round(delay / AUTO_STAGGER_MS)),
+      );
     });
   }
 }
@@ -149,77 +144,11 @@ export function useFunnelAnimations(ref: RefObject<HTMLElement | null>): void {
     const wire = () => {
       runCleanups();
 
-      // 🆕 Instrumentation AVANT la collecte : sans elle, `reveals` est vide sur
-      // tout tunnel construit avec les blocs standard, et la page reste figée.
-      ensureRevealCss(root);
+      // Les skins historiques sont convertis vers le même contrat progressif
+      // que les renderers React. useScrollReveal prend ensuite en charge
+      // l'observation, le reveal unique et la préférence reduced-motion.
+      normalizeLegacyReveals(root);
       autoInstrument(root);
-
-      const reveals = Array.from(
-        root.querySelectorAll<HTMLElement>("[data-reveal]:not(.is-in)"),
-      );
-
-      // ── Reveal ──────────────────────────────────────────────────────────
-      if (reduce) {
-        reveals.forEach((el) => el.classList.add("is-in"));
-      } else if (reveals.length) {
-        const scrollRoot = getScrollParent(root);
-        const io = new IntersectionObserver(
-          (entries) => {
-            entries.forEach((e) => {
-              if (e.isIntersecting) {
-                const d = parseInt(e.target.getAttribute("data-delay") || "0", 10);
-                const target = e.target as HTMLElement;
-                window.setTimeout(() => target.classList.add("is-in"), d);
-                io.unobserve(e.target);
-              }
-            });
-          },
-          { root: scrollRoot, threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
-        );
-        reveals.forEach((el) => io.observe(el));
-        cleanups.push(() => io.disconnect());
-        // Filet de sécurité : si l'observer ne se déclenche pas (conteneur non
-        // scrollé, layout figé), on révèle après un court délai pour ne JAMAIS
-        // laisser du contenu invisible.
-        // 🆕 FIX « aucune animation au scroll » : ce filet révélait AUTREFOIS
-        // la page ENTIÈRE au bout de 900 ms, y compris tout ce qui se trouvait
-        // sous la ligne de flottaison — donc plus rien n'animait au scroll. Il
-        // ne révèle désormais que ce que le scroll a déjà atteint.
-        const viewportBottom = () =>
-          scrollRoot
-            ? scrollRoot.getBoundingClientRect().bottom
-            : window.innerHeight || document.documentElement.clientHeight;
-        const revealReached = () => {
-          const limit = viewportBottom();
-          reveals.forEach((el) => {
-            if (el.classList.contains("is-in")) return;
-            if (el.getBoundingClientRect().top < limit - 4) {
-              el.classList.add("is-in");
-            }
-          });
-        };
-        const safety = window.setTimeout(revealReached, 900);
-        cleanups.push(() => window.clearTimeout(safety));
-
-        // Doublure au scroll (throttlée) au cas où l'IntersectionObserver
-        // resterait muet : garantit qu'aucun contenu atteint ne reste caché.
-        const scroller: HTMLElement | Window = scrollRoot || window;
-        let tick = 0;
-        const onScrollSafety = () => {
-          if (tick) return;
-          tick = window.setTimeout(() => {
-            tick = 0;
-            revealReached();
-          }, 250);
-        };
-        scroller.addEventListener("scroll", onScrollSafety, {
-          passive: true,
-        } as AddEventListenerOptions);
-        cleanups.push(() => {
-          scroller.removeEventListener("scroll", onScrollSafety);
-          if (tick) window.clearTimeout(tick);
-        });
-      }
 
       // ── Tilt ────────────────────────────────────────────────────────────
       if (!reduce) {

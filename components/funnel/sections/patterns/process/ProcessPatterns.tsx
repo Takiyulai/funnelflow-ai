@@ -64,11 +64,10 @@ function ProcessGridNumberedRich({ items }: ProcessPatternProps) {
   return (
     <div
       className="ff-process-grid2"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 1000, margin: "40px auto 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "36px 40px" }}
     >
       {items.map((it, i) => (
-        <div key={i} style={{ position: "relative", paddingLeft: 8, overflow: "hidden" }}>
+        <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ position: "relative", paddingLeft: 8, overflow: "hidden" }}>
           <span
             aria-hidden="true"
             style={{
@@ -100,13 +99,12 @@ function ProcessTimelineVerticalCircles({ items }: ProcessPatternProps) {
   return (
     <div
       className="ff-process-timeline"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 720, margin: "40px auto 0", display: "flex", flexDirection: "column" }}
     >
       {items.map((it, i) => {
         const last = i === items.length - 1;
         return (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "46px 1fr", gap: 20 }}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "grid", gridTemplateColumns: "46px 1fr", gap: 20 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               <Pastille>{i + 1}</Pastille>
               {!last && (
@@ -142,11 +140,10 @@ function ProcessFaqNumberedHybrid({ items }: ProcessPatternProps) {
   return (
     <div
       className="ff-process-qa"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 760, margin: "40px auto 0", display: "flex", flexDirection: "column", gap: 16 }}
     >
       {items.map((it, i) => (
-        <div key={i} style={qaCard}>
+        <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={qaCard}>
           <Pastille size={38}>{i + 1}</Pastille>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <StepTitle>{it.title}</StepTitle>
@@ -163,12 +160,11 @@ function ProcessHorizontalStepsArrow({ items }: ProcessPatternProps) {
   return (
     <div
       className="ff-process-steps"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 1100, margin: "44px auto 0", display: "flex", alignItems: "stretch", gap: 8 }}
     >
       {items.map((it, i) => (
         <div key={i} style={{ display: "contents" }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center", padding: "0 8px" }}>
+          <div data-ff-anim="fade-up" data-ff-anim-index={i} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center", padding: "0 8px" }}>
             <Pastille>{i + 1}</Pastille>
             <StepTitle>{it.title}</StepTitle>
             <StepDesc>{it.desc}</StepDesc>

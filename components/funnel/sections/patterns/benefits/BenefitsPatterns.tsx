@@ -94,11 +94,10 @@ function BenefitsGridNumberedFlat({ section, items }: BenefitsPatternProps) {
       <Header section={section} center />
       <div
         className="ff-benefits-grid2"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "34px 48px", marginTop: 40 }}
       >
         {items.map((it, i) => (
-          <div key={i} style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
             <span
               aria-hidden="true"
               style={{ fontSize: 34, fontWeight: 800, lineHeight: 1, color: "var(--ff-accent)", opacity: 0.9 }}
@@ -123,11 +122,10 @@ function BenefitsCards4ShadowLongtext({ section, items }: BenefitsPatternProps) 
       <Header section={section} />
       <div
         className="ff-benefits-grid2"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, marginTop: 40 }}
       >
         {items.map((it, i) => (
-          <div key={i} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 14 }}>
             <AccentBadge>✓</AccentBadge>
             <ItemTitle>{it.title}</ItemTitle>
             <ItemDesc>{it.desc}</ItemDesc>
@@ -145,12 +143,11 @@ function BenefitsHorizontalStepsArrow({ section, items }: BenefitsPatternProps) 
       <Header section={section} center />
       <div
         className="ff-benefits-steps"
-        data-ff-anim="fade-up"
         style={{ display: "flex", alignItems: "stretch", gap: 8, marginTop: 44 }}
       >
         {items.map((it, i) => (
           <div key={i} className="ff-benefits-step" style={{ display: "contents" }}>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center", padding: "0 8px" }}>
+            <div data-ff-anim="fade-up" data-ff-anim-index={i} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center", padding: "0 8px" }}>
               <span
                 aria-hidden="true"
                 style={{
@@ -194,11 +191,10 @@ function BenefitsCards6ShadowClassic({ section, items }: BenefitsPatternProps) {
       <Header section={section} center />
       <div
         className="ff-benefits-grid3"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20, marginTop: 40 }}
       >
         {items.map((it, i) => (
-          <div key={i} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
             <AccentBadge>✓</AccentBadge>
             <ItemTitle>{it.title}</ItemTitle>
             <ItemDesc>{it.desc}</ItemDesc>

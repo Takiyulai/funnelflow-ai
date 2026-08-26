@@ -52,7 +52,6 @@ export function PricingRenderer({
   return (
     <div
       className={`ff-pricing grid ${gridCols} gap-5 mt-6`}
-      data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
         const highlighted = item.data.highlighted;
@@ -82,6 +81,8 @@ export function PricingRenderer({
         return (
           <div
             key={idx}
+            data-ff-anim={section.animations?.bullets ?? "fade-up"}
+            data-ff-anim-index={idx}
             data-ff-pricing-highlighted={highlighted ? "true" : undefined}
             className={[
               "ff-pricing-card",

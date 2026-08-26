@@ -37,11 +37,11 @@ function CtaBtn({ section, mode }: CtaFinalProps) {
 // ── Pattern 1 : centré, urgence ───────────────────────────────────────────────
 function CtaFinalCenteredUrgency({ section, mode }: CtaFinalProps) {
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }} data-ff-anim="fade-up">
-      {section.headline && <RichText as="h2" className="ff-headline" text={section.headline} />}
+    <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
+      {section.headline && <RichText as="h2" className="ff-headline" text={section.headline} dataAnim="fade-up" />}
       {section.subheadline && (
         <div style={{ marginTop: 14 }}>
-          <RichText as="p" className="ff-subheadline" text={section.subheadline} />
+          <RichText as="p" className="ff-subheadline" text={section.subheadline} dataAnim="fade-up" />
         </div>
       )}
       <div className="ff-cta-wrap" style={{ marginTop: 30, display: "flex", justifyContent: "center" }}>
@@ -59,10 +59,9 @@ function CtaFinalSplitRecapBenefits({ section, mode }: CtaFinalProps) {
   return (
     <div
       className="ff-cta-split"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "center" }}
     >
-      <div>
+      <div data-ff-anim="fade-up">
         {section.headline && <RichText as="h2" className="ff-headline" text={section.headline} />}
         {section.subheadline && (
           <div style={{ marginTop: 12 }}>
@@ -76,7 +75,7 @@ function CtaFinalSplitRecapBenefits({ section, mode }: CtaFinalProps) {
       {recap.length > 0 && (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           {recap.map((r, i) => (
-            <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, fontSize: 15.5, color: "var(--ff-ink)" }}>
+            <li key={i} data-ff-anim="fade-up" data-ff-anim-index={i + 1} style={{ display: "flex", alignItems: "flex-start", gap: 12, fontSize: 15.5, color: "var(--ff-ink)" }}>
               <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, var(--ff-accent) 14%, transparent)", color: "var(--ff-accent)", fontSize: 12, fontWeight: 800 }}>✓</span>
               <span style={{ opacity: 0.9 }}>{r}</span>
             </li>

@@ -118,12 +118,16 @@ function parseVideoUrl(raw: string): ParsedVideo {
 // Utilise les classes `ff-testimonial-media*` pour partager exactement
 // les mêmes styles entre preview et export Systeme.io (cf. funnel-theme.css).
 // ─────────────────────────────────────────────────────────────────────────────
-function MediaCard({ media }: { media: TestimonialMedia }) {
+function MediaCard({ media, index }: { media: TestimonialMedia; index: number }) {
   if (!media.url) return null;
 
   if (media.kind === "image") {
     return (
-      <div className="ff-testimonial-media ff-testimonial-media--image">
+      <div
+        className="ff-testimonial-media ff-testimonial-media--image"
+        data-ff-anim="zoom-in"
+        data-ff-anim-index={index}
+      >
         <img src={media.url} alt={media.alt || ""} loading="lazy" />
       </div>
     );
@@ -134,7 +138,11 @@ function MediaCard({ media }: { media: TestimonialMedia }) {
 
   if (parsed.kind === "file") {
     return (
-      <div className="ff-testimonial-media ff-testimonial-media--video">
+      <div
+        className="ff-testimonial-media ff-testimonial-media--video"
+        data-ff-anim="zoom-in"
+        data-ff-anim-index={index}
+      >
         <video controls preload="metadata" poster={media.posterUrl}>
           <source src={parsed.src} />
         </video>
@@ -143,7 +151,11 @@ function MediaCard({ media }: { media: TestimonialMedia }) {
   }
 
   return (
-    <div className="ff-testimonial-media ff-testimonial-media--video">
+    <div
+      className="ff-testimonial-media ff-testimonial-media--video"
+      data-ff-anim="zoom-in"
+      data-ff-anim-index={index}
+    >
       <div className="ff-testimonial-media-frame">
         <iframe
           src={parsed.src}
@@ -175,8 +187,8 @@ function TestimonialMediaGallery({ medias }: { medias: TestimonialMedia[] }) {
 
   return (
     <div className={`ff-testimonial-media-gallery ${colsCls}`}>
-      {list.map((m) => (
-        <MediaCard key={m.id} media={m} />
+      {list.map((m, index) => (
+        <MediaCard key={m.id} media={m} index={index} />
       ))}
     </div>
   );
@@ -209,6 +221,7 @@ export function TestimonialsRenderer({
       authorRole: it.data.authorRole,
       avatarUrl: it.data.avatarUrl,
       rating: it.data.rating,
+      medias: it.data.medias,
       videoUrl: (it.data.medias || []).find((m) => m.kind === "video" && m.url)
         ?.url,
     }));
@@ -227,10 +240,22 @@ export function TestimonialsRenderer({
     <div
       className="ff-testimonials grid gap-5 md:gap-6 mt-10"
       style={gridStyle}
-      data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
-        const initials = (item.data.authorName || "?")
+        const hasQuote = Boolean(item.data.quote?.trim());
+        const hasRating =
+          typeof item.data.rating === "number" && item.data.rating > 0;
+        const hasAuthor = Boolean(item.data.authorName?.trim());
+        const hasAvatar = Boolean(item.data.avatarUrl?.trim());
+        const hasRole = Boolean(item.data.authorRole?.trim());
+        const hasAttribution = hasAuthor || hasAvatar || hasRole;
+        const medias = (item.data.medias ?? []).filter((media) =>
+          Boolean(media.url?.trim()),
+        );
+        const hasMedia = medias.length > 0;
+        const isMediaOnly =
+          hasMedia && !hasQuote && !hasRating && !hasAttribution;
+        const initials = (item.data.authorName || "")
           .split(" ")
           .map((s) => s[0])
           .filter(Boolean)
@@ -238,30 +263,32 @@ export function TestimonialsRenderer({
           .join("")
           .toUpperCase();
 
-        const medias = item.data.medias ?? [];
-
         return (
           <div
             key={idx}
-            className={`ff-testimonial-card ff-card relative rounded-2xl ${compact ? "p-5" : "p-6"} transition-all duration-500 hover:-translate-y-2 flex flex-col group`}
+            data-ff-anim={section.animations?.bullets ?? "fade-up"}
+            data-ff-anim-index={idx}
+            className={`ff-testimonial-card ff-card relative rounded-2xl ${isMediaOnly ? "ff-testimonial-card--media-only" : compact ? "p-5" : "p-6"} transition-all duration-500 hover:-translate-y-2 flex flex-col group`}
           >
             {/* Elegant Quote Mark */}
-            <div className="absolute top-6 right-8 opacity-10 transition-opacity group-hover:opacity-20">
-              <svg
-                width="40"
-                height="30"
-                viewBox="0 0 40 30"
-                fill="currentColor"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M0 17.5C0 7.8 7.2 0 16.1 0V7.5C11.5 7.5 7.9 10.9 7.9 15.3H16.1V30H0V17.5ZM23.9 17.5C23.9 7.8 31.1 0 40 0V7.5C35.4 7.5 31.8 10.9 31.8 15.3H40V30H23.9V17.5Z" />
-              </svg>
-            </div>
+            {hasQuote && (
+              <div className="absolute top-6 right-8 opacity-10 transition-opacity group-hover:opacity-20">
+                <svg
+                  width="40"
+                  height="30"
+                  viewBox="0 0 40 30"
+                  fill="currentColor"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M0 17.5C0 7.8 7.2 0 16.1 0V7.5C11.5 7.5 7.9 10.9 7.9 15.3H16.1V30H0V17.5ZM23.9 17.5C23.9 7.8 31.1 0 40 0V7.5C35.4 7.5 31.8 10.9 31.8 15.3H40V30H23.9V17.5Z" />
+                </svg>
+              </div>
+            )}
 
             {/* 🆕 Médias additionnels (preuves) : AU-DESSUS de la citation */}
-            {medias.length > 0 && <TestimonialMediaGallery medias={medias} />}
+            {hasMedia && <TestimonialMediaGallery medias={medias} />}
 
-            {item.data.rating && item.data.rating > 0 && (
+            {hasRating && (
               <div className="mb-6 flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <Star
@@ -277,7 +304,7 @@ export function TestimonialsRenderer({
               </div>
             )}
 
-            {item.data.quote && (
+            {hasQuote && (
               <blockquote
                 className={`${bodySize} mb-8 leading-relaxed flex-1 font-medium italic opacity-90`}
                 style={{ color: "var(--ff-ink)" }}
@@ -286,8 +313,9 @@ export function TestimonialsRenderer({
               </blockquote>
             )}
 
-            <div className="flex items-center gap-4 mt-auto pt-6 border-t border-[var(--ff-border)]/10">
-              {item.data.avatarUrl ? (
+            {hasAttribution && (
+              <div className="flex items-center gap-4 mt-auto pt-6 border-t border-[var(--ff-border)]/10">
+              {hasAvatar ? (
                 <div className="relative">
                   <img
                     src={item.data.avatarUrl}
@@ -297,7 +325,7 @@ export function TestimonialsRenderer({
                   />
                   <div className="absolute inset-0 rounded-full shadow-inner pointer-events-none"></div>
                 </div>
-              ) : (
+              ) : hasAuthor ? (
                 <div
                   className="flex h-12 w-12 items-center justify-center rounded-full text-[13px] font-bold shrink-0 ring-2 ring-[var(--ff-accent)]/20"
                   style={{
@@ -308,8 +336,8 @@ export function TestimonialsRenderer({
                 >
                   {initials}
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
+              ) : null}
+              {(hasAuthor || hasRole) && <div className="flex-1 min-w-0">
                 {item.data.authorName && (
                   <div
                     className="text-sm font-bold truncate tracking-tight"
@@ -329,8 +357,9 @@ export function TestimonialsRenderer({
                     {item.data.authorRole}
                   </div>
                 )}
+              </div>}
               </div>
-            </div>
+            )}
           </div>
         );
       })}

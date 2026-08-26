@@ -500,6 +500,8 @@ export type FormSectionConfig = {
   successMessage?: string;
   /** 🆕 Tags CRM appliqués automatiquement aux leads qui soumettent ce formulaire. */
   captureTags?: string[];
+  /** Listes CRM auxquelles rattacher automatiquement les leads de ce formulaire. */
+  captureListIds?: string[];
 };
 
 export type SectionItem =

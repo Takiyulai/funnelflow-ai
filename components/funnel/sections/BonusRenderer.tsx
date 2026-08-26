@@ -27,13 +27,14 @@ export function BonusRenderer({ section, bodySize = "text-base", compact }: Prop
   return (
     <div
       className={`ff-bonus grid ${gridCols} gap-4 mt-4`}
-      data-ff-anim={section.animations?.bullets ?? "fade-up"}
     >
       {items.map((item, idx) => {
         const Icon = getIconByName(item.data.iconName || "gift");
         return (
           <div
             key={idx}
+            data-ff-anim={section.animations?.bullets ?? "fade-up"}
+            data-ff-anim-index={idx}
             className="ff-bonus-card rounded-xl p-5 flex gap-4 items-start transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
             style={{
               // 🆕 FIX : --ff-card-bg/--ff-card-border sont dédiées aux cartes et

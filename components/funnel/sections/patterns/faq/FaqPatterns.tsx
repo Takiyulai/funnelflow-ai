@@ -32,16 +32,20 @@ function useOpenSet() {
 function FaqCard({
   q,
   a,
+  index,
   isOpen,
   onToggle,
 }: {
   q: string;
   a: string;
+  index: number;
   isOpen: boolean;
   onToggle: () => void;
 }) {
   return (
     <div
+      data-ff-anim="fade-up"
+      data-ff-anim-index={index}
       style={{
         background: "var(--ff-card-bg, #fff)",
         border: "1px solid var(--ff-card-border, var(--ff-border, rgba(0,0,0,.1)))",
@@ -129,9 +133,9 @@ function FaqAccordion({ section, faqs }: FaqPatternProps) {
           <RichText as="h2" className="ff-headline" text={section.headline} />
         </div>
       )}
-      <div data-ff-anim="fade-up" style={{ marginTop: 34, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ marginTop: 34, display: "flex", flexDirection: "column", gap: 12 }}>
         {faqs.map((f, i) => (
-          <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(i)} onToggle={() => toggle(i)} />
+          <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
     </SectionShell>
@@ -151,15 +155,15 @@ function FaqSandwichDoubleCta({ section, faqs, mode }: FaqPatternProps) {
           <RichText as="h2" className="ff-headline" text={section.headline} />
         </div>
       )}
-      <div data-ff-anim="fade-up" style={{ marginTop: 34, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ marginTop: 34, display: "flex", flexDirection: "column", gap: 12 }}>
         {first.map((f, i) => (
-          <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(i)} onToggle={() => toggle(i)} />
+          <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
       {second.length > 0 && (
-        <div data-ff-anim="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {second.map((f, i) => (
-            <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(mid + i)} onToggle={() => toggle(mid + i)} />
+            <FaqCard key={i} q={f.question} a={f.answer} index={mid + i} isOpen={open.has(mid + i)} onToggle={() => toggle(mid + i)} />
           ))}
         </div>
       )}
@@ -183,13 +187,13 @@ function FaqHubGridLinks({ section, faqs, mode }: FaqPatternProps) {
           <RichText as="p" className="ff-subheadline" text={section.subheadline} />
         </div>
       )}
-      <div className="ff-faq-grid" data-ff-anim="fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 34, alignItems: "start" }}>
+      <div className="ff-faq-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 34, alignItems: "start" }}>
         {faqs.map((f, i) => (
-          <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(i)} onToggle={() => toggle(i)} />
+          <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
       {section.cta && (
-        <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ marginTop: 26, display: "flex", justifyContent: "flex-start" }}>
+        <div className="ff-cta-wrap" style={{ marginTop: 26, display: "flex", justifyContent: "flex-start" }}>
           <CtaButton cta={section.cta} disabled={mode === "preview"} />
         </div>
       )}
@@ -210,9 +214,9 @@ function FaqGridIntro({ section, faqs, mode }: FaqPatternProps) {
           </div>
         )}
       </div>
-      <div className="ff-faq-grid" data-ff-anim="fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 32, alignItems: "start" }}>
+      <div className="ff-faq-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 32, alignItems: "start" }}>
         {faqs.map((f, i) => (
-          <FaqCard key={i} q={f.question} a={f.answer} isOpen={open.has(i)} onToggle={() => toggle(i)} />
+          <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
       {section.cta && (

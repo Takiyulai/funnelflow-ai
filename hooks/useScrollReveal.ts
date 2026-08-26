@@ -46,7 +46,19 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     const collect = () =>
       Array.from(container.querySelectorAll<HTMLElement>("[data-ff-anim]"));
 
+    const applyStagger = (el: HTMLElement) => {
+      const index = Number.parseInt(
+        el.getAttribute("data-ff-anim-index") || "0",
+        10,
+      );
+      const delay = Number.isFinite(index)
+        ? Math.min(Math.max(index, 0) * 90, 360)
+        : 0;
+      el.style.setProperty("--ff-anim-delay", `${delay}ms`);
+    };
+
     const activate = (el: HTMLElement) => {
+      applyStagger(el);
       el.classList.remove("ff-anim-pending");
       el.classList.add("ff-anim-active", "ff-in");
     };
@@ -112,6 +124,7 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     const observed = new WeakSet<Element>();
 
     const prep = (el: HTMLElement, scrollRoot: HTMLElement | null) => {
+      applyStagger(el);
       // 🆕 FIX « aperçu vide au changement de template » : au re-render React
       // (changement de template/variant → MÊMES nœuds DOM réutilisés), React
       // réécrit `className` avec la valeur rendue, ce qui EFFACE nos classes
@@ -285,7 +298,7 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "data-ff-anim", "data-ff-anim-index"],
     });
 
     // 🆕 Re-scan au resize (changement viewport mobile/desktop)

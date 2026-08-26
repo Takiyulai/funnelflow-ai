@@ -89,9 +89,29 @@ const FUNNEL_GOALS = [
 type ApiError = {
   reason?: string;
   message?: string;
+  /** Message français déjà neutralisé côté serveur pour les erreurs de validation. */
+  userMessage?: string;
+  fieldErrors?: Array<{ field: string; reason: string }>;
   /** Code d'erreur applicatif (ex : "subscription_required", "funnel_quota_reached"). */
   error?: string;
 };
+
+const GENERATION_SYSTEM_ERROR_MESSAGE =
+  "Une erreur technique est survenue pendant la génération. Réessaie dans un instant.";
+
+const HIDDEN_AI_ERROR_CODES = new Set([
+  "missing-key",
+  "invalid-key",
+  "rate-limit",
+  "insufficient-quota",
+  "network-error",
+  "empty-response",
+  "invalid-json",
+  "schema-mismatch",
+  "invalid-model",
+  "invalid-brief",
+  "unknown",
+]);
 
 /**
  * 🆕 Un libellé de prix désigne-t-il la gratuité ?
@@ -814,7 +834,7 @@ export function CreateFunnelWizard() {
         // limite du forfait) avec une invite à s'abonner, plutôt qu'une erreur
         // technique générique.
         const gate =
-          response.status === 402 || apiErr.error === "subscription_required"
+          apiErr.error === "subscription_required"
             ? "subscription-required"
             : apiErr.error === "funnel_quota_reached" ||
                 apiErr.error === "quota_exceeded"
@@ -823,13 +843,19 @@ export function CreateFunnelWizard() {
                 ? "session-expired"
                 : undefined;
         setErrorReason(gate ?? apiErr.reason ?? "unknown");
+        const validationMessage =
+          apiErr.reason === "schema-mismatch" || apiErr.reason === "invalid-brief"
+            ? apiErr.userMessage
+            : undefined;
         setErrorMessage(
-          apiErr.message ??
+          validationMessage ??
             (gate === "subscription-required"
-              ? "Aucun forfait actif. Choisis un forfait pour générer ton tunnel."
-              : gate === "session-expired"
-                ? "Ta session a expiré ou tu n'es pas connecté (refresh token invalide). Reconnecte-toi, puis réessaie."
-                : "La génération a échoué. Réessayez dans un instant ou vérifiez votre clé OpenAI")
+              ? apiErr.message ?? "Aucun forfait actif. Choisis un forfait pour générer ton tunnel."
+              : gate === "plan-limit"
+                ? apiErr.message ?? "Tu as atteint la limite de ton forfait."
+                : gate === "session-expired"
+                  ? "Ta session a expiré. Reconnecte-toi, puis réessaie."
+                  : GENERATION_SYSTEM_ERROR_MESSAGE)
         );
         setFunnel(null);
         return;
@@ -837,7 +863,7 @@ export function CreateFunnelWizard() {
 
       if (!data?.funnel) {
         setErrorReason("empty-response");
-        setErrorMessage("La réponse du serveur est vide. Réessayez la génération");
+        setErrorMessage(GENERATION_SYSTEM_ERROR_MESSAGE);
         setFunnel(null);
         return;
       }
@@ -925,9 +951,7 @@ export function CreateFunnelWizard() {
       }
 
       setErrorReason("network-error");
-      setErrorMessage(
-        "La connexion a été interrompue par le navigateur ou le serveur (Timeout). Nous avons optimisé la vitesse, réessayez une fois. Si cela persiste, vérifiez votre connexion internet."
-      );
+      setErrorMessage(GENERATION_SYSTEM_ERROR_MESSAGE);
       setFunnel(null);
     } finally {
       setIsGenerating(false);
@@ -2371,6 +2395,8 @@ function GenerationStep({
   // 🆕 Session Supabase expirée / refresh token invalide → 401 : proposer de se
   // reconnecter (au lieu du message trompeur « vérifiez votre clé OpenAI »).
   const isSessionExpired = errorReason === "session-expired";
+  const isValidationIssue = errorReason === "schema-mismatch" || errorReason === "invalid-brief";
+  const showTechnicalCode = !!errorReason && !HIDDEN_AI_ERROR_CODES.has(errorReason);
 
   return (
     <div className="grid gap-4">
@@ -2480,9 +2506,13 @@ function GenerationStep({
                     : "Aucun forfait actif"
                   : isSessionExpired
                     ? "Session expirée"
-                    : isRateLimit
-                      ? "Trop de requêtes"
-                      : "La génération a échoué"}
+                    : isValidationIssue
+                      ? errorReason === "invalid-brief"
+                        ? "Informations à corriger"
+                        : "Contenu généré invalide"
+                      : isRateLimit
+                        ? "Trop de requêtes"
+                        : "La génération a échoué"}
             </span>
           </p>
           <p className={`mt-1 text-xs leading-relaxed ${isStorageIssue || isPaywall ? "text-amber-800" : "text-red/90"}`}>
@@ -2509,7 +2539,7 @@ function GenerationStep({
               Se reconnecter
             </a>
           )}
-          {errorReason && !isPaywall && !isSessionExpired && (
+          {showTechnicalCode && !isPaywall && !isSessionExpired && (
             <p className={`mt-2 text-[10px] uppercase tracking-wider font-bold ${isStorageIssue ? "text-amber-700/80" : "text-red/70"}`}>
               Code: {errorReason}
             </p>

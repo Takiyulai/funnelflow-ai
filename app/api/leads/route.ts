@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
+import { addContactsToLists } from "@/lib/crm/lists";
 import { runLeadCreatedWorkflows, runWorkflowsForEvent, semanticEventForSubmission } from "@/lib/workflows/engine";
 import { dispatchDueEmailsNow } from "@/lib/crm/deliverScheduled";
 import { rateLimit } from "@/lib/rate-limit";
@@ -19,7 +20,8 @@ const leadSchema = z.object({
   name: z.string().max(200).optional().nullable(),
   phone: z.string().max(40).optional().nullable(),
   consent: z.boolean().optional().default(false),
-  // 🆕 Tags CRM à appliquer automatiquement (configurés sur le formulaire).
+  // Compatibilité avec les runtimes existants. Ces noms sont recoupés avec la
+  // configuration publiée côté serveur et ne sont jamais une source de vérité.
   tags: z.array(z.string().max(60)).max(20).optional(),
   // Métadonnées arbitraires (autres champs du formulaire)
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
@@ -69,6 +71,113 @@ function getClientIp(req: Request): string {
   return "unknown";
 }
 
+type PublishedCaptureSection = {
+  id?: unknown;
+  formConfig?: {
+    captureTags?: unknown;
+    captureListIds?: unknown;
+  } | null;
+  cta?: { captureTags?: unknown } | null;
+  rawHtmlPatches?: {
+    links?: Record<string, { popup?: { captureTags?: unknown } | null } | undefined>;
+  } | null;
+};
+
+type PublishedCapturePage = {
+  slug?: unknown;
+  isHome?: unknown;
+  sections?: unknown;
+};
+
+type PublishedCaptureContent = {
+  pages?: unknown;
+  sections?: unknown;
+};
+
+type CaptureSettings = {
+  tags: string[];
+  listIds: string[];
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function cleanStrings(value: unknown, maxItems: number, maxLength: number): string[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Map<string, string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const clean = item.trim().slice(0, maxLength);
+    if (!clean) continue;
+    unique.set(clean.toLowerCase(), clean);
+    if (unique.size >= maxItems) break;
+  }
+  return [...unique.values()];
+}
+
+function normalizePageSlug(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/^\/+|\/+$/g, "") : "";
+}
+
+/**
+ * Résout les automatisations de capture depuis le contenu PUBLIÉ uniquement.
+ * Les tags envoyés par les anciens runtimes servent au plus à sélectionner un
+ * popup cloné parmi ceux autorisés dans la section ; aucun ID de liste visiteur
+ * n'est lu ici.
+ */
+function resolveCaptureSettings(
+  contentValue: unknown,
+  pageSlug: string | null | undefined,
+  sectionId: string | null | undefined,
+  requestedTags: string[] | undefined,
+): CaptureSettings {
+  if (!contentValue || typeof contentValue !== "object" || !sectionId) {
+    return { tags: [], listIds: [] };
+  }
+
+  const content = contentValue as PublishedCaptureContent;
+  const pages = Array.isArray(content.pages)
+    ? (content.pages as PublishedCapturePage[])
+    : [];
+  const normalizedSlug = normalizePageSlug(pageSlug);
+  const page = normalizedSlug
+    ? pages.find((candidate) => normalizePageSlug(candidate.slug) === normalizedSlug)
+    : pages.find((candidate) => candidate.isHome === true) ?? pages[0];
+  const sectionValues = page
+    ? page.sections
+    : pages.length === 0
+      ? content.sections
+      : undefined;
+  const sections = Array.isArray(sectionValues)
+    ? (sectionValues as PublishedCaptureSection[])
+    : [];
+  const section = sections.find((candidate) => candidate.id === sectionId);
+  if (!section) return { tags: [], listIds: [] };
+
+  const directTags = cleanStrings(
+    [
+      ...cleanStrings(section.formConfig?.captureTags, 20, 60),
+      ...cleanStrings(section.cta?.captureTags, 20, 60),
+    ],
+    20,
+    60,
+  );
+
+  const rawPopupTags = Object.values(section.rawHtmlPatches?.links ?? {}).flatMap((patch) =>
+    cleanStrings(patch?.popup?.captureTags, 20, 60),
+  );
+  const rawPopupAllowed = new Map(rawPopupTags.map((tag) => [tag.toLowerCase(), tag]));
+  const requestedRawTags = cleanStrings(requestedTags, 20, 60)
+    .map((tag) => rawPopupAllowed.get(tag.toLowerCase()))
+    .filter((tag): tag is string => Boolean(tag));
+  const tags = cleanStrings([...directTags, ...requestedRawTags], 20, 60);
+
+  const listIds = cleanStrings(section.formConfig?.captureListIds, 30, 64)
+    .filter((id) => UUID_PATTERN.test(id));
+
+  return { tags, listIds };
+}
+
 // ─── POST /api/leads ──────────────────────────────────────────────────
 export async function POST(request: Request) {
   // 1. Parse + validation
@@ -78,10 +187,8 @@ export async function POST(request: Request) {
     payload = leadSchema.parse(body);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json(
-        { ok: false, error: "validation", details: err.flatten() },
-        { status: 400 }
-      );
+      console.warn("[api/leads] payload validation failed", err.issues);
+      return NextResponse.json({ ok: false, error: "validation" }, { status: 400 });
     }
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
@@ -137,6 +244,16 @@ export async function POST(request: Request) {
     );
   }
 
+  // Le visiteur ne décide ni des tags ni des listes. La section du contenu
+  // publié est la seule source de vérité ; `payload.tags` n'est qu'un indice
+  // rétrocompatible pour distinguer les popups clonés d'une même section.
+  const captureSettings = resolveCaptureSettings(
+    funnel.published_content,
+    payload.pageSlug,
+    payload.sectionId,
+    payload.tags,
+  );
+
   // 4. Insertion du lead
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
 
@@ -188,10 +305,10 @@ export async function POST(request: Request) {
     console.warn("[api/leads] mesure A/B échouée (non bloquant):", abErr);
   }
 
-  // 5. 🆕 Auto-tag : applique les tags configurés sur le formulaire (non bloquant).
-  if (payload.tags && payload.tags.length > 0) {
+  // 5. Auto-tag : applique les tags de la section publiée (non bloquant).
+  if (captureSettings.tags.length > 0) {
     try {
-      const tags = await getOrCreateTagsByName(admin, funnel.user_id, payload.tags);
+      const tags = await getOrCreateTagsByName(admin, funnel.user_id, captureSettings.tags);
       if (tags.length > 0) {
         await assignTagsToContacts(
           admin,
@@ -202,6 +319,35 @@ export async function POST(request: Request) {
       }
     } catch (tagErr) {
       console.warn("[api/leads] auto-tag échoué (non bloquant):", tagErr);
+    }
+  }
+
+  // 5bis. Assignation aux listes du formulaire publié. Le client admin contourne
+  // la RLS : on vérifie donc explicitement que chaque clé étrangère appartient
+  // bien au propriétaire du funnel AVANT l'upsert N-N. Best-effort : le lead est
+  // déjà sauvegardé et ne doit jamais être perdu si cette étape échoue.
+  if (captureSettings.listIds.length > 0) {
+    try {
+      const { data: ownedLists, error: ownedListsError } = await admin
+        .from("crm_lists")
+        .select("id")
+        .eq("user_id", funnel.user_id)
+        .in("id", captureSettings.listIds);
+      if (ownedListsError) throw ownedListsError;
+
+      const ownedListIds = (ownedLists ?? [])
+        .map((list: { id?: unknown }) => list.id)
+        .filter((id): id is string => typeof id === "string");
+      if (ownedListIds.length !== captureSettings.listIds.length) {
+        console.warn(
+          `[api/leads] certaines listes configurées sont absentes ou n'appartiennent pas au funnel owner (${ownedListIds.length}/${captureSettings.listIds.length})`,
+        );
+      }
+      if (ownedListIds.length > 0) {
+        await addContactsToLists(admin, funnel.user_id, [lead.id], ownedListIds);
+      }
+    } catch (listErr) {
+      console.warn("[api/leads] assignation aux listes échouée (non bloquant):", listErr);
     }
   }
 

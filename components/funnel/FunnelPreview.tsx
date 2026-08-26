@@ -61,6 +61,7 @@ import { getTemplateSkin } from "@/components/funnel/templates/skins";
 import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
 import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge";
+import { DayProgressButton } from "@/components/funnel/DayProgressButton";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -69,6 +70,8 @@ type BulletsMode = "list" | "grid" | "inline-strip";
 
 interface FunnelPreviewProps {
   funnel: Funnel;
+  /** Slug public stable, utilisé pour les états locaux propres à ce funnel. */
+  funnelSlug?: string;
   activePage?: FunnelPage;
   defaultMode?: PreviewMode;
   forcedMode?: ForcedMode;
@@ -768,6 +771,7 @@ function WhatsAppFloat({ href }: { href: string }) {
 
 export function FunnelPreview({
   funnel,
+  funnelSlug,
   activePage,
   defaultMode = "desktop",
   forcedMode,
@@ -937,6 +941,7 @@ export function FunnelPreview({
 
   const frameProps: FrameProps = {
     funnel,
+    funnelSlug,
     activePage: resolvedActivePage,
     heroSection,
     otherSections,
@@ -1041,6 +1046,7 @@ function PreviewToolbar({
 
 type FrameProps = {
   funnel: Funnel;
+  funnelSlug?: string;
   activePage?: FunnelPage;
   heroSection: FunnelSection | undefined;
   otherSections: FunnelSection[];
@@ -1180,6 +1186,7 @@ function shouldRenderHeader(
 
 function PreviewBody({
   funnel,
+  funnelSlug,
   activePage,
   heroSection,
   otherSections,
@@ -1193,6 +1200,7 @@ function PreviewBody({
   templateId,
 }: {
   funnel: Funnel;
+  funnelSlug?: string;
   activePage?: FunnelPage;
   heroSection: FunnelSection | undefined;
   otherSections: FunnelSection[];
@@ -1224,6 +1232,16 @@ function PreviewBody({
     (funnel.meta as { clonedHead?: string } | undefined)?.clonedHead,
   );
 
+  const challengeProgress =
+    funnelSlug &&
+    activePage?.role === "challenge-day" &&
+    typeof activePage.dayIndex === "number" &&
+    Number.isFinite(activePage.dayIndex) &&
+    typeof activePage.dayTotal === "number" &&
+    Number.isFinite(activePage.dayTotal)
+      ? { funnelSlug, dayIndex: activePage.dayIndex, dayTotal: activePage.dayTotal }
+      : null;
+
   // 🆕 Bouton flottant WhatsApp : niveau page, côté public uniquement.
   const whatsAppLink =
     !editMode && isClonedFunnel
@@ -1247,7 +1265,10 @@ function PreviewBody({
   );
 
   const body = (
-    <div className={embed ? "ff-fill-col" : undefined}>
+    <div
+      className={embed ? "ff-fill-col" : undefined}
+      style={{ containerType: "inline-size", width: "100%" }}
+    >
       {!isClonedFunnel && shouldRenderHeader(funnel, activePage) && (
         <FunnelHeader
           funnel={funnel}
@@ -1256,6 +1277,19 @@ function PreviewBody({
           pageLinks={pageLinks}
           slugLinks={slugLinks}
         />
+      )}
+
+      {challengeProgress && (
+        <div className={`${padX} pb-2 pt-4`}>
+          <div className={compact ? "" : "mx-auto max-w-[920px]"}>
+            <DayProgressButton
+              key={`${challengeProgress.funnelSlug}:${challengeProgress.dayIndex}`}
+              funnelSlug={challengeProgress.funnelSlug}
+              dayIndex={challengeProgress.dayIndex}
+              dayTotal={challengeProgress.dayTotal}
+            />
+          </div>
+        </div>
       )}
 
       {heroSection &&
@@ -1721,7 +1755,6 @@ function HeroBlock({
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
-      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
       data-ff-anim-scope={animOf(section.animations, "headline", "fade-up")}
       className={`ff-section ${padX} ${padY} relative`}
       style={{
@@ -2133,7 +2166,6 @@ function StandardSectionBlock({
       data-ff-has-bg-image={bg.hasBackgroundImage ? "true" : undefined}
       data-ff-deco-top={edges.top ? "true" : undefined}
       data-ff-deco-bottom={edges.bottom ? "true" : undefined}
-      data-ff-anim={animOf(section.animations, "headline", "fade-up")}
       data-ff-anim-scope={animOf(section.animations, "headline", "fade-up")}
       className={`ff-section ${padX} ${padY} relative`}
       style={{
@@ -2485,6 +2517,7 @@ function BulletsList({
             <li
               key={i}
               data-ff-anim={animOf(animations, "bullets", "fade-up")}
+              data-ff-anim-index={i}
             >
               <span
                 className="ff-strip-value"
@@ -2517,6 +2550,7 @@ function BulletsList({
             <li
               key={i}
               data-ff-anim={animOf(animations, "bullets", "fade-up")}
+              data-ff-anim-index={i}
               className={bodySize}
             >
               {numbered ? (
@@ -2572,6 +2606,7 @@ function BulletsList({
           <li
             key={i}
             data-ff-anim={animOf(animations, "bullets", "fade-up")}
+            data-ff-anim-index={i}
             className={`flex items-start gap-2 ${bodySize}`}
             style={{ opacity: 0.95 }}
           >

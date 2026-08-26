@@ -48,16 +48,17 @@
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
-[data-reveal] {
-  opacity: 0;
-  transform: translateY(26px);
-  transition: opacity .7s cubic-bezier(.2,.7,.2,1),
-              transform .7s cubic-bezier(.2,.7,.2,1);
+/* Compatibilité des anciens templates : visible tant que le runtime n'a pas
+   converti data-reveal vers le contrat sûr data-ff-anim. Le !important
+   neutralise aussi les anciens <style> embarqués qui masquaient ces éléments
+   avant l'exécution de JavaScript. */
+[data-reveal],
+[data-reveal].is-in {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
 }
-[data-reveal].is-in { opacity: 1; transform: none; }
-/* 🆕 ACCESSIBILITÉ : « réduire les animations » → contenu immédiatement visible.
-   Couvre aussi le cas sans JS (le hook useFunnelAnimations révèle déjà tout
-   côté script, mais [data-reveal] partait en opacity:0 dans la feuille). */
+/* ACCESSIBILITÉ : « réduire les animations » → contenu immédiatement visible. */
 @media (prefers-reduced-motion: reduce) {
   [data-reveal],
   [data-reveal].is-in {

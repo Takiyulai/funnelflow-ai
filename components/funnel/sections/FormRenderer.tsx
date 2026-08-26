@@ -174,6 +174,10 @@ export function FormRenderer({
           phone,
           consent,
           metadata,
+          // Compatibilité avec les runtimes HTML existants. L'API recoupe ces
+          // tags avec la section publiée ; les IDs de listes ne quittent jamais
+          // la configuration publiée et ne sont pas envoyés par le visiteur.
+          tags: section.formConfig?.captureTags ?? [],
         }),
       });
 

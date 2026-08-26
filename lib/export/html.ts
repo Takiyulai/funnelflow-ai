@@ -1418,7 +1418,19 @@ function renderTestimonials(section: FunnelSection): string {
   const cards = items
     .map((item) => {
       const d = item.data;
-      const initials = (d.authorName || "?")
+      const hasQuote = Boolean(d.quote?.trim());
+      const hasRating = typeof d.rating === "number" && d.rating > 0;
+      const hasAuthor = Boolean(d.authorName?.trim());
+      const hasAvatar = Boolean(d.avatarUrl?.trim());
+      const hasRole = Boolean(d.authorRole?.trim());
+      const hasAttribution = hasAuthor || hasAvatar || hasRole;
+      const medias = Array.isArray(d.medias)
+        ? d.medias.filter((media) => Boolean(media.url?.trim()))
+        : [];
+      const hasMedia = medias.length > 0;
+      const isMediaOnly =
+        hasMedia && !hasQuote && !hasRating && !hasAttribution;
+      const initials = (d.authorName || "")
         .split(" ")
         .map((s) => s[0])
         .filter(Boolean)
@@ -1426,35 +1438,43 @@ function renderTestimonials(section: FunnelSection): string {
         .join("")
         .toUpperCase();
 
-      const mediasHtml = Array.isArray(d.medias) && d.medias.length > 0
-        ? renderTestimonialMediaGallery(d.medias)
+      const mediasHtml = hasMedia
+        ? renderTestimonialMediaGallery(medias)
         : "";
 
       const rating =
-        d.rating && d.rating > 0
-          ? `<div class="ff-testimonial-rating">${"★".repeat(clamp(d.rating, 0, 5))}${"☆".repeat(5 - clamp(d.rating, 0, 5))}</div>`
+        hasRating
+          ? `<div class="ff-testimonial-rating">${"★".repeat(clamp(d.rating ?? 0, 0, 5))}${"☆".repeat(5 - clamp(d.rating ?? 0, 0, 5))}</div>`
           : "";
-      const quote = d.quote
+      const quote = hasQuote
         ? `<blockquote class="ff-testimonial-quote">« ${escapeHtml(d.quote)} »</blockquote>`
         : "";
-      const avatar = d.avatarUrl
-        ? `<img class="ff-testimonial-avatar" src="${escapeAttr(d.avatarUrl)}" alt="${escapeAttr(d.authorName || "")}" loading="lazy" />`
-        : `<div class="ff-testimonial-avatar ff-testimonial-avatar--initials">${escapeHtml(initials)}</div>`;
-      const role = d.authorRole
-        ? `<div class="ff-testimonial-role">${escapeHtml(d.authorRole)}</div>`
+      const avatar = hasAvatar
+        ? `<img class="ff-testimonial-avatar" src="${escapeAttr(d.avatarUrl || "")}" alt="${escapeAttr(d.authorName || "")}" loading="lazy" />`
+        : hasAuthor
+          ? `<div class="ff-testimonial-avatar ff-testimonial-avatar--initials">${escapeHtml(initials)}</div>`
+          : "";
+      const role = hasRole
+        ? `<div class="ff-testimonial-role">${escapeHtml(d.authorRole || "")}</div>`
+        : "";
+      const meta = hasAuthor || hasRole
+        ? `<div class="ff-testimonial-meta">
+        ${hasAuthor ? `<div class="ff-testimonial-name">${escapeHtml(d.authorName)}</div>` : ""}
+        ${role}
+      </div>`
+        : "";
+      const attribution = hasAttribution
+        ? `<div class="ff-testimonial-author">
+      ${avatar}
+      ${meta}
+    </div>`
         : "";
 
-      return `  <div class="ff-testimonial-card ff-card">
+      return `  <div class="ff-testimonial-card ff-card${isMediaOnly ? " ff-testimonial-card--media-only" : ""}">
     ${mediasHtml}
     ${rating}
     ${quote}
-    <div class="ff-testimonial-author">
-      ${avatar}
-      <div class="ff-testimonial-meta">
-        <div class="ff-testimonial-name">${escapeHtml(d.authorName || "")}</div>
-        ${role}
-      </div>
-    </div>
+    ${attribution}
   </div>`;
     })
     .join("\n");
@@ -3100,6 +3120,9 @@ export function renderFunnelHtml(
     : `<style>
 ${getFunnelThemeCss()}
 </style>`;
+  // Toujours injecté, y compris pour un funnel cloné sans theme CSS : les
+  // anciens templates ne doivent jamais rester masqués si JavaScript est coupé.
+  const legacyRevealSafetyBlock = `<style>[data-reveal]{opacity:1!important;transform:none!important;transition:none!important}</style>`;
 
   // 🆕 FIX couleurs de marque : les overrides --ff-bg/--ff-accent/... sont
   // désormais posés en inline style par buildThemeRootAttrs() (voir
@@ -3167,6 +3190,7 @@ ${getFunnelThemeCss()}
   const scrollAnimScript = isFullyClonedFunnel ? "" : FF_SCROLL_ANIM_SCRIPT;
 
   const body = `${themeCssBlock}
+${legacyRevealSafetyBlock}
 ${designOverrideBlock}
 ${clonedHeadHtml}
 ${rawHtmlExtraCss}

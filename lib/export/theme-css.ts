@@ -2027,20 +2027,27 @@ a.ff-brand-cta:hover {
 
 /* ─── Animations CSS (declenchees au chargement, comme l'ancien) ─── */
 .ff-page [class*="ff-anim-"] {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+/* Progressive enhancement : le runtime confirme d'abord qu'il est actif en
+   ajoutant ff-anim-scroll. Sans JavaScript, le contenu reste donc visible. */
+.ff-page.ff-anim-scroll [class*="ff-anim-"] {
   opacity: 0;
   animation-duration: var(--ff-anim-duration);
   animation-timing-function: var(--ff-anim-easing);
   animation-fill-mode: forwards;
   animation-delay: 0.1s;
 }
-.ff-page .ff-anim-fade-in { animation-name: ff-fade-in; }
-.ff-page .ff-anim-fade-up { animation-name: ff-fade-up; }
-.ff-page .ff-anim-fade-down { animation-name: ff-fade-down; }
-.ff-page .ff-anim-slide-left { animation-name: ff-slide-left; }
-.ff-page .ff-anim-slide-right { animation-name: ff-slide-right; }
-.ff-page .ff-anim-zoom-in { animation-name: ff-zoom-in; }
-.ff-page .ff-anim-zoom-out { animation-name: ff-zoom-out; }
-.ff-page .ff-anim-pulse { animation: ff-pulse 0.8s ease-out 0.1s both; }
+.ff-page.ff-anim-scroll .ff-anim-fade-in { animation-name: ff-fade-in; }
+.ff-page.ff-anim-scroll .ff-anim-fade-up { animation-name: ff-fade-up; }
+.ff-page.ff-anim-scroll .ff-anim-fade-down { animation-name: ff-fade-down; }
+.ff-page.ff-anim-scroll .ff-anim-slide-left { animation-name: ff-slide-left; }
+.ff-page.ff-anim-scroll .ff-anim-slide-right { animation-name: ff-slide-right; }
+.ff-page.ff-anim-scroll .ff-anim-zoom-in { animation-name: ff-zoom-in; }
+.ff-page.ff-anim-scroll .ff-anim-zoom-out { animation-name: ff-zoom-out; }
+.ff-page.ff-anim-scroll .ff-anim-pulse { animation: ff-pulse 0.8s ease-out 0.1s both; }
 
 /* ─── Mode SCROLL (progressive enhancement, active par JS) ───
    Sans JS : les animations jouent au chargement (comportement historique).
@@ -2048,6 +2055,15 @@ a.ff-brand-cta:hover {
    jusqu'a ce qu'il entre dans le viewport (.ff-in) → reveal au scroll. */
 .ff-page.ff-anim-scroll [class*="ff-anim-"] { animation-play-state: paused; }
 .ff-page.ff-anim-scroll [class*="ff-anim-"].ff-in { animation-play-state: running; }
+
+/* Sécurité des anciens skins : leur CSS embarqué ne doit jamais masquer le
+   contenu si leur runtime JavaScript n'est pas exécuté. */
+.ff-page [data-reveal],
+.ff-page [data-reveal].is-in {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
 
 @keyframes ff-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ff-fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
@@ -2623,6 +2639,23 @@ textarea.ff-input {
 }
 .ff-page .ff-testimonial-media-gallery {
   margin-bottom: 1.25rem;
+}
+.ff-page .ff-testimonial-card--media-only {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.ff-page .ff-testimonial-card--media-only .ff-testimonial-media-gallery {
+  width: 100%;
+  height: 100%;
+  margin-bottom: 0 !important;
+  gap: 0 !important;
+}
+.ff-page .ff-testimonial-card--media-only .ff-testimonial-media,
+.ff-page .ff-testimonial-card--media-only .ff-testimonial-media img,
+.ff-page .ff-testimonial-card--media-only .ff-testimonial-media video {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
 }
 @media (max-width: 640px) {
   .ff-page .ff-testimonial-media-gallery {

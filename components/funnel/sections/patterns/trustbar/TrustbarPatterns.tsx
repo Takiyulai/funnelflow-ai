@@ -28,7 +28,7 @@ function TrustbarLogosMarquee({ items }: TrustbarPatternProps) {
   // Duplication pour un défilement continu sans saut.
   const loop = [...labels, ...labels];
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", overflow: "hidden", position: "relative" }} data-ff-anim="fade-up">
+    <div style={{ maxWidth: 1100, margin: "0 auto", overflow: "hidden", position: "relative" }}>
       <style>{"@keyframes af-trustbar-marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}"}</style>
       <div
         style={{
@@ -42,6 +42,8 @@ function TrustbarLogosMarquee({ items }: TrustbarPatternProps) {
         {loop.map((label, i) => (
           <span
             key={i}
+            data-ff-anim="fade-up"
+            data-ff-anim-index={i % Math.max(1, labels.length)}
             style={{
               fontSize: 17,
               fontWeight: 700,
@@ -63,7 +65,6 @@ function TrustbarLogosMarquee({ items }: TrustbarPatternProps) {
 function TrustbarStatsInlineNoCard({ items }: TrustbarPatternProps) {
   return (
     <div
-      data-ff-anim="fade-up"
       style={{
         maxWidth: 1000,
         margin: "0 auto",
@@ -74,7 +75,7 @@ function TrustbarStatsInlineNoCard({ items }: TrustbarPatternProps) {
       }}
     >
       {items.map((it, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+        <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: 34, fontWeight: 800, color: "var(--ff-accent)", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
             {it.left}
           </span>
@@ -91,7 +92,6 @@ function TrustbarStatsInlineNoCard({ items }: TrustbarPatternProps) {
 function TrustbarPressQuoteStrip({ items }: TrustbarPatternProps) {
   return (
     <div
-      data-ff-anim="fade-up"
       style={{
         maxWidth: 1100,
         margin: "0 auto",
@@ -103,7 +103,7 @@ function TrustbarPressQuoteStrip({ items }: TrustbarPatternProps) {
       }}
     >
       {items.map((it, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 28 }}>
+        <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", alignItems: "center", gap: 28 }}>
           {i > 0 && (
             <span aria-hidden="true" style={{ width: 1, height: 34, background: "color-mix(in srgb, var(--ff-ink) 16%, transparent)" }} />
           )}

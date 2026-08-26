@@ -96,11 +96,10 @@ function StatsCards4SuffixBadge({ section, items }: StatsPatternProps) {
       <Header section={section} center />
       <div
         className="ff-stats-grid2"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, marginTop: 40 }}
       >
         {items.map((it, i) => (
-          <div key={i} style={cardStyle}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={cardStyle}>
             <StatValue>{it.value}</StatValue>
             <StatLabel>{it.label}</StatLabel>
           </div>
@@ -117,11 +116,10 @@ function StatsCards4PercentIcons({ section, items }: StatsPatternProps) {
       <Header section={section} center />
       <div
         className="ff-stats-grid2"
-        data-ff-anim="fade-up"
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, marginTop: 40 }}
       >
         {items.map((it, i) => (
-          <div key={i} style={cardStyle}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={cardStyle}>
             <span
               aria-hidden="true"
               style={{
@@ -154,7 +152,6 @@ function StatsBarHorizontalNoCard({ section, items }: StatsPatternProps) {
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div
         className="ff-stats-bar"
-        data-ff-anim="fade-up"
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${Math.max(1, items.length)}, 1fr)`,
@@ -168,7 +165,7 @@ function StatsBarHorizontalNoCard({ section, items }: StatsPatternProps) {
         }}
       >
         {items.map((it, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+          <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
             <StatValue>{it.value}</StatValue>
             <StatLabel>{it.label}</StatLabel>
           </div>

@@ -112,16 +112,18 @@ export function HeroVideoCenteredFunnel({ section, mode = "public" }: Props) {
         </div>
 
         {section.cta && (
-          <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ marginTop: 34 }}>
+        <div className="ff-cta-wrap" style={{ marginTop: 34 }}>
             <CtaButton cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
           </div>
         )}
 
         {bullets.length >= 2 && (
-          <div data-ff-anim="fade-up" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 14, marginTop: 46 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 14, marginTop: 46 }}>
             {bullets.map((b, i) => (
               <div
                 key={i}
+                data-ff-anim="fade-up"
+                data-ff-anim-index={i}
                 style={{
                   flex: 1,
                   minWidth: 210,

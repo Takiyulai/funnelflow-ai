@@ -48,7 +48,11 @@ export default async function PublishedFunnelSubPage({
   return (
     <>
       <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
-      <PublishedFunnelView funnel={published.funnel} activePage={activePage} />
+      <PublishedFunnelView
+        funnel={published.funnel}
+        funnelSlug={slug}
+        activePage={activePage}
+      />
       <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
     </>
   );

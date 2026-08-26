@@ -182,17 +182,16 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {section.cta && (
-              <div className="ff-cta-wrap" data-ff-anim="fade-up" style={{ justifyContent: "flex-start", display: "flex" }}>
+        <div className="ff-cta-wrap" style={{ justifyContent: "flex-start", display: "flex" }}>
                 <CtaButton cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
               </div>
             )}
             {bullets.length >= 2 && (
               <div
-                data-ff-anim="fade-up"
                 style={{ display: "flex", alignItems: "stretch", gap: 26, flexWrap: "wrap" }}
               >
                 {bullets.map((b, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 26 }}>
+                  <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", alignItems: "center", gap: 26 }}>
                     {i > 0 && <div style={{ width: 1, alignSelf: "stretch", background: "color-mix(in srgb, var(--ff-ink) 14%, transparent)" }} />}
                     <div style={{ fontWeight: 600, fontSize: 15, color: "color-mix(in srgb, var(--ff-ink) 78%, transparent)", maxWidth: 180 }}>{b}</div>
                   </div>

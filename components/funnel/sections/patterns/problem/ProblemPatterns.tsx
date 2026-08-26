@@ -48,9 +48,9 @@ function CrossIcon() {
   );
 }
 
-function PainLine({ item }: { item: PainItem }) {
+function PainLine({ item, index }: { item: PainItem; index: number }) {
   return (
-    <li style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+    <li data-ff-anim="fade-up" data-ff-anim-index={index} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
       <CrossIcon />
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 16, fontWeight: 600, color: "var(--ff-ink)", lineHeight: 1.35 }}>
@@ -102,15 +102,14 @@ function ProblemSplitPainChecklist({ section, items, funnel }: ProblemPatternPro
   return (
     <div
       className="ff-problem-split"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 1040, margin: "36px auto 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 44, alignItems: "center" }}
     >
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 20 }}>
         {items.map((it, i) => (
-          <PainLine key={i} item={it} />
+          <PainLine key={i} item={it} index={i} />
         ))}
       </ul>
-      <div style={{ position: "relative" }}>
+      <div data-ff-anim="zoom-in" data-ff-anim-index={Math.min(items.length, 4)} style={{ position: "relative" }}>
         {imgUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -172,11 +171,10 @@ function ProblemCardsBeforeComparison({ items }: ProblemPatternProps) {
   return (
     <div
       className="ff-problem-cards"
-      data-ff-anim="fade-up"
       style={{ maxWidth: 1000, margin: "36px auto 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}
     >
       {items.map((it, i) => (
-        <div key={i} style={flatCard}>
+        <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={flatCard}>
           <CrossIcon />
           <span style={{ fontSize: 16.5, fontWeight: 700, color: "var(--ff-ink)", lineHeight: 1.3 }}>
             {it.title}
