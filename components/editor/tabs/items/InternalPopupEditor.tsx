@@ -11,6 +11,7 @@ import type {
   FormFieldType,
 } from "@/lib/funnels/types";
 import { TagsInput } from "./TagsInput";
+import { CaptureListsEditor } from "./CaptureListsEditor";
 
 const inputClass =
   "w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/40";
@@ -200,6 +201,11 @@ export function InternalPopupEditor({
           onChange={(next) => onChange({ captureTags: next })}
         />
       </Field>
+
+      <CaptureListsEditor
+        value={cta.captureListIds ?? []}
+        onValueChange={(next) => onChange({ captureListIds: next })}
+      />
 
       <Field
         label="Identifiant technique"

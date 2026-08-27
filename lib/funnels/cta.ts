@@ -92,6 +92,7 @@ export function resolveCtaWithGlobal(
     popupFields: globalCta.popupFields,
     popupEmbedHtml: globalCta.popupEmbedHtml,
     captureTags: globalCta.captureTags,
+    captureListIds: globalCta.captureListIds,
     chariow: globalCta.chariow,
     // label / icon / spacing : on GARDE ceux du CTA d'origine.
   };

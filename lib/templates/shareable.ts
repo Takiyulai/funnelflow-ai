@@ -6,7 +6,7 @@
 // personnelle / secret / intégration du créateur :
 //   - logo, canaux sociaux (WhatsApp/Telegram), email de livraison, domaine perso
 //   - liens de redirection (souvent perso : WhatsApp/paiement), Chariow, popups SIO
-//   - tags CRM de capture
+//   - tags et identifiants de listes CRM de capture
 // Aucune donnée de leads/CRM n'est présente dans json_content, donc rien à retirer
 // de ce côté.
 
@@ -47,6 +47,7 @@ function cleanCta(cta: AnyObj | undefined | null): void {
   delete cta.chariow;
   delete cta.systemePopupId;
   delete cta.captureTags;
+  delete cta.captureListIds;
   delete cta.popupEmbedHtml;
 }
 
@@ -60,6 +61,14 @@ function cleanSections(sections: any): void {
     cleanCta(s.cta);
     cleanCta(s.secondaryCta);
     if (Array.isArray(s.ctas)) s.ctas.forEach(cleanCta);
+    const rawLinks = s.rawHtmlPatches?.links;
+    if (rawLinks && typeof rawLinks === "object") {
+      for (const link of Object.values(rawLinks) as AnyObj[]) {
+        if (link?.popup && typeof link.popup === "object") {
+          delete link.popup.captureListIds;
+        }
+      }
+    }
     if (Array.isArray(s.items)) {
       for (const it of s.items) {
         if (it?.data?.cta) cleanCta(it.data.cta);

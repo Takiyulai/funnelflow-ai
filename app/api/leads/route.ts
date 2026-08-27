@@ -15,6 +15,9 @@ const leadSchema = z.object({
   funnelSlug: z.string().min(1).max(100),
   pageSlug: z.string().max(100).optional().nullable(),
   sectionId: z.string().max(100).optional().nullable(),
+  // Identifiant du CTA raw HTML servant uniquement à retrouver son patch dans
+  // le snapshot publié. Ce n'est jamais un identifiant de liste.
+  popupId: z.string().max(100).optional().nullable(),
   // Champs lead
   email: z.string().email().max(255),
   name: z.string().max(200).optional().nullable(),
@@ -77,9 +80,22 @@ type PublishedCaptureSection = {
     captureTags?: unknown;
     captureListIds?: unknown;
   } | null;
-  cta?: { captureTags?: unknown } | null;
+  cta?: {
+    mode?: unknown;
+    captureTags?: unknown;
+    captureListIds?: unknown;
+  } | null;
   rawHtmlPatches?: {
-    links?: Record<string, { popup?: { captureTags?: unknown } | null } | undefined>;
+    links?: Record<
+      string,
+      {
+        action?: unknown;
+        popup?: {
+          captureTags?: unknown;
+          captureListIds?: unknown;
+        } | null;
+      } | undefined
+    >;
   } | null;
 };
 
@@ -130,6 +146,7 @@ function resolveCaptureSettings(
   pageSlug: string | null | undefined,
   sectionId: string | null | undefined,
   requestedTags: string[] | undefined,
+  popupId: string | null | undefined,
 ): CaptureSettings {
   if (!contentValue || typeof contentValue !== "object" || !sectionId) {
     return { tags: [], listIds: [] };
@@ -154,26 +171,48 @@ function resolveCaptureSettings(
   const section = sections.find((candidate) => candidate.id === sectionId);
   if (!section) return { tags: [], listIds: [] };
 
+  const directCta = section.cta?.mode === "popup" ? section.cta : null;
   const directTags = cleanStrings(
     [
       ...cleanStrings(section.formConfig?.captureTags, 20, 60),
-      ...cleanStrings(section.cta?.captureTags, 20, 60),
+      ...cleanStrings(directCta?.captureTags, 20, 60),
     ],
     20,
     60,
   );
 
-  const rawPopupTags = Object.values(section.rawHtmlPatches?.links ?? {}).flatMap((patch) =>
-    cleanStrings(patch?.popup?.captureTags, 20, 60),
-  );
-  const rawPopupAllowed = new Map(rawPopupTags.map((tag) => [tag.toLowerCase(), tag]));
-  const requestedRawTags = cleanStrings(requestedTags, 20, 60)
-    .map((tag) => rawPopupAllowed.get(tag.toLowerCase()))
-    .filter((tag): tag is string => Boolean(tag));
-  const tags = cleanStrings([...directTags, ...requestedRawTags], 20, 60);
+  const rawLinks = section.rawHtmlPatches?.links ?? {};
+  const rawPatch = popupId ? rawLinks[popupId] : undefined;
+  const exactRawPopup = rawPatch?.action === "popup" ? rawPatch.popup : null;
 
-  const listIds = cleanStrings(section.formConfig?.captureListIds, 30, 64)
-    .filter((id) => UUID_PATTERN.test(id));
+  // Les runtimes récents indiquent le spot raw HTML, puis le serveur lit son
+  // patch publié. Pour les anciens runtimes sans popupId, on conserve seulement
+  // le fallback historique des tags autorisés ; aucune liste n'est résolue à
+  // partir d'un identifiant fourni par le visiteur.
+  const rawTags = exactRawPopup
+    ? cleanStrings(exactRawPopup.captureTags, 20, 60)
+    : (() => {
+        const allowedTags = Object.values(rawLinks).flatMap((patch) =>
+          cleanStrings(patch?.popup?.captureTags, 20, 60),
+        );
+        const allowedByName = new Map(
+          allowedTags.map((tag) => [tag.toLowerCase(), tag]),
+        );
+        return cleanStrings(requestedTags, 20, 60)
+          .map((tag) => allowedByName.get(tag.toLowerCase()))
+          .filter((tag): tag is string => Boolean(tag));
+      })();
+  const tags = cleanStrings([...directTags, ...rawTags], 20, 60);
+
+  const listIds = cleanStrings(
+    [
+      ...cleanStrings(section.formConfig?.captureListIds, 30, 64),
+      ...cleanStrings(directCta?.captureListIds, 30, 64),
+      ...cleanStrings(exactRawPopup?.captureListIds, 30, 64),
+    ],
+    30,
+    64,
+  ).filter((id) => UUID_PATTERN.test(id));
 
   return { tags, listIds };
 }
@@ -252,6 +291,7 @@ export async function POST(request: Request) {
     payload.pageSlug,
     payload.sectionId,
     payload.tags,
+    payload.popupId,
   );
 
   // 4. Insertion du lead

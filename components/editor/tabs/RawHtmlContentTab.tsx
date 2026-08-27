@@ -41,6 +41,8 @@ import {
 } from "@/lib/clone/raw-html-editable";
 import { CloneCopyRewritePanel } from "@/components/editor/CloneCopyRewritePanel";
 import { PopupFieldsEditor } from "@/components/editor/tabs/items/PopupFieldsEditor";
+import { CaptureListsEditor } from "@/components/editor/tabs/items/CaptureListsEditor";
+import { TagsInput } from "@/components/editor/tabs/items/TagsInput";
 import { walkerDebug } from "@/lib/clone/raw-html-walker";
 walkerDebug.enabled = true;
 
@@ -1796,6 +1798,27 @@ function LinkSpotEditor({
                   onChange={(fields) =>
                     onPatch({
                       popup: { ...(patch?.popup ?? {}), fields },
+                    })
+                  }
+                />
+                <div>
+                  <label className="mb-1 block text-[9px] uppercase tracking-wide text-white/40">
+                    Tags appliqués
+                  </label>
+                  <TagsInput
+                    value={patch?.popup?.captureTags ?? []}
+                    onChange={(captureTags) =>
+                      onPatch({
+                        popup: { ...(patch?.popup ?? {}), captureTags },
+                      })
+                    }
+                  />
+                </div>
+                <CaptureListsEditor
+                  value={patch?.popup?.captureListIds ?? []}
+                  onValueChange={(captureListIds) =>
+                    onPatch({
+                      popup: { ...(patch?.popup ?? {}), captureListIds },
                     })
                   }
                 />

@@ -54,6 +54,7 @@ const NO_ACCESS: PlanLimits = {
   aiSequenceGensPerMonth: 0,
   aiCopyRegensPerMonth: 0,
   crm: false,
+  pageTimeTracking: false,
   maxLeads: 0,
   leadsExport: false,
   campaigns: false,

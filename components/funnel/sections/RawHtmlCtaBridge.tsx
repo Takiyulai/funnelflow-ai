@@ -151,6 +151,11 @@ export function RawHtmlCtaBridge({ section, funnel, page }: Props) {
     popupBody: openPopup.config.body,
     popupReassurance: openPopup.config.reassurance,
     captureTags: openPopup.config.captureTags,
+    captureListIds: openPopup.config.captureListIds,
+    // Le serveur utilise uniquement cet identifiant de spot pour retrouver la
+    // configuration du popup dans le snapshot publié. Aucun ID de liste ne lui
+    // est transmis par le visiteur.
+    popupId: openPopup.linkId,
   };
 
   return (

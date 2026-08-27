@@ -63,6 +63,7 @@ export function featureBlockedResponse(feature: BooleanFeature): NextResponse {
     sectionRegeneration: "La régénération IA de section",
     campaigns: "Les campagnes email",
     workflows: "Les automatisations",
+    pageTimeTracking: "Le suivi du temps par page",
   };
   const label = labels[feature] ?? "Cette fonctionnalité";
   return NextResponse.json(

@@ -16,6 +16,7 @@ import {
   extractSlugsFromPath,
   resolveNextDestination,
 } from "@/lib/funnels/nextDestination";
+import { persistIdentifiedContact } from "@/lib/tracking/contactIdentity";
 
 type Props = {
   section: FunnelSection;
@@ -187,8 +188,8 @@ export function FormRenderer({
       // Workflow `page.visited` sur les revisites). Best-effort, jamais
       // bloquant (navigation privée stricte, etc.).
       if (data?.ok && typeof data.leadId === "string" && funnelSlug) {
+        persistIdentifiedContact(funnelSlug, data.leadId);
         try {
-          window.localStorage.setItem(`ff_contact_${funnelSlug}`, data.leadId);
           // 🆕 LOT 5 — Ancre pour les timers "countdown-since-registration"
           // (webinaire Evergreen) : moment EXACT de l'inscription, partagé
           // entre toutes les pages du tunnel (live/replay/sales).

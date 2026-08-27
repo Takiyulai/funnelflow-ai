@@ -32,6 +32,8 @@ export type PlanLimits = {
   aiCopyRegensPerMonth: number;
   /** CRM : gestion des contacts / leads. */
   crm: boolean;
+  /** Temps actif par page pour les prospects identifiés (fonctionnalité CRM avancée). */
+  pageTimeTracking: boolean;
   /** 🆕 Nombre max de leads/contacts stockés. Infinity = illimité. */
   maxLeads: number;
   /** Export CSV des leads. */
@@ -105,6 +107,7 @@ export const PLANS: Record<PlanId, Plan> = {
       aiSequenceGensPerMonth: 1,
       aiCopyRegensPerMonth: 20,
       crm: true,
+      pageTimeTracking: false,
       maxLeads: 500,
       leadsExport: true,
       campaigns: true,
@@ -138,6 +141,7 @@ export const PLANS: Record<PlanId, Plan> = {
       aiSequenceGensPerMonth: 10,
       aiCopyRegensPerMonth: 200,
       crm: true,
+      pageTimeTracking: true,
       maxLeads: 5000,
       leadsExport: true,
       campaigns: true,
@@ -178,6 +182,7 @@ export const PLANS: Record<PlanId, Plan> = {
       aiSequenceGensPerMonth: Infinity,
       aiCopyRegensPerMonth: Infinity,
       crm: true,
+      pageTimeTracking: true,
       maxLeads: Infinity,
       leadsExport: true,
       campaigns: true,

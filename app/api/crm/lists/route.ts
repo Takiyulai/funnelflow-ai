@@ -14,8 +14,9 @@ export async function GET() {
     const lists = await listContactLists(sb, user.id);
     return NextResponse.json({ ok: true, lists });
   } catch (e) {
+    console.error("[api/crm/lists] lecture des listes échouée", e);
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "read_failed" },
+      { ok: false, error: "read_failed" },
       { status: 500 },
     );
   }
@@ -46,8 +47,9 @@ export async function POST(request: Request) {
     const message = e instanceof Error ? e.message : "create_failed";
     // 23505 = index unique sur lower(name) → nom déjà pris.
     const conflict = message.includes("23505") || message.includes("duplicate");
+    if (!conflict) console.error("[api/crm/lists] création de liste échouée", e);
     return NextResponse.json(
-      { ok: false, error: conflict ? "list_already_exists" : message },
+      { ok: false, error: conflict ? "list_already_exists" : "create_failed" },
       { status: conflict ? 409 : 500 },
     );
   }

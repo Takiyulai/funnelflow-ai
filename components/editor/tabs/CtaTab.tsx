@@ -13,6 +13,7 @@ import type {
   FormFieldType,
 } from "@/lib/funnels/types";
 import { TagsInput } from "./items/TagsInput";
+import { CaptureListsEditor } from "./items/CaptureListsEditor";
 
 type Props = {
   section: FunnelSection;
@@ -526,6 +527,11 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
                       onChange={(next) => updateCta({ captureTags: next })}
                     />
                   </Field>
+
+                  <CaptureListsEditor
+                    value={cta.captureListIds ?? []}
+                    onValueChange={(next) => updateCta({ captureListIds: next })}
+                  />
 
                   <Field
                     label="Identifiant technique"

@@ -45,6 +45,7 @@ import {
   extractSlugsFromPath,
   resolveNextDestination,
 } from "@/lib/funnels/nextDestination";
+import { persistIdentifiedContact } from "@/lib/tracking/contactIdentity";
 
 type Props = {
   cta: CtaConfig;
@@ -321,10 +322,14 @@ function InternalPopup({
           funnelSlug,
           pageSlug: pageSlug || null,
           sectionId: section.id || null,
+          popupId: cta.popupId || null,
           email,
           name,
           phone,
           consent,
+          // Compatibilité avec les anciens popups raw HTML : ces noms ne sont
+          // qu'un indice, toujours recoupé avec le snapshot publié côté serveur.
+          tags: cta.captureTags ?? [],
           metadata: { ...metadata, source: "popup-cta" },
         }),
       });
@@ -343,6 +348,10 @@ function InternalPopup({
                 : "Une erreur est survenue. Réessayez dans un instant.";
         setState({ kind: "error", message });
         return;
+      }
+
+      if (typeof data.leadId === "string" && funnelSlug) {
+        persistIdentifiedContact(funnelSlug, data.leadId);
       }
 
       const redirectTo = resolveNextDestination({

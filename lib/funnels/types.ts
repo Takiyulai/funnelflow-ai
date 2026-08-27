@@ -146,6 +146,8 @@ export type CtaConfig = {
   popupEmbedHtml?: string;
   /** 🆕 Tags CRM appliqués automatiquement aux leads capturés via ce popup interne. */
   captureTags?: string[];
+  /** Listes CRM alimentées automatiquement par les leads capturés via ce popup. */
+  captureListIds?: string[];
   /** 🆕 Action INDIVIDUELLE : si true, ce CTA garde SON action propre et n'est
    *  PAS remplacé par l'« action commune des boutons » (funnel.meta
    *  .applyDefaultCtaToAll), même sur la page d'accueil. Permet de personnaliser
@@ -583,6 +585,7 @@ export interface RawHtmlPopupConfig {
   reassurance?: string;
   fields?: FormFieldItem[];
   captureTags?: string[];
+  captureListIds?: string[];
 }
 
 /**

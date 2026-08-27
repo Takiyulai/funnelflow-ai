@@ -1,23 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, List as ListIcon, X } from "lucide-react";
+import { ChevronDown, List as ListIcon, Loader2, Plus, X } from "lucide-react";
 import type { ContactListWithCount } from "@/lib/crm/types";
 import type { FunnelSection } from "@/lib/funnels/types";
 
-type Props = {
+type SectionProps = {
   section: FunnelSection;
   onChange: (patch: Partial<FunnelSection>) => void;
+  value?: never;
+  onValueChange?: never;
 };
 
+type ControlledProps = {
+  value: string[];
+  onValueChange: (next: string[]) => void;
+  section?: never;
+  onChange?: never;
+};
+
+type Props = SectionProps | ControlledProps;
+
+function isSectionProps(props: Props): props is SectionProps {
+  return "section" in props && props.section !== undefined;
+}
+
 /** Sélectionne les listes CRM alimentées à chaque soumission du formulaire. */
-export function CaptureListsEditor({ section, onChange }: Props) {
-  const selectedIds = section.formConfig?.captureListIds ?? [];
+export function CaptureListsEditor(props: Props) {
+  const selectedIds = isSectionProps(props)
+    ? props.section.formConfig?.captureListIds ?? []
+    : props.value;
   const [lists, setLists] = useState<ContactListWithCount[]>([]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,13 +83,18 @@ export function CaptureListsEditor({ section, onChange }: Props) {
   }, [lists, query, selectedIds]);
 
   const commit = (next: string[]) => {
-    onChange({
-      formConfig: {
-        ...(section.formConfig ?? {}),
-        provider: section.formConfig?.provider ?? "internal",
-        captureListIds: [...new Set(next)],
-      },
-    });
+    const unique = [...new Set(next)];
+    if (isSectionProps(props)) {
+      props.onChange({
+        formConfig: {
+          ...(props.section.formConfig ?? {}),
+          provider: props.section.formConfig?.provider ?? "internal",
+          captureListIds: unique,
+        },
+      });
+      return;
+    }
+    props.onValueChange(unique);
   };
 
   const addList = (id: string) => {
@@ -80,6 +104,50 @@ export function CaptureListsEditor({ section, onChange }: Props) {
 
   const removeList = (id: string) => {
     commit(selectedIds.filter((selectedId) => selectedId !== id));
+  };
+
+  const createName = query.trim();
+  const hasExactMatch = lists.some(
+    (list) => list.name.trim().toLowerCase() === createName.toLowerCase(),
+  );
+  const canCreate = createName.length > 0 && !hasExactMatch && !creating;
+
+  const createList = async () => {
+    if (!canCreate) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const response = await fetch("/api/crm/lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: createName }),
+      });
+      const data = await response.json().catch(() => null);
+      if (
+        !response.ok ||
+        !data?.ok ||
+        !data.list ||
+        typeof data.list.id !== "string" ||
+        typeof data.list.name !== "string"
+      ) {
+        setCreateError(
+          data?.error === "list_already_exists"
+            ? "Une liste porte déjà ce nom."
+            : "La liste n’a pas pu être créée. Réessayez dans un instant.",
+        );
+        return;
+      }
+
+      const created = { ...data.list, contactsCount: 0 } as ContactListWithCount;
+      setLists((current) => [created, ...current.filter((list) => list.id !== created.id)]);
+      commit([...selectedIds, created.id]);
+      setQuery("");
+      setOpen(false);
+    } catch {
+      setCreateError("La liste n’a pas pu être créée. Réessayez dans un instant.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -129,20 +197,29 @@ export function CaptureListsEditor({ section, onChange }: Props) {
               : loadFailed
                 ? "Listes indisponibles"
                 : lists.length === 0
-                  ? "Aucune liste CRM disponible"
-                  : "Ajouter une liste…"}
+                  ? "Créer une première liste…"
+                  : "Ajouter ou créer une liste…"}
           </span>
           <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
         </button>
 
-        {open && !loading && !loadFailed && lists.length > 0 && (
+        {open && !loading && !loadFailed && (
           <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-white/15 bg-zinc-900 shadow-xl">
             <div className="border-b border-white/10 p-2">
               <input
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Rechercher une liste…"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCreateError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && canCreate) {
+                    event.preventDefault();
+                    void createList();
+                  }
+                }}
+                placeholder="Rechercher ou créer une liste…"
                 className="w-full rounded-md border border-white/15 bg-black/20 px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-violet-300/40 focus:outline-none"
                 autoFocus
               />
@@ -165,17 +242,43 @@ export function CaptureListsEditor({ section, onChange }: Props) {
               ))}
               {availableLists.length === 0 && (
                 <p className="px-3 py-3 text-xs text-white/40">
-                  {query ? "Aucune liste ne correspond." : "Toutes les listes sont sélectionnées."}
+                  {query
+                    ? hasExactMatch
+                      ? "Cette liste existe déjà."
+                      : "Aucune liste ne correspond."
+                    : lists.length === 0
+                      ? "Saisissez le nom de votre première liste."
+                      : "Toutes les listes sont sélectionnées."}
                 </p>
               )}
+              {createName && !hasExactMatch && (
+                <button
+                  type="button"
+                  onClick={() => void createList()}
+                  disabled={creating}
+                  className="flex w-full items-center gap-2 border-t border-white/10 px-2.5 py-2 text-left text-sm font-medium text-violet-200 hover:bg-violet-500/10 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {creating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  <span className="min-w-0 truncate">Créer « {createName} »</span>
+                </button>
+              )}
             </div>
+            {createError && (
+              <p className="border-t border-red-300/15 px-3 py-2 text-[11px] text-red-200">
+                {createError}
+              </p>
+            )}
           </div>
         )}
       </div>
 
       <p className="text-[10px] text-white/40">
         Chaque lead qui envoie ce formulaire sera ajouté aux listes sélectionnées,
-        sans modifier ses tags. Créez les listes depuis le CRM avant de les choisir ici.
+        sans modifier ses tags. Une nouvelle liste peut être créée ici sans quitter l’éditeur.
       </p>
     </div>
   );

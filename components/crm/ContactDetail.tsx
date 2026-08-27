@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Trash2, Save, Plus, X } from "lucide-react";
+import { ArrowLeft, Clock, History, Trash2, Save, Plus, X } from "lucide-react";
 import { WhatsAppIcon } from "@/components/crm/WhatsAppIcon";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,37 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   client: "Client",
   perdu: "Perdu",
 };
+
+type PageTimeSummary = {
+  totalActiveMs: number;
+  sessionCount: number;
+  lastSeenAt: string | null;
+  pages: Array<{
+    pageSlug: string;
+    activeMs: number;
+    sessionCount: number;
+    lastSeenAt: string | null;
+  }>;
+};
+
+function formatActiveTime(milliseconds: number): string {
+  if (milliseconds <= 0) return "0 s";
+  const seconds = Math.max(1, Math.round(milliseconds / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours} h ${remainingMinutes} min` : `${hours} h`;
+}
+
+function formatVisitDate(value: string | null): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
 
 export function ContactDetail({ contact }: { contact: ContactWithTags }) {
   const router = useRouter();
@@ -37,6 +68,10 @@ export function ContactDetail({ contact }: { contact: ContactWithTags }) {
   const [tags, setTags] = useState<Tag[]>(contact.tags);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState("");
+  const [pageTime, setPageTime] = useState<PageTimeSummary | null>(null);
+  const [pageTimeState, setPageTimeState] = useState<
+    "loading" | "ready" | "blocked" | "error"
+  >("loading");
 
   useEffect(() => {
     fetch("/api/crm/tags")
@@ -46,6 +81,29 @@ export function ContactDetail({ contact }: { contact: ContactWithTags }) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/crm/contacts/${contact.id}/page-time`)
+      .then(async (response) => ({ response, json: await response.json().catch(() => null) }))
+      .then(({ response, json }) => {
+        if (!active) return;
+        if (response.ok && json?.ok && json.summary) {
+          setPageTime(json.summary as PageTimeSummary);
+          setPageTimeState("ready");
+        } else if (response.status === 402 || response.status === 403) {
+          setPageTimeState("blocked");
+        } else {
+          setPageTimeState("error");
+        }
+      })
+      .catch(() => {
+        if (active) setPageTimeState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [contact.id]);
 
   async function addTag(tagId: string) {
     const tag = allTags.find((t) => t.id === tagId);
@@ -196,6 +254,83 @@ export function ContactDetail({ contact }: { contact: ContactWithTags }) {
             </button>
           </div>
         </div>
+      </Card>
+
+      <Card className="mb-5 p-4">
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
+          <Clock className="h-4 w-4" /> Temps passé dans le tunnel
+        </div>
+
+        {pageTimeState === "loading" && (
+          <p className="text-sm text-muted">Chargement des visites identifiées…</p>
+        )}
+        {pageTimeState === "blocked" && (
+          <p className="text-sm text-muted">
+            Le suivi du temps par page n’est pas inclus dans votre plan actuel.
+          </p>
+        )}
+        {pageTimeState === "error" && (
+          <p className="text-sm text-muted">
+            Les données de temps sont momentanément indisponibles.
+          </p>
+        )}
+        {pageTimeState === "ready" && pageTime && pageTime.pages.length === 0 && (
+          <p className="text-sm text-muted">
+            Aucune durée enregistrée après la capture de ce prospect.
+          </p>
+        )}
+        {pageTimeState === "ready" && pageTime && pageTime.pages.length > 0 && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-canvas px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                  Temps total
+                </div>
+                <div className="mt-1 text-lg font-black text-ink">
+                  {formatActiveTime(pageTime.totalActiveMs)}
+                </div>
+              </div>
+              <div className="rounded-lg bg-canvas px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                  Sessions
+                </div>
+                <div className="mt-1 text-lg font-black text-ink">
+                  {pageTime.sessionCount}
+                </div>
+              </div>
+              <div className="rounded-lg bg-canvas px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                  Dernière visite
+                </div>
+                <div className="mt-1 text-sm font-bold text-ink">
+                  {formatVisitDate(pageTime.lastSeenAt)}
+                </div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-line rounded-lg border border-line">
+              {pageTime.pages.map((page) => (
+                <div
+                  key={page.pageSlug || "home"}
+                  className="flex items-center justify-between gap-4 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-ink">
+                      {page.pageSlug || "Page d’accueil"}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                      <History className="h-3 w-3" /> {page.sessionCount} session
+                      {page.sessionCount > 1 ? "s" : ""} · dernière visite {formatVisitDate(page.lastSeenAt)}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-sm font-black text-ink">
+                    {formatActiveTime(page.activeMs)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="p-5">
