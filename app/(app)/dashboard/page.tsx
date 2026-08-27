@@ -23,8 +23,11 @@ import {
   useFunnelList,
   deleteFunnel,
   saveFunnel,
+  loadFunnel,
+  type FunnelListItem,
   type StoredFunnel,
 } from "@/lib/store/funnelStore";
+import { loadRemote } from "@/lib/store/funnelRepository";
 import { CloneFunnelButton } from "@/components/dashboard/CloneFunnelButton";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -33,7 +36,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const stored = useFunnelList();
+  const {
+    funnels: stored,
+    status: funnelListStatus,
+    error: funnelListError,
+  } = useFunnelList();
   const { celebrate } = useCelebrate();
 
   // 🆕 Liste tunnels : on n'affiche que les 3 plus récents par défaut, le reste
@@ -204,9 +211,23 @@ export default function DashboardPage() {
     deleteFunnel(id);
   }
 
-  function handleDuplicate(id: string) {
-    const found = stored.find((f) => f.id === id);
-    if (!found) return;
+  async function handleDuplicate(id: string) {
+    const summary = stored.find((f) => f.id === id);
+    if (!summary) return;
+
+    // La liste distante ne transporte plus le contenu lourd. Pour dupliquer,
+    // on réutilise le cache s'il est au moins aussi récent, sinon on charge ce
+    // tunnel précis depuis Supabase.
+    const local = loadFunnel(id);
+    let found: StoredFunnel | null =
+      local && local.updatedAt >= summary.updatedAt ? local : null;
+    if (!found) found = await loadRemote(id).catch(() => null);
+    if (!found) {
+      window.alert(
+        "Impossible de charger ce tunnel pour le dupliquer. Réessayez dans un instant.",
+      );
+      return;
+    }
 
     const newId =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -364,6 +385,16 @@ export default function DashboardPage() {
             <p className="text-xs text-muted">Vos tunnels les plus récents</p>
           </div>
 
+          {funnelListStatus === "error" && funnelListError && (
+            <p
+              role="alert"
+              className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+            >
+              {funnelListError}
+              {stored.length > 0 ? " Les données locales disponibles restent affichées." : ""}
+            </p>
+          )}
+
           <div className="grid gap-2">
             {(showAllFunnels ? stored : stored.slice(0, RECENT_LIMIT)).map((item) => (
               <FunnelRow
@@ -374,7 +405,13 @@ export default function DashboardPage() {
               />
             ))}
 
-            {stored.length === 0 && (
+            {funnelListStatus === "loading" && stored.length === 0 && (
+              <p className="rounded-lg border border-dashed border-line bg-canvas p-6 text-center text-xs text-muted">
+                Chargement de vos tunnels…
+              </p>
+            )}
+
+            {funnelListStatus === "loaded" && stored.length === 0 && (
               <p className="rounded-lg border border-dashed border-line bg-canvas p-6 text-center text-xs text-muted">
                 Aucun tunnel pour le moment. Créez votre premier tunnel pour commencer
               </p>
@@ -409,41 +446,50 @@ function FunnelRow({
   onDelete,
   onDuplicate,
 }: {
-  stored: StoredFunnel;
+  stored: FunnelListItem;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
 }) {
-  const { id, slug, funnel, updatedAt, publishedAt } = stored;
+  const {
+    id,
+    slug,
+    name,
+    language,
+    updatedAt,
+    publishedAt,
+    status,
+    pageCount,
+    sectionCount,
+  } = stored;
   const dateLabel = formatRelativeDate(updatedAt);
 
-  // 🔧 Compat mono-page (ancien modèle) ET multi-pages (nouveau modèle)
-  const pages = funnel.pages ?? [];
-  const sectionCount =
-    pages.length > 0
-      ? pages.reduce((acc, p) => acc + (p.sections?.length ?? 0), 0)
-      : // fallback ancien modèle
-        (funnel as { sections?: unknown[] }).sections?.length ?? 0;
-
-  const language = (funnel.language ?? "fr").toUpperCase();
-  const pageLabel = pages.length > 1 ? `${pages.length} pages · ` : "";
+  // Les compteurs ne sont présents que lorsqu'une copie complète existe déjà
+  // dans le cache local. Le dashboard n'extrait jamais ces valeurs du JSON distant.
+  const structureLabel =
+    pageCount && pageCount > 1
+      ? `${pageCount} pages · `
+      : sectionCount !== undefined
+        ? `${sectionCount} sections · `
+        : "";
+  const languageLabel = (language || "fr").toUpperCase();
 
   return (
     <div className="ff-card-hover flex min-w-0 items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 sm:p-3.5">
       <a href={`/editor/${id}`} className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-ink">{funnel.funnelName}</p>
+        <p className="truncate text-sm font-bold text-ink">{name}</p>
         <p className="mt-0.5 truncate text-xs text-muted">
-          {pageLabel}
-          {sectionCount} sections · {language} · {dateLabel}
+          {structureLabel}
+          {languageLabel} · {dateLabel}
         </p>
       </a>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        {publishedAt ? (
+        {status === "published" || publishedAt ? (
           <Badge tone="green">Publié</Badge>
         ) : (
           <Badge tone="neutral">Brouillon</Badge>
         )}
         <FunnelRowMenu
-          funnel={{ id, name: funnel.funnelName, slug }}
+          funnel={{ id, name, slug }}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
         />

@@ -19,6 +19,7 @@ import {
   deleteRemote as deleteRemoteFn,
   publishRemote,
   getCurrentUserId,
+  type RemoteFunnelSummary,
 } from "./funnelRepository";
 import { normalizeFunnel } from "./normalizeFunnel";
 import { compressToUTF16, decompressFromUTF16 } from "lz-string";
@@ -1080,22 +1081,62 @@ export function clearAllFunnels(): void {
 // Hooks React
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 🆕 FIX « tunnels disparus » — Fusionne la liste DISTANTE (source de vérité)
- *  avec les brouillons LOCAUX. L'affichage ne dépend donc plus du fait que le
- *  cache localStorage ait pu, ou non, accueillir tous les tunnels (quota).
- *  Règles : tombstones exclus ; en doublon, la version la plus récente gagne
- *  (protège un brouillon local en avance sur le distant). */
-function mergeRemoteAndLocal(remoteList: StoredFunnel[]): StoredFunnel[] {
+export type FunnelListItem = RemoteFunnelSummary & {
+  /** Disponibles seulement quand une copie complète existe déjà dans le cache. */
+  pageCount?: number;
+  sectionCount?: number;
+};
+
+export type FunnelListState = {
+  funnels: FunnelListItem[];
+  status: "loading" | "loaded" | "error";
+  error: string | null;
+};
+
+function storedToListItem(stored: StoredFunnel): FunnelListItem {
+  const pages = stored.funnel.pages ?? [];
+  const sectionCount =
+    pages.length > 0
+      ? pages.reduce((sum, page) => sum + (page.sections?.length ?? 0), 0)
+      : stored.funnel.sections?.length ?? 0;
+  return {
+    id: stored.id,
+    name: stored.funnel.funnelName || stored.slug,
+    slug: stored.slug,
+    language: stored.funnel.language || "fr",
+    status: stored.publishedAt ? "published" : "draft",
+    createdAt: stored.createdAt,
+    updatedAt: stored.updatedAt,
+    publishedAt: stored.publishedAt,
+    publishedSlug: stored.publishedSlug,
+    pageCount: pages.length || undefined,
+    sectionCount,
+  };
+}
+
+/** Fusionne les métadonnées DISTANTES avec les brouillons LOCAUX complets.
+ *  Règles inchangées : tombstones exclus ; en doublon, la version la plus
+ *  récente gagne. Un résumé distant n'est jamais écrit dans le cache. */
+function mergeRemoteAndLocal(remoteList: RemoteFunnelSummary[]): FunnelListItem[] {
   const deleted = new Set(readDeleted());
-  const byId = new Map<string, StoredFunnel>();
+  const byId = new Map<string, FunnelListItem>();
   for (const r of remoteList) {
     if (!deleted.has(r.id)) byId.set(r.id, r);
   }
   for (const l of listFunnels()) {
     // listFunnels() exclut déjà les tombstones.
+    const localItem = storedToListItem(l);
     const existing = byId.get(l.id);
     if (!existing || (l.updatedAt ?? "") > (existing.updatedAt ?? "")) {
-      byId.set(l.id, l);
+      byId.set(l.id, localItem);
+    } else if (existing) {
+      // Conserve les compteurs disponibles dans le cache sans remplacer les
+      // métadonnées distantes plus récentes.
+      byId.set(l.id, {
+        ...existing,
+        pageCount: localItem.pageCount,
+        sectionCount: localItem.sectionCount,
+      });
     }
   }
   return [...byId.values()].sort((a, b) =>
@@ -1103,11 +1144,13 @@ function mergeRemoteAndLocal(remoteList: StoredFunnel[]): StoredFunnel[] {
   );
 }
 
-export function useFunnelList(): StoredFunnel[] {
-  const [list, setList] = useState<StoredFunnel[]>([]);
+export function useFunnelList(): FunnelListState {
+  const [list, setList] = useState<FunnelListItem[]>([]);
+  const [status, setStatus] = useState<FunnelListState["status"]>("loading");
+  const [error, setError] = useState<string | null>(null);
   // 🆕 Dernière liste distante connue, pour que les mises à jour locales
   // (subscribe) n'écrasent pas l'affichage avec le seul cache localStorage.
-  const remoteRef = useRef<StoredFunnel[]>([]);
+  const remoteRef = useRef<RemoteFunnelSummary[]>([]);
   useEffect(() => {
     let cancelled = false;
 
@@ -1123,16 +1166,12 @@ export function useFunnelList(): StoredFunnel[] {
       );
     }
 
-    // 2) 🆕 SUPABASE — source de vérité : on récupère la liste distante,
-    //    on hydrate le cache local, puis on rafraîchit l'affichage.
+    // 2) SUPABASE — source de vérité pour les MÉTADONNÉES de liste. Le contenu
+    //    complet reste chargé à la demande par loadRemote(id).
     function hydrateFromRemote() {
       listRemote()
         .then((remoteList) => {
           if (cancelled) return;
-          // Liste distante vide = potentiellement transitoire (session non encore
-          // prête) → on NE touche PAS aux tombstones (sinon risque de ressusciter
-          // un tunnel supprimé) et on garde l'affichage local.
-          if (remoteList.length === 0) return;
 
           // 🆕 Réconciliation des tombstones (suppressions) :
           //  - un tunnel supprimé ABSENT du distant → suppression confirmée,
@@ -1153,15 +1192,23 @@ export function useFunnelList(): StoredFunnel[] {
             }
           }
 
-          for (const remote of remoteList) {
-            hydrateLocalFromRemote(remote);
-          }
-          // 🆕 FIX : l'affichage vient de la fusion distant+local (et plus du
-          // seul cache localStorage, qui peut être plein → tunnels manquants).
+          // L'affichage vient de la fusion des résumés distants et du cache
+          // local. Ne jamais hydrater le cache avec ces objets partiels.
           remoteRef.current = remoteList;
-          if (!cancelled) setList(mergeRemoteAndLocal(remoteList));
+          if (!cancelled) {
+            setList(mergeRemoteAndLocal(remoteList));
+            setStatus("loaded");
+            setError(null);
+          }
         })
-        .catch((e) => console.warn("[useFunnelList] listRemote:", e));
+        .catch((e) => {
+          console.warn("[useFunnelList] listRemote:", e);
+          if (cancelled) return;
+          setStatus("error");
+          setError(
+            "Impossible de charger vos tunnels depuis le serveur. Réessayez dans un instant.",
+          );
+        });
     }
 
     // 1) 🆕 Garde anti-fuite inter-comptes : si le cache local appartient à un
@@ -1175,13 +1222,13 @@ export function useFunnelList(): StoredFunnel[] {
           setCacheOwner(userId);
           setList([]); // rien tant que le remote du bon compte n'est pas chargé
         } else {
-          setList(listFunnels());
+          setList(listFunnels().map(storedToListItem));
         }
         hydrateFromRemote();
       })
       .catch(() => {
         if (cancelled) return;
-        setList(listFunnels());
+        setList(listFunnels().map(storedToListItem));
         hydrateFromRemote();
       });
 
@@ -1195,7 +1242,7 @@ export function useFunnelList(): StoredFunnel[] {
       unsub();
     };
   }, []);
-  return list;
+  return { funnels: list, status, error };
 }
 
 export function useFunnel(id: string | undefined): StoredFunnel | null {

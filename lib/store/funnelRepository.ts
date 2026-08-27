@@ -38,12 +38,52 @@ type FunnelRow = {
   updated_at: string;
 };
 
+type FunnelListRow = Pick<
+  FunnelRow,
+  | "id"
+  | "name"
+  | "slug"
+  | "language"
+  | "status"
+  | "published_slug"
+  | "published_at"
+  | "created_at"
+  | "updated_at"
+>;
+
+/** Métadonnées légères utilisées par le dashboard, sans contenu du tunnel. */
+export type RemoteFunnelSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  language: string;
+  status: FunnelRow["status"];
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  publishedSlug?: string;
+};
+
 function rowToStored(row: FunnelRow): StoredFunnel {
   return {
     id: row.id,
     slug: row.slug,
     funnel: normalizeFunnel(row.json_content),
     brief: (row.brief ?? {}) as StoredFunnel["brief"],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    publishedAt: row.published_at ?? undefined,
+    publishedSlug: row.published_slug ?? undefined,
+  };
+}
+
+function rowToSummary(row: FunnelListRow): RemoteFunnelSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    language: row.language,
+    status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at ?? undefined,
@@ -270,12 +310,21 @@ function formatPgError(
   return `${prefix} : ${code}${parts.join(" — ") || "erreur inconnue"}`;
 }
 
-// Colonnes nécessaires à rowToStored. On EXCLUT volontairement `published_content`
-// (énorme et redondant avec json_content) : le ramener pour TOUS les tunnels
-// d'un coup gonflait la réponse jusqu'à casser le parsing JSON
-// (« Unterminated string in JSON »), faisant tomber la synchro du dashboard.
+// Métadonnées strictement nécessaires au dashboard. Le contenu lourd
+// (`json_content`, `brief`, `published_content`) est chargé à la demande par
+// `loadRemote(id)` quand l'utilisateur ouvre ou duplique un tunnel précis.
 const LIST_COLS =
-  "id, slug, json_content, brief, created_at, updated_at, published_at, published_slug";
+  "id, name, slug, language, status, created_at, updated_at, published_at, published_slug";
+
+export class FunnelListRemoteError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "FunnelListRemoteError";
+  }
+}
 
 /**
  * 🆕 FIX « tunnels disparus » (bis) : le plan gratuit Supabase fait des cold
@@ -288,7 +337,14 @@ const LIST_COLS =
  * page. On retente donc 3 fois (backoff court) avant d'abandonner, comme déjà
  * fait pour saveRemote/publishRemote.
  */
-export async function listRemote(): Promise<StoredFunnel[]> {
+export async function listRemote(): Promise<RemoteFunnelSummary[]> {
+  const userId = await getUserId();
+  if (!userId) {
+    throw new FunnelListRemoteError(
+      "Impossible de charger les tunnels : session Supabase absente ou expirée.",
+      "unauthenticated",
+    );
+  }
   const supabase = createSupabaseBrowserClient();
   let lastErr: unknown = null;
   const ATTEMPTS = 4;
@@ -297,14 +353,26 @@ export async function listRemote(): Promise<StoredFunnel[]> {
       const { data, error } = await supabase
         .from("funnels")
         .select(LIST_COLS)
+        .eq("user_id", userId)
         .order("updated_at", { ascending: false });
       if (error) {
-        console.warn(formatPgError("[funnelRepository] listRemote", error));
-        return [];
+        const remoteError = new FunnelListRemoteError(
+          formatPgError("[funnelRepository] listRemote", error),
+          error.code,
+        );
+        lastErr = remoteError;
+        // 57014 = statement timeout. Les erreurs structurelles / d'autorisation
+        // ne gagnent rien à être rejouées plusieurs fois.
+        if (error.code !== "57014" || attempt === ATTEMPTS - 1) {
+          throw remoteError;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+        continue;
       }
-      return (data as FunnelRow[]).map(rowToStored);
+      return (data as FunnelListRow[]).map(rowToSummary);
     } catch (e) {
       lastErr = e;
+      if (e instanceof FunnelListRemoteError && e.code !== "57014") throw e;
       if (attempt < ATTEMPTS - 1) {
         // Backoff croissant (800ms, 1600ms, 2400ms) : couvre un vrai cold
         // start Supabase (~15s cumulés) sans bloquer indéfiniment l'UI.
@@ -312,8 +380,10 @@ export async function listRemote(): Promise<StoredFunnel[]> {
       }
     }
   }
-  console.warn(`[funnelRepository] listRemote échoué après ${ATTEMPTS} tentatives:`, lastErr);
-  return [];
+  if (lastErr instanceof Error) throw lastErr;
+  throw new FunnelListRemoteError(
+    `Impossible de charger les tunnels après ${ATTEMPTS} tentatives.`,
+  );
 }
 
 export async function loadRemote(id: string): Promise<StoredFunnel | null> {
