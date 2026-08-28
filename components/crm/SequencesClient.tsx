@@ -96,6 +96,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   const [notice, setNotice] = useState<string | null>(null);
   const [emails, setEmails] = useState<EditableEmail[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [replayNow, setReplayNow] = useState<number | null>(null);
 
   const [sequences, setSequences] = useState<Sequence[]>([]);
   // 🆕 LOT 3 — Stats envoyés/ouverts/cliqués par séquence.
@@ -110,6 +111,16 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
   const hasFunnels = publishedFunnels.length > 0;
   const reindex = (list: EditableEmail[]) => list.map((e, i) => ({ ...e, position: i }));
+  const replayImmediateEmailIndex = useMemo(() => {
+    if (!emails || replayNow === null) return -1;
+    const lastDatedIndex = emails.reduce((last, email, index) => {
+      const fixedMs = email.sendAt ? new Date(email.sendAt).getTime() : NaN;
+      return Number.isFinite(fixedMs) ? index : last;
+    }, -1);
+    if (lastDatedIndex < 0 || lastDatedIndex >= emails.length - 1) return -1;
+    const lastFixedMs = new Date(emails[lastDatedIndex].sendAt as string).getTime();
+    return lastFixedMs <= replayNow ? lastDatedIndex + 1 : -1;
+  }, [emails, replayNow]);
 
   // 🆕 LOT 1 : gestion de la liste ordonnée de rôles.
   function addRole() {
@@ -148,6 +159,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     } catch { /* non bloquant */ }
   }
   useEffect(() => {
+    setReplayNow(Date.now());
     refreshList();
     fetch("/api/crm/contacts?limit=200")
       .then((r) => (r.ok ? r.json() : null))
@@ -571,7 +583,12 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                     </button>
                   </div>
 
-                  {em.sendAt === null ? (
+                  {em.sendAt === null && i === replayImmediateEmailIndex ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                      <AlertCircle size={16} className="shrink-0" />
+                      Envoyé immédiatement après inscription (mode replay)
+                    </div>
+                  ) : em.sendAt === null ? (
                     <div className="grid gap-3 sm:grid-cols-[130px_130px]">
                       <label className="grid gap-1.5">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Délai (jours)</span>
