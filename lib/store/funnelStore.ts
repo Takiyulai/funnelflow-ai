@@ -403,6 +403,38 @@ function safeSetItem(key: string, value: string, protectedId?: string): void {
 
 const remoteSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const REMOTE_DEBOUNCE_MS = 1200;
+const PUBLICATION_TIMEOUT_MS = 45_000;
+
+function cancelScheduledRemoteSave(id: string): void {
+  const timer = remoteSaveTimers.get(id);
+  if (!timer) return;
+  clearTimeout(timer);
+  remoteSaveTimers.delete(id);
+}
+
+async function runPublicationStep<T>(
+  label: string,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(
+        new Error(
+          `${label} a dépassé ${PUBLICATION_TIMEOUT_MS / 1000} secondes. Vérifie ta connexion puis réessaie.`,
+        ),
+      );
+    }, PUBLICATION_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 /**
  * Pousse un funnel vers Supabase en arrière-plan (debounce par id).
@@ -938,6 +970,10 @@ export async function publishFunnel(id: string): Promise<PublishResult> {
     return { stored: null, remoteOk: false, error: "Tunnel introuvable." };
   }
 
+  // Bloque la sauvegarde différée avant toute préparation locale de la
+  // publication : aucun upsert concurrent ne peut démarrer après le clic.
+  cancelScheduledRemoteSave(id);
+
   const updated: StoredFunnel = {
     ...stored,
     publishedAt: new Date().toISOString(),
@@ -956,7 +992,11 @@ export async function publishFunnel(id: string): Promise<PublishResult> {
   // draft à jour (json_content + médias), PUIS on fige le snapshot publié.
   // Toute erreur (session, RLS, colonne manquante) est REMONTÉE à l'appelant.
   try {
-    const saved = await saveRemote(updated);
+    // Une sauvegarde différée créée juste avant le clic Publier ne doit pas
+    // réécrire en parallèle le même tunnel et son brief volumineux.
+    const saved = await runPublicationStep("L'enregistrement avant publication", (signal) =>
+      saveRemote(updated, { includeBrief: false, signal }),
+    );
     // 🆕 Si une collision de slug a été résolue côté distant, on aligne le local
     // AVANT de figer le snapshot publié (sinon slug local ≠ slug distant).
     if (saved?.slug && saved.slug !== updated.slug) {
@@ -967,13 +1007,17 @@ export async function publishFunnel(id: string): Promise<PublishResult> {
     // transitoires → la publication ne « prenait » pas (published_content restait
     // figé sur l'ancien instantané) sans raison persistante. On réessaie une fois
     // après une courte pause avant de considérer l'échec.
-    let published = await publishRemote(id).catch((e) => {
+    let published = await runPublicationStep("La publication", (signal) =>
+      publishRemote(id, { signal }),
+    ).catch((e) => {
       console.warn("[funnelStore] publishRemote tentative 1 échouée:", e);
       return null as Awaited<ReturnType<typeof publishRemote>>;
     });
     if (!published) {
       await new Promise((r) => setTimeout(r, 1200));
-      published = await publishRemote(id);
+      published = await runPublicationStep("La publication", (signal) =>
+        publishRemote(id, { signal }),
+      );
     }
 
     // 🆕 FIX 404 « faux publié » : publishRemote renvoie NULL quand l'UPDATE

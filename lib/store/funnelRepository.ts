@@ -38,6 +38,19 @@ type FunnelRow = {
   updated_at: string;
 };
 
+type RemoteOptions = {
+  signal?: AbortSignal;
+};
+
+type SaveRemoteOptions = RemoteOptions & {
+  /** Une republication d'un brouillon existant ne doit pas réécrire le brief lourd. */
+  includeBrief?: boolean;
+};
+
+// `loadRemote` exclut volontairement le brief lourd. Un tunnel obtenu par ce
+// chemin ne doit donc jamais réécrire le placeholder vide dans la colonne DB.
+const remoteDraftsWithoutBrief = new Set<string>();
+
 type FunnelListRow = Pick<
   FunnelRow,
   | "id"
@@ -386,22 +399,41 @@ export async function listRemote(): Promise<RemoteFunnelSummary[]> {
   );
 }
 
-export async function loadRemote(id: string): Promise<StoredFunnel | null> {
+const LOAD_COLS =
+  "id, user_id, name, slug, language, funnel_type, json_content, default_cta, status, published_slug, published_at, created_at, updated_at";
+
+export async function loadRemote(
+  id: string,
+  options: RemoteOptions = {},
+): Promise<StoredFunnel | null> {
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("funnels")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !data) return null;
-  return rowToStored(data as FunnelRow);
+    .select(LOAD_COLS)
+    .eq("id", id);
+  if (options.signal) query = query.abortSignal(options.signal);
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    if (options.signal?.aborted) {
+      throw new Error("Le chargement du brouillon Supabase a dépassé le délai autorisé.");
+    }
+    return null;
+  }
+  if (!data) return null;
+  remoteDraftsWithoutBrief.add(id);
+  // Le brief et l'ancien snapshot publié ne sont pas nécessaires pour ouvrir
+  // le brouillon. Le brief local éventuel reste la source utilisée à l'édition.
+  return rowToStored({ ...data, brief: {}, published_content: null } as FunnelRow);
 }
 
 /**
  * Upsert du brouillon. Externalise les médias vers Storage avant écriture
  * (le JSON stocké ne contient donc QUE des URLs https, jamais de base64).
  */
-export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | null> {
+export async function saveRemote(
+  stored: StoredFunnel,
+  options: SaveRemoteOptions = {},
+): Promise<StoredFunnel | null> {
   const userId = await getUserId();
   if (!userId) {
     // ⚠️ On LÈVE l'erreur (au lieu de retourner null en silence) pour que la
@@ -416,6 +448,22 @@ export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | n
     stored.id,
   );
 
+  let includeBrief = options.includeBrief !== false && !remoteDraftsWithoutBrief.has(stored.id);
+  if (!includeBrief) {
+    // Un tout premier enregistrement doit encore conserver son brief. La
+    // vérification ne lit que l'id et évite de recharger la colonne lourde.
+    let existenceQuery = supabase
+      .from("funnels")
+      .select("id")
+      .eq("id", stored.id);
+    if (options.signal) existenceQuery = existenceQuery.abortSignal(options.signal);
+    const { data: existing, error: existenceError } = await existenceQuery.maybeSingle();
+    if (existenceError) {
+      throw new Error(formatPgError("Vérification Supabase impossible", existenceError));
+    }
+    includeBrief = !existing;
+  }
+
   const row = {
     id: stored.id,
     user_id: userId,
@@ -423,30 +471,37 @@ export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | n
     slug: stored.slug,
     language: funnelWithUrls.language || "fr",
     funnel_type: funnelWithUrls.meta?.funnelKind ?? null,
-    brief: stored.brief,
+    ...(includeBrief ? { brief: stored.brief } : {}),
     json_content: funnelWithUrls,
     default_cta: funnelWithUrls.defaultCta ?? null,
     updated_at: new Date().toISOString(),
   };
 
   // Première tentative : upsert par id.
-  let { data, error } = await supabase
+  let saveQuery = supabase
     .from("funnels")
     .upsert(row, { onConflict: "id" })
-    .select("*")
-    .maybeSingle();
+    .select("id, slug, updated_at");
+  if (options.signal) saveQuery = saveQuery.abortSignal(options.signal);
+  let { data, error } = await saveQuery.maybeSingle();
 
   // 🆕 Collision de slug (23505 sur funnels_user_slug_uidx) : un AUTRE tunnel
   // (souvent une ligne orpheline laissée par une suppression qui avait échoué)
   // occupe déjà ce slug. On résout vers un slug libre et on réessaie, plutôt
   // que de bloquer la publication.
   if (error && error.code === "23505" && /slug/i.test(`${error.message} ${error.details ?? ""}`)) {
-    const freeSlug = await resolveFreeFunnelSlug(userId, stored.slug, stored.id);
-    ({ data, error } = await supabase
+    const freeSlug = await resolveFreeFunnelSlug(
+      userId,
+      stored.slug,
+      stored.id,
+      options.signal,
+    );
+    let retryQuery = supabase
       .from("funnels")
       .upsert({ ...row, slug: freeSlug }, { onConflict: "id" })
-      .select("*")
-      .maybeSingle());
+      .select("id, slug, updated_at");
+    if (options.signal) retryQuery = retryQuery.abortSignal(options.signal);
+    ({ data, error } = await retryQuery.maybeSingle());
   }
 
   if (error) {
@@ -466,7 +521,14 @@ export async function saveRemote(stored: StoredFunnel): Promise<StoredFunnel | n
   // Ne se déclenche JAMAIS en mode externe : `meta.bookingSlug` n'y est pas posé.
   await linkBookingEventType(funnelWithUrls, stored.id);
 
-  return data ? rowToStored(data as FunnelRow) : null;
+  return data
+    ? {
+        ...stored,
+        slug: data.slug,
+        funnel: funnelWithUrls,
+        updatedAt: data.updated_at,
+      }
+    : null;
 }
 
 /**
@@ -497,16 +559,19 @@ async function resolveFreeFunnelSlug(
   userId: string,
   base: string,
   selfId: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const supabase = createSupabaseBrowserClient();
   const isTaken = async (candidate: string): Promise<boolean> => {
-    const { data } = await supabase
+    let query = supabase
       .from("funnels")
       .select("id")
       .eq("user_id", userId)
       .eq("slug", candidate)
-      .neq("id", selfId)
-      .maybeSingle();
+      .neq("id", selfId);
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query.maybeSingle();
+    if (error) throw new Error(formatPgError("Vérification du slug impossible", error));
     return !!data;
   };
   if (!(await isTaken(base))) return base;
@@ -548,13 +613,16 @@ export async function deleteRemote(id: string): Promise<void> {
  * Publication : fige un snapshot dans published_content + published_slug,
  * passe status='published'. Le snapshot est la version servie aux visiteurs.
  */
-export async function publishRemote(id: string): Promise<StoredFunnel | null> {
+export async function publishRemote(
+  id: string,
+  options: RemoteOptions = {},
+): Promise<StoredFunnel | null> {
   const userId = await getUserId();
   if (!userId) throw new Error("Non connecté à Supabase (session expirée ?).");
   const supabase = createSupabaseBrowserClient();
 
   // On repart du draft courant (déjà à jour côté json_content via saveRemote)
-  const current = await loadRemote(id);
+  const current = await loadRemote(id, options);
   if (!current) {
     throw new Error(
       "Brouillon introuvable côté Supabase : l'enregistrement distant n'a pas abouti.",
@@ -575,9 +643,9 @@ export async function publishRemote(id: string): Promise<StoredFunnel | null> {
   );
 
   // published_slug global : on tente le slug draft, sinon suffixe court
-  const publishedSlug = await resolvePublishedSlug(current.slug, id);
+  const publishedSlug = await resolvePublishedSlug(current.slug, id, options.signal);
 
-  const { data, error } = await supabase
+  let publishQuery = supabase
     .from("funnels")
     .update({
       status: "published",
@@ -586,25 +654,40 @@ export async function publishRemote(id: string): Promise<StoredFunnel | null> {
       published_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .select("*")
-    .maybeSingle();
+    .select("id, status, published_slug, published_at");
+  if (options.signal) publishQuery = publishQuery.abortSignal(options.signal);
+  const { data, error } = await publishQuery.maybeSingle();
 
   if (error) {
     throw new Error(formatPgError("Publication Supabase impossible", error));
   }
-  return data ? rowToStored(data as FunnelRow) : null;
+  return data
+    ? {
+        ...current,
+        publishedAt: data.published_at ?? undefined,
+        publishedSlug: data.published_slug ?? undefined,
+      }
+    : null;
 }
 
 /** Trouve un published_slug global libre (unique cross-user). */
-async function resolvePublishedSlug(base: string, selfId: string): Promise<string> {
+async function resolvePublishedSlug(
+  base: string,
+  selfId: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const supabase = createSupabaseBrowserClient();
   const tryOne = async (candidate: string): Promise<boolean> => {
-    const { data } = await supabase
+    let query = supabase
       .from("funnels")
       .select("id")
       .eq("published_slug", candidate)
-      .neq("id", selfId)
-      .maybeSingle();
+      .neq("id", selfId);
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      throw new Error(formatPgError("Vérification du slug publié impossible", error));
+    }
     return !data; // libre si aucune autre ligne
   };
   if (await tryOne(base)) return base;
