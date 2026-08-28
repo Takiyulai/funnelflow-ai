@@ -7,6 +7,7 @@ import { listTags } from "@/lib/crm/tags";
 import { listContactLists } from "@/lib/crm/lists";
 import { ContactsTable } from "@/components/crm/ContactsTable";
 import type { LeadStatus } from "@/lib/crm/types";
+import { guardApiAccess } from "@/lib/billing/apiGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function LeadsPage({
   const status = (sp.status as LeadStatus | undefined) || undefined;
   const funnelFilter = sp.funnel || undefined;
 
-  const [{ contacts, total }, tags, lists, funnelsRes, kpiQueries] = await Promise.all([
+  const [{ contacts, total }, tags, lists, funnelsRes, kpiQueries, pageTimeGuard] = await Promise.all([
     listContacts(sb, user.id, {
       search: sp.q || undefined,
       tagId: sp.tag || undefined,
@@ -52,10 +53,40 @@ export default async function LeadsPage({
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "qualifie"),
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "client"),
     ]),
+    guardApiAccess(),
   ]);
 
   const funnels = (funnelsRes.data ?? []) as { id: string; name: string }[];
   const [totalAll, nouveaux, qualifies, clients] = kpiQueries.map((r) => r.count ?? 0);
+  const pageTimeTrackingEnabled =
+    pageTimeGuard.ok &&
+    pageTimeGuard.userId === user.id &&
+    pageTimeGuard.access.limits.pageTimeTracking;
+  const pageTimeByContact: Record<string, number> = {};
+
+  if (pageTimeTrackingEnabled && contacts.length > 0) {
+    // Une seule lecture légère pour tous les contacts affichés. L'agrégation
+    // reste côté serveur et la RLS vérifie en plus la propriété des lignes.
+    const { data: sessionRows, error: sessionError } = await sb
+      .from("funnel_page_sessions")
+      .select("contact_id, active_ms")
+      .eq("user_id", user.id)
+      .in(
+        "contact_id",
+        contacts.map((contact) => contact.id),
+      );
+
+    if (sessionError) {
+      console.error("[leads] agrégation du temps par contact impossible", sessionError);
+    } else {
+      for (const row of sessionRows ?? []) {
+        const activeMs = Number(row.active_ms);
+        if (!row.contact_id || !Number.isFinite(activeMs) || activeMs <= 0) continue;
+        pageTimeByContact[row.contact_id] =
+          (pageTimeByContact[row.contact_id] ?? 0) + Math.floor(activeMs);
+      }
+    }
+  }
 
   return (
     <AppShell>
@@ -83,6 +114,8 @@ export default async function LeadsPage({
         tags={tags}
         lists={lists}
         funnels={funnels}
+        pageTimeTrackingEnabled={pageTimeTrackingEnabled}
+        pageTimeByContact={pageTimeByContact}
         exportHref={`/api/leads/export${funnelFilter ? `?funnelId=${funnelFilter}` : ""}`}
         filters={{
           q: sp.q ?? "",

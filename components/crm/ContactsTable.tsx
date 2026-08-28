@@ -31,7 +31,19 @@ type Props = {
   filters: { q: string; tag: string; list?: string; status: string; funnel?: string };
   funnels?: { id: string; name: string }[];
   exportHref?: string;
+  pageTimeTrackingEnabled?: boolean;
+  pageTimeByContact?: Record<string, number>;
 };
+
+function formatActiveTime(milliseconds: number): string {
+  const seconds = Math.max(1, Math.round(milliseconds / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours} h ${remainingMinutes} min` : `${hours} h`;
+}
 
 export function ContactsTable({
   initialContacts,
@@ -41,6 +53,8 @@ export function ContactsTable({
   filters,
   funnels = [],
   exportHref,
+  pageTimeTrackingEnabled = false,
+  pageTimeByContact = {},
 }: Props) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -484,6 +498,9 @@ export function ContactsTable({
                 <th className="px-4 py-3 font-bold">Téléphone</th>
                 {lists.length > 0 && <th className="px-4 py-3 font-bold">Liste</th>}
                 <th className="px-4 py-3 font-bold">Tags</th>
+                {pageTimeTrackingEnabled && (
+                  <th className="px-4 py-3 font-bold whitespace-nowrap">Temps passé</th>
+                )}
                 <th className="px-4 py-3 font-bold">Statut</th>
                 <th className="px-4 py-3 font-bold text-right">Actions</th>
               </tr>
@@ -491,7 +508,10 @@ export function ContactsTable({
             <tbody>
               {initialContacts.length === 0 && (
                 <tr>
-                  <td colSpan={lists.length > 0 ? 7 : 6} className="px-4 py-10 text-center text-muted">
+                  <td
+                    colSpan={6 + (lists.length > 0 ? 1 : 0) + (pageTimeTrackingEnabled ? 1 : 0)}
+                    className="px-4 py-10 text-center text-muted"
+                  >
                     {filters.list
                       ? "Aucun contact dans cette liste."
                       : "Aucun contact. Créez-en un ou laissez vos tunnels en capturer."}
@@ -565,6 +585,13 @@ export function ContactsTable({
                         ))}
                       </div>
                     </td>
+                    {pageTimeTrackingEnabled && (
+                      <td className="px-4 py-3 whitespace-nowrap text-ink">
+                        {pageTimeByContact[c.id]
+                          ? formatActiveTime(pageTimeByContact[c.id])
+                          : "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-[11px] font-semibold text-ink">
                         {STATUS_LABEL[c.status]}
