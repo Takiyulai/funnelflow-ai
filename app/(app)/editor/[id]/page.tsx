@@ -834,7 +834,7 @@ export default function EditorPage() {
     <AppShell>
       <div className="sticky top-0 z-30 -mx-4 -mt-5 mb-5 border-b border-white/10 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80 sm:-mx-6 lg:-mx-8 lg:-mt-8 min-w-0">
         <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-8 min-w-0">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden sm:gap-3 flex-1">
             <Link
               href="/dashboard"
               title="Retour au dashboard"
@@ -843,7 +843,7 @@ export default function EditorPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
 
-            <div className="flex min-w-0 flex-col leading-tight">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden leading-tight">
               <div className="flex items-center gap-2 min-w-0">
                 <h1 className="truncate text-sm font-semibold text-white">
                   {brandName || "Sans titre"}
@@ -865,7 +865,7 @@ export default function EditorPage() {
                   aria-label={isPublished ? "Publié" : "Brouillon"}
                 />
               </div>
-              <div className="hidden md:flex items-center gap-1 text-[11px] text-zinc-500 min-w-0">
+              <div className="hidden min-w-0 items-center gap-1 overflow-hidden text-[11px] text-zinc-500 md:flex">
                 <span className="shrink-0">/tunnel/</span>
                 <input
                   type="text"
@@ -874,7 +874,7 @@ export default function EditorPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   }}
-                  className="w-32 rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-zinc-300 outline-none hover:border-zinc-700 focus:border-indigo-500/50 focus:text-white"
+                  className="min-w-0 w-full max-w-32 truncate rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-zinc-300 outline-none hover:border-zinc-700 focus:border-indigo-500/50 focus:text-white"
                 />
                 <button
                   onClick={handleCopyLink}
@@ -1100,7 +1100,7 @@ export default function EditorPage() {
         </div>
 
         <div
-          className="lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
+          className="ff-editor-preview lg:sticky lg:top-20 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden min-w-0 relative"
           ref={previewWrapperRef}
           onClickCapture={handlePreviewClick}
         >

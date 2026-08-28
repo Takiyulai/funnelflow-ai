@@ -84,6 +84,7 @@ type PublishedCaptureSection = {
     mode?: unknown;
     captureTags?: unknown;
     captureListIds?: unknown;
+    ignoreGlobalCta?: unknown;
   } | null;
   rawHtmlPatches?: {
     links?: Record<
@@ -108,6 +109,14 @@ type PublishedCapturePage = {
 type PublishedCaptureContent = {
   pages?: unknown;
   sections?: unknown;
+  defaultCta?: {
+    mode?: unknown;
+    captureTags?: unknown;
+    captureListIds?: unknown;
+  } | null;
+  meta?: {
+    applyDefaultCtaToAll?: unknown;
+  } | null;
 };
 
 type CaptureSettings = {
@@ -171,7 +180,35 @@ function resolveCaptureSettings(
   const section = sections.find((candidate) => candidate.id === sectionId);
   if (!section) return { tags: [], listIds: [] };
 
-  const directCta = section.cta?.mode === "popup" ? section.cta : null;
+  const localCta = section.cta;
+  // Même périmètre que CtaLink : l'action commune ne s'applique qu'au CTA
+  // principal de la page d'accueil, si le funnel l'a activée et si ce CTA ne
+  // porte pas son opt-out individuel. Pour les anciens funnels mono-page sans
+  // pages[], la section racine est assimilée à l'accueil comme côté client.
+  const isHomePage = page ? page.isHome === true : pages.length <= 1;
+  const globalCta = content.defaultCta;
+  const useGlobalCta =
+    isHomePage &&
+    content.meta?.applyDefaultCtaToAll === true &&
+    localCta?.ignoreGlobalCta !== true &&
+    Boolean(globalCta?.mode);
+
+  // Une configuration de capture explicitement posée sur le CTA local reste
+  // prioritaire, propriété par propriété. Sinon, le CTA global fournit le
+  // fallback correspondant. Un tableau vide explicite permet donc aussi de
+  // désactiver les tags ou listes pour ce CTA précis.
+  const effectiveCta = useGlobalCta
+    ? {
+        mode: globalCta?.mode,
+        captureTags: Array.isArray(localCta?.captureTags)
+          ? localCta?.captureTags
+          : globalCta?.captureTags,
+        captureListIds: Array.isArray(localCta?.captureListIds)
+          ? localCta?.captureListIds
+          : globalCta?.captureListIds,
+      }
+    : localCta;
+  const directCta = effectiveCta?.mode === "popup" ? effectiveCta : null;
   const directTags = cleanStrings(
     [
       ...cleanStrings(section.formConfig?.captureTags, 20, 60),

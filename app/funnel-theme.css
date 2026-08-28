@@ -1402,6 +1402,52 @@
   /* 🆕 CTA du HEADER masqué sur mobile (demande utilisateur). */
   .ff-brand-bar .ff-brand-bar-cta { display: none !important; }
 }
+
+/* Aperçu intégré à l'éditeur : les @media ci-dessus suivent le viewport du
+   navigateur, beaucoup plus large que le panneau. Ces container queries sont
+   volontairement limitées à .ff-editor-preview pour répartir proprement la
+   marque, l'événement et le CTA selon la largeur RÉELLE de l'aperçu, sans
+   modifier le tunnel publié ni l'export HTML. */
+@container (max-width: 860px) {
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.5rem;
+  }
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    justify-self: stretch;
+  }
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-cta {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: 100%;
+    justify-self: center;
+  }
+}
+
+@container (max-width: 560px) {
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left,
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-header-event,
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-cta {
+    grid-column: 1;
+    grid-row: auto;
+    max-width: 100%;
+    justify-self: center;
+  }
+  .ff-editor-preview .ff-brand-bar-inner:has(.ff-header-event) .ff-brand-bar-left {
+    justify-content: center;
+  }
+}
 /* 🆕 Idem dans le cadre d'aperçu mobile de l'éditeur. */
 [data-ff-mobile-frame] .ff-brand-bar .ff-brand-bar-cta { display: none !important; }
 
