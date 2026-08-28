@@ -1414,7 +1414,7 @@ function ActionConfigFields({
   }
 
   return (
-    <div className="mt-3">
+    <div className="mt-3 min-w-0 max-w-full [&_input]:min-w-0 [&_input]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full [&_textarea]:min-w-0 [&_textarea]:max-w-full">
         {action.kind === "add_tag" && (
           <input
             value={action.tags.join(", ")}
@@ -1478,7 +1478,7 @@ function ActionConfigFields({
           ))}
 
         {action.kind === "notify_owner" && (
-          <div className="grid gap-2">
+          <div className="grid min-w-0 max-w-full gap-2">
             <input
               value={action.subject ?? ""}
               onChange={(e) =>
@@ -1592,8 +1592,8 @@ function ActionConfigFields({
         {action.kind === "send_email" && (
           <div className="grid gap-2">
             {/* 🆕 Génération IA à volonté de l'objet + du contenu */}
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
-              <div className="flex items-center gap-1.5">
+            <div className="min-w-0 max-w-full rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+              <div className="flex min-w-0 flex-col items-stretch gap-1.5 sm:flex-row sm:items-center">
                 <input
                   value={genPrompt}
                   onChange={(e) => setGenPrompt(e.target.value)}
@@ -1611,7 +1611,7 @@ function ActionConfigFields({
                   type="button"
                   onClick={generateWorkflowEmail}
                   disabled={genLoading}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gold px-3 py-1.5 text-xs font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-md bg-gold px-3 py-1.5 text-xs font-bold text-zinc-950 transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
                 >
                   {genLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                   {genLoading ? "Génération…" : "Générer avec l'IA"}
@@ -1726,7 +1726,7 @@ function ConditionFields({
     onChange({ ...action, [branch]: actions });
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 max-w-full gap-3">
       {/* Choix du test */}
       <div className="grid gap-2 sm:grid-cols-2">
         <select
@@ -1995,7 +1995,7 @@ function ConditionBranch({
       : "border-red/40 bg-red/5 text-red";
 
   return (
-    <div className="rounded-lg border border-line bg-canvas/60 p-3">
+    <div className="min-w-0 max-w-full rounded-lg border border-line bg-canvas/60 p-2 sm:p-3">
       <span
         className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${toneCls}`}
       >
@@ -2008,7 +2008,7 @@ function ConditionBranch({
         </p>
       )}
 
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid min-w-0 max-w-full gap-2">
         {actions.map((a, i) => {
           const Meta = ACTION_META[a.kind];
           const Icon = Meta.icon;
@@ -2016,8 +2016,8 @@ function ConditionBranch({
           // parent (la condition), plus les "wait" précédents DANS la branche.
           const offsetMs = offsetBeforeIndex(actions, i, baseOffsetMs);
           return (
-            <div key={i} className="rounded-lg border border-line bg-surface p-3">
-              <div className="flex items-center justify-between gap-2">
+            <div key={i} className="min-w-0 max-w-full rounded-lg border border-line bg-surface p-2 sm:p-3">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
                   <Icon size={13} /> {Meta.label}
                 </span>

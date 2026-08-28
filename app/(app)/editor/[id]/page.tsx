@@ -865,7 +865,7 @@ export default function EditorPage() {
                   aria-label={isPublished ? "Publié" : "Brouillon"}
                 />
               </div>
-              <div className="hidden min-w-0 items-center gap-1 overflow-hidden text-[11px] text-zinc-500 md:flex">
+              <div className="hidden min-w-0 items-center gap-1 overflow-hidden text-[11px] text-zinc-500 2xl:flex">
                 <span className="shrink-0">/tunnel/</span>
                 <input
                   type="text"
@@ -974,10 +974,11 @@ export default function EditorPage() {
           </div>
         </div>
 
-        <div className="lg:hidden flex flex-col gap-2 pb-2 px-3 min-w-0">
-          {/* 🆕 Slug éditable + copie du lien, visibles sur mobile (< md) où le
-              slug de la barre principale est masqué. */}
-          <div className="md:hidden flex items-center gap-1 text-[11px] text-zinc-500 min-w-0">
+        <div className="flex min-w-0 flex-col gap-2 px-3 pb-2 2xl:hidden">
+          {/* La barre d'actions occupe presque toute la largeur utile une fois la
+              sidebar déduite. Jusqu'à 2xl, le slug garde donc sa propre ligne :
+              il reste lisible, éditable et copiable au lieu d'être comprimé. */}
+          <div className="flex min-w-0 items-center gap-1 text-[11px] text-zinc-500">
             <span className="shrink-0">/tunnel/</span>
             <input
               type="text"
@@ -996,7 +997,7 @@ export default function EditorPage() {
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
           </div>
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center lg:hidden">
             <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} syncError={syncError} />
           </div>
         </div>

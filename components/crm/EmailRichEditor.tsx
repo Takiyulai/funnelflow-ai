@@ -305,9 +305,9 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
     "grid h-8 w-8 place-items-center rounded-md border border-line bg-surface text-ink transition hover:bg-canvas";
 
   return (
-    <div className="rounded-lg border border-line bg-surface">
+    <div className="min-w-0 max-w-full rounded-lg border border-line bg-surface">
       {/* Barre d'outils */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
         <button type="button" className={btn} title="Gras" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("bold")}>
           <Bold className="h-4 w-4" />
         </button>
@@ -484,7 +484,7 @@ export function EmailRichEditor({ value, onChange, placeholder }: Props) {
         onInput={emit}
         onBlur={emit}
         data-placeholder={placeholder || "Rédigez votre email…"}
-        className="ff-email-editor min-h-[180px] w-full px-3 py-2.5 text-sm leading-relaxed text-ink outline-none"
+        className="ff-email-editor min-h-[180px] min-w-0 w-full max-w-full break-words px-3 py-2.5 text-sm leading-relaxed text-ink outline-none [overflow-wrap:anywhere]"
       />
     </div>
   );
