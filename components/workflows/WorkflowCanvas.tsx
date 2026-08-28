@@ -138,7 +138,7 @@ function FfNode({ data }: NodeProps<Node<FfNodeData>>) {
   if (data.kind === "trigger") {
     const detail = describeTrigger(data.trigger);
     return (
-      <div className="w-[240px] rounded-xl border-2 border-accent bg-accent-soft px-3 py-2.5 shadow-card">
+      <div className="w-[min(240px,calc(100cqw-4rem))] rounded-xl border-2 border-accent bg-accent-soft px-3 py-2.5 shadow-card">
         {handles}
         <div className="flex items-center gap-1.5">
           <Zap size={13} className="shrink-0 text-accent-ink" />
@@ -156,7 +156,7 @@ function FfNode({ data }: NodeProps<Node<FfNodeData>>) {
 
   if (data.kind === "join") {
     return (
-      <div className="w-[240px] rounded-full border border-dashed border-line bg-canvas px-3 py-1.5 text-center">
+      <div className="w-[min(240px,calc(100cqw-4rem))] rounded-full border border-dashed border-line bg-canvas px-3 py-1.5 text-center">
         {handles}
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted">
           <Merge size={11} />
@@ -168,7 +168,7 @@ function FfNode({ data }: NodeProps<Node<FfNodeData>>) {
 
   if (data.kind === "end") {
     return (
-      <div className="w-[240px] rounded-xl border border-line bg-canvas px-3 py-2 text-center">
+      <div className="w-[min(240px,calc(100cqw-4rem))] rounded-xl border border-line bg-canvas px-3 py-2 text-center">
         {handles}
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted">
           <CircleDot size={12} />
@@ -185,7 +185,7 @@ function FfNode({ data }: NodeProps<Node<FfNodeData>>) {
     <button
       type="button"
       onClick={() => data.onSelect?.(data.path)}
-      className={`w-[240px] rounded-xl border bg-surface px-3 py-2.5 text-left shadow-card transition hover:border-accent ${
+      className={`w-[min(240px,calc(100cqw-4rem))] rounded-xl border bg-surface px-3 py-2.5 text-left shadow-card transition hover:border-accent ${
         isCondition ? "border-info" : "border-line"
       }`}
     >
@@ -260,7 +260,7 @@ export function WorkflowCanvas({
 
   return (
     <div
-      className="rounded-xl border border-line bg-canvas"
+      className="min-w-0 rounded-xl border border-line bg-canvas [container-type:inline-size]"
       style={{ height }}
     >
       <ReactFlow

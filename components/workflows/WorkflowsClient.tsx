@@ -599,21 +599,10 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
         // vérification a posteriori : on voit une branche apparaître au moment
         // où on ajoute la condition qui la crée.
         //
-        // 🐛 CORRECTIF — l'aperçu passait sous le formulaire sur la plupart des
-        // écrans réels.
-        //
-        // La bascule était fixée à `xl` (1280 px de VIEWPORT CSS). Or les
-        // portables Windows appliquent couramment une mise à l'échelle à 125 %,
-        // qui divise la largeur CSS : un écran 1366 px n'expose que ~1092 px, un
-        // 1920 px à 150 % exactement 1280 px. Une grande partie des utilisateurs
-        // passait donc sous le seuil et voyait le graphe empilé — le retour
-        // « en direct » perdait tout son intérêt puisqu'il fallait défiler pour
-        // le voir.
-        //
-        // On bascule désormais dès `lg` (1024 px) avec une colonne d'aperçu plus
-        // étroite, puis on l'élargit à `xl`. Le souci d'origine (formulaire
-        // écrasé) reste couvert : à 1024 px, le formulaire garde ~660 px.
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
+        // La largeur utile est celle qui reste APRÈS la sidebar de l'AppShell.
+        // À `lg`, deux colonnes forçaient donc le formulaire à déborder. La
+        // bascule est repoussée à `xl`, avec une seconde colonne progressive.
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
           <WorkflowEditor
             draft={draft}
             setDraft={setDraft}
@@ -632,7 +621,7 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
           />
           {/* `sticky` aligné sur la même bascule que la grille : en une seule
               colonne, un aperçu collant masquerait le formulaire au défilement. */}
-          <div className="min-w-0 lg:sticky lg:top-4">
+          <div className="min-w-0 xl:sticky xl:top-4">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
               Aperçu en direct
             </p>
@@ -731,7 +720,7 @@ function WorkflowList({
       {workflows.map((wf) => (
         <div key={wf.id} className="grid gap-2">
         <div
-          className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between"
+          className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between sm:p-5"
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -757,7 +746,7 @@ function WorkflowList({
               })}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {/* 🆕 Historique : replié par défaut. C'est un outil de diagnostic,
                 consulté quand quelque chose cloche — pas une information de
                 pilotage à afficher en permanence. */}
@@ -887,13 +876,13 @@ function WorkflowEditor({
   ];
 
   return (
-    <div className="mt-8 max-w-3xl">
+    <div className="mt-8 min-w-0 max-w-3xl">
       <h2 className="text-xl font-black text-ink">
         {isNew ? "Nouveau workflow" : "Modifier le workflow"}
       </h2>
 
       {/* Réglages généraux */}
-      <div className="mt-5 grid gap-4 rounded-lg border border-line bg-surface p-5">
+      <div className="mt-5 grid min-w-0 gap-4 rounded-lg border border-line bg-surface p-3 sm:p-5">
         <label className="block">
           <span className="text-xs font-bold uppercase text-muted">Nom</span>
           <input
@@ -1238,13 +1227,13 @@ function WorkflowEditor({
           )}
 
           {/* Nœud d'ajout d'action */}
-          <div className="flex gap-4">
+          <div className="flex min-w-0 gap-3 sm:gap-4">
             <div className="flex flex-col items-center">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-dashed border-line text-muted">
                 <Plus size={16} />
               </div>
             </div>
-            <div className="flex-1 pb-1">
+            <div className="min-w-0 flex-1 pb-1">
               <p className="mb-2 text-xs font-bold text-muted">Ajouter une action</p>
               <div className="flex flex-wrap gap-2">
                 {actionKinds.map((kind) => {
@@ -1312,7 +1301,7 @@ function TimelineNode({
 }) {
   const badgeCls = tone === "gold" ? "bg-gold text-[#08111F]" : "bg-navy text-white";
   return (
-    <div className="flex gap-4">
+    <div className="flex min-w-0 gap-3 sm:gap-4">
       {/* Rail : pastille + ligne de connexion vers le nœud suivant */}
       <div className="flex flex-col items-center">
         <div
@@ -1324,9 +1313,9 @@ function TimelineNode({
       </div>
 
       {/* Carte du nœud */}
-      <div className={`flex-1 ${hasNext ? "pb-5" : "pb-2"}`}>
-        <div className="rounded-lg border border-line bg-surface p-4">
-          <div className="flex items-start justify-between gap-2">
+      <div className={`min-w-0 flex-1 ${hasNext ? "pb-5" : "pb-2"}`}>
+        <div className="rounded-lg border border-line bg-surface p-3 sm:p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="text-sm font-bold text-ink">{title}</div>
               {subtitle && (
@@ -1334,7 +1323,7 @@ function TimelineNode({
               )}
             </div>
             {onRemove && (
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="flex shrink-0 flex-wrap items-center gap-1">
                 <button
                   type="button"
                   onClick={onMoveUp}

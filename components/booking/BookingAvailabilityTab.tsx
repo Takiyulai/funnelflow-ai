@@ -21,11 +21,11 @@ export function BookingAvailabilityTab({
   const dstNotice = daylightSavingNotice(active.timezone);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 max-w-full gap-5">
       {/* Le fuseau EN PREMIER : les horaires saisis plus bas sont exprimés
           dans ce fuseau. L'ordre inverse ferait saisir des heures avant d'en
           connaître la référence. */}
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
           Ton fuseau horaire
         </h2>
@@ -44,7 +44,7 @@ export function BookingAvailabilityTab({
           value={active.timezone}
           onChange={(e) => onPatch({ timezone: e.target.value })}
           style={{ colorScheme: "dark" }}
-          className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+          className="mt-3 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
         >
           {TIMEZONE_OPTIONS.map((t) => (
             <option key={t.id} value={t.id}>
@@ -59,7 +59,7 @@ export function BookingAvailabilityTab({
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
           Disponibilités hebdomadaires
           <span className="ml-2 font-normal normal-case opacity-70">
@@ -70,11 +70,17 @@ export function BookingAvailabilityTab({
           {JOURS.map((label, weekday) => {
             const rules = active.availability.filter((r) => r.weekday === weekday);
             return (
-              <div key={weekday} className="flex flex-wrap items-center gap-2">
-                <span className="w-24 text-sm opacity-70">{label}</span>
+              <div
+                key={weekday}
+                className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+              >
+                <span className="w-full text-sm opacity-70 sm:w-24">{label}</span>
                 {rules.length === 0 && <span className="text-xs opacity-40">Fermé</span>}
                 {rules.map((r, i) => (
-                  <span key={i} className="flex items-center gap-1">
+                  <span
+                    key={i}
+                    className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:flex sm:w-auto"
+                  >
                     <input
                       type="time"
                       value={toHHMM(r.startMin)}
@@ -85,7 +91,7 @@ export function BookingAvailabilityTab({
                           ),
                         })
                       }
-                      className="rounded border border-white/15 bg-black/30 px-2 py-1 text-sm"
+                      className="w-full min-w-0 max-w-full rounded border border-white/15 bg-black/30 px-2 py-1 text-sm sm:w-auto"
                     />
                     <span className="opacity-40">→</span>
                     <input
@@ -98,14 +104,14 @@ export function BookingAvailabilityTab({
                           ),
                         })
                       }
-                      className="rounded border border-white/15 bg-black/30 px-2 py-1 text-sm"
+                      className="w-full min-w-0 max-w-full rounded border border-white/15 bg-black/30 px-2 py-1 text-sm sm:w-auto"
                     />
                     <button
                       type="button"
                       onClick={() =>
                         onPatch({ availability: active.availability.filter((x) => x !== r) })
                       }
-                      className="p-1 opacity-50 hover:opacity-100"
+                      className="col-span-3 justify-self-end p-1 opacity-50 hover:opacity-100 sm:col-auto"
                       aria-label="Supprimer la plage"
                     >
                       <Trash2 size={14} />
@@ -122,7 +128,7 @@ export function BookingAvailabilityTab({
                       ],
                     })
                   }
-                  className="rounded border border-white/15 px-2 py-1 text-xs opacity-70 hover:opacity-100"
+                  className="self-start rounded border border-white/15 px-2 py-1 text-xs opacity-70 hover:opacity-100"
                 >
                   + plage
                 </button>
@@ -132,12 +138,12 @@ export function BookingAvailabilityTab({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">Jours fermés</h2>
         <p className="mt-1 text-xs opacity-60">
           Congés, fêtes, imprévus — ces dates ne proposeront aucun créneau.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-2">
           {active.exceptions
             .filter((e) => e.kind === "closed")
             .map((e) => (
@@ -166,7 +172,7 @@ export function BookingAvailabilityTab({
               onPatch({ exceptions: [...active.exceptions, { day, kind: "closed" }] });
               e.target.value = "";
             }}
-            className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm"
+            className="min-w-0 max-w-full rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-sm"
           />
         </div>
       </section>
