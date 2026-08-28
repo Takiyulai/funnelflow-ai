@@ -364,7 +364,7 @@ function InternalPopup({
       const successMessage =
         section.formConfig?.successMessage ||
         (redirectTo
-          ? "Merci ! Redirection…"
+          ? "Inscription confirmée, merci !"
           : "Merci ! Votre inscription a bien été enregistrée.");
 
       setState({ kind: "success", message: successMessage });
