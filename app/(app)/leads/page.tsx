@@ -8,6 +8,11 @@ import { listContactLists } from "@/lib/crm/lists";
 import { ContactsTable } from "@/components/crm/ContactsTable";
 import type { LeadStatus } from "@/lib/crm/types";
 import { guardApiAccess } from "@/lib/billing/apiGuard";
+import {
+  buildPublishedPageRoleLookup,
+  getPublishedPageRole,
+  isPostConversionPageRole,
+} from "@/lib/funnels/publishedPageRoles";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +24,18 @@ type SearchParams = Promise<{
   /** 🆕 Filtre par liste de contacts (provenance d'un lot importé). */
   list?: string;
 }>;
+
+type PageTimeSessionRow = {
+  contact_id: string | null;
+  funnel_id: string;
+  page_slug: string | null;
+  active_ms: number | string;
+};
+
+type FunnelPublishedPagesRow = {
+  id: string;
+  pages: unknown;
+};
 
 export default async function LeadsPage({
   searchParams,
@@ -69,7 +86,7 @@ export default async function LeadsPage({
     // reste côté serveur et la RLS vérifie en plus la propriété des lignes.
     const { data: sessionRows, error: sessionError } = await sb
       .from("funnel_page_sessions")
-      .select("contact_id, active_ms")
+      .select("contact_id, funnel_id, page_slug, active_ms")
       .eq("user_id", user.id)
       .in(
         "contact_id",
@@ -79,11 +96,33 @@ export default async function LeadsPage({
     if (sessionError) {
       console.error("[leads] agrégation du temps par contact impossible", sessionError);
     } else {
-      for (const row of sessionRows ?? []) {
-        const activeMs = Number(row.active_ms);
-        if (!row.contact_id || !Number.isFinite(activeMs) || activeMs <= 0) continue;
-        pageTimeByContact[row.contact_id] =
-          (pageTimeByContact[row.contact_id] ?? 0) + Math.floor(activeMs);
+      const rows = (sessionRows ?? []) as PageTimeSessionRow[];
+      const funnelIds = [...new Set(rows.map((row) => row.funnel_id))];
+      const { data: funnelPageRows, error: funnelPagesError } = funnelIds.length
+        ? await sb
+            .from("funnels")
+            // Ne charge que le tableau de pages nécessaire au classement par rôle,
+            // jamais l'intégralité du snapshot publié.
+            .select("id, pages:published_content->pages")
+            .eq("user_id", user.id)
+            .in("id", funnelIds)
+        : { data: [], error: null };
+
+      if (funnelPagesError) {
+        console.error("[leads] résolution des rôles de page impossible", funnelPagesError);
+      } else {
+        const pageRoles = buildPublishedPageRoleLookup(
+          (funnelPageRows ?? []) as FunnelPublishedPagesRow[],
+        );
+
+        for (const row of rows) {
+          const activeMs = Number(row.active_ms);
+          if (!row.contact_id || !Number.isFinite(activeMs) || activeMs <= 0) continue;
+          const role = getPublishedPageRole(pageRoles, row.funnel_id, row.page_slug);
+          if (isPostConversionPageRole(role)) continue;
+          pageTimeByContact[row.contact_id] =
+            (pageTimeByContact[row.contact_id] ?? 0) + Math.floor(activeMs);
+        }
       }
     }
   }

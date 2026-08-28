@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { rateLimit } from "@/lib/rate-limit";
+import { resolvePublishedPage } from "@/lib/funnels/publishedPageRoles";
 
 export const dynamic = "force-dynamic";
 
@@ -19,38 +20,6 @@ const bodySchema = z.object({
   // chaque progression par rapport à la valeur déjà stockée à 60 secondes.
   activeMs: z.number().int().min(1).max(MAX_SESSION_PAGE_MS),
 });
-
-type PublishedPage = {
-  slug?: unknown;
-  isHome?: unknown;
-};
-
-function normalizeSlug(value: unknown): string {
-  return typeof value === "string" ? value.trim().replace(/^\/+|\/+$/g, "") : "";
-}
-
-/** Retourne le slug canonique publié, ou null si la page demandée n'existe pas. */
-function resolvePublishedPageSlug(
-  publishedContent: unknown,
-  requestedSlug: string | null | undefined,
-): string | null {
-  const content =
-    publishedContent && typeof publishedContent === "object"
-      ? (publishedContent as { pages?: unknown })
-      : null;
-  const pages = Array.isArray(content?.pages)
-    ? (content.pages as PublishedPage[])
-    : [];
-  const requested = normalizeSlug(requestedSlug);
-
-  // Ancien funnel mono-page : seule la page racine est valide.
-  if (pages.length === 0) return requested ? null : "";
-
-  const page = requested
-    ? pages.find((candidate) => normalizeSlug(candidate.slug) === requested)
-    : pages.find((candidate) => candidate.isHome === true) ?? pages[0];
-  return page ? normalizeSlug(page.slug) : null;
-}
 
 export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -87,11 +56,11 @@ export async function POST(request: Request) {
     if (funnelError) throw funnelError;
     if (!funnel) return NextResponse.json({ ok: true });
 
-    const pageSlug = resolvePublishedPageSlug(
+    const publishedPage = resolvePublishedPage(
       funnel.published_content,
       parsed.data.pageSlug,
     );
-    if (pageSlug === null) return NextResponse.json({ ok: true });
+    if (!publishedPage) return NextResponse.json({ ok: true });
 
     // Le contact doit appartenir au propriétaire du funnel. Un UUID présent
     // dans localStorage n'est jamais considéré comme une preuve suffisante.
@@ -104,15 +73,17 @@ export async function POST(request: Request) {
     if (contactError) throw contactError;
     if (!contact) return NextResponse.json({ ok: true });
 
+    // Toutes les pages, y compris confirmation/thankyou, restent enregistrées :
+    // le rôle résolu depuis le snapshot sert ensuite aux agrégations CRM pour
+    // isoler le temps post-conversion. Le client ne décide jamais de ce rôle.
     // La fonction SQL effectue l'addition atomique et répète les contrôles de
-    // propriété. Le client ne peut ni écrire directement la table, ni fournir
-    // funnel_id/user_id.
+    // propriété ; le client ne fournit ni funnel_id ni user_id.
     const { error: incrementError } = await admin.rpc(
       "increment_funnel_page_session",
       {
         p_funnel_id: funnel.id,
         p_user_id: funnel.user_id,
-        p_page_slug: pageSlug,
+        p_page_slug: publishedPage.slug,
         p_contact_id: contact.id,
         p_session_id: parsed.data.sessionId,
         p_active_ms: parsed.data.activeMs,

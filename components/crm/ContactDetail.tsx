@@ -20,7 +20,8 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
 };
 
 type PageTimeSummary = {
-  totalActiveMs: number;
+  engagementActiveMs: number;
+  postConversionActiveMs: number;
   sessionCount: number;
   lastSeenAt: string | null;
   pages: Array<{
@@ -32,7 +33,7 @@ type PageTimeSummary = {
 };
 
 function formatActiveTime(milliseconds: number): string {
-  if (milliseconds <= 0) return "0 s";
+  if (milliseconds <= 0) return "—";
   const seconds = Math.max(1, Math.round(milliseconds / 1000));
   if (seconds < 60) return `${seconds} s`;
   const minutes = Math.floor(seconds / 60);
@@ -281,13 +282,21 @@ export function ContactDetail({ contact }: { contact: ContactWithTags }) {
         )}
         {pageTimeState === "ready" && pageTime && pageTime.pages.length > 0 && (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-lg bg-canvas px-3 py-2">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                  Temps total
+                  Temps d&apos;engagement
                 </div>
                 <div className="mt-1 text-lg font-black text-ink">
-                  {formatActiveTime(pageTime.totalActiveMs)}
+                  {formatActiveTime(pageTime.engagementActiveMs)}
+                </div>
+              </div>
+              <div className="rounded-lg bg-canvas px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                  Temps après conversion
+                </div>
+                <div className="mt-1 text-lg font-black text-ink">
+                  {formatActiveTime(pageTime.postConversionActiveMs)}
                 </div>
               </div>
               <div className="rounded-lg bg-canvas px-3 py-2">

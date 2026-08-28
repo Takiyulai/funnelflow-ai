@@ -5,16 +5,27 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { guardApiAccess, featureBlockedResponse } from "@/lib/billing/apiGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  buildPublishedPageRoleLookup,
+  getPublishedPageRole,
+  isPostConversionPageRole,
+} from "@/lib/funnels/publishedPageRoles";
 
 export const dynamic = "force-dynamic";
 
 const idSchema = z.string().uuid();
 
 type SessionRow = {
+  funnel_id: string;
   page_slug: string | null;
   session_id: string;
   active_ms: number | string;
   last_seen_at: string;
+};
+
+type FunnelPublishedPagesRow = {
+  id: string;
+  pages: unknown;
 };
 
 function safeMilliseconds(value: number | string): number {
@@ -52,19 +63,35 @@ export async function GET(
 
     const { data, error } = await admin
       .from("funnel_page_sessions")
-      .select("page_slug, session_id, active_ms, last_seen_at")
+      .select("funnel_id, page_slug, session_id, active_ms, last_seen_at")
       .eq("user_id", guard.userId)
       .eq("contact_id", contact.id)
       .order("last_seen_at", { ascending: false });
     if (error) throw error;
 
     const rows = (data ?? []) as SessionRow[];
+    const funnelIds = [...new Set(rows.map((row) => row.funnel_id))];
+    const { data: funnelPageRows, error: funnelPagesError } = funnelIds.length
+      ? await admin
+          .from("funnels")
+          // Le rôle vient du snapshot publié. La projection JSON évite de relire
+          // les sections et médias lourds dont cette agrégation n'a pas besoin.
+          .select("id, pages:published_content->pages")
+          .eq("user_id", guard.userId)
+          .in("id", funnelIds)
+      : { data: [], error: null };
+    if (funnelPagesError) throw funnelPagesError;
+
+    const pageRoles = buildPublishedPageRoleLookup(
+      (funnelPageRows ?? []) as FunnelPublishedPagesRow[],
+    );
     const allSessions = new Set<string>();
     const byPage = new Map<
       string,
       { activeMs: number; sessionIds: Set<string>; lastSeenAt: string | null }
     >();
-    let totalActiveMs = 0;
+    let engagementActiveMs = 0;
+    let postConversionActiveMs = 0;
     let lastSeenAt: string | null = null;
 
     for (const row of rows) {
@@ -82,7 +109,12 @@ export async function GET(
       }
       byPage.set(pageSlug, page);
       allSessions.add(row.session_id);
-      totalActiveMs += activeMs;
+      const role = getPublishedPageRole(pageRoles, row.funnel_id, pageSlug);
+      if (isPostConversionPageRole(role)) {
+        postConversionActiveMs += activeMs;
+      } else {
+        engagementActiveMs += activeMs;
+      }
       if (!lastSeenAt || row.last_seen_at > lastSeenAt) lastSeenAt = row.last_seen_at;
     }
 
@@ -100,7 +132,8 @@ export async function GET(
     return NextResponse.json({
       ok: true,
       summary: {
-        totalActiveMs,
+        engagementActiveMs,
+        postConversionActiveMs,
         sessionCount: allSessions.size,
         lastSeenAt,
         pages,
