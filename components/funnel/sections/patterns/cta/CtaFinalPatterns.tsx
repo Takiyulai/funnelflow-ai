@@ -5,9 +5,10 @@
 // cta-final-glow-countdown. Contenu SEUL (wrapper = <section>/fond/padding).
 
 import { useEffect, useState, type ComponentType } from "react";
-import type { FunnelSection } from "@/lib/funnels/types";
+import type { FunnelSection, TimerItem } from "@/lib/funnels/types";
 import { RichText } from "@/components/funnel/RichText";
 import { CtaButton } from "@/components/funnel/CtaButton";
+import { TimerRenderer } from "@/components/funnel/sections/TimerRenderer";
 
 export type CtaFinalProps = {
   section: FunnelSection;
@@ -134,7 +135,16 @@ function Countdown() {
   );
 }
 
+function editableTimer(section: FunnelSection): TimerItem | null {
+  const item = section.items?.find(
+    (candidate): candidate is { kind: "timer"; data: TimerItem } =>
+      candidate.kind === "timer",
+  );
+  return item?.data ?? null;
+}
+
 function CtaFinalGlowCountdown({ section, mode }: CtaFinalProps) {
+  const timer = editableTimer(section);
   return (
     <div
       className="ff-cta-glow"
@@ -152,7 +162,13 @@ function CtaFinalGlowCountdown({ section, mode }: CtaFinalProps) {
       }}
     >
       {section.headline && <RichText as="h2" className="ff-headline" text={section.headline} />}
-      <Countdown />
+      {timer ? (
+        <TimerRenderer timer={timer} pageId={section.id} />
+      ) : (
+        // Rétrocompatibilité : les tunnels créés avant l'ajout du TimerItem
+        // conservent leur countdown historique jusqu'à leur prochaine édition.
+        <Countdown />
+      )}
       <div className="ff-cta-wrap" style={{ display: "flex", justifyContent: "center" }}>
         <CtaBtn section={section} mode={mode} />
       </div>

@@ -20,7 +20,13 @@ import type {
   VideoSource,
   TimerItem,
 } from "@/lib/funnels/types";
-import { makeAnchorCta, makeRedirectCta, normalizeIconName, makePageId } from "@/lib/funnels/types";
+import {
+  makeAnchorCta,
+  makeDefaultTimer,
+  makeRedirectCta,
+  normalizeIconName,
+  makePageId,
+} from "@/lib/funnels/types";
 import { buildWebinarIcsDataUri } from "@/lib/funnels/ics";
 import {
   toWallClockString,
@@ -3093,6 +3099,10 @@ export function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): F
   const isFree = isFreeOffer(brief.price);
   const archetype = getArchetype(brief.funnelKind);
   const config = getCTAConfig(brief.funnelKind);
+  // Le libellé saisi dans le wizard est la source de vérité pour l'action de
+  // conversion principale. Les libellés de la matrice restent un repli pour
+  // les anciens briefs qui ne transportent pas encore primaryCta.
+  const wizardPrimaryLabel = brief.primaryCta?.label?.trim() || null;
 
   console.log(
     `[cta-harmonize] funnelKind="${brief.funnelKind}" → archetype="${archetype}" (verbe: ${config.primaryVerb[lang]})`
@@ -3193,7 +3203,7 @@ export function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): F
         case "convert-primary": {
           if (!section.cta) return section;
           const labels = config.primaryLabels[lang];
-          const label = labels[landingCtaIndex % labels.length];
+          const label = wizardPrimaryLabel ?? labels[landingCtaIndex % labels.length];
           landingCtaIndex++;
 
           // 🆕 B3 — Priorité absolue à la destination de réservation résolue
@@ -3257,7 +3267,7 @@ export function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): F
           if (!section.cta) return section;
           const nextCta: CtaConfig = {
             ...section.cta,
-            label: config.formSubmitLabel[lang],
+            label: wizardPrimaryLabel ?? config.formSubmitLabel[lang],
             mode: "anchor",
             anchorId: "lead-form",
           };
@@ -3268,7 +3278,7 @@ export function harmonizeCTAsByFunnelKind(funnel: Funnel, brief: FunnelBrief): F
           if (!section.cta) return section;
           const nextCta: CtaConfig = {
             ...section.cta,
-            label: config.formSubmitLabel[lang],
+            label: wizardPrimaryLabel ?? config.formSubmitLabel[lang],
             mode: "anchor",
             anchorId: "lead-form",
           };
@@ -5203,6 +5213,34 @@ function pickPattern(pool: readonly string[], lastFamily: string | null): string
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
+/**
+ * Le pattern glow affichait historiquement un countdown purement visuel, sans
+ * TimerItem. Il était donc impossible à détecter et à modifier dans l'éditeur.
+ * Les nouveaux tunnels reçoivent désormais un vrai item, sans dupliquer un
+ * timer déjà fourni par une règle métier (webinaire, evergreen, etc.).
+ *
+ * Exportée pour verrouiller cette normalisation par un test unitaire ciblé.
+ */
+export function ensureEditableCtaPatternTimer(section: FunnelSection): void {
+  if (section.pattern !== "cta-final-glow-countdown") return;
+  const items = Array.isArray(section.items) ? section.items : [];
+  if (items.some((item) => item.kind === "timer")) return;
+
+  const timer = makeDefaultTimer();
+  section.items = [
+    ...items,
+    {
+      kind: "timer",
+      data: {
+        ...timer,
+        // Le pattern historique n'affichait pas de texte au-dessus du timer.
+        // Une valeur vide conserve ce rendu tout en restant éditable.
+        label: "",
+      },
+    },
+  ];
+}
+
 function assignSectionPatterns(funnel: Funnel): void {
   const apply = (sections?: FunnelSection[]): void => {
     if (!Array.isArray(sections)) return;
@@ -5253,6 +5291,7 @@ function assignSectionPatterns(funnel: Funnel): void {
             ]
           : ["cta-final-centered-urgency", "cta-final-glow-countdown"];
         s.pattern = pickPattern(pool, lastFamily);
+        ensureEditableCtaPatternTimer(s);
         lastFamily = patternFamily(s.pattern);
         return;
       }

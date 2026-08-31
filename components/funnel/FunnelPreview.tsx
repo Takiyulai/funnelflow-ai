@@ -131,9 +131,14 @@ const BULLET_LIST_ONLY_SECTIONS = new Set<string>([
 
 function extractTimers(section: FunnelSection): TimerItem[] {
   if (!Array.isArray(section.items)) return [];
-  return section.items
+  const timers = section.items
     .filter((it): it is { kind: "timer"; data: TimerItem } => it.kind === "timer")
     .map((it) => it.data);
+
+  // Le premier timer du pattern glow est rendu à l'endroit prévu par le
+  // pattern (entre le titre et son CTA). Ne rendre ici que d'éventuels timers
+  // additionnels afin d'éviter un doublon dans l'aperçu et en public.
+  return section.pattern === "cta-final-glow-countdown" ? timers.slice(1) : timers;
 }
 
 function isSuccessRole(role: PageRole | undefined): boolean {
