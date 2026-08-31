@@ -135,7 +135,7 @@ export default function DashboardPage() {
               title: "Ton tout premier lead !",
               message:
                 "Quelqu'un vient d'entrer dans ton tunnel. La machine est lancée — garde le cap.",
-              cta: { label: "Voir mes leads", href: "/leads" },
+              cta: { label: "Ouvrir le CRM", href: "/leads" },
             });
           } else if (t) {
             celebrate({

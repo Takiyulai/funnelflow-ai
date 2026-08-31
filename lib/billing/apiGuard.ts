@@ -25,7 +25,7 @@ export async function guardApiAccess(): Promise<GuardResult> {
       response: NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 }),
     };
   }
-  const access = await getAccess(user.id);
+  const access = await getAccess(user.id, user.email);
   if (!access.hasAccess) {
     return {
       ok: false,

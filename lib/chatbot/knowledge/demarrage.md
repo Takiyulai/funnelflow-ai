@@ -22,7 +22,7 @@ Générer et publier avec l'IA nécessitent un abonnement actif.
 
 ## 5. Récupérer tes premiers leads
 Les inscriptions via les formulaires de ton tunnel arrivent automatiquement dans
-la section « Leads » (CRM). Tu peux les taguer, les segmenter et les exporter.
+la section « CRM ». Tu peux les taguer, les segmenter et les exporter.
 
 ## 6. Aller plus loin
 - Crée des campagnes et séquences email depuis l'onglet « Emails ».

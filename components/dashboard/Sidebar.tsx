@@ -16,7 +16,7 @@ const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/create", label: "Créer un tunnel", icon: PlusCircle, primary: true },
   { href: "/galerie", label: "Galerie", icon: LayoutGrid },
-  { href: "/leads", label: "Leads", icon: Users },
+  { href: "/leads", label: "CRM", icon: Users },
   { href: "/emails", label: "Emails", icon: Mail },
   // 🆕 Placée juste après Emails : les deux répondent au même besoin
   // (communiquer avec ses contacts), l'une en différé, l'autre en direct.

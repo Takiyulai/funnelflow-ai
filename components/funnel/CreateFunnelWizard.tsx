@@ -48,6 +48,10 @@ import {
 import { MediasStep } from "@/components/funnel/wizard/MediasStep";
 import { CopywritingStep } from "@/components/funnel/wizard/CopywritingStep";
 import { queueCelebration } from "@/components/ui/Celebration";
+import {
+  prepareWizardBriefForGeneration,
+  WizardMediaUploadError,
+} from "@/lib/media/prepareWizardBrief";
 
 // 11 étapes (fusion Marque + Offre + À propos = "Ton offre")
 const ALL_STEPS = [
@@ -110,6 +114,8 @@ const HIDDEN_AI_ERROR_CODES = new Set([
   "schema-mismatch",
   "invalid-model",
   "invalid-brief",
+  "payload-too-large",
+  "media-upload-failed",
   "unknown",
 ]);
 
@@ -820,10 +826,20 @@ export function CreateFunnelWizard() {
         return;
       }
 
+      // Les imports du wizard sont initialement des data-URL. Avec 5 médias de
+      // 2 Mo + un logo, envoyer `brief` tel quel dépasse la limite Vercel et
+      // provoque un 413 avant même l'entrée dans la route. On externalise donc
+      // chaque fichier séparément, puis l'IA ne reçoit plus que des URL.
+      const generationBrief = await prepareWizardBriefForGeneration(brief);
+      if (generationBrief !== brief) {
+        setBrief(generationBrief);
+        setLogoPreview(generationBrief.logoUrl ?? "");
+      }
+
       const response = await fetch("/api/ai/generate-funnel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(brief),
+        body: JSON.stringify(generationBrief),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -842,7 +858,10 @@ export function CreateFunnelWizard() {
               : response.status === 401 || apiErr.error === "unauthorized"
                 ? "session-expired"
                 : undefined;
-        setErrorReason(gate ?? apiErr.reason ?? "unknown");
+        const payloadTooLarge = response.status === 413;
+        setErrorReason(
+          gate ?? (payloadTooLarge ? "payload-too-large" : apiErr.reason ?? "unknown"),
+        );
         const validationMessage =
           apiErr.reason === "schema-mismatch" || apiErr.reason === "invalid-brief"
             ? apiErr.userMessage
@@ -855,7 +874,9 @@ export function CreateFunnelWizard() {
                 ? apiErr.message ?? "Tu as atteint la limite de ton forfait."
                 : gate === "session-expired"
                   ? "Ta session a expiré. Reconnecte-toi, puis réessaie."
-                  : GENERATION_SYSTEM_ERROR_MESSAGE)
+                  : payloadTooLarge
+                    ? "Les médias sélectionnés sont encore trop volumineux. Retire le fichier le plus lourd, puis relance la génération."
+                    : GENERATION_SYSTEM_ERROR_MESSAGE)
         );
         setFunnel(null);
         return;
@@ -882,14 +903,14 @@ export function CreateFunnelWizard() {
         ...data.funnel,
         design: {
           ...data.funnel.design,
-          ...(brief.brandColorsEnabled
+          ...(generationBrief.brandColorsEnabled
             ? {
-                primaryColor: brief.mainColor ?? data.funnel.design.primaryColor,
-                secondaryColor: brief.secondaryColor ?? data.funnel.design.secondaryColor,
+                primaryColor: generationBrief.mainColor ?? data.funnel.design.primaryColor,
+                secondaryColor: generationBrief.secondaryColor ?? data.funnel.design.secondaryColor,
               }
             : {}),
-          brandColorsEnabled: brief.brandColorsEnabled === true,
-          style: brief.designStyle,
+          brandColorsEnabled: generationBrief.brandColorsEnabled === true,
+          style: generationBrief.designStyle,
         },
       };
 
@@ -898,7 +919,7 @@ export function CreateFunnelWizard() {
       // ✅ FIX : on isole la persistance localStorage pour différencier
       // un échec de quota d'un échec réseau côté API.
       try {
-        const stored = createFunnelFromAi(enrichedFunnel, brief);
+        const stored = createFunnelFromAi(enrichedFunnel, generationBrief);
         setSuccessMessage("Tunnel généré : redirection vers l'éditeur...");
         // 🆕 Micro-victoire : 1er tunnel généré (déclenchée après l'arrivée sur
         // l'éditeur — la modale se perdrait sinon à la navigation).
@@ -950,8 +971,15 @@ export function CreateFunnelWizard() {
         return;
       }
 
-      setErrorReason("network-error");
-      setErrorMessage(GENERATION_SYSTEM_ERROR_MESSAGE);
+      if (err instanceof WizardMediaUploadError) {
+        setErrorReason("media-upload-failed");
+        setErrorMessage(
+          "Impossible de préparer un média pour la génération. Vérifie ta connexion, puis relance. Aucun fichier n'a été perdu.",
+        );
+      } else {
+        setErrorReason("network-error");
+        setErrorMessage(GENERATION_SYSTEM_ERROR_MESSAGE);
+      }
       setFunnel(null);
     } finally {
       setIsGenerating(false);
@@ -1035,6 +1063,17 @@ export function CreateFunnelWizard() {
         <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
+            onClick={() => { update("creationMode", "guided"); setEntryMode("wizard"); }}
+            className="group text-left rounded-2xl border-2 border-line bg-white p-6 transition-all duration-200 hover:border-[#31845C] hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#31845C]/40"
+          >
+            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#31845C]/15 text-[#31845C]">
+              <Target className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-black text-ink">Pas à pas</h3>
+            <p className="mt-1.5 text-sm text-muted">Le parcours guidé classique&nbsp;: format, offre, audience, copywriting… Tu contrôles chaque détail, étape par étape.</p>
+          </button>
+          <button
+            type="button"
             onClick={() => { update("creationMode", "express"); setEntryMode("express"); }}
             className="group text-left rounded-2xl border-2 border-line bg-white p-6 transition-all duration-200 hover:border-[#C7A436] hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C7A436]/50"
           >
@@ -1046,17 +1085,6 @@ export function CreateFunnelWizard() {
               <span className="rounded-full bg-[#C7A436] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#080E1A]">Rapide</span>
             </h3>
             <p className="mt-1.5 text-sm text-muted">Décris ton activité en quelques phrases et choisis le type de tunnel (les pages générées sont indiquées). L'IA pré-remplit tout, puis tu ajustes thème, visuels et médias.</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => { update("creationMode", "guided"); setEntryMode("wizard"); }}
-            className="group text-left rounded-2xl border-2 border-line bg-white p-6 transition-all duration-200 hover:border-[#31845C] hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#31845C]/40"
-          >
-            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#31845C]/15 text-[#31845C]">
-              <Target className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-black text-ink">Pas à pas</h3>
-            <p className="mt-1.5 text-sm text-muted">Le parcours guidé classique&nbsp;: format, offre, audience, copywriting… Tu contrôles chaque détail, étape par étape.</p>
           </button>
         </div>
       </div>
@@ -2457,7 +2485,7 @@ function GenerationStep({
         </div>
       )}
 
-      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${health?.ok ? "border-[#31845C]/30 bg-[#31845C]/5 text-[#080E1A]" :
+      <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${health?.ok ? "border-[#31845C]/50 bg-[#31845C]/10 text-ink" :
           blocked ? "border-red/30 bg-red/5 text-red" :
             "border-line bg-canvas text-muted"
         }`}>

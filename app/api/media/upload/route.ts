@@ -23,6 +23,7 @@ const ALLOWED_MIMES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/svg+xml",
   // 🔒 AUDIT 18/08/2026 — `image/svg+xml` CONSERVÉ, mais ASSAINI.
   //
   // Un SVG est un document XML que le navigateur exécute : il peut porter

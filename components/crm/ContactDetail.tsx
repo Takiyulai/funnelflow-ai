@@ -182,7 +182,7 @@ export function ContactDetail({ contact }: { contact: ContactWithTags }) {
   return (
     <div className="max-w-2xl animate-[fadeIn_0.4s_ease-out]">
       <Link href="/leads" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="h-4 w-4" /> Leads &amp; Contacts
+        <ArrowLeft className="h-4 w-4" /> CRM
       </Link>
 
       <div className="mb-6 flex items-start justify-between gap-4">

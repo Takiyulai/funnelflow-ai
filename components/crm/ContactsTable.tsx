@@ -216,7 +216,7 @@ export function ContactsTable({
     <div className="animate-[fadeIn_0.4s_ease-out]">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-ink">Leads &amp; Contacts</h1>
+          <h1 className="text-3xl font-black text-ink">CRM</h1>
           <p className="mt-2 text-sm text-muted">{total} contact{total > 1 ? "s" : ""} dans votre CRM</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

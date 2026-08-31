@@ -26,9 +26,9 @@ ton compte comme nouveau tunnel modifiable.
 Publie un tunnel pour obtenir une URL publique partageable. La page publiée est
 servie en direct ; les mises à jour se propagent après republication.
 
-## CRM & Leads
-Chaque formulaire capture les leads dans un CRM intégré : contacts, tags, segments,
-statuts. Export CSV des leads.
+## CRM
+Chaque formulaire capture les contacts dans un CRM intégré : contacts, tags,
+segments, statuts. Export CSV des contacts.
 
 ## Emails : newsletters & séquences
 Envoie des campagnes email ponctuelles (newsletters) et crée des séquences

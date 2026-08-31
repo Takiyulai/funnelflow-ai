@@ -14,6 +14,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { PLANS, isPlanId, type PlanId, type PlanLimits } from "@/lib/billing/plans";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
+import { isInternalTestAccount } from "@/lib/billing/internalTestAccounts";
 
 export type SubscriptionStatus =
   | "inactive"
@@ -116,6 +117,11 @@ export async function getProfile(userId: string): Promise<ProfileRow | null> {
  */
 export async function getSubscribedPlanId(userId: string): Promise<PlanId | null> {
   try {
+    // Les comptes de test internes doivent aussi accéder aux fonctionnalités
+    // sensibles (ex. custom code), qui utilisent le plan réellement autorisé
+    // plutôt que les limites générales de getAccess().
+    if (await isInternalTestAccount(userId)) return "agency";
+
     const profile = await getProfile(userId);
     if (profile?.plan && statusGrantsAccess(profile.status)) return profile.plan;
     const license = await getActiveChariowLicense(userId);
@@ -132,12 +138,28 @@ export async function getSubscribedPlanId(userId: string): Promise<PlanId | null
  * souci de lecture, renvoie « pas d'accès » (si gating actif) ou « accès
  * Agency » (si gating inactif).
  */
-export async function getAccess(userId: string): Promise<Access> {
+export async function getAccess(
+  userId: string,
+  authenticatedEmail?: string | null,
+): Promise<Access> {
   const enforced = isBillingEnforced();
 
   if (!enforced) {
     return {
       enforced: false,
+      hasAccess: true,
+      planId: "agency",
+      status: "active",
+      limits: PLANS.agency.limits,
+    };
+  }
+
+  // Bypass durable réservé aux comptes de test identifiés côté serveur. Il est
+  // indépendant du plan Stripe stocké dans profiles, qui peut être resynchronisé
+  // par webhook sans retirer les droits nécessaires aux tests internes.
+  if (await isInternalTestAccount(userId, authenticatedEmail)) {
+    return {
+      enforced: true,
       hasAccess: true,
       planId: "agency",
       status: "active",

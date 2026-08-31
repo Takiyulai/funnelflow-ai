@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getProfile, getAccess } from "@/lib/billing/subscription";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { PLANS } from "@/lib/billing/plans";
+import { isInternalTestAccountEmail } from "@/lib/billing/internalTestAccounts";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,15 @@ export async function GET() {
   let planId = profile?.plan ?? null;
   let status = profile?.status ?? "inactive";
   let active = status === "active" || status === "trialing";
+  const internalTestAccount = isInternalTestAccountEmail(user.email);
+
+  // L'abonnement réel reste intact dans profiles, mais l'interface doit refléter
+  // les droits Agency effectifs du compte test au lieu d'afficher Starter.
+  if (internalTestAccount) {
+    planId = "agency";
+    status = "active";
+    active = true;
+  }
 
   // 🆕 Pas d'abonnement Stripe/CinetPay actif → vérifier une licence Chariow
   // active (même fallback que lib/billing/subscription.ts::getAccess()).
@@ -47,7 +57,7 @@ export async function GET() {
   // gating est désactivé, vaut true pour tous ; quand il est activé, exige un
   // abonnement/licence actif). Sert à gater côté client les actions importantes
   // (ex : publication) qui ne passent pas par une route API gardée.
-  const access = await getAccess(user.id);
+  const access = await getAccess(user.id, user.email);
 
   // 🆕 Jours restants avant expiration de la licence (table user_licenses,
   // intégration CinetPay). On prend la licence ACTIVE dont l'expiration est la
