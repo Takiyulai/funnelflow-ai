@@ -2106,6 +2106,20 @@ function StandardSectionBlock({
     : [];
   const hasBullets = bulletsArr.length > 0;
   const hasImg = !!resolvedImage || !!section.video?.url;
+  const isTestimonialSection =
+    section.type === "testimonials" || section.type === "proof";
+  const hasExplicitSplit =
+    section.layoutVariant === "split-text-image" ||
+    section.layoutVariant === "split-image-text";
+  // Une section de témoignages connaît déjà la structure de ses cartes. Quand
+  // le wizard lui ajoute une image de section, la forcer en split réduit la
+  // grille à une demi-colonne et empile artificiellement toutes les cartes.
+  // On conserve donc son layout de grille/centré et on laisse l'image suivre la
+  // grille, avec ses dimensions proportionnelles. Un split choisi explicitement
+  // dans l'éditeur reste naturellement prioritaire.
+  if (!isSuccess && isTestimonialSection && hasImg && !hasExplicitSplit) {
+    rawLayout = section.layoutVariant ?? "centered";
+  }
   // 🆕 RÈGLE ABSOLUE : image/vidéo + contenu textuel dans la MÊME section →
   // layout SPLIT automatique (côte à côte). Sur mobile, le CSS empile
   // texte → image → CTA. (Les pages de succès restent centrées.)
@@ -2117,6 +2131,7 @@ function StandardSectionBlock({
   );
   if (
     !isSuccess &&
+    !isTestimonialSection &&
     hasImg &&
     hasText &&
     rawLayout !== "split-text-image" &&

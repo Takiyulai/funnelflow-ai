@@ -1917,6 +1917,24 @@ type SectionContext = {
 
 function resolveLayout(section: FunnelSection, ctx: SectionContext): string {
   if (ctx.isSuccess) return "centered";
+  const isTestimonialSection =
+    section.type === "testimonials" || section.type === "proof";
+  const hasExplicitSplit =
+    section.layoutVariant === "split-text-image" ||
+    section.layoutVariant === "split-image-text";
+  const materializedImage = materializeSectionImage(section.image, ctx.funnel);
+  const hasSectionMedia =
+    (materializedImage?.mode !== "none" &&
+      isUsableMediaUrl(materializedImage?.url)) ||
+    isUsableMediaUrl(section.video?.url);
+
+  // Parité avec l'aperçu/public : une preuve visuelle ajoutée par le wizard ne
+  // doit pas réduire la grille des témoignages à une demi-colonne. L'image est
+  // rendue après la grille, centrée et sans déformation. Un split explicitement
+  // choisi par l'utilisateur reste respecté.
+  if (isTestimonialSection && hasSectionMedia && !hasExplicitSplit) {
+    return "centered";
+  }
   const raw = effectiveLayoutVariant(section, ctx.funnel);
   if (raw === "split-text-image" || raw === "split-image-text") return "split";
   if (raw === "left-aligned") return "left-aligned";

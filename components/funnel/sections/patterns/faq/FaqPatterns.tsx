@@ -2,12 +2,12 @@
 
 // Patterns FAQ (zip Claude Design) → composants React color-aware.
 // 4 variantes : faq-accordion, faq-sandwich-double-cta, faq-hub-grid-links,
-// faq-grid-intro. Accordéons fonctionnels (useState). Couleurs de démo (violet)
-// remplacées par les variables du tunnel (--ff-accent, --ff-ink, --ff-bg, --ff-card-*).
+// faq-grid-intro. Accordéons fonctionnels (useState). Le CTA de la section est
+// rendu une seule fois par FunnelPreview, après le pattern : les patterns FAQ
+// ne fabriquent aucun bloc CTA secondaire redondant.
 
 import { useState, type ComponentType } from "react";
 import type { Funnel, FunnelSection, FaqItem } from "@/lib/funnels/types";
-import { CtaButton } from "@/components/funnel/CtaButton";
 import { RichText } from "@/components/funnel/RichText";
 
 export type FaqPatternProps = {
@@ -143,7 +143,7 @@ function FaqAccordion({ section, faqs }: FaqPatternProps) {
 }
 
 // ── Pattern 2 : sandwich double CTA ───────────────────────────────────────────
-function FaqSandwichDoubleCta({ section, faqs, mode }: FaqPatternProps) {
+function FaqSandwichDoubleCta({ section, faqs }: FaqPatternProps) {
   const { open, toggle } = useOpenSet();
   const mid = Math.ceil(faqs.length / 2);
   const first = faqs.slice(0, mid);
@@ -173,7 +173,7 @@ function FaqSandwichDoubleCta({ section, faqs, mode }: FaqPatternProps) {
 }
 
 // ── Pattern 3 : hub grille + liens ────────────────────────────────────────────
-function FaqHubGridLinks({ section, faqs, mode }: FaqPatternProps) {
+function FaqHubGridLinks({ section, faqs }: FaqPatternProps) {
   const { open, toggle } = useOpenSet();
   return (
     <SectionShell pattern="faq-hub-grid-links" maxWidth={980}>
@@ -192,17 +192,12 @@ function FaqHubGridLinks({ section, faqs, mode }: FaqPatternProps) {
           <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
-      {section.cta && (
-        <div className="ff-cta-wrap" style={{ marginTop: 26, display: "flex", justifyContent: "flex-start" }}>
-          <CtaButton cta={section.cta} disabled={mode === "preview"} />
-        </div>
-      )}
     </SectionShell>
   );
 }
 
-// ── Pattern 4 : intro + grille + bloc « pas trouvé » ─────────────────────────
-function FaqGridIntro({ section, faqs, mode }: FaqPatternProps) {
+// ── Pattern 4 : intro + grille ────────────────────────────────────────────────
+function FaqGridIntro({ section, faqs }: FaqPatternProps) {
   const { open, toggle } = useOpenSet();
   return (
     <SectionShell pattern="faq-grid-intro" maxWidth={980}>
@@ -219,26 +214,6 @@ function FaqGridIntro({ section, faqs, mode }: FaqPatternProps) {
           <FaqCard key={i} q={f.question} a={f.answer} index={i} isOpen={open.has(i)} onToggle={() => toggle(i)} />
         ))}
       </div>
-      {section.cta && (
-        <div
-          data-ff-anim="fade-up"
-          style={{
-            marginTop: 32,
-            background: "color-mix(in srgb, var(--ff-accent) 10%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--ff-accent) 26%, transparent)",
-            borderRadius: 16,
-            padding: "22px 26px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 18,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ fontWeight: 600, fontSize: 17 }}>Pas trouvé ta réponse ?</div>
-          <CtaButton cta={section.cta} disabled={mode === "preview"} />
-        </div>
-      )}
     </SectionShell>
   );
 }

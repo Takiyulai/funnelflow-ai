@@ -88,7 +88,7 @@ export function CtaButton({
   );
 
   const baseClass =
-    "inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors";
+    "ff-btn inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors";
   const disabledClass = disabled
     ? "pointer-events-none opacity-60 cursor-not-allowed"
     : "";
@@ -99,6 +99,7 @@ export function CtaButton({
     return (
       <button
         type="button"
+        data-ff-cta
         data-ff-anim="fade-up"
         onClick={onPopupClick}
         disabled={disabled}
@@ -113,13 +114,13 @@ export function CtaButton({
   if (cta.mode === "anchor" && cta.anchorId) {
     if (disabled) {
       return (
-        <button type="button" data-ff-anim="fade-up" className={finalClass} disabled>
+        <button type="button" data-ff-cta data-ff-anim="fade-up" className={finalClass} disabled>
           {content}
         </button>
       );
     }
     return (
-      <a href={`#${cta.anchorId}`} data-ff-anim="fade-up" className={finalClass}>
+      <a href={`#${cta.anchorId}`} data-ff-cta data-ff-anim="fade-up" className={finalClass}>
         {content}
       </a>
     );
@@ -129,7 +130,7 @@ export function CtaButton({
   if (href) {
     if (disabled) {
       return (
-        <button type="button" data-ff-anim="fade-up" className={finalClass} disabled>
+        <button type="button" data-ff-cta data-ff-anim="fade-up" className={finalClass} disabled>
           {content}
         </button>
       );
@@ -139,6 +140,7 @@ export function CtaButton({
       return (
         <a
           href={href}
+          data-ff-cta
           data-ff-anim="fade-up"
           target="_blank"
           rel="noopener noreferrer"
@@ -149,7 +151,7 @@ export function CtaButton({
       );
     }
     return (
-      <Link href={href} data-ff-anim="fade-up" className={finalClass}>
+      <Link href={href} data-ff-cta data-ff-anim="fade-up" className={finalClass}>
         {content}
       </Link>
     );
@@ -157,7 +159,7 @@ export function CtaButton({
 
   // Fallback : bouton désactivé (aucune cible définie)
   return (
-    <button type="button" data-ff-anim="fade-up" className={finalClass} disabled>
+    <button type="button" data-ff-cta data-ff-anim="fade-up" className={finalClass} disabled>
       {content}
     </button>
   );
