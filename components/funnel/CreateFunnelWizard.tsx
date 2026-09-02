@@ -13,6 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { LoaderIA } from "@/components/ui/LoaderIA";
 import { FunnelPreview } from "@/components/funnel/FunnelPreview";
 import { LogoUploader } from "@/components/funnel/LogoUploader";
+import { tWizard } from "@/lib/i18n/wizard";
 import { FunnelKindStep, WebinarDetailsFields } from "@/components/funnel/wizard/FunnelKindStep";
 // 🆕 B6 — Quels blocs du wizard afficher selon le type de tunnel.
 import {
@@ -60,6 +61,22 @@ const ALL_STEPS = [
   "Ambiance", "Génération",
 ] as const;
 type StepLabel = typeof ALL_STEPS[number];
+
+// Les identifiants historiques restent stables ; seuls les libellés affichés changent.
+const STEP_LABEL_KEYS: Record<StepLabel, string> = {
+  Format: "step.kind",
+  Template: "step.design",
+  Objectif: "step.objective",
+  "Ton offre": "step.offer",
+  Audience: "step.audience",
+  Copywriting: "step.copywriting",
+  Vidéo: "step.video",
+  Médias: "step.media",
+  CTA: "step.cta",
+  Visuels: "step.images",
+  Ambiance: "step.mood",
+  Génération: "step.generation",
+};
 
 const initialBrief: FunnelBrief = {
   brandName: "Votre marque",
@@ -1057,7 +1074,7 @@ export function CreateFunnelWizard() {
     return (
       <div className="grid gap-6 animate-[fadeIn_0.4s_ease-out] max-w-3xl mx-auto">
         <div className="text-center">
-          <h2 className="text-2xl font-black text-ink">Comment veux-tu créer ton tunnel&nbsp;?</h2>
+          <h2 className="text-2xl font-black text-ink">Comment souhaitez-vous créer votre tunnel&nbsp;?</h2>
           <p className="mt-2 text-muted">Choisis ton point de départ. Tu pourras tout ajuster ensuite dans l'éditeur.</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1103,10 +1120,10 @@ export function CreateFunnelWizard() {
           <ArrowLeft className="h-4 w-4" /> Retour
         </button>
         <div>
-          <h2 className="text-2xl font-black text-ink">Décris ton activité</h2>
+          <h2 className="text-2xl font-black text-ink">Quelle activité souhaitez-vous présenter ?</h2>
           <p className="mt-2 text-muted">Plus c'est précis, meilleur sera le tunnel. Mentionne ton offre, ton audience, ton prix et ta promesse.</p>
         </div>
-        <Field label="Ton activité, ton offre, ta cible…">
+        <Field label="Quelle est votre activité, votre offre et votre cible ?">
           <Textarea
             rows={7}
             value={expressPrompt}
@@ -1114,7 +1131,7 @@ export function CreateFunnelWizard() {
             placeholder="Ex : Je suis coach en nutrition pour femmes actives. Je vends un programme de 8 semaines à 297€ qui aide à retrouver de l'énergie sans régime restrictif. Mon audience : femmes 30-45 ans débordées qui ont déjà essayé plusieurs régimes…"
           />
         </Field>
-        <Field label="Type de tunnel (les pages générées sont indiquées)">
+        <Field label="Quel type de tunnel souhaitez-vous créer ?">
           <Select
             value={brief.funnelKind ?? "lead-magnet"}
             onChange={(e) => update("funnelKind", e.target.value as FunnelKind)}
@@ -1172,8 +1189,8 @@ export function CreateFunnelWizard() {
               type="button"
               data-step-index={index}
               onClick={() => setStep(index)}
-              title={label}
-              className={`shrink-0 snap-start rounded-lg px-2.5 py-2 text-left text-[11px] font-bold transition-all duration-200 min-w-[88px] max-w-[110px] ${
+              title={tWizard(brief.language, STEP_LABEL_KEYS[label])}
+              className={`shrink-0 snap-start rounded-lg px-2.5 py-2 text-left text-[11px] font-bold transition-all duration-200 w-44 ${
                 index === step
                   ? "bg-[#080E1A] text-white shadow-sm"
                   : index < step
@@ -1184,19 +1201,19 @@ export function CreateFunnelWizard() {
               <span className="mb-0.5 block text-[9px] opacity-80">
                 {String(index + 1).padStart(2, "0")} / {String(steps.length).padStart(2, "0")}
               </span>
-              <span className="block truncate">{label}</span>
+              <span className="block whitespace-normal break-words">{tWizard(brief.language, STEP_LABEL_KEYS[label])}</span>
             </button>
           ))}
         </div>
 
-        {/* Desktop : grille 12 colonnes */}
-        <div className="hidden xl:grid grid-cols-12 gap-2">
+        {/* Questions lisibles sur deux rangées, sans tronquer les libellés. */}
+        <div className="hidden xl:grid grid-cols-6 gap-2">
           {steps.map((label, index) => (
             <button
               key={label}
               type="button"
               onClick={() => setStep(index)}
-              title={label}
+              title={tWizard(brief.language, STEP_LABEL_KEYS[label])}
               className={`min-w-0 rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all duration-200 ${
                 index === step
                   ? "bg-[#080E1A] text-white shadow-sm"
@@ -1208,7 +1225,7 @@ export function CreateFunnelWizard() {
               <span className="mb-1 block text-[10px] opacity-80">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <span className="block truncate">{label}</span>
+              <span className="block whitespace-normal break-words">{tWizard(brief.language, STEP_LABEL_KEYS[label])}</span>
             </button>
           ))}
         </div>
@@ -1494,7 +1511,7 @@ function ObjectiveStep({ value, onSelect }: { value: string; onSelect: (v: strin
     <div className="grid gap-4">
       <div className="flex items-center gap-2.5">
         <Target className="text-[#31845C]" size={20} />
-        <h2 className="text-xl font-black">Objectif du tunnel</h2>
+        <h2 className="text-xl font-black">Quel est votre objectif ?</h2>
       </div>
       <div className="grid gap-2.5">
         {FUNNEL_GOALS.map((goal) => (
@@ -1528,10 +1545,10 @@ function ObjectiveStep({ value, onSelect }: { value: string; onSelect: (v: strin
 // à la fois, scroll interne réduit au strict nécessaire. Les données restent
 // dans le même `brief` (rien ne change côté state/validation).
 const OFFER_SUBTABS = [
-  { id: "marque", label: "Marque", icon: Building2 },
-  { id: "offre", label: "Offre", icon: Package },
-  { id: "benefices", label: "Bénéfices & garantie", icon: CheckCircle2 },
-  { id: "apropos", label: "À propos", icon: User },
+  { id: "marque", label: "Quelle marque ?", icon: Building2 },
+  { id: "offre", label: "Quelle offre ?", icon: Package },
+  { id: "benefices", label: "Quels bénéfices ?", icon: CheckCircle2 },
+  { id: "apropos", label: "Qui êtes-vous ?", icon: User },
 ] as const;
 type OfferSubTab = (typeof OFFER_SUBTABS)[number]["id"];
 
@@ -1593,7 +1610,7 @@ function OfferStep({
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-xl font-black text-ink">Ton offre</h2>
+        <h2 className="text-xl font-black text-ink">Quelle est votre offre ?</h2>
         <p className="mt-1 text-xs text-muted">
           Présente ta marque, ton produit et qui tu es. Ces infos guideront tout le copywriting du tunnel.
         </p>
@@ -1657,14 +1674,14 @@ function OfferStep({
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
             <Building2 size={14} />
           </span>
-          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Marque</h3>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Quelle est votre marque ?</h3>
         </div>
 
-        <Field label="Nom de marque">
+        <Field label="Quel est le nom de votre marque ?">
           <Input value={brief.brandName} onChange={(e) => update("brandName", e.target.value)} />
         </Field>
 
-        <Field label="Logo">
+        <Field label="Quel logo souhaitez-vous utiliser ?">
           <LogoUploader
             value={logoPreview || brief.logoUrl}
             brandName={brief.brandName}
@@ -1672,7 +1689,7 @@ function OfferStep({
           />
         </Field>
 
-        <Field label="Langue de génération">
+        <Field label="Dans quelle langue souhaitez-vous générer le tunnel ?">
           <Select value={brief.language} onChange={(e) => update("language", e.target.value as Language)}>
             <option value="fr">Français</option>
             <option value="en">English</option>
@@ -1692,14 +1709,14 @@ function OfferStep({
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
             <Package size={14} />
           </span>
-          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Offre</h3>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Que proposez-vous ?</h3>
         </div>
 
         <Field
           label={
             brief.funnelKind === "booking"
-              ? "Objet du rendez-vous"
-              : "Nom du produit ou service"
+              ? "Quel est l’objet du rendez-vous ?"
+              : "Quel est le nom de votre produit ou service ?"
           }
         >
           <Input
@@ -1724,7 +1741,7 @@ function OfferStep({
             valeur canonique et rend le comportement déterministe (cf. N2). */}
         {brief.funnelKind === "challenge" ? (
           <Field
-            label="Participation au challenge"
+            label="La participation au challenge est-elle gratuite ou payante ?"
             hint="La plupart des challenges sont gratuits : ce qui se vend, c'est l'offre de clôture plus bas."
           >
             <div className="grid gap-2">
@@ -1764,13 +1781,13 @@ function OfferStep({
           </Field>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Prix">
+            <Field label="Quel est votre prix de vente ?">
               <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="49€, 297€, Gratuit..." />
             </Field>
             {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
             <Field
-              label="Prix barré (optionnel)"
-              hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+              label="Quel est le prix de référence ? (optionnel)"
+              hint="Montant de comparaison présenté avec votre offre. Seul le prix de vente est facturé."
             >
               <Input value={brief.anchorPrice ?? ""} onChange={(e) => update("anchorPrice", e.target.value)} placeholder="97€..." />
             </Field>
@@ -1782,10 +1799,10 @@ function OfferStep({
             Upsell (optionnel) — proposé après l'achat
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-            <Field label="Offre upsell" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
+            <Field label="Quelle offre complémentaire proposez-vous après l’achat ?" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
               <Input value={brief.upsellOffer ?? ""} onChange={(e) => update("upsellOffer", e.target.value)} placeholder="Pack modèles + coaching de groupe..." />
             </Field>
-            <Field label="Prix upsell">
+            <Field label="Quel est le prix de cette offre complémentaire ?">
               <Input value={brief.upsellPrice ?? ""} onChange={(e) => update("upsellPrice", e.target.value)} placeholder="27€..." />
             </Field>
           </div>
@@ -1796,10 +1813,10 @@ function OfferStep({
             Downsell (optionnel) — repli si l'upsell est refusé
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-            <Field label="Offre downsell" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
+            <Field label="Quelle alternative plus accessible proposez-vous ?" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
               <Input value={brief.downsellOffer ?? ""} onChange={(e) => update("downsellOffer", e.target.value)} placeholder="Les modèles seuls, sans le coaching..." />
             </Field>
-            <Field label="Prix downsell">
+            <Field label="Quel est le prix de cette alternative ?">
               <Input value={brief.downsellPrice ?? ""} onChange={(e) => update("downsellPrice", e.target.value)} placeholder="17€..." />
             </Field>
           </div>
@@ -1810,27 +1827,27 @@ function OfferStep({
             Order bump (optionnel) — case à cocher sur la page de commande
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-            <Field label="Produit complémentaire" hint="Laisse vide pour ne PAS afficher d'order bump.">
+            <Field label="Quel produit souhaitez-vous proposer en complément ?" hint="Laisse vide pour ne PAS afficher d'order bump.">
               <Input value={brief.orderBumpName ?? ""} onChange={(e) => update("orderBumpName", e.target.value)} placeholder="Guide PDF bonus..." />
             </Field>
-            <Field label="Prix">
+            <Field label="Quel est votre prix de vente ?">
               <Input value={brief.orderBumpPrice ?? ""} onChange={(e) => update("orderBumpPrice", e.target.value)} placeholder="9€..." />
             </Field>
           </div>
           <div className="mt-3">
-            <Field label="Description courte (optionnel)">
+            <Field label="Comment décririez-vous ce complément ? (optionnel)">
               <Input value={brief.orderBumpDescription ?? ""} onChange={(e) => update("orderBumpDescription", e.target.value)} placeholder="Ajoute ce bonus à ta commande en un clic" />
             </Field>
           </div>
         </div>
 
-        <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
+        <Field label="Quel lien de paiement souhaitez-vous utiliser ? (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
           <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
         </Field>
         </>
         )}
 
-        <Field label="Promesse principale">
+        <Field label="Quel résultat principal promettez-vous ?">
           <Textarea
             value={brief.promise}
             onChange={(e) => update("promise", e.target.value)}
@@ -1853,21 +1870,21 @@ function OfferStep({
               <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C7A436]/15 text-[#C7A436]">
                 <Package size={14} />
               </span>
-              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Ton webinaire</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Quel webinaire proposez-vous ?</h3>
             </div>
             <p className="-mt-1 text-xs text-muted">
               Ce que voit le prospect sur la page d'inscription : le sujet et la promesse du webinaire (pas l'offre finale).
             </p>
 
-            <Field label="Titre / sujet du webinaire">
+            <Field label="Quel est le sujet de votre webinaire ?">
               <Input value={brief.offerName} onChange={(e) => update("offerName", e.target.value)} placeholder="Ex. Comment doubler tes ventes en 30 jours" />
             </Field>
 
-            <Field label="Prix du webinaire" hint="Laisse « Gratuit » si c'est l'appât — le prix ci-dessous concerne l'offre vendue après.">
+            <Field label="Quel est le tarif de votre webinaire ?" hint="Laisse « Gratuit » si c'est l'appât — le prix ci-dessous concerne l'offre vendue après.">
               <Input value={brief.price} onChange={(e) => update("price", e.target.value)} placeholder="Gratuit" />
             </Field>
 
-            <Field label="Promesse du webinaire">
+            <Field label="Qu’apprendra votre public grâce à ce webinaire ?">
               <Textarea
                 value={brief.promise}
                 onChange={(e) => update("promise", e.target.value)}
@@ -1882,30 +1899,30 @@ function OfferStep({
               <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#08498D]/10 text-[#08498D]">
                 <Package size={14} />
               </span>
-              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Offre vendue après le webinaire</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-ink">Quelle offre proposez-vous après le webinaire ?</h3>
             </div>
             <p className="-mt-1 text-xs text-muted">
               Ce qui alimente la page de vente affichée après le live/replay. Distinct du webinaire ci-dessus.
             </p>
 
-            <Field label="Nom du produit ou service">
+            <Field label="Quel est le nom de votre produit ou service ?">
               <Input value={brief.postWebinarOfferName ?? ""} onChange={(e) => update("postWebinarOfferName", e.target.value)} placeholder="Ex. Programme d'accompagnement 90 jours" />
             </Field>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Prix">
+              <Field label="Quel est votre prix de vente ?">
                 <Input value={brief.postWebinarPrice ?? ""} onChange={(e) => update("postWebinarPrice", e.target.value)} placeholder="497€..." />
               </Field>
               {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
               <Field
-                label="Prix barré (optionnel)"
-                hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+                label="Quel est le prix de référence ? (optionnel)"
+                hint="Montant de comparaison présenté avec votre offre. Seul le prix de vente est facturé."
               >
                 <Input value={brief.postWebinarAnchorPrice ?? ""} onChange={(e) => update("postWebinarAnchorPrice", e.target.value)} placeholder="997€..." />
               </Field>
             </div>
 
-            <Field label="Promesse de l'offre">
+            <Field label="Quel résultat votre offre permet-elle d’obtenir ?">
               <Textarea
                 value={brief.postWebinarPromise ?? ""}
                 onChange={(e) => update("postWebinarPromise", e.target.value)}
@@ -1919,10 +1936,10 @@ function OfferStep({
                 Upsell (optionnel) — proposé après l'achat
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-                <Field label="Offre upsell" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
+                <Field label="Quelle offre complémentaire proposez-vous après l’achat ?" hint="Décris CE QUE c'est. Laisse vide pour ne PAS générer de page upsell.">
                   <Input value={brief.upsellOffer ?? ""} onChange={(e) => update("upsellOffer", e.target.value)} placeholder="Pack modèles + coaching de groupe..." />
                 </Field>
-                <Field label="Prix upsell">
+                <Field label="Quel est le prix de cette offre complémentaire ?">
                   <Input value={brief.upsellPrice ?? ""} onChange={(e) => update("upsellPrice", e.target.value)} placeholder="27€..." />
                 </Field>
               </div>
@@ -1933,10 +1950,10 @@ function OfferStep({
                 Downsell (optionnel) — repli si l'upsell est refusé
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-                <Field label="Offre downsell" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
+                <Field label="Quelle alternative plus accessible proposez-vous ?" hint="Version réduite/moins chère. Laisse vide pour ne PAS générer de page downsell.">
                   <Input value={brief.downsellOffer ?? ""} onChange={(e) => update("downsellOffer", e.target.value)} placeholder="Les modèles seuls, sans le coaching..." />
                 </Field>
-                <Field label="Prix downsell">
+                <Field label="Quel est le prix de cette alternative ?">
                   <Input value={brief.downsellPrice ?? ""} onChange={(e) => update("downsellPrice", e.target.value)} placeholder="17€..." />
                 </Field>
               </div>
@@ -1947,21 +1964,21 @@ function OfferStep({
                 Order bump (optionnel) — case à cocher sur la page de commande
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-                <Field label="Produit complémentaire" hint="Laisse vide pour ne PAS afficher d'order bump.">
+                <Field label="Quel produit souhaitez-vous proposer en complément ?" hint="Laisse vide pour ne PAS afficher d'order bump.">
                   <Input value={brief.orderBumpName ?? ""} onChange={(e) => update("orderBumpName", e.target.value)} placeholder="Guide PDF bonus..." />
                 </Field>
-                <Field label="Prix">
+                <Field label="Quel est votre prix de vente ?">
                   <Input value={brief.orderBumpPrice ?? ""} onChange={(e) => update("orderBumpPrice", e.target.value)} placeholder="9€..." />
                 </Field>
               </div>
               <div className="mt-3">
-                <Field label="Description courte (optionnel)">
+                <Field label="Comment décririez-vous ce complément ? (optionnel)">
                   <Input value={brief.orderBumpDescription ?? ""} onChange={(e) => update("orderBumpDescription", e.target.value)} placeholder="Ajoute ce bonus à ta commande en un clic" />
                 </Field>
               </div>
             </div>
 
-            <Field label="Lien de paiement (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
+            <Field label="Quel lien de paiement souhaitez-vous utiliser ? (optionnel)" hint="Stripe Payment Link, page de paiement systeme.io, etc. Si renseigné, le bouton de l'offre redirige vers ce lien pour encaisser.">
               <Input value={brief.paymentUrl ?? ""} onChange={(e) => update("paymentUrl", e.target.value)} placeholder="https://buy.stripe.com/..." />
             </Field>
           </section>
@@ -1980,7 +1997,7 @@ function OfferStep({
               <Package size={14} />
             </span>
             <h3 className="text-sm font-black uppercase tracking-wider text-ink">
-              Offre vendue à la fin du challenge
+              Quelle offre proposez-vous à la fin du challenge ?
             </h3>
           </div>
           <p className="-mt-1 text-xs text-muted">
@@ -1989,7 +2006,7 @@ function OfferStep({
             de page de vente.</strong>
           </p>
 
-          <Field label="Nom du produit ou service">
+          <Field label="Quel est le nom de votre produit ou service ?">
             <Input
               value={brief.challengeOfferName ?? ""}
               onChange={(e) => update("challengeOfferName", e.target.value)}
@@ -1998,7 +2015,7 @@ function OfferStep({
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Prix">
+            <Field label="Quel est votre prix de vente ?">
               <Input
                 value={brief.challengeOfferPrice ?? ""}
                 onChange={(e) => update("challengeOfferPrice", e.target.value)}
@@ -2007,8 +2024,8 @@ function OfferStep({
             </Field>
             {/* 🆕 Prix d'ancrage : cosmétique, jamais encaissé. */}
             <Field
-              label="Prix barré (optionnel)"
-              hint="Affiché rayé au-dessus du prix. Purement visuel : le montant encaissé reste le prix ci-contre."
+              label="Quel est le prix de référence ? (optionnel)"
+              hint="Montant de comparaison présenté avec votre offre. Seul le prix de vente est facturé."
             >
               <Input
                 value={brief.challengeOfferAnchorPrice ?? ""}
@@ -2018,7 +2035,7 @@ function OfferStep({
             </Field>
           </div>
 
-          <Field label="Promesse de l'offre">
+          <Field label="Quel résultat votre offre permet-elle d’obtenir ?">
             <Textarea
               rows={3}
               value={brief.challengeOfferPromise ?? ""}
@@ -2036,7 +2053,7 @@ function OfferStep({
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#31845C]/10 text-[#31845C]">
             <CheckCircle2 size={14} />
           </span>
-          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Bénéfices, urgence & garantie</h3>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Quels bénéfices et garanties proposez-vous ?</h3>
         </div>
         <p className="-mt-1 text-xs text-muted">
           Facultatif : si tu remplis ces champs, l'IA utilise TON contenu au lieu d'en générer un générique.
@@ -2044,7 +2061,7 @@ function OfferStep({
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-bold text-ink">Bénéfices clés</p>
+            <p className="text-xs font-bold text-ink">Quels sont les bénéfices pour vos clients ?</p>
             <button
               type="button"
               onClick={addBenefit}
@@ -2080,7 +2097,7 @@ function OfferStep({
           )}
         </div>
 
-        <Field label="Urgence (optionnel)" hint="La raison concrète d'agir maintenant : places limitées, prix qui augmente, bonus qui expire...">
+        <Field label="Pourquoi profiter de votre offre maintenant ? (optionnel)" hint="La raison concrète d'agir maintenant : places limitées, prix qui augmente, bonus qui expire...">
           <Textarea
             rows={2}
             value={brief.urgencyText ?? ""}
@@ -2090,14 +2107,14 @@ function OfferStep({
         </Field>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px]">
-          <Field label="Garantie — titre (optionnel)">
+          <Field label="Quelle garantie proposez-vous ? (optionnel)">
             <Input
               value={brief.guaranteeTitle ?? ""}
               onChange={(e) => update("guaranteeTitle", e.target.value)}
               placeholder="Satisfait ou remboursé"
             />
           </Field>
-          <Field label="Durée">
+          <Field label="Quelle est la durée de cette garantie ?">
             <Input
               value={brief.guaranteeDuration ?? ""}
               onChange={(e) => update("guaranteeDuration", e.target.value)}
@@ -2105,7 +2122,7 @@ function OfferStep({
             />
           </Field>
         </div>
-        <Field label="Garantie — description (optionnel)">
+        <Field label="Quelles sont les conditions de votre garantie ? (optionnel)">
           <Textarea
             rows={2}
             value={brief.guaranteeDescription ?? ""}
@@ -2123,10 +2140,10 @@ function OfferStep({
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#31845C]/10 text-[#31845C]">
             <User size={14} />
           </span>
-          <h3 className="text-sm font-black uppercase tracking-wider text-ink">À propos de toi</h3>
+          <h3 className="text-sm font-black uppercase tracking-wider text-ink">Qui êtes-vous ?</h3>
         </div>
 
-        <Field label="Nom et prénom (optionnel)">
+        <Field label="Quel est votre nom complet ? (optionnel)">
           <Input
             value={brief.authorName ?? ""}
             placeholder="Ex. Marie Dubois"
@@ -2134,7 +2151,7 @@ function OfferStep({
           />
         </Field>
 
-        <Field label="Biographie (optionnel)">
+        <Field label="Quel parcours souhaitez-vous présenter ? (optionnel)">
           <Textarea
             rows={5}
             value={brief.aboutText ?? ""}
@@ -2155,11 +2172,11 @@ function OfferStep({
 function AudienceStep({ brief, update }: { brief: FunnelBrief; update: <K extends keyof FunnelBrief>(k: K, v: FunnelBrief[K]) => void; }) {
   return (
     <div className="grid gap-4">
-      <h2 className="text-xl font-black">Audience</h2>
-      <Field label="Client idéal">
+      <h2 className="text-xl font-black">À qui vous adressez-vous ?</h2>
+      <Field label="Quelle est votre cible principale ?">
         <Textarea value={brief.targetAudience} onChange={(e) => update("targetAudience", e.target.value)} />
       </Field>
-      <Field label="Problème principal">
+      <Field label="Quel est le principal problème de votre cible ?">
         <Textarea value={brief.mainPain} onChange={(e) => update("mainPain", e.target.value)} />
       </Field>
       {/* Le ton est défini à l'étape Copywriting (suppression du doublon). */}
@@ -2177,10 +2194,10 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-xl font-black">Comportement des CTA</h2>
+        <h2 className="text-xl font-black">Quelle action attendez-vous de vos visiteurs ?</h2>
         <p className="mt-1 text-xs text-muted">Définissez ce qui se passe quand un visiteur clique sur le bouton principal</p>
       </div>
-      <Field label="Texte du bouton principal">
+      <Field label="Quel texte souhaitez-vous afficher sur le bouton principal ?">
         <Input value={cta.label} onChange={(e) => updateCta({ label: e.target.value })} placeholder="Recevoir l'offre" />
       </Field>
       <div className="grid gap-2.5">
@@ -2222,10 +2239,10 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
 
       {cta.mode === "redirect" && (
         <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3 animate-[fadeIn_0.2s_ease-out]">
-          <Field label="URL de redirection (Stripe Payment Link, Calendly, page externe...)">
+          <Field label="Vers quel lien souhaitez-vous diriger vos visiteurs ?">
             <Input value={cta.url ?? ""} onChange={(e) => updateCta({ url: e.target.value })} placeholder="https://buy.stripe.com/..." type="url" />
           </Field>
-          <Field label="Ouverture du lien">
+          <Field label="Comment souhaitez-vous ouvrir ce lien ?">
             <Select value={cta.target ?? "_blank"} onChange={(e) => updateCta({ target: e.target.value as "_self" | "_blank" })}>
               <option value="_blank">Nouvel onglet (recommandé)</option>
               <option value="_self">Même onglet</option>
@@ -2236,7 +2253,7 @@ function CtaStep({ brief, updateCta }: { brief: FunnelBrief; updateCta: (patch: 
 
       {cta.mode === "anchor" && (
         <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3 animate-[fadeIn_0.2s_ease-out]">
-          <Field label="Identifiant de la section cible">
+          <Field label="Quel est l’identifiant de la section à rejoindre ?">
             <Input value={cta.anchorId ?? "lead-form"} onChange={(e) => updateCta({ anchorId: e.target.value.replace(/^#/, "") })} placeholder="lead-form" />
           </Field>
           <p className="text-xs text-muted">
@@ -2264,13 +2281,13 @@ function CommunityChannelsFields({ brief, update }: {
   return (
     <div className="grid gap-3 rounded-lg border border-line bg-white p-3.5">
       <div>
-        <h3 className="text-sm font-bold text-ink">Rejoindre la communauté (optionnel)</h3>
+        <h3 className="text-sm font-bold text-ink">Quelle communauté peuvent-ils rejoindre ? (optionnel)</h3>
         <p className="mt-0.5 text-xs text-muted">
           Ajoute un bouton WhatsApp et/ou Telegram sur la page de remerciement.
           Laisse vide pour ne rien afficher.
         </p>
       </div>
-      <Field label="Lien du groupe / canal WhatsApp">
+      <Field label="Quel est le lien de votre groupe ou canal WhatsApp ?">
         <Input
           type="url"
           value={brief.communityWhatsappUrl ?? ""}
@@ -2278,7 +2295,7 @@ function CommunityChannelsFields({ brief, update }: {
           placeholder="https://chat.whatsapp.com/..."
         />
       </Field>
-      <Field label="Lien du groupe / canal Telegram">
+      <Field label="Quel est le lien de votre groupe ou canal Telegram ?">
         <Input
           type="url"
           value={brief.communityTelegramUrl ?? ""}
@@ -2300,7 +2317,7 @@ function ImagesStep({ brief, update }: { brief: FunnelBrief; update: <K extends 
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-xl font-black">Visuels du tunnel</h2>
+        <h2 className="text-xl font-black">Comment souhaitez-vous illustrer votre tunnel ?</h2>
         <p className="mt-1 text-xs text-muted">Choisissez la politique image par défaut. Modifiable section par section après génération</p>
       </div>
       <div className="grid gap-2.5">
@@ -2428,7 +2445,7 @@ function GenerationStep({
 
   return (
     <div className="grid gap-4">
-      <h2 className="text-xl font-black">Génération</h2>
+      <h2 className="text-xl font-black">Prêt à générer votre tunnel ?</h2>
       <div className="rounded-lg bg-[#08498D]/5 border border-[#08498D]/20 p-4">
         <p className="font-bold text-[#08498D]">{templateName}</p>
         <p className="mt-1 text-xs leading-5 text-muted">{templateObjective}</p>
@@ -2453,7 +2470,7 @@ function GenerationStep({
           <div className="min-w-0 flex-1">
             <p className="font-bold">Date du webinaire manquante</p>
             <p className="mt-0.5 leading-relaxed">
-              Retourne à l'étape « Format » pour renseigner la date et l'heure du webinaire (obligatoire en mode Live) — sinon le compte à rebours et le copywriting ne seront pas fiables.
+              Retourne à l'étape « Quel type de tunnel souhaitez-vous ? » pour renseigner la date et l'heure du webinaire (obligatoire en mode Live) — sinon le compte à rebours et le copywriting ne seront pas fiables.
             </p>
           </div>
         </div>
@@ -2465,7 +2482,7 @@ function GenerationStep({
           <div className="min-w-0 flex-1">
             <p className="font-bold">Lien du calendrier externe manquant</p>
             <p className="mt-0.5 leading-relaxed">
-              Retourne à l&apos;étape « Format » pour coller le lien de ton calendrier
+              Retourne à l&apos;étape « Quel type de tunnel souhaitez-vous ? » pour coller le lien de ton calendrier
               (Calendly, Cal.com…) — obligatoire en mode externe. Sans lui, la page
               d&apos;accueil serait générée sans bouton de réservation.
             </p>
@@ -2479,7 +2496,7 @@ function GenerationStep({
           <div className="min-w-0 flex-1">
             <p className="font-bold">Vidéo du webinaire manquante</p>
             <p className="mt-0.5 leading-relaxed">
-              Retourne à l'étape « Format » pour renseigner l'URL de la vidéo pré-enregistrée (obligatoire en mode Evergreen — c'est elle que regardera chaque prospect après avoir choisi son créneau).
+              Retourne à l'étape « Quel type de tunnel souhaitez-vous ? » pour renseigner l'URL de la vidéo pré-enregistrée (obligatoire en mode Evergreen — c'est elle que regardera chaque prospect après avoir choisi son créneau).
             </p>
           </div>
         </div>
@@ -2659,14 +2676,14 @@ function PagesPreviewChecklist({
               {checked && bp.role === "oto" && onOtoOfferChange && (
                 <div className="mt-1.5 ml-6 grid gap-2 rounded-md border border-[#C7A436]/30 bg-[#C7A436]/5 p-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px]">
-                    <Field label="Offre OTO" hint="Décris CE QUE c'est. Laisse vide et l'IA inventera une offre générique.">
+                    <Field label="Quelle offre souhaitez-vous proposer juste après l’inscription ?" hint="Décris CE QUE c'est. Laisse vide et l'IA inventera une offre générique.">
                       <Input
                         value={otoOfferName ?? ""}
                         onChange={(e) => onOtoOfferChange({ otoOfferName: e.target.value })}
                         placeholder="Ex. Pack de templates additionnels"
                       />
                     </Field>
-                    <Field label="Prix">
+                    <Field label="Quel est votre prix de vente ?">
                       <Input
                         value={otoPrice ?? ""}
                         onChange={(e) => onOtoOfferChange({ otoPrice: e.target.value })}
@@ -2674,7 +2691,7 @@ function PagesPreviewChecklist({
                       />
                     </Field>
                   </div>
-                  <Field label="Promesse (optionnel)">
+                  <Field label="Quel résultat promet cette offre ? (optionnel)">
                     <Input
                       value={otoPromise ?? ""}
                       onChange={(e) => onOtoOfferChange({ otoPromise: e.target.value })}

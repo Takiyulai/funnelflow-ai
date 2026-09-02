@@ -11,38 +11,38 @@ import type {
 
 const LABELS = {
   fr: {
-    title: "Ton & style d'écriture",
+    title: "Quel style d’écriture souhaitez-vous ?",
     intro:
       "Précisez comment l'IA doit écrire. Toutes les options sont facultatives.",
-    toneLabel: "Ton dominant",
-    lengthLabel: "Longueur des textes",
-    exampleLabel: "Une phrase qui représente votre style (optionnel)",
+    toneLabel: "Quel ton souhaitez-vous adopter ?",
+    lengthLabel: "Quelle longueur de texte préférez-vous ?",
+    exampleLabel: "Quelle phrase représente votre style ? (optionnel)",
     examplePlaceholder:
       "Ex. on ne vend pas un ebook, on transmet une méthode qui a déjà fait ses preuves.",
-    avoidLabel: "Mots ou expressions à éviter (séparés par une virgule)",
+    avoidLabel: "Quels mots ou expressions souhaitez-vous éviter ? (séparés par une virgule)",
     avoidPlaceholder: "révolutionnaire, incroyable, magique",
   },
   en: {
-    title: "Tone & writing style",
+    title: "What writing style would you like?",
     intro: "Tell the AI how to write. All fields are optional.",
-    toneLabel: "Dominant tone",
-    lengthLabel: "Copy length",
-    exampleLabel: "A sentence that represents your style (optional)",
+    toneLabel: "What tone would you like to use?",
+    lengthLabel: "How long should the copy be?",
+    exampleLabel: "Which sentence represents your style? (optional)",
     examplePlaceholder:
       "E.g. we don't sell an ebook, we share a method that already works.",
-    avoidLabel: "Words to avoid (comma-separated)",
+    avoidLabel: "Which words should be avoided? (comma-separated)",
     avoidPlaceholder: "revolutionary, amazing, magical",
   },
   es: {
-    title: "Tono y estilo de escritura",
+    title: "¿Qué estilo de escritura prefieres?",
     intro:
       "Indica cómo debe escribir la IA. Todos los campos son opcionales.",
-    toneLabel: "Tono dominante",
-    lengthLabel: "Longitud de los textos",
-    exampleLabel: "Una frase que representa tu estilo (opcional)",
+    toneLabel: "¿Qué tono quieres adoptar?",
+    lengthLabel: "¿Qué longitud de texto prefieres?",
+    exampleLabel: "¿Qué frase representa tu estilo? (opcional)",
     examplePlaceholder:
       "Ej. no vendemos un ebook, transmitimos un método ya probado.",
-    avoidLabel: "Palabras a evitar (separadas por coma)",
+    avoidLabel: "¿Qué palabras quieres evitar? (separadas por coma)",
     avoidPlaceholder: "revolucionario, increíble, mágico",
   },
 } as const;

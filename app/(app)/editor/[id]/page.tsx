@@ -942,17 +942,33 @@ export default function EditorPage() {
                 conversion qui permettent de juger un test ; mais c'est ICI
                 qu'on a l'idée de tester une accroche. Sans ce bouton, personne
                 ne découvrait la fonctionnalité.
-                Uniquement si le tunnel est PUBLIÉ : sans trafic, rien à mesurer. */}
-            {isPublished && activePage && (
+                Visible aussi en brouillon, mais activé seulement après publication. */}
+            {activePage && (isPublished ? (
               <Link
                 href={`/funnels/${stored.id}/stats?abPage=${encodeURIComponent(activePage.id)}`}
                 title={`Tester la page « ${activePage.name} » en A/B`}
-                className="hidden lg:flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+                className="flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 lg:px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition"
+                aria-label="Tester la page en A/B"
               >
                 <FlaskConical className="h-3.5 w-3.5" />
-                Tester
+                <span className="hidden lg:inline">Tester</span>
               </Link>
-            )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => toast.show({
+                  title: "Publie d’abord ce tunnel",
+                  description: "Le test A/B compare les visites de la page publiée. Utilise « Aperçu » pour vérifier ton brouillon.",
+                  variant: "info",
+                })}
+                title="Publie ce tunnel pour lancer un test A/B"
+                aria-label="Tester : publication nécessaire"
+                className="flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 lg:px-3 text-xs font-medium text-zinc-400 hover:bg-zinc-800 transition"
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Tester</span>
+              </button>
+            ))}
 
             <button
               onClick={handlePublish}

@@ -144,6 +144,7 @@ export function MediaTab({ section, funnel, onChange }: Props) {
           size: section.image?.size ?? "lg",
           customWidth: section.image?.customWidth,
           animation: section.image?.animation,
+          frame: section.image?.frame,
         },
       });
     } catch (e) {
@@ -171,10 +172,8 @@ export function MediaTab({ section, funnel, onChange }: Props) {
     const provider: VideoSource["provider"] =
       patch.provider ?? video?.provider ?? "youtube";
     const url = patch.url ?? video?.url ?? "";
-    if (!url) {
-      onChange({ video: undefined });
-      return;
-    }
+    // Conserver le provider même avant la saisie du lien. Le renderer ne
+    // monte une vidéo que lorsque son URL est renseignée.
     onChange({
       video: {
         provider,
@@ -416,6 +415,14 @@ export function MediaTab({ section, funnel, onChange }: Props) {
               </select>
             </Field>
 
+            {animation !== "none" && (
+              <p className="text-[11px] leading-relaxed text-zinc-400">
+                {funnel.design?.animationsEnabled === false
+                  ? "Les animations du tunnel sont désactivées dans le style global. Réactive-les pour voir cet effet."
+                  : "L’animation d’entrée se joue à l’apparition de l’image et lorsque tu changes ce réglage. Les effets respectent la préférence de réduction des animations du navigateur."}
+              </p>
+            )}
+
             {uploadError && (
               <p className="flex items-start gap-1 text-[11px] text-rose-300">
                 <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
@@ -472,7 +479,13 @@ export function MediaTab({ section, funnel, onChange }: Props) {
               value={video?.url ?? ""}
               onChange={(e) => updateVideo({ url: e.target.value })}
               className={inputClass}
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder={
+                video?.provider === "vimeo"
+                  ? "https://vimeo.com/123456789"
+                  : video?.provider === "url"
+                    ? "https://exemple.com/video.mp4"
+                    : "https://www.youtube.com/watch?v=..."
+              }
             />
           </Field>
 
@@ -686,6 +699,7 @@ function ModeBtn({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={[
         "rounded-md border px-2.5 py-1 text-[11px] transition-colors",

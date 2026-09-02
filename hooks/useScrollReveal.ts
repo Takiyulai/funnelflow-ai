@@ -39,10 +39,6 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     const animationsOff =
       tplEl?.getAttribute("data-ff-animations") === "off";
 
-    if (tplEl) {
-      tplEl.classList.add("ff-anim-ready");
-    }
-
     const collect = () =>
       Array.from(container.querySelectorAll<HTMLElement>("[data-ff-anim]"));
 
@@ -63,10 +59,14 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       el.classList.add("ff-anim-active", "ff-in");
     };
 
-    if (prefersReduced || animationsOff || typeof IntersectionObserver === "undefined") {
+    if (prefersReduced || typeof IntersectionObserver === "undefined") {
       collect().forEach(activate);
       return;
     }
+
+    if (!animationsOff) tplEl?.classList.add("ff-anim-ready");
+    const rafs: number[] = [];
+    let disposed = false;
 
     // 🆕 Recalcule le scroll root à chaque scan (peut changer si le DOM
     // est encore en train de se stabiliser au premier rendu).
@@ -139,10 +139,17 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       if (observed.has(el) && hasState) return;
       observed.add(el);
 
+      el.classList.add("ff-anim-pending");
       if (isVisibleNow(el, scrollRoot)) {
-        activate(el);
+        // Peindre l'état de départ avant l'état final. Une activation dans
+        // le même scan fusionnait les deux styles : aucune transition visible,
+        // notamment après un changement d'animation d'image dans l'éditeur.
+        rafs.push(requestAnimationFrame(() => {
+          rafs.push(requestAnimationFrame(() => {
+            if (container.contains(el)) activate(el);
+          }));
+        }));
       } else {
-        el.classList.add("ff-anim-pending");
         observer?.observe(el);
       }
     };
@@ -169,6 +176,15 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     };
 
     const scan = () => {
+      if (disposed) return;
+      // React peut remplacer la racine du template sans remonter le hook.
+      const template = container.querySelector("[data-ff-template]");
+      if (template?.getAttribute("data-ff-animations") === "off") {
+        template.classList.remove("ff-anim-ready");
+        collect().forEach(activate);
+        return;
+      }
+      template?.classList.add("ff-anim-ready");
       const scrollRoot = getScrollRoot();
       if (!observer) buildObserver(scrollRoot);
       let leftPending = false;
@@ -185,7 +201,6 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     // toujours stables (images en cours de chargement, polices custom,
     // transform: scale du desktop stage). On scanne plusieurs fois
     // pour rattraper les éléments above-the-fold qui auraient été ratés.
-    const rafs: number[] = [];
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     rafs.push(
@@ -275,6 +290,7 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       // timer, auto-scaling de headline, hover…) est ignorée — sinon chaque
       // frame déclenchait un scan + layout complet et gelait l'onglet.
       const relevant = mutations.some((m) => {
+        if (m.attributeName === "data-ff-animations") return true;
         if (m.type === "childList") {
           return m.addedNodes.length > 0 || m.removedNodes.length > 0;
         }
@@ -298,7 +314,7 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["class", "data-ff-anim", "data-ff-anim-index"],
+      attributeFilter: ["class", "data-ff-anim", "data-ff-anim-index", "data-ff-animations"],
     });
 
     // 🆕 Re-scan au resize (changement viewport mobile/desktop)
@@ -306,6 +322,8 @@ export function useScrollReveal<T extends HTMLElement = HTMLElement>() {
     window.addEventListener("resize", onResize);
 
     return () => {
+      disposed = true;
+      container.querySelector("[data-ff-template]")?.classList.remove("ff-anim-ready");
       observer?.disconnect();
       mo.disconnect();
       rafs.forEach((id) => cancelAnimationFrame(id));

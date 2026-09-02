@@ -454,14 +454,14 @@ const LABELS: Record<
 > = {
   fr: {
     eyebrow: "Templates premium",
-    title: "Choisissez l'ambiance de votre tunnel",
+    title: "Quel modèle préférez-vous pour votre tunnel ?",
     subtitle:
       "Chaque template apporte une personnalité visuelle distincte. Vous pourrez tout ajuster ensuite dans l'éditeur.",
     recommended: "Recommandés pour votre format",
     others: "Autres templates disponibles",
     prev: "Précédent",
     next: "Suivant",
-    brandTitle: "Utiliser les couleurs de ma marque (optionnel)",
+    brandTitle: "Souhaitez-vous utiliser les couleurs de votre marque ? (optionnel)",
     brandHint:
       "Après génération, le tunnel prendra tes couleurs au lieu de la palette par défaut du template. Ajoute jusqu'à 4 couleurs. Modifiable ensuite dans Style global.",
     brandAddColor: "Ajouter une couleur",
@@ -471,14 +471,14 @@ const LABELS: Record<
   },
   en: {
     eyebrow: "Premium templates",
-    title: "Pick your funnel's vibe",
+    title: "Which template do you prefer for your funnel?",
     subtitle:
       "Each template brings a distinct visual personality. You can fine-tune everything later in the editor.",
     recommended: "Recommended for your format",
     others: "Other available templates",
     prev: "Previous",
     next: "Next",
-    brandTitle: "Use my brand colours (optional)",
+    brandTitle: "Would you like to use your brand colours? (optional)",
     brandHint:
       "After generation, the funnel will use your colours instead of the template's default palette. Add up to 4 colours. Editable later in Global style.",
     brandAddColor: "Add a colour",
@@ -488,14 +488,14 @@ const LABELS: Record<
   },
   es: {
     eyebrow: "Plantillas premium",
-    title: "Elige la atmósfera de tu funnel",
+    title: "¿Qué plantilla prefieres para tu embudo?",
     subtitle:
       "Cada plantilla aporta una personalidad visual distinta. Podrás ajustar todo después en el editor.",
     recommended: "Recomendadas para tu formato",
     others: "Otras plantillas disponibles",
     prev: "Anterior",
     next: "Siguiente",
-    brandTitle: "Usar los colores de mi marca (opcional)",
+    brandTitle: "¿Quieres usar los colores de tu marca? (opcional)",
     brandHint:
       "Tras la generación, el funnel usará tus colores en lugar de la paleta por defecto de la plantilla. Añade hasta 4 colores. Editable luego en Estilo global.",
     brandAddColor: "Añadir un color",

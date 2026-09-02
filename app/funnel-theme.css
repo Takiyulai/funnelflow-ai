@@ -372,25 +372,31 @@
    préréglage choisi dans l'éditeur (onglet Style → Animations) n'avait donc
    aucun effet sur ces sections. La section porte désormais son préréglage dans
    data-ff-anim-scope, qui pilote aussi ses descendants animés. */
-[data-ff-template] [data-ff-anim-scope="none"] [data-ff-anim] {
+[data-ff-template] [data-ff-anim-scope="none"] [data-ff-anim]:not([data-ff-anim-override]) {
   opacity: 1 !important;
   transform: none !important;
   transition: none !important;
 }
-[data-ff-template].ff-anim-ready [data-ff-anim-scope="fade-in"] [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
+[data-ff-template].ff-anim-ready [data-ff-anim-scope="fade-in"] [data-ff-anim]:not([data-ff-anim-override]):not(.ff-in):not(.ff-anim-active) {
   transform: none;
 }
-[data-ff-template].ff-anim-ready [data-ff-anim-scope="zoom-in"] [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
+[data-ff-template].ff-anim-ready [data-ff-anim-scope="zoom-in"] [data-ff-anim]:not([data-ff-anim-override]):not(.ff-in):not(.ff-anim-active) {
   transform: scale(0.96);
 }
-[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim].ff-in,
-[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim].ff-anim-active {
+[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim]:not([data-ff-anim-override]).ff-in,
+[data-ff-template] [data-ff-anim-scope="zoom-in"] [data-ff-anim]:not([data-ff-anim-override]).ff-anim-active {
   transform: scale(1);
 }
 
 /* 🆕 ACCESSIBILITÉ — prefers-reduced-motion : aucune animation d'entrée, tout
    le contenu est immédiatement visible (le hook useScrollReveal active déjà
    tout côté JS, ces règles couvrent le cas sans JS / avant hydratation). */
+[data-ff-template][data-ff-animations="off"] [data-ff-anim] {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-ff-template] [data-ff-anim],
   [data-ff-template].ff-anim-ready [data-ff-anim]:not(.ff-in):not(.ff-anim-active) {
@@ -4173,7 +4179,8 @@
   [data-ff-template="vsl-focus"], [data-ff-template="webinar-live"],
   [data-ff-template="showcase"]
 ) .ff-image-wrap {
-  border-radius: 16px !important;
+  /* Le réglage explicite, y compris 0px, prime sur l'arrondi du thème. */
+  border-radius: var(--ff-img-radius, 16px) !important;
   overflow: hidden;
 }
 :is(

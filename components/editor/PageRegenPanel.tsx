@@ -26,6 +26,29 @@ const SUGGESTIONS = [
   "Raccourcis, va à l'essentiel",
 ];
 
+const GENERATION_SUGGESTIONS = [
+  "Présente les informations essentielles et la prochaine étape",
+  "Crée une page courte avec un appel à l'action clair",
+  "Reprends le ton et la promesse de la page d'accueil",
+];
+
+/** Une page vide ou le seul hero créé par « + Page », pas une page courte
+ * déjà rédigée. Les médias ajoutés au placeholder seront conservés. */
+export function isPageGenerationPlaceholder(page: FunnelPage): boolean {
+  const sections = page.sections ?? [];
+  if (sections.length === 0) return true;
+  if (sections.length !== 1) return false;
+  const section = sections[0];
+  return (
+    section.type === "hero" &&
+    (!section.headline?.trim() || section.headline === "Nouvelle section") &&
+    !section.eyebrow?.trim() && !section.subheadline?.trim() &&
+    !section.body?.trim() && !section.bullets?.length &&
+    !section.items?.length && !section.cta && !section.secondaryCta &&
+    !section.ctas?.length
+  );
+}
+
 /**
  * 🆕 Type de page proposé à la génération.
  *
@@ -52,11 +75,7 @@ const PAGE_ROLE_OPTIONS: { id: PageRole; label: string }[] = [
   { id: "custom", label: "Libre" },
 ];
 
-export function PageRegenPanel({
-  funnel,
-  page,
-  onApply,
-}: {
+type Props = {
   funnel: Funnel;
   page: FunnelPage;
   /**
@@ -66,8 +85,17 @@ export function PageRegenPanel({
    * prochaine régénération.
    */
   onApply: (sections: FunnelSection[], role?: PageRole) => void;
-}) {
-  const [open, setOpen] = useState(false);
+};
+
+export function PageRegenPanel(props: Props) {
+  // Un brouillon/proposal et un rôle appartiennent à UNE page : ne jamais
+  // reporter ceux de la page précédente lorsqu'on sélectionne « + Page ».
+  return <PageRegenForm key={props.page.id} {...props} />;
+}
+
+function PageRegenForm({ funnel, page, onApply }: Props) {
+  const isNewPage = isPageGenerationPlaceholder(page);
+  const [open, setOpen] = useState(isNewPage);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,11 +198,11 @@ export function PageRegenPanel({
       const json = await res.json().catch(() => ({}));
       if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
       if (!res.ok) {
-        setError(json?.message || json?.error || "Régénération impossible.");
+        setError(json?.message || json?.error || "Génération impossible.");
         return;
       }
       if (!Array.isArray(json.sections) || json.sections.length === 0) {
-        setError("Régénération IA indisponible pour le moment (page inchangée).");
+        setError("Génération IA indisponible pour le moment (page inchangée).");
         return;
       }
       if (json.fallback) {
@@ -241,7 +269,7 @@ export function PageRegenPanel({
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-ink"
       >
         <Sparkles className="h-4 w-4 shrink-0 text-violet-500" />
-        Régénérer toute la page avec l&apos;IA
+        {isNewPage ? "Générer cette nouvelle page avec l’IA" : "Régénérer toute la page avec l’IA"}
         <span className="ml-auto text-[10px] font-normal text-muted">
           {open ? "Réduire" : "Ouvrir"}
         </span>
@@ -250,9 +278,15 @@ export function PageRegenPanel({
       {open && (
         <div className="grid gap-3 border-t border-violet-300/15 p-3">
           <p className="text-[11px] leading-relaxed text-muted">
-            Régénère le copy de <b className="text-ink">toutes les sections</b> de
-            cette page (« {page.name} »). Le reste du tunnel n&apos;est pas touché, et
-            les images/vidéos sont conservées.
+            {isNewPage ? (
+              <>Crée les sections et les textes de cette nouvelle page (« {page.name} »).
+                Choisis son type et décris son objectif. Les autres pages du tunnel
+                restent intactes ; les médias déjà ajoutés sont conservés.</>
+            ) : (
+              <>Régénère le copy de <b className="text-ink">toutes les sections</b> de
+                cette page (« {page.name} »). Le reste du tunnel n&apos;est pas touché, et
+                les images/vidéos sont conservées.</>
+            )}
           </p>
 
           {/* 🆕 Type de page — décide des conventions appliquées. */}
@@ -265,7 +299,9 @@ export function PageRegenPanel({
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setRole(opt.id)}
+                  disabled={busy}
+                  aria-pressed={role === opt.id}
+                  onClick={() => { setRole(opt.id); setProposal(null); }}
                   className={[
                     "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                     role === opt.id
@@ -295,7 +331,7 @@ export function PageRegenPanel({
           )}
 
           <div className="flex flex-wrap gap-1.5">
-            {SUGGESTIONS.map((s) => (
+            {(isNewPage ? GENERATION_SUGGESTIONS : SUGGESTIONS).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -312,7 +348,10 @@ export function PageRegenPanel({
             onChange={(e) => setPrompt(e.target.value)}
             rows={2}
             maxLength={800}
-            placeholder="Instruction facultative (ex. « ton plus direct »). Laisse vide pour une simple régénération."
+            aria-label={isNewPage ? "Objectif de la nouvelle page" : "Instruction de régénération"}
+            placeholder={isNewPage
+              ? "Ex. : présente mon accompagnement après le téléchargement du guide, avec ses bénéfices et un bouton pour prendre rendez-vous."
+              : "Instruction facultative (ex. « ton plus direct »). Laisse vide pour une simple régénération."}
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-violet-500/50"
           />
 
@@ -323,7 +362,7 @@ export function PageRegenPanel({
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? "Génération…" : "Régénérer la page"}
+            {busy ? "Génération…" : isNewPage ? "Générer la nouvelle page" : "Régénérer la page"}
           </button>
 
           {error && <p className="text-xs text-red-300">{error}</p>}
@@ -331,7 +370,7 @@ export function PageRegenPanel({
           {proposal && (
             <div className="grid gap-2 rounded-lg border border-line bg-zinc-950/60 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                Aperçu — {proposal.length} section(s) régénérée(s)
+                Aperçu — {proposal.length} section(s) {isNewPage ? "générée(s)" : "régénérée(s)"}
               </p>
               <ul className="grid gap-1">
                 {proposal.map((s, i) => (

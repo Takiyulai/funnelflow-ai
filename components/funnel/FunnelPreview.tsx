@@ -2735,7 +2735,7 @@ function ImageBlock({
   const loopAnim =
     imageAnim === "float" || imageAnim === "pulse" ? imageAnim : undefined;
 
-  const figureStyle: React.CSSProperties = {};
+  const figureStyle: React.CSSProperties = { ...frameVars(image.frame, "img") };
   if (!transparent) {
     figureStyle.border = "1px solid var(--ff-border, rgba(0,0,0,0.08))";
   }
@@ -2788,7 +2788,9 @@ function ImageBlock({
 
   return (
     <figure
+      key={imageAnim ?? "theme"}
       data-ff-anim={entryAnim}
+      data-ff-anim-override={imageAnim !== undefined ? "true" : undefined}
       data-ff-shadow={
         !transparent && shadowSize !== "none" ? shadowSize : undefined
       }

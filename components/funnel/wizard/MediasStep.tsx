@@ -58,7 +58,7 @@ const LABELS: Record<
   }
 > = {
   fr: {
-    title: "Médias",
+    title: "Quels médias souhaitez-vous ajouter ?",
     intro:
       "Ajoutez jusqu'à 5 médias (images, vidéos). L'IA les placera dans les bonnes sections.",
     counter: (n) => `${n} / ${MAX_MEDIAS} médias`,
@@ -68,12 +68,12 @@ const LABELS: Record<
     auto: "Placement automatique",
     upload: "Téléverser",
     pasteUrl: "Coller une URL…",
-    description: "Description",
+    description: "Que représente ce média ?",
     descriptionPlaceholder:
       "Ex. : Photo du coach Jean Dupont, capture d'écran du témoignage de Marie...",
-    alt: "Texte alternatif (SEO/accessibilité)",
+    alt: "Comment décrire ce média pour l’accessibilité ?",
     altPlaceholder: "Décrivez l'image en quelques mots",
-    sectionHintLabel: "À placer dans la section (recommandé)",
+    sectionHintLabel: "Dans quelle section placer ce média ? (recommandé)",
     sectionHintHelper:
       "Indiquez où ce média doit apparaître. Sans cette info, l'IA déduit depuis la description — mais le placement n'est pas garanti.",
     placementGuaranteed: "Placement garanti",
@@ -85,7 +85,7 @@ const LABELS: Record<
       "Choisissez la section cible pour chaque média. Sinon, l'IA déduit depuis la description — le résultat peut varier.",
   },
   en: {
-    title: "Media",
+    title: "Which media would you like to add?",
     intro:
       "Add up to 5 medias (images, videos). The AI will place them in the right sections.",
     counter: (n) => `${n} / ${MAX_MEDIAS} medias`,
@@ -95,12 +95,12 @@ const LABELS: Record<
     auto: "Auto placement",
     upload: "Upload",
     pasteUrl: "Paste a URL…",
-    description: "Description",
+    description: "What does this media show?",
     descriptionPlaceholder:
       "E.g.: Coach John Doe's photo, screenshot of Marie's testimonial...",
-    alt: "Alt text (SEO/accessibility)",
+    alt: "How should this media be described for accessibility?",
     altPlaceholder: "Describe the image in a few words",
-    sectionHintLabel: "Place in section (recommended)",
+    sectionHintLabel: "Which section should contain this media? (recommended)",
     sectionHintHelper:
       "Tell us where this media should appear. Without this, the AI guesses from the description — placement not guaranteed.",
     placementGuaranteed: "Placement guaranteed",
@@ -112,7 +112,7 @@ const LABELS: Record<
       "Choose the target section for each media. Otherwise, the AI will guess from the description — results may vary.",
   },
   es: {
-    title: "Medios",
+    title: "¿Qué medios quieres añadir?",
     intro:
       "Añade hasta 5 medios (imágenes, vídeos). La IA los colocará en las secciones correctas.",
     counter: (n) => `${n} / ${MAX_MEDIAS} medios`,
@@ -122,12 +122,12 @@ const LABELS: Record<
     auto: "Colocación automática",
     upload: "Subir",
     pasteUrl: "Pegar una URL…",
-    description: "Descripción",
+    description: "¿Qué representa este medio?",
     descriptionPlaceholder:
       "Ej.: Foto del coach, captura del testimonio de María...",
-    alt: "Texto alternativo (SEO/accesibilidad)",
+    alt: "¿Cómo describir este medio para la accesibilidad?",
     altPlaceholder: "Describe la imagen en pocas palabras",
-    sectionHintLabel: "Colocar en la sección (recomendado)",
+    sectionHintLabel: "¿En qué sección quieres colocar este medio? (recomendado)",
     sectionHintHelper:
       "Indique dónde debe aparecer este media. Sin esta información, la IA adivina desde la descripción.",
     placementGuaranteed: "Colocación garantizada",

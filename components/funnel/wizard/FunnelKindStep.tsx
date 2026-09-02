@@ -116,13 +116,13 @@ export function WebinarDetailsFields({
         ? "Your webinar"
         : language === "es"
           ? "Tu webinar"
-          : "Ton webinaire",
+          : "Comment souhaitez-vous organiser votre webinaire ?",
     modeLabel:
       language === "en"
-        ? "Format"
+        ? "Which format would you like to use?"
         : language === "es"
-          ? "Formato"
-          : "Format",
+          ? "¿Qué formato quieres utilizar?"
+          : "Quel format souhaitez-vous utiliser ?",
     modeLive:
       language === "en"
         ? "Live (fixed date)"
@@ -146,14 +146,14 @@ export function WebinarDetailsFields({
         ? "Pre-recorded video URL (YouTube / Vimeo / mp4)"
         : language === "es"
           ? "URL del vídeo pregrabado (YouTube / Vimeo / mp4)"
-          : "URL de la vidéo pré-enregistrée (YouTube / Vimeo / mp4)",
+          : "Quel est le lien de votre vidéo pré-enregistrée ? (YouTube / Vimeo / mp4)",
     videoUrlPh: "https://youtube.com/watch?v=...",
     offerHours:
       language === "en"
         ? "Offer duration after registration (hours)"
         : language === "es"
           ? "Duración de la oferta tras la inscripción (horas)"
-          : "Durée de l'offre après inscription (heures)",
+          : "Combien d’heures votre offre reste-t-elle disponible après l’inscription ?",
     offerHoursHint:
       language === "en"
         ? "Countdown computed individually for each prospect from THEIR registration time, not a fixed date. Default: 24h."
@@ -165,7 +165,7 @@ export function WebinarDetailsFields({
         ? "Date & time of the session"
         : language === "es"
           ? "Fecha y hora de la sesión"
-          : "Date et heure du webinaire",
+          : "Quand aura lieu votre webinaire ?",
     dateHint:
       language === "en"
         ? "Feeds the countdown on the registration page."
@@ -177,7 +177,7 @@ export function WebinarDetailsFields({
         ? "Urgency / scarcity (optional)"
         : language === "es"
           ? "Urgencia / escasez (opcional)"
-          : "Urgence / rareté (optionnel)",
+          : "Pourquoi s’inscrire dès maintenant ? (optionnel)",
     urgencyPh:
       language === "en"
         ? "e.g. Limited to 200 seats"
@@ -189,7 +189,7 @@ export function WebinarDetailsFields({
         ? "Webinar link (Zoom / YouTube / Meet)"
         : language === "es"
           ? "Enlace del webinar (Zoom / YouTube / Meet)"
-          : "Lien du webinaire (Zoom / YouTube / Meet)",
+          : "Quel est le lien pour rejoindre votre webinaire ? (Zoom / YouTube / Meet)",
     linkHint:
       language === "en"
         ? "Shown in the waiting room on the day, and used in reminder emails."
@@ -205,7 +205,7 @@ export function WebinarDetailsFields({
         ? "Replay available for (hours)"
         : language === "es"
           ? "Replay disponible durante (horas)"
-          : "Replay accessible pendant (heures)",
+          : "Pendant combien d’heures le replay sera-t-il accessible ?",
     expiryHint:
       language === "en"
         ? "After that, the replay page shows an expiration message. Default: 72h."
@@ -371,7 +371,7 @@ export function BookingDetailsFields({
         ? "Your booking calendar"
         : language === "es"
           ? "Tu calendario de reservas"
-          : "Ton calendrier de RDV",
+          : "Quel calendrier souhaitez-vous utiliser ?",
     native:
       language === "en"
         ? "Built-in calendar (recommended)"
@@ -395,7 +395,7 @@ export function BookingDetailsFields({
         ? "Calendar link (Calendly / Cal.com)"
         : language === "es"
           ? "Enlace del calendario (Calendly / Cal.com)"
-          : "Lien du calendrier (Calendly / Cal.com)",
+          : "Quel est le lien de votre calendrier ? (Calendly / Cal.com)",
     hint:
       language === "en"
         ? "Embedded on the booking page. Your prospects leave AutoFunnel to book."
@@ -542,13 +542,13 @@ export function ChallengeDetailsFields({
 
   const L = {
     title:
-      language === "en" ? "Your challenge" : language === "es" ? "Tu reto" : "Ton challenge",
+      language === "en" ? "Your challenge" : language === "es" ? "Tu reto" : "Comment souhaitez-vous organiser votre challenge ?",
     label:
       language === "en"
         ? "Number of days"
         : language === "es"
           ? "Número de días"
-          : "Nombre de jours",
+          : "Combien de jours durera votre challenge ?",
     hint:
       language === "en"
         ? `One page per day (Day 1 to Day N), plus a final pitch page. Up to ${MAX_CHALLENGE_DAYS} days.`
@@ -560,7 +560,7 @@ export function ChallengeDetailsFields({
         ? "Title of each day"
         : language === "es"
           ? "Título de cada día"
-          : "Titre de chaque jour",
+          : "Quel sera le thème de chaque jour ?",
     titlesHint:
       language === "en"
         ? "Left empty, every day would carry the same headline. One subject per day makes the challenge feel real."
