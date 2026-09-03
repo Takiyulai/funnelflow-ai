@@ -10,6 +10,7 @@ import {
   Send, LineChart, Menu, X, Search, PenTool, Handshake,
 } from "lucide-react";
 import { ChatWidget } from "@/components/chatbot/ChatWidget";
+import { ProductDashboardPreview } from "@/components/marketing/ProductDashboardPreview";
 
 
 // ── Scroll animation wrapper ──────────────────────────────────────────────────
@@ -1017,21 +1018,6 @@ export default function LandingPage() {
     setLang(next);
   };
 
-  // Effet tilt 3D de la carte hero (suit le curseur)
-  const tiltRef = useRef<HTMLDivElement>(null);
-  const handleTilt = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = tiltRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width - 0.5;
-    const py = (e.clientY - r.top) / r.height - 0.5;
-    el.style.transform = `perspective(1100px) rotateY(${px * 8}deg) rotateX(${-py * 8}deg) scale(1.012)`;
-  };
-  const resetTilt = () => {
-    const el = tiltRef.current;
-    if (el) el.style.transform = "perspective(1100px) rotateY(0deg) rotateX(0deg) scale(1)";
-  };
-
   const BG = "#080E1A";
   const ALT = "#0A1322";
   const CARD = "#0D1628";
@@ -1249,151 +1235,59 @@ export default function LandingPage() {
       </header>
 
 
-      {/* HERO */}
-      <section className="relative overflow-hidden" style={{ background: `linear-gradient(140deg,#080E1A 0%,#0A1628 60%,#080E1A 100%)` }}>
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-40 -top-40 h-[600px] w-[600px] rounded-full opacity-10" style={{ background: "radial-gradient(circle,#C7A436,transparent 65%)" }} />
-          <div className="absolute -bottom-20 -left-20 h-96 w-96 rounded-full opacity-8" style={{ background: "radial-gradient(circle,#31845C,transparent 65%)" }} />
+      {/* HERO — promesse centrée, puis aperçu du produit en pleine largeur. */}
+      <section className="relative overflow-hidden" style={{ background: "linear-gradient(155deg,#080E1A 0%,#0A1826 55%,#080E1A 100%)" }}>
+        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+          <div className="absolute left-1/2 top-8 h-[540px] w-[900px] -translate-x-1/2 rounded-full opacity-15" style={{ background: "radial-gradient(ellipse,#31845C,transparent 65%)" }} />
+          <div className="absolute -right-40 bottom-0 h-[520px] w-[520px] rounded-full opacity-10" style={{ background: "radial-gradient(circle,#C7A436,transparent 65%)" }} />
         </div>
 
-        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 lg:px-8 lg:pb-28 lg:pt-24">
-          <div className="hero-grid grid items-start gap-10" style={{ gridTemplateColumns: "1.1fr 0.9fr" }}>
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="hero-promise">
-              {/* Label */}
-              <div className="inline-flex items-center gap-2 rounded-full px-3 py-1" style={{ background: "rgba(199,164,54,0.10)", border: "1px solid rgba(199,164,54,0.24)", color: "#C7A436", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-                <Sparkles size={10} /> {t.hero.label}
-              </div>
-
-              {/* 🆕 Badges différenciants : rapidité, mobile-first, tout-en-un */}
-              <div className="hero-badges mt-4 flex flex-wrap gap-2">
-                {[
-                  { icon: <Gauge size={13} />, label: ({ fr: "Ultra-rapide", en: "Ultra-fast", es: "Ultrarrápido" } as const)[lang] },
-                  { icon: <Smartphone size={13} />, label: "Mobile-first" },
-                  { icon: <Layers size={13} />, label: ({ fr: "Tout dans l'app", en: "All in the app", es: "Todo en la app" } as const)[lang] },
-                ].map((b, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 ff-body whitespace-nowrap" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>
-                    <span style={{ color: "#31845C" }}>{b.icon}</span>{b.label}
-                  </span>
-                ))}
-              </div>
-
-              {/* Promesse principale — hook direct, statique (plus de cycle de mots) */}
-              <h1 className="ff-title hero-title mt-5 leading-[1.04] text-white" style={{ fontSize: "clamp(2.1rem,4.7vw,3.6rem)", fontWeight: 700 }}>
-                {t.hero.titleStart}{" "}
-                {t.hero.titleMid}{" "}
-                <span style={{ color: "#C7A436" }}>{t.hero.titleEnd}</span>
-              </h1>
-
-              <p className="hero-sub mt-6 max-w-xl ff-body" style={{ fontSize: 16, color: MUTED2, lineHeight: 1.62 }}>
-                {t.hero.desc}
-              </p>
-
-              <div className="hero-ctas mt-8 flex flex-wrap gap-3.5">
-                <a href="#pricing" className="af-cta-pulse group inline-flex items-center gap-2 rounded-xl px-7 py-3.5 ff-title" style={{ background: "#C7A436", color: "#080E1A", fontSize: 15, fontWeight: 700 }}>
-                  {t.hero.ctaPrimary} <ArrowRight size={15} />
-                </a>
-                <a href="#how" className="inline-flex items-center gap-2 rounded-xl px-6 py-3.5 ff-title transition hover:border-[#31845C]" style={{ background: "transparent", color: "#d7deea", border: "1px solid rgba(255,255,255,0.16)", fontSize: 15, fontWeight: 600 }}>
-                  {t.hero.ctaSecondary}
-                </a>
-              </div>
-
-              {/* Proof bar */}
-              <div className="hero-proof mt-8 flex flex-wrap items-center gap-x-5 gap-y-2" style={{ fontSize: 15.5, color: MUTED2 }}>
-                {t.hero.proofBar.map((p, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 ff-body">
-                    <CheckCircle2 size={14} style={{ color: "#31845C" }} />
-                    {p}
-                  </span>
-                ))}
-              </div>
-
-              <p className="mt-5 ff-body" style={{ fontSize: 15, color: "#6b7890", lineHeight: 1.6 }}>
-                {t.hero.footnote}
-              </p>
-            </motion.div>
-
-            {/* Preview Card — refonte design (tilt + badge flottant) */}
-            <motion.div className="hero-card relative" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} onMouseMove={handleTilt} onMouseLeave={resetTilt} style={{ perspective: 1100 }}>
-              <div ref={tiltRef} className="tilt-card overflow-hidden rounded-[20px]" style={{ background: CARD, border: "1px solid rgba(255,255,255,0.09)", boxShadow: "0 50px 100px -40px rgba(0,0,0,0.7)" }}>
-                {/* Barre titre */}
-                <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#31845C", boxShadow: "0 0 0 3px rgba(49,132,92,0.18)" }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#C7A436" }}>{t.preview.badge}</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }} />
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }} />
-                  </div>
-                </div>
-
-                <div className="p-[18px]">
-                  {/* Chips d'action */}
-                  <div className="preview-buttons mb-3.5 flex flex-wrap gap-1.5">
-                    {[
-                      { label: t.preview.modify, primary: true },
-                      { label: t.preview.publish, primary: false },
-                      { label: t.preview.exportHtml, primary: false },
-                      { label: t.preview.exportSysteme, primary: false },
-                    ].map((btn, index) => (
-                      <div key={index} className="preview-btn rounded-[9px] px-3 py-1.5 ff-body" style={{ background: btn.primary ? "#C7A436" : "rgba(255,255,255,0.06)", color: btn.primary ? "#08111F" : "#fff", border: btn.primary ? "1px solid #C7A436" : "1px solid rgba(255,255,255,0.1)", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {btn.label}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Carte produit générée */}
-                  <div className="rounded-[14px] p-4" style={{ background: "#050B15" }}>
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0 ff-title" style={{ background: "#C7A436", color: "#08111F", fontWeight: 700, fontSize: 12 }}>AF</div>
-                      <div className="flex-1">
-                        <div className="h-2.5 rounded-full" style={{ width: "62%", background: "rgba(255,255,255,0.18)" }} />
-                        <div className="mt-1.5 h-2 rounded-full" style={{ width: "42%", background: "rgba(255,255,255,0.09)" }} />
-                      </div>
-                    </div>
-
-                    <span className="inline-block mt-3 rounded-full px-3 py-1 ff-body" style={{ fontSize: 10, background: "rgba(199,164,54,0.12)", color: "#C7A436" }}>{t.preview.productTag}</span>
-
-                    <h4 className="ff-title mt-3" style={{ fontSize: 15, lineHeight: 1.35, fontWeight: 600, color: "#fff" }}>
-                      {t.preview.productName}
-                    </h4>
-
-                    <p className="ff-body mt-1.5" style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-                      {t.preview.productDesc}
-                    </p>
-
-                    <div className="mt-3.5 rounded-[11px] py-2.5 text-center ff-title flex items-center justify-center gap-1.5 w-full" style={{ background: "#C7A436", color: "#08111F", fontWeight: 700, fontSize: 12 }}>
-                      <Download size={12} /> {t.preview.mainExportBtn}
-                    </div>
-                  </div>
-
-                  {/* Ce que tu obtiens */}
-                  <div className="mt-3.5 rounded-[14px] p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <p className="ff-body" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#31845C" }}>{t.preview.planTitle}</p>
-                    <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                      {t.preview.planItems.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2 ff-body" style={{ fontSize: 12, color: "#c3cdd9" }}>
-                          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full shrink-0" style={{ background: index === t.preview.planItems.length - 1 ? "#31845C" : "#1F2937", color: "#fff", fontSize: 9 }}>✓</span>
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Badge flottant */}
-              <div className="af-badge-float absolute -bottom-4 -left-4 flex items-center gap-2.5 rounded-[13px] px-3.5 py-2.5" style={{ background: CARD, border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 18px 40px -16px rgba(0,0,0,0.6)" }}>
-                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px]" style={{ background: "rgba(49,132,92,0.18)", color: "#31845C" }}>
-                  <Sparkles size={15} />
+        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
+          <div className="hero-promise mx-auto max-w-5xl text-center">
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1" style={{ background: "rgba(199,164,54,0.10)", border: "1px solid rgba(199,164,54,0.24)", color: "#C7A436", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              <Sparkles size={10} /> {t.hero.label}
+            </div>
+            <div className="hero-badges mt-4 flex flex-wrap justify-center gap-2">
+              {[
+                { icon: <Gauge size={13} />, label: ({ fr: "Ultra-rapide", en: "Ultra-fast", es: "Ultrarrápido" } as const)[lang] },
+                { icon: <Smartphone size={13} />, label: "Mobile-first" },
+                { icon: <Layers size={13} />, label: ({ fr: "Tout dans l'app", en: "All in the app", es: "Todo en la app" } as const)[lang] },
+              ].map((badge) => (
+                <span key={badge.label} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 ff-body whitespace-nowrap" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>
+                  <span style={{ color: "#69B58D" }}>{badge.icon}</span>{badge.label}
                 </span>
-                <div>
-                  <div className="ff-body" style={{ fontSize: 12.5, fontWeight: 600, color: "#fff" }}>{({ fr: "Tout dans l'app", en: "All in the app", es: "Todo en la app" } as const)[lang]}</div>
-                  <div className="ff-body" style={{ fontSize: 11, color: MUTED }}>{({ fr: "export en bonus", en: "export as a bonus", es: "exportar es un extra" } as const)[lang]}</div>
-                </div>
-              </div>
-            </motion.div>
+              ))}
+            </div>
+            <h1 className="ff-title hero-title mt-6 leading-[1.06] text-white" style={{ fontSize: "clamp(2.1rem,4.7vw,3.7rem)", fontWeight: 700 }}>
+              {t.hero.titleStart}{" "}{t.hero.titleMid}{" "}
+              <span style={{ color: "#C7A436" }}>{t.hero.titleEnd}</span>
+            </h1>
+            <p className="hero-sub mx-auto mt-6 max-w-3xl ff-body" style={{ fontSize: 17, color: MUTED2, lineHeight: 1.7 }}>
+              {t.hero.desc}
+            </p>
+            <div className="hero-ctas mt-8 flex flex-wrap justify-center gap-3.5">
+              <a href="#pricing" className="af-cta-pulse group inline-flex items-center gap-2 rounded-xl px-7 py-3.5 ff-title" style={{ background: "#C7A436", color: "#080E1A", fontSize: 15, fontWeight: 700 }}>
+                {t.hero.ctaPrimary} <ArrowRight size={15} />
+              </a>
+              <a href="#how" className="inline-flex items-center gap-2 rounded-xl px-6 py-3.5 ff-title transition hover:border-[#31845C]" style={{ background: "#152439", color: "#d7deea", border: "1px solid #34445a", fontSize: 15, fontWeight: 600 }}>
+                {t.hero.ctaSecondary}
+              </a>
+            </div>
+            <div className="hero-proof mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-2" style={{ fontSize: 13, color: MUTED2 }}>
+              {t.hero.proofBar.map((proof) => (
+                <span key={proof} className="inline-flex items-center gap-1.5 ff-body">
+                  <CheckCircle2 size={14} style={{ color: "#69B58D" }} />{proof}
+                </span>
+              ))}
+            </div>
           </div>
+
+          <div className="mt-12 sm:mt-14 lg:mt-16">
+            <ProductDashboardPreview language={lang} />
+          </div>
+          <p className="mx-auto mt-6 max-w-3xl text-center ff-body" style={{ fontSize: 12, color: "#8293a9", lineHeight: 1.6 }}>
+            {t.hero.footnote}
+          </p>
         </div>
       </section>
 

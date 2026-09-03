@@ -9,6 +9,7 @@ import type { Funnel, FunnelSection } from "@/lib/funnels/types";
 import { CtaButton } from "@/components/funnel/CtaButton";
 import { RichText } from "@/components/funnel/RichText";
 import { resolveImageUrl } from "@/lib/funnels/resolveMedia";
+import SectionBackgroundLayer from "@/components/funnel/SectionBackgroundLayer";
 
 type Props = {
   section: FunnelSection;
@@ -124,9 +125,11 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
       id={section.id || "hero"}
       data-ff-section="hero"
       data-ff-pattern="hero-split-stats-search-b2b"
+      data-ff-text-align={section.style?.align || undefined}
       className="ff-section ff-hero"
       style={{ position: "relative", overflow: "hidden", background: "var(--ff-bg)", color: "var(--ff-ink)" }}
     >
+      <SectionBackgroundLayer background={section.background}>
       <div
         aria-hidden="true"
         style={{
@@ -193,7 +196,11 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
                 {bullets.map((b, i) => (
                   <div key={i} data-ff-anim="fade-up" data-ff-anim-index={i} style={{ display: "flex", alignItems: "center", gap: 26 }}>
                     {i > 0 && <div style={{ width: 1, alignSelf: "stretch", background: "color-mix(in srgb, var(--ff-ink) 14%, transparent)" }} />}
-                    <div style={{ fontWeight: 600, fontSize: 15, color: "color-mix(in srgb, var(--ff-ink) 78%, transparent)", maxWidth: 180 }}>{b}</div>
+                    <RichText
+                      as="div"
+                      text={b}
+                      style={{ fontWeight: 600, fontSize: 15, color: "color-mix(in srgb, var(--ff-ink) 78%, transparent)", maxWidth: 180 }}
+                    />
                   </div>
                 ))}
               </div>
@@ -219,6 +226,7 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
           )}
         </div>
       </div>
+      </SectionBackgroundLayer>
     </section>
   );
 }

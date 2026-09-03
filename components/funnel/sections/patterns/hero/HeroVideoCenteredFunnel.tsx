@@ -9,6 +9,7 @@ import type { Funnel, FunnelSection } from "@/lib/funnels/types";
 import { CtaButton } from "@/components/funnel/CtaButton";
 import { RichText } from "@/components/funnel/RichText";
 import { getVideoEmbed } from "@/lib/funnels/video";
+import SectionBackgroundLayer from "@/components/funnel/SectionBackgroundLayer";
 
 type Props = {
   section: FunnelSection;
@@ -25,9 +26,11 @@ export function HeroVideoCenteredFunnel({ section, mode = "public" }: Props) {
       id={section.id || "hero"}
       data-ff-section="hero"
       data-ff-pattern="hero-video-centered-funnel"
+      data-ff-text-align={section.style?.align || undefined}
       className="ff-section ff-hero"
       style={{ position: "relative", overflow: "hidden", background: "var(--ff-bg)", color: "var(--ff-ink)" }}
     >
+      <SectionBackgroundLayer background={section.background}>
       <div
         aria-hidden="true"
         style={{
@@ -137,12 +140,13 @@ export function HeroVideoCenteredFunnel({ section, mode = "public" }: Props) {
                   lineHeight: 1.45,
                 }}
               >
-                {b}
+                <RichText as="span" text={b} />
               </div>
             ))}
           </div>
         )}
       </div>
+      </SectionBackgroundLayer>
     </section>
   );
 }

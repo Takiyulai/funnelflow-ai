@@ -5,24 +5,19 @@
 // le fond et le padding viennent du wrapper de FunnelPreview).
 
 import type { Funnel, FunnelSection } from "@/lib/funnels/types";
+import { splitTextPair } from "@/lib/funnels/text";
 import {
   BENEFITS_PATTERNS,
   type BenefitItem,
 } from "./patterns/benefits/BenefitsPatterns";
-
-function stripMarkers(s: string): string {
-  return s.replace(/\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]/g, "$1");
-}
 
 function parseBullets(bullets: unknown): BenefitItem[] {
   if (!Array.isArray(bullets)) return [];
   return bullets
     .filter((raw): raw is string => typeof raw === "string" && raw.trim().length > 0)
     .map((raw) => {
-      const pipe = raw.indexOf("|");
-      const title = pipe >= 0 ? raw.slice(0, pipe) : raw;
-      const desc = pipe >= 0 ? raw.slice(pipe + 1) : "";
-      return { title: stripMarkers(title).trim(), desc: stripMarkers(desc).trim() };
+      const pair = splitTextPair(raw);
+      return { title: pair?.first ?? raw.trim(), desc: pair?.second ?? "" };
     });
 }
 

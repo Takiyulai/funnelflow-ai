@@ -62,6 +62,7 @@ import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
 import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge";
 import { DayProgressButton } from "@/components/funnel/DayProgressButton";
+import { splitTextPair } from "@/lib/funnels/text";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -500,7 +501,7 @@ function usesSpecializedRenderer(section: FunnelSection): boolean {
  * exactement le routage de SpecializedContent : toute évolution de l'un doit
  * être répercutée sur l'autre.
  */
-type OwnHeaderParts = { eyebrow: boolean; headline: boolean; subheadline: boolean };
+type OwnHeaderParts = { eyebrow: boolean; headline: boolean; subheadline: boolean; body?: boolean };
 const NO_OWN_HEADER: OwnHeaderParts = { eyebrow: false, headline: false, subheadline: false };
 const TITLE_ONLY: OwnHeaderParts = { eyebrow: false, headline: true, subheadline: true };
 const FULL_HEADER: OwnHeaderParts = { eyebrow: true, headline: true, subheadline: true };
@@ -509,7 +510,8 @@ function specializedOwnHeader(section: FunnelSection): OwnHeaderParts {
   if (!usesSpecializedRenderer(section)) return NO_OWN_HEADER;
   const t = section.type as string;
   // Toujours routés vers un pattern (défaut inclus), tous porteurs d'un en-tête.
-  if (t === "faq" || t === "benefits" || t === "cta") return TITLE_ONLY;
+  if (t === "benefits") return { ...TITLE_ONLY, body: true };
+  if (t === "faq" || t === "cta") return TITLE_ONLY;
   // proof + stats : seule famille dont le pattern rend AUSSI l'eyebrow.
   if (t === "proof" && isStatsPattern(section.pattern)) return FULL_HEADER;
   // proof + trustbar : contenu seul, aucun en-tête → le générique reste.
@@ -633,12 +635,10 @@ function buildSlugLinkMap(funnel: Funnel): Map<string, string> {
 function splitBulletValueLabel(
   raw: string,
 ): { value: string; label: string } | null {
-  if (!raw) return null;
-  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
-  if (!m) return null;
-  const value = m[1].trim();
-  const label = m[2].trim();
-  if (!value || !label) return null;
+  const pair = splitTextPair(raw);
+  if (!pair) return null;
+  const value = pair.first;
+  const label = pair.second;
   if (value.length > 12) return null;
   return { value, label };
 }
@@ -646,12 +646,10 @@ function splitBulletValueLabel(
 function splitBulletTitleDescription(
   raw: string,
 ): { title: string; description: string } | null {
-  if (!raw) return null;
-  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
-  if (!m) return null;
-  const title = m[1].trim();
-  const description = m[2].trim();
-  if (!title || !description) return null;
+  const pair = splitTextPair(raw);
+  if (!pair) return null;
+  const title = pair.first;
+  const description = pair.second;
   if (description.length < 20) return null;
   return { title, description };
 }
@@ -1754,6 +1752,7 @@ function HeroBlock({
       data-ff-section="hero"
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-text-align={section.style?.align || undefined}
       data-ff-shadow-scope={shadowAttr}
       data-ff-page-role={pageRole ?? undefined}
       data-ff-custom-bg={colors.bg ? "true" : undefined}
@@ -2179,6 +2178,7 @@ function StandardSectionBlock({
       data-ff-section={section.type}
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-text-align={section.style?.align || undefined}
       data-ff-pattern={section.pattern || undefined}
       data-ff-split-mode={splitTextOnly ? "text" : undefined}
       data-ff-shadow-scope={shadowAttr}
@@ -2246,7 +2246,7 @@ function StandardSectionBlock({
           />
         )}
 
-        {section.body && (
+        {section.body && !ownHeader.body && (
           <RichText
             as="p"
             className={`ff-body ${bodySize} whitespace-pre-line`}
@@ -2592,7 +2592,7 @@ function BulletsList({
               )}
               {split ? (
                 <span className="flex flex-col gap-1">
-                  <strong className="font-semibold">{split.title}</strong>
+                  <RichText as="strong" text={split.title} className="font-semibold" />
                   <RichText
                     as="span"
                     text={split.description}
@@ -2649,7 +2649,7 @@ function BulletsList({
             )}
             {split ? (
               <span className="flex flex-col gap-0.5">
-                <strong className="font-semibold">{split.title}</strong>
+                <RichText as="strong" text={split.title} className="font-semibold" />
                 <RichText
                   as="span"
                   text={split.description}

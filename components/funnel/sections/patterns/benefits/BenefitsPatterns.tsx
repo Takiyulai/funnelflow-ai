@@ -22,7 +22,7 @@ export type BenefitsPatternProps = {
 };
 
 function Header({ section, center }: { section: FunnelSection; center?: boolean }) {
-  if (!section.headline && !section.subheadline) return null;
+  if (!section.headline && !section.subheadline && !section.body) return null;
   return (
     <div
       data-ff-anim="fade-up"
@@ -35,6 +35,9 @@ function Header({ section, center }: { section: FunnelSection; center?: boolean 
         <div style={{ marginTop: 12 }}>
           <RichText as="p" className="ff-subheadline" text={section.subheadline} />
         </div>
+      )}
+      {section.body && (
+        <RichText as="p" className="ff-body" text={section.body} style={{ marginTop: 16 }} />
       )}
     </div>
   );
@@ -70,19 +73,19 @@ function AccentBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ItemTitle({ children }: { children: React.ReactNode }) {
+function ItemTitle({ children }: { children: string }) {
   return (
     <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--ff-ink)", lineHeight: 1.25 }}>
-      {children}
+      <RichText as="span" text={children} />
     </h3>
   );
 }
 
-function ItemDesc({ children }: { children: React.ReactNode }) {
+function ItemDesc({ children }: { children: string }) {
   if (!children) return null;
   return (
     <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: "var(--ff-ink)", opacity: 0.78 }}>
-      {children}
+      <RichText as="span" text={children} />
     </p>
   );
 }

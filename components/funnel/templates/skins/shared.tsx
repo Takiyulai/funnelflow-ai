@@ -9,6 +9,7 @@ import type {
   TimerItem,
 } from "@/lib/funnels/types";
 import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
+import { splitTextPair } from "@/lib/funnels/text";
 
 /* ─── Couleurs de section (copie de la logique FunnelPreview) ──────────── */
 
@@ -116,6 +117,7 @@ export function SkinSection({
       data-ff-section={section.type}
       data-ff-section-id={section.id}
       data-ff-skin="true"
+      data-ff-text-align={section.style?.align || undefined}
       data-ff-has-bg-image={hasBgImage ? "true" : undefined}
       className={`t1-sec relative ${className ?? ""}`}
       style={{
@@ -155,13 +157,8 @@ export function SkinSection({
 export function splitTitleDesc(
   raw: string,
 ): { title: string; description: string } | null {
-  if (!raw) return null;
-  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
-  if (!m) return null;
-  const title = m[1].trim();
-  const description = m[2].trim();
-  if (!title || !description) return null;
-  return { title, description };
+  const pair = splitTextPair(raw);
+  return pair ? { title: pair.first, description: pair.second } : null;
 }
 
 /** Retire la syntaxe de surlignage [[texte|#hex]] → texte brut. */

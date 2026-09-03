@@ -76,11 +76,32 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
   // pourtant avoir supprimée). `applyCta` est désormais le SEUL chemin qui
   // modifie l'action d'un bouton ; tant que l'action commune est active pour
   // CE bouton, elle resynchronise `defaultCta` à chaque changement.
+  const sectionCtaPatch = (nextCta: CtaConfig): Partial<Funnel> => ({
+    sections: funnel.sections.map((item) =>
+      item.id === section.id ? { ...item, cta: nextCta } : item,
+    ),
+    ...(funnel.pages ? {
+      pages: funnel.pages.map((page) => ({
+        ...page,
+        sections: page.sections.map((item) =>
+          item.id === section.id ? { ...item, cta: nextCta } : item,
+        ),
+      })),
+    } : {}),
+  });
+
   const applyCta = (nextCta: CtaConfig) => {
-    onChange({ cta: nextCta });
     if (funnel.meta?.applyDefaultCtaToAll === true && !nextCta.ignoreGlobalCta) {
-      onFunnelChange({ defaultCta: { ...nextCta } });
+      // Une seule transaction d'état : appeler `onChange` puis
+      // `onFunnelChange` reconstruisait deux funnels depuis le même ancien
+      // snapshot. La seconde mise à jour annulait alors la frappe précédente.
+      onFunnelChange({
+        defaultCta: { ...nextCta },
+        ...sectionCtaPatch(nextCta),
+      });
+      return;
     }
+    onChange({ cta: nextCta });
   };
 
   const updateCta = (patch: Partial<CtaConfig>) => {
@@ -277,16 +298,13 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
               checked={funnel.meta?.applyDefaultCtaToAll === true}
               onChange={(e) => {
                 const on = e.target.checked;
+                // Lever l'exclusion locale dans la même transaction quand
+                // l'action commune est activée depuis ce bouton.
+                const sharedCta = on ? { ...cta, ignoreGlobalCta: false } : cta;
                 onFunnelChange({
                   meta: { ...(funnel.meta ?? {}), applyDefaultCtaToAll: on },
-                  ...(on ? { defaultCta: { ...cta } } : {}),
+                  ...(on ? { defaultCta: sharedCta, ...sectionCtaPatch(sharedCta) } : {}),
                 });
-                // Si ce bouton était lui-même marqué "action spécifique", on
-                // lève l'exclusion : sinon activer l'action commune DEPUIS ce
-                // bouton tout en le laissant l'ignorer serait contradictoire.
-                if (on && cta.ignoreGlobalCta) {
-                  updateCta({ ignoreGlobalCta: false });
-                }
               }}
               className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
             />

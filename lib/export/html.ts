@@ -62,6 +62,7 @@ import {
 } from "./theme-css";
 import { createReadme } from "./readme";
 import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
+import { splitTextPair } from "@/lib/funnels/text";
 
 // 🆕 RAW HTML — imports pour le rendu des sections clonées
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
@@ -104,6 +105,13 @@ type PublicNavContext = {
   /** URL de la page SUIVANTE du tunnel (après soumission de formulaire / CTA sans cible). */
   nextUrl?: string;
 };
+
+function sectionTextAlignAttr(section: FunnelSection): string {
+  const align = section.style?.align;
+  return align === "left" || align === "center" || align === "right"
+    ? ` data-ff-text-align="${align}"`
+    : "";
+}
 
 /** Construit l'URL publique d'une page cible à partir de son pageId. */
 function publicPageUrl(nav: PublicNavContext, pageId: string): string | null {
@@ -1141,11 +1149,11 @@ function splitBulletValueLabel(
   raw: string,
 ): { value: string; label?: string } {
   const t = (raw || "").trim();
-  const pipeIdx = t.indexOf("|");
-  if (pipeIdx > 0 && pipeIdx < t.length - 1) {
+  const pair = splitTextPair(t);
+  if (pair) {
     return {
-      value: t.slice(0, pipeIdx).trim(),
-      label: t.slice(pipeIdx + 1).trim(),
+      value: pair.first,
+      label: pair.second,
     };
   }
   const nlIdx = t.indexOf("\n");
@@ -1172,12 +1180,10 @@ function bulletsFitInlineStrip(bullets: string[]): boolean {
 function splitBulletTitleDesc(
   raw: string,
 ): { title: string; description: string } | null {
-  if (!raw) return null;
-  const m = raw.match(/^\s*(.+?)\s*(?:\||—|–|::)\s*(.+?)\s*$/);
-  if (!m) return null;
-  const title = m[1].trim();
-  const description = m[2].trim();
-  if (!title || !description) return null;
+  const pair = splitTextPair(raw);
+  if (!pair) return null;
+  const title = pair.first;
+  const description = pair.second;
   if (description.length < 20) return null;
   return { title, description };
 }
@@ -2322,7 +2328,7 @@ function renderSkinCtaFinalSection(
   ].join(";");
   const glowStyle = `background:radial-gradient(circle, color-mix(in srgb, ${t.accent} 30%, transparent), transparent 65%)`;
 
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-cta ff-layout-centered" data-ff-section="cta" data-ff-section-id="${escapeAttr(section.id)}" data-ff-custom-bg="true">
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-cta ff-layout-centered" data-ff-section="cta" data-ff-section-id="${escapeAttr(section.id)}" data-ff-custom-bg="true"${sectionTextAlignAttr(section)}>
   <div class="ff-section-inner">
     <div class="ff-skin-cta-final" style="${escapeAttr(boxStyle)}">
       <div class="ff-skin-cta-final__glow" aria-hidden="true" style="${escapeAttr(glowStyle)}"></div>
@@ -2400,7 +2406,7 @@ function renderSkinProcessSection(
   const inner = renderSkinTextAndCta(section, ctx, cardsHtml, mediaHtml || undefined);
   const layoutClass = mediaHtml ? "ff-layout-split" : "ff-layout-centered";
   const layoutAttr = mediaHtml ? "split" : "centered";
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ${layoutClass}" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layoutAttr}">
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ${layoutClass}" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layoutAttr}"${sectionTextAlignAttr(section)}>
   <div class="ff-section-inner">${inner}</div>
 </section>`;
 }
@@ -2444,7 +2450,7 @@ function renderSkinUrgencySection(
     `padding:40px 28px`,
     `text-align:center`,
   ].join(";");
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-urgency ff-layout-centered" data-ff-section="urgency" data-ff-section-id="${escapeAttr(section.id)}">
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-urgency ff-layout-centered" data-ff-section="urgency" data-ff-section-id="${escapeAttr(section.id)}"${sectionTextAlignAttr(section)}>
   <div class="ff-section-inner">
     <div style="${escapeAttr(panelStyle)}">
       ${titleHtml}${timerHtml}
@@ -2617,7 +2623,7 @@ function renderSection(
   // etc.) → elles ne matchaient JAMAIS pour la quasi-totalité des sections
   // exportées. Miroir de FunnelPreview.tsx qui pose déjà data-ff-section
   // partout dans l'aperçu live.
-  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${hasVideo ? ' data-ff-has-video="true"' : ""}>
+  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${sectionTextAlignAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
 ${overlay}${inner}
 </section>`;
 }

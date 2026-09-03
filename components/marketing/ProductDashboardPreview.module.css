@@ -1,0 +1,73 @@
+.preview { position: relative; width: 100%; max-width: 1120px; margin: 0 auto; color: #eef3fa; font-family: "Instrument Sans", sans-serif; text-align: left; border: 1px solid #344354; border-radius: 18px; background: #0c1524; box-shadow: 0 32px 110px -30px #000, 0 0 90px -45px #31845c; }
+.windowBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #243043; color: #8798ad; font-size: 10px; letter-spacing: .03em; }
+.windowDots { display: flex; gap: 5px; }
+.windowDots i { width: 7px; height: 7px; border-radius: 50%; background: #526174; }
+.windowDots i:first-child { background: #c7a436; }
+.secure { display: inline-flex; align-items: center; gap: 5px; }
+.secure svg { color: #70c49b; }
+.workspace { display: grid; grid-template-columns: 190px minmax(0, 1fr); }
+.sidebar { display: flex; flex-direction: column; padding: 24px 16px 20px; border-right: 1px solid #243043; background: #0e192b; border-bottom-left-radius: 18px; }
+.brand { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.brand > span { display: grid; place-items: center; width: 28px; height: 30px; margin-right: 3px; border-radius: 9px; background: linear-gradient(140deg, #31845c, #08498d); font-size: 10px; }
+.brand b { color: #c7a436; }
+.workspaceLabel { margin: 28px 8px 11px; color: #71839a; font-size: 10px; }
+.navigation { display: grid; gap: 5px; }
+.navItem, .navActive { display: flex; align-items: center; gap: 10px; padding: 10px 11px; border-radius: 8px; font-size: 11px; color: #a4b2c7; }
+.navActive { background: #c7a436; color: #111827; font-weight: 700; }
+.copilot { display: flex; align-items: center; gap: 9px; margin-top: auto; padding: 17px 5px 0; font-size: 11px; line-height: 1.5; color: #a1b5a8; }
+.copilot svg { color: #67bd96; }
+.copilot small { color: #708298; font-size: 9px; }
+.dashboard { min-width: 0; padding: 28px; }
+.dashboardHeader { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 24px; }
+.dashboardHeader h2 { font-size: 22px; font-weight: 600; letter-spacing: -.035em; line-height: 1.25; margin: 0; }
+.dashboardHeader p { margin: 6px 0 0; color: #8798ad; font-size: 11px; }
+.create { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; padding: 10px 12px; border-radius: 8px; background: #c7a436; color: #101827; font-size: 10px; font-weight: 700; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.metric { position: relative; overflow: hidden; padding: 16px 17px; background: #111e30; border: 1px solid #243247; border-radius: 11px; }
+.metric > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #96a9c0; font-size: 10px; }
+.metric svg { color: #c7a436; flex-shrink: 0; }
+.metric strong { display: block; margin-top: 12px; font-size: 30px; line-height: 1; font-weight: 600; letter-spacing: -.04em; }
+.metricLine { display: block; width: 42px; height: 3px; margin-top: 14px; background: #31845c; border-radius: 3px; }
+.metric:nth-child(2) .metricLine { background: #c7a436; width: 64px; }
+.metric:nth-child(3) .metricLine { background: #357fc2; }
+.mainGrid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; }
+.panel { min-width: 0; padding: 17px; border: 1px solid #243247; border-radius: 11px; background: #0f1a2c; }
+.panelHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+.panelHeading h3 { font-size: 12px; margin: 0; font-weight: 600; }
+.panelHeading > span { display: inline-flex; align-items: center; gap: 3px; color: #8398b0; font-size: 9px; }
+.panelHeading > svg { color: #71869d; }
+.funnelList { display: grid; gap: 12px; }
+.funnelRow { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid #202e41; }
+.funnelRow:last-child { border-bottom: 0; padding-bottom: 0; }
+.funnelThumb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 38px; height: 46px; flex-shrink: 0; border: 1px solid #59632c; border-radius: 5px; background: linear-gradient(155deg, #444a21, #172624); }
+.funnelThumb i { height: 2px; width: 22px; background: #dee8c4; border-radius: 2px; }
+.funnelThumb i:nth-child(2) { width: 16px; opacity: .4; }
+.funnelThumb i:nth-child(3) { height: 5px; width: 16px; margin-top: 4px; background: #c7a436; }
+.thumb1 { background: linear-gradient(155deg, #213865, #151a32); border-color: #334d7e; }
+.thumb2 { background: linear-gradient(155deg, #184b40, #152b30); border-color: #2b6452; }
+.funnelInfo { min-width: 0; flex: 1; }
+.funnelInfo strong { display: block; font-size: 11px; line-height: 1.4; font-weight: 500; }
+.funnelInfo small { display: block; color: #758ba5; font-size: 9px; margin-top: 4px; }
+.live, .draft { flex-shrink: 0; font-size: 8px; padding: 4px 6px; border-radius: 20px; color: #8fd2b2; background: #18392f; }
+.draft { color: #9aacbf; background: #233045; }
+.rowArrow { color: #758ba5; flex-shrink: 0; }
+.chartSummary { display: flex; justify-content: space-between; align-items: baseline; }
+.chartSummary strong { font-size: 25px; font-weight: 600; letter-spacing: -.04em; }
+.chartSummary span { font-size: 9px; color: #71869d; }
+.chart { height: 114px; display: flex; align-items: stretch; justify-content: space-between; gap: 8px; margin-top: 10px; border-bottom: 1px solid #344256; background: repeating-linear-gradient(to top, transparent 0, transparent 32px, #253345 33px, transparent 34px); }
+.chart > div { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.chart i { width: 100%; max-width: 20px; min-height: 8px; border-radius: 4px 4px 0 0; background: linear-gradient(to top, #245d49, #5dae86); }
+.chart > div:last-child i { background: linear-gradient(to top, #917426, #d9bc55); }
+.chart span { margin: 7px 0 -20px; font-size: 8px; color: #6b819b; }
+.chartNote { font-size: 9px; color: #7f94ad; margin: 29px 0 0; line-height: 1.4; }
+.automation { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; padding: 14px 16px; border-radius: 10px; border: 1px solid #2a423c; background: linear-gradient(100deg, #142b28, #111e2c); }
+.automationTitle { display: flex; align-items: center; gap: 8px; color: #9fc3b3; }
+.automationTitle strong { font-size: 10px; font-weight: 500; }
+.flow { display: flex; flex-wrap: wrap; gap: 14px; }
+.flow > span { position: relative; display: flex; align-items: center; gap: 5px; color: #c5d1de; font-size: 9px; }
+.flow > span > svg:first-child { color: #70c49b; }
+.flowArrow { color: #6d8f83; margin-right: -10px; }
+.preview figcaption { padding: 12px 18px; border-top: 1px solid #243043; color: #8194aa; text-align: center; font-size: 10px; letter-spacing: .02em; }
+@media (max-width: 1000px) { .workspace { grid-template-columns: 160px minmax(0, 1fr); } .sidebar { padding: 22px 11px; } .brand { font-size: 11px; } .dashboard { padding: 22px; } .mainGrid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } .rowArrow { display: none; } .funnelRow { gap: 7px; } }
+@media (max-width: 760px) { .workspace { grid-template-columns: minmax(0, 1fr); } .sidebar { display: none; } .dashboard { padding: 22px; } .dashboardHeader h2 { font-size: 21px; } }
+@media (max-width: 540px) { .windowBar { padding: 11px 14px; } .secure { display: none; } .dashboard { padding: 18px 14px; } .dashboardHeader { align-items: flex-start; margin-bottom: 18px; } .dashboardHeader h2 { font-size: 19px; max-width: 230px; } .dashboardHeader p { font-size: 10px; } .create { display: none; } .metrics { gap: 7px; } .metric { padding: 12px 9px; } .metric > div { font-size: 9px; min-height: 26px; line-height: 1.4; } .metric svg { display: none; } .metric strong { font-size: 26px; } .mainGrid { grid-template-columns: minmax(0, 1fr); } .panel { padding: 15px; } .chart { height: 94px; } .automation { padding: 13px; } .flow { gap: 12px; } .flow > span { font-size: 8px; } }

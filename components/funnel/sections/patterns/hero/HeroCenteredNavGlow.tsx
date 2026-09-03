@@ -9,6 +9,7 @@
 import type { Funnel, FunnelSection } from "@/lib/funnels/types";
 import { CtaButton } from "@/components/funnel/CtaButton";
 import { RichText } from "@/components/funnel/RichText";
+import SectionBackgroundLayer from "@/components/funnel/SectionBackgroundLayer";
 
 type Props = {
   section: FunnelSection;
@@ -22,6 +23,7 @@ export function HeroCenteredNavGlow({ section, mode = "public" }: Props) {
       id={section.id || "hero"}
       data-ff-section="hero"
       data-ff-pattern="hero-centered-nav-glow"
+      data-ff-text-align={section.style?.align || undefined}
       className="ff-section ff-hero"
       style={{
         position: "relative",
@@ -30,6 +32,7 @@ export function HeroCenteredNavGlow({ section, mode = "public" }: Props) {
         color: "var(--ff-ink, #E9D5FF)",
       }}
     >
+      <SectionBackgroundLayer background={section.background}>
       {/* Halos animés color-aware (décoratif) */}
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         <div
@@ -114,6 +117,7 @@ export function HeroCenteredNavGlow({ section, mode = "public" }: Props) {
           </div>
         )}
       </div>
+      </SectionBackgroundLayer>
     </section>
   );
 }

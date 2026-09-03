@@ -3610,6 +3610,14 @@ const THEMES_CSS = `
 .ff-page .ff-split-text > .ff-bullets li span {
   text-align: left !important;
 }
+
+/* Réglage explicite « Alignement du texte » — parité avec l'aperçu React. */
+.ff-page [data-ff-section][data-ff-text-align][data-ff-text-align="left"] :is(h1, h2, h3, h4, p, li, div, .ff-bullets span, .ff-strip-label, .ff-eyebrow, .ff-headline, .ff-subheadline, .ff-body),
+[data-ff-text-align="left"] { text-align: left !important; }
+.ff-page [data-ff-section][data-ff-text-align][data-ff-text-align="center"] :is(h1, h2, h3, h4, p, li, div, .ff-bullets span, .ff-strip-label, .ff-eyebrow, .ff-headline, .ff-subheadline, .ff-body),
+[data-ff-text-align="center"] { text-align: center !important; }
+.ff-page [data-ff-section][data-ff-text-align][data-ff-text-align="right"] :is(h1, h2, h3, h4, p, li, div, .ff-bullets span, .ff-strip-label, .ff-eyebrow, .ff-headline, .ff-subheadline, .ff-body),
+[data-ff-text-align="right"] { text-align: right !important; }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────

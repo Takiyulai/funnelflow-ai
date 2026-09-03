@@ -93,7 +93,7 @@ export function StyleTab({ section, onChange }: Props) {
     shadow?: { size?: ShadowSize; color?: string };
     userColorsOverride?: boolean;
   };
-  const currentAlign: SectionAlign = style.align ?? "left";
+  const currentAlign = style.align;
   const colors = style.colors ?? {};
   const shadow = style.shadow ?? {};
   const shadowSize: ShadowSize = shadow.size ?? "none";
@@ -193,8 +193,14 @@ export function StyleTab({ section, onChange }: Props) {
       </Field>
 
       {/* Align */}
-      <Field label="Alignement du texte">
-        <div className="flex gap-1.5">
+      <Field label="Alignement du texte" hint="Automatique conserve l'alignement du template. Un choix explicite s'applique uniquement à cette section.">
+        <div className="flex flex-wrap gap-1.5">
+          <ModeBtn
+            active={currentAlign === undefined}
+            onClick={() => onChange({ style: { ...style, align: undefined } })}
+          >
+            Automatique
+          </ModeBtn>
           {ALIGNS.map((a) => (
             <ModeBtn
               key={a.value}
