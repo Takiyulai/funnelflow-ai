@@ -1282,7 +1282,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="mt-12 sm:mt-14 lg:mt-16">
+          <div className="mt-8 sm:mt-10">
             <ProductDashboardPreview language={lang} />
           </div>
           <p className="mx-auto mt-6 max-w-3xl text-center ff-body" style={{ fontSize: 12, color: "#8293a9", lineHeight: 1.6 }}>

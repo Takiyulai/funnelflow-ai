@@ -130,7 +130,7 @@ export function ProductDashboardPreview({ language }: { language: keyof typeof C
                 ))}
               </div>
             </section>
-            <section className={styles.panel}>
+            <section className={`${styles.panel} ${styles.activityPanel}`}>
               <div className={styles.panelHeading}><h3>{copy.activity}</h3><BarChart3 size={15} /></div>
               <div className={styles.chartSummary}><strong>128</strong><span>{copy.period}</span></div>
               <div className={styles.chart} aria-hidden="true">
