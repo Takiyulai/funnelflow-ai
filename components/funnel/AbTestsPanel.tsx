@@ -108,7 +108,7 @@ function VariantColumn({
       }`}
     >
       <p className="text-[11px] font-bold uppercase tracking-wider text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-black text-ink">{rate.toFixed(1)} %</p>
+      <p className="mt-1 text-2xl font-black text-ink">{counts.views ? `${rate.toFixed(1)} %` : "—"}</p>
       <p className="text-[11px] text-muted">
         {counts.conversions} conversion{counts.conversions > 1 ? "s" : ""} ·{" "}
         {counts.views} visiteur{counts.views > 1 ? "s" : ""}
@@ -254,7 +254,11 @@ export function AbTestsPanel({
     try {
       const res = await fetch(`/api/funnels/${funnelId}/ab-tests`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
-      if (json.ok) setTests(json.tests as AbTest[]);
+      if (!res.ok || !json.ok) throw new Error("read_failed");
+      setTests(json.tests as AbTest[]);
+      setError(null);
+    } catch {
+      setError("Impossible d’actualiser les résultats A/B. Les éventuels chiffres affichés sont les derniers chargés, pas des données à jour.");
     } finally {
       setLoading(false);
     }
@@ -408,6 +412,19 @@ export function AbTestsPanel({
             <strong className="text-ink">une seule chose à la fois</strong> :
             c&apos;est ce qui permet de savoir ce qui a marché.
           </p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            A et B sont diffusées simultanément, jamais l’une après l’autre.
+            L’affectation reste stable sur un même navigateur tant que son cookie est conservé.
+            À 50/50, trois nouveaux visiteurs peuvent tous recevoir B (12,5 % de probabilité).
+            La proportion observée se rapproche de la cible avec davantage de visiteurs.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            Ces résultats couvrent toute la durée de chaque test, indépendamment du filtre 7/30/90 jours des statistiques globales.
+          </p>
+          <button type="button" onClick={() => void load()} disabled={busy}
+            className="mt-2 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink">
+            Actualiser les résultats A/B
+          </button>
         </div>
       </div>
 
@@ -438,7 +455,7 @@ export function AbTestsPanel({
             </label>
             <label className="block">
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-                Trafic vers B : {split} %
+                Répartition cible : A {100 - split} % / B {split} %
               </span>
               <input
                 type="range"
@@ -463,7 +480,7 @@ export function AbTestsPanel({
       )}
 
       {/* ── Tests ─────────────────────────────────────────────────────── */}
-      {tests.length === 0 ? (
+      {tests.length === 0 && !error ? (
         <p className="mt-4 rounded-lg bg-canvas p-4 text-center text-xs text-muted">
           Aucun test pour l&apos;instant. Commence par l&apos;accroche de ta page
           d&apos;entrée : c&apos;est presque toujours ce qui bouge le plus.
@@ -528,6 +545,25 @@ export function AbTestsPanel({
                     </button>
                   </div>
                 </div>
+
+                <p className="mt-2 text-xs text-muted">
+                  Depuis le {new Date(test.started_at).toLocaleString("fr-FR")} · Cible : A {100 - test.traffic_split} % / B {test.traffic_split} %.
+                  {test.stats.a.views + test.stats.b.views > 0
+                    ? ` Répartition observée : A ${(100 * test.stats.a.views / (test.stats.a.views + test.stats.b.views)).toFixed(1)} % / B ${(100 * test.stats.b.views / (test.stats.a.views + test.stats.b.views)).toFixed(1)} %.`
+                    : " Aucun visiteur mesuré depuis le lancement. Les visites antérieures et les liens Voir A / Voir B sont exclus."}
+                </p>
+                {editable && page && countDifferences(original, test.variant_b) === 0 && (
+                  <p role="status" className="mt-3 rounded-lg border border-accent bg-accent-soft p-3 text-sm text-ink">
+                    <strong>A et B ont les mêmes textes testables.</strong> Voir la même page dans plusieurs navigateurs est donc normal.
+                    Ouvre « Modifier la variante B », change un titre ou un bouton, puis clique sur « Enregistrer la variante B ».
+                  </p>
+                )}
+                {editable && (
+                  <p className="mt-2 text-xs text-muted">
+                    A correspond à la page actuellement publiée. B se modifie et s’enregistre séparément ci-dessous, sans republication nécessaire.
+                    Modifier puis republier la page dans l’éditeur change A, pas B. Évite de changer A pendant la mesure.
+                  </p>
+                )}
 
                 {/* Résultats */}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">

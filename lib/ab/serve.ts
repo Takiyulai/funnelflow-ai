@@ -8,7 +8,8 @@
 // des défauts : un test qui tourne, affiche des chiffres, et n'a jamais montré
 // la variante B à personne.
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { isAbPreview } from "@/lib/ab/preview";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { FunnelPage } from "@/lib/funnels/types";
 import { AB_COOKIE } from "@/lib/ab/cookie";
@@ -53,19 +54,19 @@ export async function serveAbVariant(
     // Pas de cookie (middleware non passé, navigateur qui les refuse) → on
     // sert la version d'origine sans rien compter. Compter une vue sans
     // pouvoir garantir la stabilité de l'affectation fausserait le test.
-    if (!visitorKey) return { page, testId: null, variant: null };
+    if (!visitorKey && !forcedVariant) return { page, testId: null, variant: null };
 
     const admin = getSupabaseAdmin();
     const test = await getRunningTest(admin, funnelId, page.id);
     if (!test) return { page, testId: null, variant: null };
 
-    const variant = forcedVariant ?? pickVariant(visitorKey, test.id, test.traffic_split);
+    const variant = forcedVariant ?? pickVariant(visitorKey!, test.id, test.traffic_split);
 
     // 🔒 Une variante forcée par l'URL est un APERÇU : on ne compte rien.
     // Compter ces vues permettrait à n'importe qui de fausser un test en
     // rechargeant `?ff_ab=b`, et fausserait aussi tes propres chiffres à
     // chaque fois que tu vas vérifier ta page.
-    if (!forcedVariant) {
+    if (!forcedVariant && visitorKey) {
       await recordAbEvent(admin, {
         testId: test.id,
         userId: ownerId,
@@ -108,6 +109,14 @@ export async function recordAbConversion(
   pageId: string,
 ): Promise<void> {
   try {
+    // A submission from an explicit preview may create a lead, but must not
+    // credit a conversion to an automatically assigned variant never viewed.
+    const referrer = (await headers()).get("referer");
+    if (referrer) {
+      try {
+        if (isAbPreview(new URL(referrer).search)) return;
+      } catch { /* An invalid referrer is not an assignment signal. */ }
+    }
     const cookieStore = await cookies();
     const visitorKey = cookieStore.get(AB_COOKIE)?.value;
     if (!visitorKey) return;

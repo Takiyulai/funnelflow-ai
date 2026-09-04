@@ -12,6 +12,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { isAbPreview } from "@/lib/ab/preview";
 import { extractSlugsFromPath } from "@/lib/funnels/nextDestination";
 import {
   CONTACT_IDENTIFIED_EVENT,
@@ -133,6 +134,7 @@ export function PageViewBeacon() {
 
   // 1. 🆕 Comptage anonyme des visites (tous visiteurs, tunnels publiés).
   useEffect(() => {
+    if (isAbPreview(window.location.search)) return;
     const { funnelSlug, pageSlug } = extractSlugsFromPath(pathname);
     if (!funnelSlug) return;
 
@@ -167,6 +169,7 @@ export function PageViewBeacon() {
 
   // 2. Déclencheur workflow `page.visited` (contacts identifiés uniquement).
   useEffect(() => {
+    if (isAbPreview(window.location.search)) return;
     const { funnelSlug, pageSlug } = extractSlugsFromPath(pathname);
     if (!funnelSlug) return;
 
@@ -197,6 +200,7 @@ export function PageViewBeacon() {
   // qu'un leadId n'est pas connu. Le temps antérieur à la capture est donc
   // volontairement ignoré, même si le composant était déjà monté.
   useEffect(() => {
+    if (isAbPreview(window.location.search)) return;
     const { funnelSlug, pageSlug } = extractSlugsFromPath(pathname);
     if (!funnelSlug) return;
 

@@ -20,7 +20,7 @@ export default async function PublishedSubPage({ published, page, slug, searchPa
   );
   return <>
     <CustomCodeBlock code={customCode?.head ?? null} zone="head" />
-    <PublishedFunnelView funnel={published.funnel} funnelSlug={slug} activePage={activePage} />
+    <PublishedFunnelView funnel={published.funnel} funnelSlug={slug} activePage={activePage} previewVariant={forced} />
     <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
   </>;
 }

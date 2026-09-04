@@ -21,8 +21,9 @@ export async function GET(
     const tests = await listAbTests(sb, user.id, id);
     return NextResponse.json({ ok: true, tests }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
+    console.error("[ab-tests] lecture échouée :", e);
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "read_failed" },
+      { ok: false, error: "read_failed", message: "Les résultats A/B sont indisponibles. Réessaie dans un instant." },
       { status: 500 },
     );
   }

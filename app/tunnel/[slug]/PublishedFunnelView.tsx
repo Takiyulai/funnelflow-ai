@@ -23,10 +23,12 @@ export default function PublishedFunnelView({
   funnel,
   funnelSlug,
   activePage,
+  previewVariant,
 }: {
   funnel: Funnel;
   funnelSlug: string;
   activePage?: FunnelPage;
+  previewVariant?: "a" | "b" | null;
 }) {
   return (
     // 🆕 Fin de l'espace vide sous le footer : shell en flex column, la chaîne
@@ -42,6 +44,12 @@ export default function PublishedFunnelView({
         background: "#0B0F14",
       }}
     >
+      {previewVariant && <aside className="border-b border-border bg-bg px-4 py-3 text-center text-sm text-ink">
+        <strong>Aperçu forcé {previewVariant.toUpperCase()}</strong> — cette visite ne compte pas dans les statistiques.
+        {" "}<a className="underline" href={`/tunnel/${funnelSlug}${activePage?.isHome || !activePage?.slug ? "" : `/${activePage.slug.replace(/^\/+/, "")}`}`}>
+          Ouvrir le lien public avec répartition automatique
+        </a>
+      </aside>}
       <FunnelPreview
         funnel={funnel}
         funnelSlug={funnelSlug}

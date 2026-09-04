@@ -37,11 +37,6 @@ export type AbTest = {
 export type AbCounts = { views: number; conversions: number };
 export type AbTestWithStats = AbTest & { stats: { a: AbCounts; b: AbCounts } };
 
-const EMPTY_STATS = {
-  a: { views: 0, conversions: 0 },
-  b: { views: 0, conversions: 0 },
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Côté PUBLIC
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,13 +56,14 @@ export async function getRunningTest(
   pageId: string,
 ): Promise<AbTest | null> {
   try {
-    const { data } = await admin
+    const { data, error } = await admin
       .from("funnel_ab_tests")
       .select(TEST_COLS)
       .eq("funnel_id", funnelId)
       .eq("page_id", pageId)
       .eq("status", "running")
       .limit(1);
+    if (error) throw error;
     return data && data.length > 0 ? (data[0] as AbTest) : null;
   } catch (e) {
     console.error("[ab] lecture du test en cours échouée :", e);
@@ -116,7 +112,10 @@ async function statsFor(
   testId: string,
 ): Promise<{ a: AbCounts; b: AbCounts }> {
   const { data, error } = await sb.rpc("ab_test_stats_v1", { p_test_id: testId });
-  if (error || !data) return EMPTY_STATS;
+  if (error || !data) {
+    console.error("[ab] lecture des statistiques échouée :", error);
+    throw new Error("ab_stats_unavailable");
+  }
   return data as { a: AbCounts; b: AbCounts };
 }
 

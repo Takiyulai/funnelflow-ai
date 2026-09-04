@@ -56,6 +56,7 @@ export default async function PublishedFunnelPage({
         funnel={published.funnel}
         funnelSlug={slug}
         activePage={activePage}
+        previewVariant={forced}
       />
       <CustomCodeBlock code={customCode?.body ?? null} zone="body" />
     </>
