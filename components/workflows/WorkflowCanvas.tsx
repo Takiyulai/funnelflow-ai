@@ -215,7 +215,7 @@ export function WorkflowCanvas({
   workflow: Workflow;
   /** Clic sur un nœud d'action : l'appelant ouvre le formulaire correspondant. */
   onSelectAction?: (path: ActionPath) => void;
-  height?: number;
+  height?: number | string;
 }) {
   const graph = useMemo(() => buildCanvasGraph(workflow), [workflow]);
 

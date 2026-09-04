@@ -599,10 +599,9 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
         // vérification a posteriori : on voit une branche apparaître au moment
         // où on ajoute la condition qui la crée.
         //
-        // La largeur utile est celle qui reste APRÈS la sidebar de l'AppShell.
-        // À `lg`, deux colonnes forçaient donc le formulaire à déborder. La
-        // bascule est repoussée à `xl`, avec une seconde colonne progressive.
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
+        // Same desktop breakpoint as AppShell; both tracks can shrink after
+        // the sidebar. Mobile keeps the preview below the editor.
+        <div className="mt-8 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
           <WorkflowEditor
             draft={draft}
             setDraft={setDraft}
@@ -621,17 +620,17 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
           />
           {/* `sticky` aligné sur la même bascule que la grille : en une seule
               colonne, un aperçu collant masquerait le formulaire au défilement. */}
-          <div className="min-w-0 xl:sticky xl:top-4">
+          <aside aria-label="Aperçu du workflow" className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:[--workflow-preview-height:clamp(220px,calc(100dvh-12rem),560px)]">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
               Aperçu en direct
             </p>
-            <WorkflowCanvas workflow={livePreview} height={560} />
+            <WorkflowCanvas workflow={livePreview} height="var(--workflow-preview-height, 560px)" />
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
               Ce schéma reflète le brouillon en cours, pas la version
               enregistrée. Les actions incomplètes y apparaissent aussi — c&apos;est
               voulu, ça montre ce qui manque.
             </p>
-          </div>
+          </aside>
         </div>
       )}
     </>
@@ -876,7 +875,7 @@ function WorkflowEditor({
   ];
 
   return (
-    <div className="mt-8 min-w-0 max-w-3xl">
+    <div className="min-w-0 max-w-3xl">
       <h2 className="text-xl font-black text-ink">
         {isNew ? "Nouveau workflow" : "Modifier le workflow"}
       </h2>
