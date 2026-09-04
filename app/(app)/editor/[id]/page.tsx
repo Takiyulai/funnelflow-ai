@@ -1148,7 +1148,8 @@ export default function EditorPage() {
       >
         {selectedSection && (
           <SectionEditor
-            key={selectedSection.id}
+            key={`${activePage?.id}:${selectedSection.id}`}
+            pageId={activePage?.id}
             section={selectedSection}
             language={funnel.language}
             funnel={funnel}

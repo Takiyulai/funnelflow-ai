@@ -147,7 +147,7 @@ export function PopupForm({
         data-ff-cta
         {...buttonProps}
       >
-        {cta.label}
+        {buttonProps?.children ?? cta.label}
       </button>
     );
   }
@@ -411,7 +411,7 @@ function InternalPopup({
           data-ff-cta
           {...buttonProps}
         >
-          {cta.label}
+          {buttonProps?.children ?? cta.label}
         </button>
       )}
 
@@ -746,7 +746,7 @@ function EmbedPopup({
         data-ff-cta
         {...buttonProps}
       >
-        {cta.label}
+        {buttonProps?.children ?? cta.label}
       </button>
 
       {open && typeof document !== "undefined" && createPortal(

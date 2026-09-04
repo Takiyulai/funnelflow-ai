@@ -63,6 +63,7 @@ import {
 import { createReadme } from "./readme";
 import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 import { splitTextPair } from "@/lib/funnels/text";
+import { isFunnelHomePage, resolveCtaWithGlobal } from "@/lib/funnels/cta";
 
 // 🆕 RAW HTML — imports pour le rendu des sections clonées
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
@@ -191,15 +192,21 @@ function resolveExportPage(
   pageId?: string;
 } {
   const pages = funnel.pages ?? [];
+  const effectiveSections = (sections: FunnelSection[], isHome: boolean) =>
+    sections.map((section) => section.cta ? {
+      ...section,
+      cta: resolveCtaWithGlobal(section.cta, funnel.defaultCta,
+        isHome && funnel.meta?.applyDefaultCtaToAll === true),
+    } : section);
 
   if (targetPageId) {
     const page = pages.find((p) => p.id === targetPageId);
     if (page) {
       return {
-        sections: page.sections ?? [],
+        sections: effectiveSections(page.sections ?? [], isFunnelHomePage(funnel, page)),
         role: page.role,
         slug: page.slug,
-        isHome: !!page.isHome,
+        isHome: isFunnelHomePage(funnel, page),
         pageId: page.id,
       };
     }
@@ -208,16 +215,16 @@ function resolveExportPage(
   const home = pages.find((p) => p.isHome) ?? pages[0];
   if (home) {
     return {
-      sections: home.sections ?? funnel.sections ?? [],
+      sections: effectiveSections(home.sections ?? funnel.sections ?? [], true),
       role: home.role,
       slug: home.slug,
-      isHome: !!home.isHome,
+      isHome: true,
       pageId: home.id,
     };
   }
 
   return {
-    sections: funnel.sections ?? [],
+    sections: effectiveSections(funnel.sections ?? [], true),
     isHome: true,
   };
 }
@@ -3101,6 +3108,13 @@ export function renderFunnelHtml(
     funnel,
     options.targetPageId,
   );
+  // Resolve the home header too, so popup detection and exported buttons agree.
+  // Clone only: exporting must never overwrite a secondary page's saved action.
+  if (isHome && funnel.header?.cta) {
+    funnel = { ...funnel, header: { ...funnel.header, cta: resolveCtaWithGlobal(
+      funnel.header.cta, funnel.defaultCta, funnel.meta?.applyDefaultCtaToAll === true,
+    ) } };
+  }
 
   // 🆕 Contexte de navigation publique : uniquement si un publicSlug est fourni.
   const nav: PublicNavContext | undefined = options.publicSlug

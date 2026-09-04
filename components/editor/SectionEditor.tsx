@@ -25,6 +25,7 @@ type Props = {
   section: FunnelSection;
   language: Language;
   funnel: Funnel;
+  pageId?: string;
   onChange: (patch: Partial<FunnelSection>) => void;
   // 🆕 Requis par l'onglet CTA pour la case « Appliquer cette action à tous
   // les CTA de la page » (écrit funnel.defaultCta / funnel.meta au niveau
@@ -70,7 +71,7 @@ const SECTION_LABELS: Record<string, string> = {
   "raw-html": "Section clonée",
 };
 
-export function SectionEditor({ section, language, funnel, onChange, onFunnelChange }: Props) {
+export function SectionEditor({ section, language, funnel, pageId, onChange, onFunnelChange }: Props) {
   // 🆕 Détecte si la section est un contenu raw-html cloné.
   // On vérifie à la fois le type ET le marqueur dans body (double sécurité,
   // car certaines sections clonées pourraient avoir un type différent).
@@ -190,6 +191,7 @@ export function SectionEditor({ section, language, funnel, onChange, onFunnelCha
         )}
         {safeActiveTab === "cta" && !isRawHtml && (
           <CtaTab
+            pageId={pageId}
             section={section}
             language={language}
             funnel={funnel}

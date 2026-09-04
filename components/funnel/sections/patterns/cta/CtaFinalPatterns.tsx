@@ -21,7 +21,7 @@ function stripMarkers(s: string): string {
 
 function CtaBtn({ section, mode }: CtaFinalProps) {
   if (section.cta) {
-    return <CtaButton cta={section.cta} disabled={mode === "preview"} />;
+    return <CtaButton section={section} cta={section.cta} disabled={mode === "preview"} />;
   }
   return (
     <a

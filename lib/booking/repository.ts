@@ -487,7 +487,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     funnel_id: input.eventType.funnelId ?? null,
     // 🆕 Décide de quelle règle d'unicité s'applique : null → index
     // anti-double-réservation (1 personne), renseigné → plafond par comptage.
-    session_id: input.sessionId ?? null,
+    ...(input.sessionId ? { session_id: input.sessionId } : {}),
   };
 
   // 🆕 Objet vide normalisé en null : `{}` en base laisserait croire à des
@@ -495,24 +495,28 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   const answers =
     input.answers && Object.keys(input.answers).length > 0 ? input.answers : null;
 
-  const insert = (row: Record<string, unknown>) =>
-    admin
+  const insert = async (row: Record<string, unknown>) => {
+    try {
+      return await admin
       .from("bookings")
       .insert(row)
       .select("id, manage_token")
       .maybeSingle<{ id: string; manage_token: string }>();
+    } catch (error) {
+      console.error("[booking] Échec de connexion lors de la réservation", error);
+      return { data: null, error: { code: "connection_failed", message: "Booking request failed" } };
+    }
+  };
 
-  // ⚠️ La colonne `answers` vient de la migration 03. Si elle n'est pas encore
-  // appliquée, l'insert échouerait — et le visiteur perdrait sa réservation
-  // pour une raison qui ne le concerne pas. On réessaie sans, en perdant les
-  // réponses plutôt que le rendez-vous.
-  let { data, error } = await insert({ ...baseRow, answers });
-  if (isMissingColumnError(error)) {
+  // Do not require optional extension columns for an ordinary appointment.
+  // A real session_id is NEVER removed: it controls session capacity/uniqueness.
+  let { data, error } = await insert(answers ? { ...baseRow, answers } : baseRow);
+  if (answers && isMissingColumnError(error) && /\banswers\b/i.test(error?.message ?? "")) {
     console.warn(
-      "[booking] Colonne answers absente — migration 03 non appliquée. " +
-        "Réservation enregistrée SANS les réponses personnalisées.",
+      "[booking] Colonne answers absente — conservation des réponses dans la note.",
     );
-    ({ data, error } = await insert(baseRow));
+    const answerNote = Object.entries(answers).map(([key, value]) => `${key}: ${String(value)}`).join("\n");
+    ({ data, error } = await insert({ ...baseRow, note: [input.note, answerNote].filter(Boolean).join("\n\n") }));
   }
 
   if (error) {
@@ -523,7 +527,8 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
         message: "Ce créneau vient d'être réservé par quelqu'un d'autre. Choisis-en un autre.",
       };
     }
-    return { ok: false, reason: "db_error", message: error.message };
+    console.error("[booking] Échec d'enregistrement", error);
+    return { ok: false, reason: "db_error", message: "La réservation n’a pas pu être confirmée. Réessaie dans un instant." };
   }
   if (!data) {
     return { ok: false, reason: "db_error", message: "Réservation non confirmée." };

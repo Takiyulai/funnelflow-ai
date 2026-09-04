@@ -9,12 +9,25 @@
 
 export const dynamic = "force-dynamic";
 
+import { getPublishedFunnelBySlug } from "@/lib/funnels/loadPublished";
+import { getPageBySlug } from "@/lib/funnels/types";
+import PublishedSubPage from "../PublishedSubPage";
+
 export default async function CheckoutSuccessPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ ff_ab?: string }>;
 }) {
   const { slug } = await params;
+  const published = await getPublishedFunnelBySlug(slug);
+  // Static routes take precedence over [pageSlug]. Give an authored /merci
+  // page the exact same renderer, custom code and A/B handling as other pages.
+  const page = published && (getPageBySlug(published.funnel, "merci") || getPageBySlug(published.funnel, "/merci"));
+  if (published && page) {
+    return PublishedSubPage({ published, page, slug, searchParams });
+  }
 
   return (
     <main

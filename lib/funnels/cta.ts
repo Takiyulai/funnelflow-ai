@@ -1,7 +1,14 @@
 // lib/funnels/cta.ts
 // Helpers partagés pour transformer une CtaConfig en attributs <a> sûrs
 // Utilisé par : FunnelPreview, app/tunnel/[slug], lib/export/html
-import type { CtaConfig } from "@/lib/funnels/types";
+import type { CtaConfig, Funnel, FunnelPage } from "@/lib/funnels/types";
+
+/** Scope shared by the editor and public renderers; never infer it from section IDs. */
+export function isFunnelHomePage(funnel: Funnel, page?: FunnelPage): boolean {
+  const pages = funnel.pages ?? [];
+  const home = pages.find((candidate) => candidate.isHome) ?? pages[0];
+  return page ? page.id === home?.id : pages.length <= 1;
+}
 
 // URL safe-list. Refuse javascript:, data:, file:, etc.
 export function isSafeUrl(url: string): boolean {
@@ -83,6 +90,7 @@ export function resolveCtaWithGlobal(
     target: globalCta.target,
     anchorId: globalCta.anchorId,
     pageId: globalCta.pageId,
+    pageSlug: globalCta.pageSlug,
     popupId: globalCta.popupId,
     popupProvider: globalCta.popupProvider,
     systemePopupId: globalCta.systemePopupId,
@@ -91,8 +99,8 @@ export function resolveCtaWithGlobal(
     popupReassurance: globalCta.popupReassurance,
     popupFields: globalCta.popupFields,
     popupEmbedHtml: globalCta.popupEmbedHtml,
-    captureTags: globalCta.captureTags,
-    captureListIds: globalCta.captureListIds,
+    captureTags: cta.captureTags ?? globalCta.captureTags,
+    captureListIds: cta.captureListIds ?? globalCta.captureListIds,
     chariow: globalCta.chariow,
     // label / icon / spacing : on GARDE ceux du CTA d'origine.
   };

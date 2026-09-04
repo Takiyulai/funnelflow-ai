@@ -14,11 +14,13 @@ import type {
 } from "@/lib/funnels/types";
 import { TagsInput } from "./items/TagsInput";
 import { CaptureListsEditor } from "./items/CaptureListsEditor";
+import { isFunnelHomePage } from "@/lib/funnels/cta";
 
 type Props = {
   section: FunnelSection;
   language: Language;
   funnel: Funnel;
+  pageId?: string;
   onChange: (patch: Partial<FunnelSection>) => void;
   // 🆕 Écrit funnel.defaultCta / funnel.meta.applyDefaultCtaToAll — remplace
   // l'ancien réglage "Action commune des boutons" du panneau Style global
@@ -46,9 +48,13 @@ const DEFAULT_POPUP_FIELDS: FormFieldItem[] = [
   { name: "email", type: "email", label: "Email", placeholder: "vous@exemple.com", required: true, width: "full" },
 ];
 
-export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
+export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Props) {
   const cta: CtaConfig | undefined = section.cta;
   const enabled = Boolean(cta);
+  const page = pageId
+    ? funnel.pages?.find((candidate) => candidate.id === pageId)
+    : funnel.pages?.find((candidate) => candidate.sections.includes(section));
+  const isHome = isFunnelHomePage(funnel, page);
 
   const toggleEnabled = (next: boolean) => {
     if (next) {
@@ -77,21 +83,21 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
   // modifie l'action d'un bouton ; tant que l'action commune est active pour
   // CE bouton, elle resynchronise `defaultCta` à chaque changement.
   const sectionCtaPatch = (nextCta: CtaConfig): Partial<Funnel> => ({
-    sections: funnel.sections.map((item) =>
+    sections: isHome ? funnel.sections.map((item) =>
       item.id === section.id ? { ...item, cta: nextCta } : item,
-    ),
+    ) : funnel.sections,
     ...(funnel.pages ? {
-      pages: funnel.pages.map((page) => ({
-        ...page,
-        sections: page.sections.map((item) =>
+      pages: funnel.pages.map((candidate) => candidate.id === page?.id ? ({
+        ...candidate,
+        sections: candidate.sections.map((item) =>
           item.id === section.id ? { ...item, cta: nextCta } : item,
         ),
-      })),
+      }) : candidate),
     } : {}),
   });
 
   const applyCta = (nextCta: CtaConfig) => {
-    if (funnel.meta?.applyDefaultCtaToAll === true && !nextCta.ignoreGlobalCta) {
+    if (isHome && funnel.meta?.applyDefaultCtaToAll === true && !nextCta.ignoreGlobalCta) {
       // Une seule transaction d'état : appeler `onChange` puis
       // `onFunnelChange` reconstruisait deux funnels depuis le même ancien
       // snapshot. La seconde mise à jour annulait alors la frappe précédente.
@@ -160,6 +166,8 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
       icon: cta.icon,
       spacing: cta.spacing,
       ignoreGlobalCta: cta.ignoreGlobalCta,
+      captureTags: cta.captureTags,
+      captureListIds: cta.captureListIds,
     };
     if (mode === "redirect") {
       applyCta({
@@ -280,7 +288,7 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
               redirection) avec tous les boutons principaux de la page
               d'accueil. Le libellé/icône/espacement de chaque bouton restent
               les leurs — seule l'action au clic est partagée. */}
-          <label className="flex items-start justify-between gap-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5">
+          {isHome ? <label className="flex items-start justify-between gap-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2.5">
             <div>
               <div className="text-xs font-medium text-white">
                 🔗 Appliquer cette action à tous les CTA de la page
@@ -308,7 +316,7 @@ export function CtaTab({ section, funnel, onChange, onFunnelChange }: Props) {
               }}
               className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
             />
-          </label>
+          </label> : <p className="text-xs leading-relaxed text-white/60">Ce bouton est propre à cette page. L’action commune de la page d’accueil ne s’applique pas ici.</p>}
 
           {/* 🆕 Opt-out de l'action commune, bouton par bouton. */}
           <label className="flex items-start gap-2 text-xs text-white/70">

@@ -63,6 +63,7 @@ import { RawHtmlRenderer } from "@/components/funnel/sections/RawHtmlRenderer";
 import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge";
 import { DayProgressButton } from "@/components/funnel/DayProgressButton";
 import { splitTextPair } from "@/lib/funnels/text";
+import { FunnelCtaContext } from "./FunnelCtaContext";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -1426,13 +1427,13 @@ function PreviewBody({
 
   // Le wrapper applique le runtime d'animations bespoke (reveal/tilt/parallax/
   // accordéon/countdown) + container-type pour les @container CSS du skin.
-  return skin ? (
+  return <FunnelCtaContext.Provider value={{ funnel, page: activePage, pageLinks, slugLinks }}>{skin ? (
     <FunnelSectionWrapper className={embed ? "ff-fill-col" : undefined}>
       {body}
     </FunnelSectionWrapper>
   ) : (
     body
-  );
+  )}</FunnelCtaContext.Provider>;
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */

@@ -126,6 +126,8 @@ export type CtaConfig = {
   popupEmbed?: string;
   /** Lot B3+ : id d'une page interne du même funnel (navigation inter-pages) */
   pageId?: string;
+  /** Legacy internal page destination, already supported by public renderers. */
+  pageSlug?: string;
   /** Lot B2 : provider de la popup (internal = FunnelForge, systeme = SIO) */
   popupProvider?: PopupProvider;
   /** Lot B2 : id du popup Systeme.io (ex: "24034535") si popupProvider="systeme" */

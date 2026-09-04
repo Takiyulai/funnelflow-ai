@@ -12,7 +12,7 @@ import type {
   FunnelPage,
   FunnelSection,
 } from "@/lib/funnels/types";
-import { ctaHref, ctaTarget, ctaRel, ctaIsExternal, resolveCtaWithGlobal } from "@/lib/funnels/cta";
+import { ctaHref, ctaTarget, ctaRel, ctaIsExternal, resolveCtaWithGlobal, isFunnelHomePage } from "@/lib/funnels/cta";
 import { PopupForm } from "@/components/funnel/PopupForm";
 
 const DEFAULT_BASE_CLASS =
@@ -30,6 +30,7 @@ export function CtaLink({
   baseClassName,
   arrow,
   isExtra: isExtraProp,
+  children,
 }: {
   cta: NonNullable<FunnelSection["cta"]>;
   className?: string;
@@ -49,6 +50,8 @@ export function CtaLink({
    *  MÊME style que le CTA principal. Repli rétro-compatible : détection par la
    *  classe « ff-btn-extra » si la prop est absente. */
   isExtra?: boolean;
+  /** Preserve a pattern's existing label/icon markup while sharing behavior. */
+  children?: React.ReactNode;
 }) {
   const base = baseClassName ?? DEFAULT_BASE_CLASS;
 
@@ -62,9 +65,7 @@ export function CtaLink({
     isExtraProp === true || (baseClassName ?? "").includes("ff-btn-extra");
   // Page d'accueil = la page portant isHome ; pour un tunnel mono-page (sans
   // contexte de page), on considère que c'est l'accueil.
-  const isHomePage = page
-    ? page.isHome === true
-    : (funnel.pages?.length ?? 0) <= 1;
+  const isHomePage = isFunnelHomePage(funnel, page);
   const cta = resolveCtaWithGlobal(
     ctaProp,
     funnel.defaultCta,
@@ -78,12 +79,12 @@ export function CtaLink({
     return (
       <PopupForm
         cta={cta}
-        section={section}
+        section={{ ...section, cta }}
         funnel={funnel}
         page={page}
         customFields={cta.popupFields}
         buttonClassName={`${base} ${className}`}
-        buttonProps={{ "data-ff-anim": anim ?? "fade-up" } as React.ButtonHTMLAttributes<HTMLButtonElement>}
+        buttonProps={{ "data-ff-anim": anim ?? "fade-up", children } as React.ButtonHTMLAttributes<HTMLButtonElement>}
       />
     );
   }
@@ -137,8 +138,8 @@ export function CtaLink({
       data-ff-cta
       className={`${base} ${className}`}
     >
-      {cta.label}
-      {showArrow && (
+      {children ?? cta.label}
+      {!children && showArrow && (
         <span aria-hidden className="sk-cta-arrow">
           →
         </span>
@@ -146,7 +147,7 @@ export function CtaLink({
       {/* 🆕 Pas de double flèche : l'icône « lien externe » n'apparaît PLUS
           quand la flèche décorative → est déjà affichée (évitait le doublon
           « → ⧉ » sur les CTA de redirection). */}
-      {external && !showArrow && <ExternalLink size={13} />}
+      {!children && external && !showArrow && <ExternalLink size={13} />}
     </a>
   );
 }

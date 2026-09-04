@@ -186,7 +186,7 @@ export function HeroSplitStatsB2b({ section, funnel, mode = "public" }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {section.cta && (
         <div className="ff-cta-wrap" style={{ justifyContent: "flex-start", display: "flex" }}>
-                <CtaButton cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
+                <CtaButton section={section} cta={section.cta} className="ff-btn ff-cta-attn" disabled={mode === "preview"} />
               </div>
             )}
             {bullets.length >= 2 && (

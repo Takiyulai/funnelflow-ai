@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import type { CtaConfig, CtaIcon } from "@/lib/funnels/types";
+import { useContext } from "react";
+import type { CtaConfig, CtaIcon, FunnelSection } from "@/lib/funnels/types";
+import { FunnelCtaContext } from "./FunnelCtaContext";
+import { CtaLink } from "./CtaLink";
 
 type Props = {
   cta: CtaConfig;
+  section?: FunnelSection;
   className?: string;
   /** Si fourni, override le href calculé depuis cta. */
   href?: string;
@@ -72,11 +76,13 @@ function CtaIconSvg({ name }: { name: CtaIcon }) {
 
 export function CtaButton({
   cta,
+  section,
   className = "",
   href,
   disabled = false,
   onPopupClick,
 }: Props) {
+  const navigation = useContext(FunnelCtaContext);
   const iconName = effectiveIcon(cta);
   const icon = iconName ? <CtaIconSvg name={iconName} /> : null;
 
@@ -93,6 +99,10 @@ export function CtaButton({
     ? "pointer-events-none opacity-60 cursor-not-allowed"
     : "";
   const finalClass = `${baseClass} ${className} ${disabledClass}`.trim();
+
+  if (navigation && section && !disabled && !onPopupClick) {
+    return <CtaLink {...navigation} cta={cta} section={section} baseClassName={finalClass}>{content}</CtaLink>;
+  }
 
   // Mode popup : bouton qui ouvre la modale
   if (cta.mode === "popup") {
