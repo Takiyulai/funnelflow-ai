@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { ChatWidget } from "@/components/chatbot/ChatWidget";
 import { ProductDashboardPreview } from "@/components/marketing/ProductDashboardPreview";
+import { AgentWorkflowAnimation, AGENT_WORKFLOW_COPY } from "@/components/marketing/AgentWorkflowAnimation";
 
 
 // ── Scroll animation wrapper ──────────────────────────────────────────────────
@@ -1283,7 +1284,9 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-8 sm:mt-10">
-            <ProductDashboardPreview language={lang} />
+            <ProductDashboardPreview language={lang} caption={AGENT_WORKFLOW_COPY[lang].caption}>
+              <AgentWorkflowAnimation language={lang} members={t.team.members} />
+            </ProductDashboardPreview>
           </div>
           <p className="mx-auto mt-6 max-w-3xl text-center ff-body" style={{ fontSize: 12, color: "#8293a9", lineHeight: 1.6 }}>
             {t.hero.footnote}

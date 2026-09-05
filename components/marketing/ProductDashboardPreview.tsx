@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Mail, MousePointerClick, Plus, Sparkles, Users,
 } from "lucide-react";
 import styles from "./ProductDashboardPreview.module.css";
+import type { ReactNode } from "react";
 
 const COPY = {
   fr: {
@@ -78,16 +79,23 @@ const METRIC_ICONS = [MousePointerClick, Users, Mail];
 const BAR_HEIGHTS = [24, 42, 34, 62, 50, 76, 92];
 
 /** Product illustration, not a live account or a second interactive dashboard. */
-export function ProductDashboardPreview({ language }: { language: keyof typeof COPY }) {
+export function ProductDashboardPreview({ language, children, caption }: {
+  language: keyof typeof COPY;
+  children?: ReactNode;
+  caption?: string;
+}) {
   const copy = COPY[language];
   return (
-    <figure className={styles.preview} aria-label={copy.caption}>
+    <figure className={styles.preview} aria-label={caption ?? copy.caption}>
       <div className={styles.windowBar} aria-hidden="true">
         <div className={styles.windowDots}><i /><i /><i /></div>
         <span>app.autofunnelai.cloud</span>
         <span className={styles.secure}><Check size={12} /> AutoFunnel AI</span>
       </div>
-      <div className={styles.workspace}>
+      <div className={styles.contentFrame}>
+      {/* Preserve the exact responsive footprint, including translated text wraps.
+          The sizing illustration is inert and absent from the accessibility tree. */}
+      <div className={`${styles.workspace} ${children ? styles.sizingOnly : ""}`} aria-hidden={children ? true : undefined} inert={children ? true : undefined}>
         <aside className={styles.sidebar} aria-hidden="true">
           <div className={styles.brand}><span>AF</span> AutoFunnel <b>AI</b></div>
           <p className={styles.workspaceLabel}>{copy.workspace}</p>
@@ -145,7 +153,9 @@ export function ProductDashboardPreview({ language }: { language: keyof typeof C
           </div>
         </div>
       </div>
-      <figcaption>{copy.caption}</figcaption>
+      {children && <div className={styles.contentOverlay}>{children}</div>}
+      </div>
+      <figcaption>{caption ?? copy.caption}</figcaption>
     </figure>
   );
 }

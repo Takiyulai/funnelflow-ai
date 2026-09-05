@@ -6,6 +6,9 @@
 .secure { display: inline-flex; align-items: center; gap: 5px; }
 .secure svg { color: #70c49b; }
 .workspace { display: grid; grid-template-columns: 144px minmax(0, 1fr); }
+.contentFrame { position: relative; }
+.sizingOnly { visibility: hidden; pointer-events: none; }
+.contentOverlay { position: absolute; inset: 0; min-width: 0; overflow: hidden; }
 .sidebar { display: flex; flex-direction: column; padding: 18px 10px 14px; border-right: 1px solid #243043; background: #0e192b; }
 .brand { display: flex; align-items: center; gap: 3px; white-space: nowrap; font-size: 10px; font-weight: 700; }
 .brand > span { display: grid; place-items: center; width: 24px; height: 26px; margin-right: 2px; border-radius: 7px; background: linear-gradient(140deg, #31845c, #08498d); font-size: 9px; }
