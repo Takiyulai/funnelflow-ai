@@ -84,7 +84,11 @@ export function CtaLink({
         page={page}
         customFields={cta.popupFields}
         buttonClassName={`${base} ${className}`}
-        buttonProps={{ "data-ff-anim": anim ?? "fade-up", children } as React.ButtonHTMLAttributes<HTMLButtonElement>}
+        buttonProps={{
+          "data-ff-anim": anim ?? "fade-up",
+          "data-ff-cta-align": cta.align,
+          children,
+        } as React.ButtonHTMLAttributes<HTMLButtonElement>}
       />
     );
   }
@@ -136,6 +140,7 @@ export function CtaLink({
       rel={rel}
       data-ff-anim={anim ?? "fade-up"}
       data-ff-cta
+      data-ff-cta-align={cta.align}
       className={`${base} ${className}`}
     >
       {children ?? cta.label}

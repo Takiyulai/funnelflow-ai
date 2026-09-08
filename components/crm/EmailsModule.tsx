@@ -2,7 +2,7 @@
 
 // components/crm/EmailsModule.tsx
 //
-// 🆕 Module Email unifié : une seule entrée « Emails » à DEUX onglets.
+// Module Email unifié : diffusions, séquences, expéditeur et listes d'audience.
 //  - Newsletter / Diffusions : l'existant (CampaignsClient, envoi Resend).
 //  - Séquences : automations temporisées générées par IA (ÉTAPE 4 — à venir).
 //
@@ -10,15 +10,16 @@
 // composant Campagnes actuel, migré tel quel.
 
 import { useState } from "react";
-import { Mail, Workflow, AtSign } from "lucide-react";
+import { Mail, Workflow, AtSign, ListChecks } from "lucide-react";
 import { CampaignsClient } from "@/components/crm/CampaignsClient";
 import { SequencesClient } from "@/components/crm/SequencesClient";
 import { EmailStatsBand } from "@/components/crm/EmailStatsBand";
 import { SendingDomainPanel } from "@/components/crm/SendingDomainPanel";
-import type { Campaign } from "@/lib/crm/types";
+import { ContactListsPanel } from "@/components/crm/ContactListsPanel";
+import type { Campaign, ContactListWithCount } from "@/lib/crm/types";
 import { EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
 
-type Tab = "newsletter" | "sequences" | "expediteur";
+type Tab = "newsletter" | "sequences" | "expediteur" | "listes";
 
 export type PublishedFunnelOption = { id: string; name: string };
 
@@ -30,6 +31,7 @@ export function EmailsModule({
   publishedFunnels = [],
   campaignStats = {},
   tags = [],
+  initialLists = [],
   emailStats = EMPTY_EMAIL_STATS,
 }: {
   initialCampaigns: Campaign[];
@@ -41,10 +43,13 @@ export function EmailsModule({
   campaignStats?: Record<string, { opens: number; clicks: number }>;
   /** 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes. */
   tags?: { id: string; name: string }[];
+  /** Listes CRM disponibles pour le ciblage et leur gestion dans ce module. */
+  initialLists?: ContactListWithCount[];
   /** 🆕 Stats email agrégées (bandeau en haut du module). */
   emailStats?: EmailStats;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [lists, setLists] = useState<ContactListWithCount[]>(initialLists);
 
   const tabBtn = (value: Tab, label: string, Icon: typeof Mail) => (
     <button
@@ -67,7 +72,7 @@ export function EmailsModule({
   );
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 max-w-full gap-5 overflow-x-clip">
       <div>
         <h1 className="text-2xl font-black text-ink">Emails</h1>
         <p className="mt-1 text-sm text-muted">
@@ -88,9 +93,10 @@ export function EmailsModule({
         {tabBtn("newsletter", "Newsletter / Diffusions", Mail)}
         {tabBtn("sequences", "Séquences", Workflow)}
         {tabBtn("expediteur", "Expéditeur", AtSign)}
+        {tabBtn("listes", "Listes", ListChecks)}
       </div>
 
-      {/* 🆕 On garde les DEUX onglets montés (masqués en CSS) pour ne pas perdre
+      {/* On garde les deux éditeurs principaux montés (masqués en CSS) pour ne pas perdre
           l'état (ex. séquence générée non encore enregistrée) au changement d'onglet. */}
       <div className={tab === "newsletter" ? "" : "hidden"}>
         <CampaignsClient
@@ -99,6 +105,7 @@ export function EmailsModule({
           resendReady={resendReady}
           campaignStats={campaignStats}
           tags={tags}
+          lists={lists}
         />
       </div>
       <div className={tab === "sequences" ? "" : "hidden"}>
@@ -108,6 +115,7 @@ export function EmailsModule({
           réseau qu'il est inutile de déclencher pour tout le monde à chaque
           visite de l'onglet Newsletter. */}
       {tab === "expediteur" && <SendingDomainPanel />}
+      {tab === "listes" && <ContactListsPanel lists={lists} onChange={setLists} />}
     </div>
   );
 }

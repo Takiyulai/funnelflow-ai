@@ -61,6 +61,7 @@ export function SectionRegenPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [maxWords, setMaxWords] = useState(100);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<ProposedSection | null>(null);
@@ -86,6 +87,7 @@ export function SectionRegenPanel({
             cta: typeof section.cta === "object" ? section.cta : undefined,
           },
           instruction: prompt.trim() || undefined,
+          maxWords,
           language,
           brief: { language, brandName: funnel.funnelName ?? "" },
         }),
@@ -165,6 +167,24 @@ export function SectionRegenPanel({
             placeholder="Décris la modification souhaitée (ex. « rends ça plus percutant »). Laisse vide pour une simple amélioration."
             className="w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-white outline-none focus:border-amber-300/50"
           />
+
+          <label className="grid gap-1 text-[11px] text-white/60">
+            <span>Longueur maximale de la section</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={30}
+                max={300}
+                step={10}
+                value={maxWords}
+                onChange={(e) => setMaxWords(Number(e.target.value))}
+                className="min-w-0 flex-1 accent-amber-300"
+              />
+              <span className="w-20 rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-center text-white">
+                {maxWords} mots
+              </span>
+            </div>
+          </label>
 
           <button
             type="button"

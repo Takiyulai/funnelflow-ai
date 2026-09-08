@@ -23,8 +23,8 @@ type Props = {
 const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
   { value: "text", label: "Texte court" },
   { value: "email", label: "Email" },
-  { value: "tel", label: "Téléphone" },
-  { value: "number", label: "Nombre" },
+  { value: "tel", label: "Téléphone / WhatsApp" },
+  { value: "number", label: "Nombre (quantité)" },
   { value: "textarea", label: "Texte long" },
   { value: "select", label: "Liste déroulante" },
   { value: "checkbox", label: "Case à cocher" },

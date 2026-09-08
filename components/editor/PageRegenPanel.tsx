@@ -18,6 +18,7 @@ import type {
 } from "@/lib/funnels/types";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import { extractHomeContext, isClonedSection } from "@/lib/clone/clone-context";
+import { mergeRegeneratedSections } from "@/lib/funnels/mergeRegeneratedSections";
 
 const SUGGESTIONS = [
   "Rends le copy plus percutant",
@@ -134,19 +135,17 @@ function PageRegenForm({ funnel, page, onApply }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, funnel.pages]);
 
-  // Reporte les médias (image/vidéo) des anciennes sections sur les nouvelles,
-  // par position, quand la nouvelle n'en fournit pas → on ne perd pas les
-  // visuels uploadés lors d'une régénération de COPY.
-  function carryMedia(next: FunnelSection[]): FunnelSection[] {
+  // Une page ajoutée vide n'a pas encore de template à préserver : on reporte
+  // seulement les éventuels médias de son placeholder. Sur une page existante,
+  // le merge conserve le design, les actions CTA et les réglages fonctionnels.
+  function prepareSections(next: FunnelSection[]): FunnelSection[] {
     const old = page.sections;
-    return next.map((s, i) => {
-      const prev = old[i];
-      return {
-        ...s,
-        image: s.image ?? prev?.image,
-        video: s.video ?? prev?.video,
-      };
-    });
+    if (!isNewPage) return mergeRegeneratedSections(old, next);
+    return next.map((section, index) => ({
+      ...section,
+      image: section.image ?? old[index]?.image,
+      video: section.video ?? old[index]?.video,
+    }));
   }
 
   async function regenerate() {
@@ -223,7 +222,7 @@ function PageRegenForm({ funnel, page, onApply }: Props) {
     if (hasClonedSection) return;
     // Le rôle part avec les sections : sans lui, la page resterait "custom" et
     // la régénération suivante retomberait dans le même défaut.
-    onApply(carryMedia(proposal), role);
+    onApply(prepareSections(proposal), role);
     setProposal(null);
     setPrompt("");
     setOpen(false);

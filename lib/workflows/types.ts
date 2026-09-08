@@ -90,6 +90,7 @@ export type WorkflowStepType = "trigger" | "action";
  *  (embranchement si/alors, purement logique — AUCUN appel IA). */
 export type WorkflowActionKind =
   | "add_tag"
+  | "add_to_list"
   | "set_status"
   | "enroll_in_sequence"
   | "notify_owner"
@@ -111,6 +112,7 @@ export const LEAD_STATUSES: readonly LeadStatus[] = [
 
 export const WORKFLOW_ACTION_KINDS: readonly WorkflowActionKind[] = [
   "add_tag",
+  "add_to_list",
   "set_status",
   "enroll_in_sequence",
   "notify_owner",
@@ -130,6 +132,8 @@ export const WORKFLOW_ACTION_KINDS: readonly WorkflowActionKind[] = [
 export type WorkflowConditionTest =
   /** Le contact porte (ou non) ce tag (crm_contact_tags). */
   | { type: "has_tag"; tagId: string }
+  /** Le contact appartient (ou non) à cette liste CRM. */
+  | { type: "in_list"; listId: string }
   /** Le statut CRM du contact est cette valeur (leads.status). */
   | { type: "status_is"; status: LeadStatus }
   /** La langue du contact est cette valeur (leads.language). */
@@ -156,6 +160,7 @@ export type WorkflowConditionTest =
 
 export const WORKFLOW_CONDITION_TYPES = [
   "has_tag",
+  "in_list",
   "status_is",
   "language_is",
   "source_is",
@@ -202,6 +207,7 @@ export type WorkflowTriggerConfig = {
 
 export type WorkflowActionConfig =
   | { kind: "add_tag"; tags: string[] }
+  | { kind: "add_to_list"; listId: string }
   | { kind: "set_status"; status: LeadStatus }
   | { kind: "enroll_in_sequence"; sequenceId: string }
   | { kind: "notify_owner"; subject?: string; message?: string }

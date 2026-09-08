@@ -165,6 +165,7 @@ export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Pr
       label: cta.label,
       icon: cta.icon,
       spacing: cta.spacing,
+      align: cta.align,
       ignoreGlobalCta: cta.ignoreGlobalCta,
       captureTags: cta.captureTags,
       captureListIds: cta.captureListIds,
@@ -498,8 +499,8 @@ export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Pr
                           >
                             <option value="text">Texte</option>
                             <option value="email">Email</option>
-                            <option value="tel">Téléphone</option>
-                            <option value="number">Nombre</option>
+                            <option value="tel">Téléphone / WhatsApp</option>
+                            <option value="number">Nombre (quantité)</option>
                             <option value="textarea">Zone texte</option>
                             <option value="checkbox">Case à cocher</option>
                           </select>
@@ -656,6 +657,26 @@ export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Pr
                   {opt.label}
                 </ModeBtn>
               ))}
+            </div>
+          </Field>
+
+          <Field
+            label="Position du bouton"
+            hint="Le réglage s'applique à ce CTA sans modifier l'alignement des textes."
+          >
+            <div className="flex flex-wrap gap-1.5">
+              <ModeBtn active={!cta.align} onClick={() => updateCta({ align: undefined })}>
+                Thème
+              </ModeBtn>
+              <ModeBtn active={cta.align === "left"} onClick={() => updateCta({ align: "left" })}>
+                Gauche
+              </ModeBtn>
+              <ModeBtn active={cta.align === "center"} onClick={() => updateCta({ align: "center" })}>
+                Centre
+              </ModeBtn>
+              <ModeBtn active={cta.align === "right"} onClick={() => updateCta({ align: "right" })}>
+                Droite
+              </ModeBtn>
             </div>
           </Field>
 

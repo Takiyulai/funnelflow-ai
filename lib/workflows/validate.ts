@@ -6,6 +6,7 @@ import type { WorkflowInput } from "./types";
 // 🆕 VAGUE 1 / LOT 5 — Test de condition (purement logique, aucun appel IA).
 const conditionTestSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("has_tag"), tagId: z.string().uuid() }),
+  z.object({ type: z.literal("in_list"), listId: z.string().uuid() }),
   z.object({
     type: z.literal("status_is"),
     status: z.enum(["nouveau", "contacte", "qualifie", "client", "perdu"]),
@@ -47,6 +48,10 @@ const baseActionSchemas = [
   z.object({
     kind: z.literal("add_tag"),
     tags: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
+  }),
+  z.object({
+    kind: z.literal("add_to_list"),
+    listId: z.string().uuid(),
   }),
   z.object({
     kind: z.literal("set_status"),

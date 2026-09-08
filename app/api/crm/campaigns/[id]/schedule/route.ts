@@ -1,13 +1,14 @@
 // app/api/crm/campaigns/[id]/schedule/route.ts
 // POST → PROGRAMME l'envoi d'une newsletter (ne l'envoie pas tout de suite).
 //   Body : { audience, scheduledAt }
-//   audience = { type:"all" } | { type:"status", status } | { type:"tag", tagId } | { type:"ids", ids:[] }
+//   audience = { type:"all" } | { type:"status", status } | { type:"tag", tagId }
+//            | { type:"list", listId } | { type:"ids", ids:[] }
 //   scheduledAt = ISO string (date/heure future)
 // Les emails concrets sont écrits dans `scheduled_emails` ; le cron les enverra.
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { scheduleCampaign, type Audience } from "@/lib/crm/campaigns";
+import { parseAudience, scheduleCampaign } from "@/lib/crm/campaigns";
 import { getAccess } from "@/lib/billing/subscription";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,10 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
-  const audience: Audience = body?.audience ?? { type: "all" };
+  const audience = parseAudience(body?.audience ?? { type: "all" });
+  if (!audience) {
+    return NextResponse.json({ ok: false, error: "invalid_audience" }, { status: 400 });
+  }
   const scheduledAt: string = typeof body?.scheduledAt === "string" ? body.scheduledAt : "";
 
   if (!scheduledAt) {
@@ -50,8 +54,21 @@ export async function POST(
     const result = await scheduleCampaign(sb, user.id, id, audience, scheduledAt);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
+    const detail = e instanceof Error ? e.message : "schedule_failed";
+    const publicErrors = new Set([
+      "campaign_not_found",
+      "subject_required",
+      "no_recipients",
+      "email_quota_exceeded",
+      "list_not_found",
+      "invalid_date",
+      "date_in_past",
+    ]);
+    if (!publicErrors.has(detail)) {
+      console.error("[campaigns/schedule] programmation échouée", e);
+    }
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "schedule_failed" },
+      { ok: false, error: publicErrors.has(detail) ? detail : "schedule_failed" },
       { status: 500 },
     );
   }

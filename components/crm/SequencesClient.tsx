@@ -379,10 +379,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   const isSaved = !!editingId && !!emails && emails.every((e) => e.id);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 max-w-full gap-5">
       {sequences.length > 0 && (
-        <Card className="p-5">
-          <div className="mb-3 flex items-center justify-between">
+        <Card className="min-w-0 p-3 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-black text-ink">Mes séquences</h2>
             <button type="button" onClick={resetForm}
               className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
@@ -398,10 +398,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                 // sombre, un survol clair « éteint » la ligne au lieu de la
                 // désigner. L'état SÉLECTIONNÉ garde le bleu de marque, pour
                 // qu'on distingue « je survole » de « c'est ouvert ».
-                className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${editingId === s.id ? "border-[#08498D] bg-[#08498D]/5" : "border-line bg-white hover:border-[color:var(--ff-accent)]"}`}>
+                className={`flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 transition-colors sm:items-center ${editingId === s.id ? "border-[#08498D] bg-[#08498D]/5" : "border-line bg-surface hover:border-[color:var(--ff-accent)]"}`}>
                 <button type="button" onClick={() => loadSequence(s.id)} className="min-w-0 flex-1 text-left">
                   <div className="truncate text-sm font-semibold text-ink">{s.name}</div>
-                  <div className="text-xs text-muted">
+                  <div className="mt-0.5 break-words text-xs leading-relaxed text-muted">
                     {TYPE_OPTIONS.find((t) => t.value === s.type)?.label ?? s.type} · {s.status}
                     {/* 🆕 LOT 3 — open/click rate (si la migration stats est en place) */}
                     {seqStats[s.id] && seqStats[s.id].sent > 0 && (
@@ -424,7 +424,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         </Card>
       )}
 
-      <Card className="p-5">
+      <Card className="min-w-0 p-3 sm:p-5">
         <div className="mb-4 flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-ink/5 text-ink"><Workflow size={18} /></span>
           <div>
@@ -478,13 +478,13 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
             ))}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <select className={`${inputCls} max-w-[220px]`} value={pendingRoleType}
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+            <select className={`${inputCls} w-full sm:max-w-[220px]`} value={pendingRoleType}
               onChange={(e) => setPendingRoleType(e.target.value as SequenceType)}>
               {ROLE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
             </select>
             {pendingRoleType === "autre" && (
-              <input className={`${inputCls} max-w-[220px]`} value={pendingCustomLabel}
+              <input className={`${inputCls} w-full sm:max-w-[220px]`} value={pendingCustomLabel}
                 onChange={(e) => setPendingCustomLabel(e.target.value)}
                 placeholder="Nom du type personnalisé" />
             )}
@@ -522,10 +522,10 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       </Card>
 
       {emails && (
-        <Card className="p-5">
+        <Card className="min-w-0 p-3 sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <input className={`${inputCls} max-w-xs font-semibold`} value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Nom de la séquence" />
-            <div className="flex items-center gap-2">
+            <input className={`${inputCls} w-full font-semibold sm:max-w-xs`} value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Nom de la séquence" />
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <button type="button" onClick={addEmail}
                 className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
                 <Plus size={14} /> Ajouter un email
@@ -539,8 +539,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
           <div className="grid gap-4">
             {emails.map((em, i) => (
-              <div key={i} className="rounded-xl border border-line bg-white p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
+              <div key={i} className="min-w-0 rounded-xl border border-line bg-surface p-3 sm:p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-xs font-bold text-ink">Email {i + 1}</span>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => regenerateEmail(i)} disabled={regenIdx !== null}
@@ -572,7 +572,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                 {/* 🆕 Planification : délai relatif à l'inscription OU date/heure fixe */}
                 <div className="mt-3 grid gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Quand l&apos;envoyer</span>
-                  <div className="inline-flex w-fit rounded-lg border border-line bg-[#F8F9FB] p-0.5 text-xs font-semibold">
+                    <div className="flex max-w-full flex-wrap rounded-lg border border-line bg-canvas p-0.5 text-xs font-semibold sm:w-fit">
                     <button type="button" onClick={() => updateEmail(i, { sendAt: null })}
                       className={`rounded-md px-3 py-1.5 ${em.sendAt === null ? "bg-white text-ink shadow-sm" : "text-muted"}`}>
                       Délai relatif
@@ -603,7 +603,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                     </div>
                   ) : (
                     <div className="grid gap-1">
-                      <input type="datetime-local" className={`${inputCls} w-fit`}
+                      <input type="datetime-local" className={`${inputCls} max-w-full sm:w-fit`}
                         value={isoToLocalInput(em.sendAt)}
                         onChange={(e) => updateEmail(i, { sendAt: localInputToIso(e.target.value) })} />
                       <span className="text-[11px] text-muted">
@@ -628,8 +628,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
           <div className="mt-5 rounded-xl border border-line bg-[#F8F9FB] p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-bold text-ink"><UserPlus size={15} /> Inscrire un contact</div>
             {isSaved ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <select className={`${inputCls} max-w-xs`} value={enrollId} onChange={(e) => setEnrollId(e.target.value)}>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <select className={`${inputCls} w-full sm:max-w-xs`} value={enrollId} onChange={(e) => setEnrollId(e.target.value)}>
                   <option value="">Choisir un contact…</option>
                   {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name || c.email}</option>))}
                 </select>

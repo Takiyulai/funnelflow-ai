@@ -1,14 +1,15 @@
 // app/(app)/emails/page.tsx
-// 🆕 Entrée unique « Emails » à deux onglets (Newsletter + Séquences).
+// Entrée unique « Emails » : diffusions, séquences, expéditeur et listes.
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listCampaigns } from "@/lib/crm/campaigns";
 import { listTags } from "@/lib/crm/tags";
+import { listContactLists } from "@/lib/crm/lists";
 import { resendConfigured } from "@/lib/crm/email";
 import { EmailsModule } from "@/components/crm/EmailsModule";
 import { getEmailStats, EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
-import type { Campaign } from "@/lib/crm/types";
+import type { Campaign, ContactListWithCount } from "@/lib/crm/types";
 
 type PublishedFunnelOpt = { id: string; name: string };
 
@@ -27,7 +28,13 @@ export default async function EmailsPage({
 
   const { tab } = await searchParams;
   const initialTab =
-    tab === "sequences" ? "sequences" : tab === "expediteur" ? "expediteur" : "newsletter";
+    tab === "sequences"
+      ? "sequences"
+      : tab === "expediteur"
+        ? "expediteur"
+        : tab === "listes"
+          ? "listes"
+          : "newsletter";
 
   // 🆕 Résilience : une coupure réseau ponctuelle vers Supabase (`fetch failed`)
   //    ne doit PAS crasher toute la route. On dégrade en état vide.
@@ -36,13 +43,14 @@ export default async function EmailsPage({
   let publishedFunnels: PublishedFunnelOpt[] = [];
   // 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes.
   let tags: { id: string; name: string }[] = [];
+  let lists: ContactListWithCount[] = [];
   // 🆕 LOT 3 — Ouvertures/clics par campagne (best-effort : {} si la migration
   // db/email-events-schema.sql n'est pas encore passée).
   const campaignStats: Record<string, { opens: number; clicks: number }> = {};
   // 🆕 Bandeau de stats agrégées (total/actives/envoyés/ouverture/clic/séquences).
   let emailStats: EmailStats = { ...EMPTY_EMAIL_STATS };
   try {
-    const [campaignsRes, contactsRes, publishedFunnelsRes, tagsRes, statsRes] = await Promise.all([
+    const [campaignsRes, contactsRes, publishedFunnelsRes, tagsRes, listsRes, statsRes] = await Promise.all([
       listCampaigns(sb, user.id),
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       // Tunnels PUBLIÉS de l'utilisateur, pour rattacher une séquence (Étape 4).
@@ -53,6 +61,7 @@ export default async function EmailsPage({
         .eq("status", "published")
         .order("updated_at", { ascending: false }),
       listTags(sb, user.id),
+      listContactLists(sb, user.id),
       getEmailStats(sb, user.id),
     ]);
     campaigns = campaignsRes;
@@ -62,6 +71,7 @@ export default async function EmailsPage({
       (f: { id: string; name: string | null }) => ({ id: f.id, name: f.name || "Tunnel" }),
     );
     tags = tagsRes.map((t) => ({ id: t.id, name: t.name }));
+    lists = listsRes;
 
     // 🆕 LOT 3 — Stats open/click des campagnes (RPC SECURITY INVOKER → RLS).
     if (campaigns.length > 0) {
@@ -93,6 +103,7 @@ export default async function EmailsPage({
         publishedFunnels={publishedFunnels}
         campaignStats={campaignStats}
         tags={tags}
+        initialLists={lists}
         emailStats={emailStats}
       />
     </AppShell>

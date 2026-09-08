@@ -193,7 +193,7 @@ export function SendingDomainPanel() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-line bg-white p-10 text-center text-sm text-muted">
+      <div className="rounded-xl border border-line bg-surface p-6 text-center text-sm text-muted sm:p-10">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
         Chargement…
       </div>
@@ -204,8 +204,8 @@ export function SendingDomainPanel() {
   const verified = state?.status === "verified";
 
   return (
-    <div className="max-w-3xl">
-      <div className="rounded-xl border border-line bg-white p-6">
+    <div className="min-w-0 max-w-3xl">
+      <div className="min-w-0 rounded-xl border border-line bg-surface p-4 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-info-soft text-info-ink">
             <AtSign size={18} />

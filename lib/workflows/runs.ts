@@ -162,6 +162,8 @@ export function describeAction(a: WorkflowActionConfig): string {
       return `attente jusqu'au ${a.dateTime}`;
     case "add_tag":
       return `tags : ${a.tags.join(", ")}`;
+    case "add_to_list":
+      return "ajout à une liste CRM";
     case "set_status":
       return `statut → ${a.status}`;
     case "enroll_in_sequence":

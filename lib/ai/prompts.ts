@@ -1140,10 +1140,11 @@ export function completeFunnelPrompt(brief: FunnelBrief): string {
 
 export function regenerateSectionPrompt(args: {
   brief: FunnelBrief;
-  section: Pick<FunnelSection, "type" | "headline" | "subheadline" | "body" | "bullets" | "cta">;
+  section: Pick<FunnelSection, "type" | "eyebrow" | "headline" | "subheadline" | "body" | "bullets" | "cta">;
   instruction?: string;
+  maxWords?: number;
 }): string {
-  const { brief, section, instruction } = args;
+  const { brief, section, instruction, maxWords = 100 } = args;
   const lang = brief.language;
 
   return [
@@ -1165,9 +1166,14 @@ export function regenerateSectionPrompt(args: {
     `SECTION ACTUELLE (à améliorer) :`,
     JSON.stringify(section, null, 2),
     "",
-    strictSectionRequirementsBlock(lang),
-    "",
-    richSectionsBlock(brief),
+    tr(
+      {
+        fr: `CONTRAINTE DE PORTÉE ET DE LONGUEUR :\n- Réécris UNIQUEMENT cette section. Ne génère jamais une page complète ni d'autres sections.\n- Conserve exactement le type \"${section.type}\" et les mêmes champs de copy.\n- Le total de eyebrow + headline + subheadline + body + bullets + libellé CTA ne doit JAMAIS dépasser ${maxWords} mots.\n- Ne crée ni FAQ, ni témoignages, ni prix, ni nouveaux items si la section actuelle n'en contient pas.\n- Garde au maximum le nombre actuel de puces (${section.bullets?.length ?? 0}).\n- Le CTA peut changer de libellé, mais pas d'action ni de destination.`,
+        en: `SCOPE AND LENGTH REQUIREMENT:\n- Rewrite ONLY this section. Never generate a full page or other sections.\n- Keep exactly the \"${section.type}\" type and the same copy fields.\n- The combined eyebrow + headline + subheadline + body + bullets + CTA label must NEVER exceed ${maxWords} words.\n- Do not create FAQs, testimonials, pricing, or new items when the current section has none.\n- Keep no more than the current bullet count (${section.bullets?.length ?? 0}).\n- The CTA label may change, but not its action or destination.`,
+        es: `RESTRICCIÓN DE ALCANCE Y LONGITUD:\n- Reescribe ÚNICAMENTE esta sección. Nunca generes una página completa ni otras secciones.\n- Conserva exactamente el tipo \"${section.type}\" y los mismos campos de texto.\n- El total de eyebrow + headline + subheadline + body + bullets + etiqueta CTA NUNCA debe superar ${maxWords} palabras.\n- No crees FAQ, testimonios, precios ni elementos nuevos si la sección actual no los contiene.\n- Conserva como máximo el número actual de viñetas (${section.bullets?.length ?? 0}).\n- La etiqueta del CTA puede cambiar, pero no su acción ni su destino.`,
+      },
+      lang,
+    ),
     "",
     antiHypeBlock(lang),
     "",

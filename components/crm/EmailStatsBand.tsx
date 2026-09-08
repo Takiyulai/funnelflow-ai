@@ -71,23 +71,23 @@ export function EmailStatsBand({ stats }: { stats: EmailStats }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid min-w-0 max-w-full grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
       {tiles.map((t) => (
         <div
           key={t.label}
           // `bg-white` en dur restait blanc en mode sombre — texte `text-ink`
           // clair sur fond blanc, donc illisible. `bg-surface` bascule.
-          className="rounded-xl border border-line bg-surface p-3 shadow-sm sm:p-3.5"
+          className="min-w-0 rounded-xl border border-line bg-surface p-2.5 shadow-sm sm:p-3.5"
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+            <p className="min-w-0 text-[9px] font-bold uppercase tracking-wide text-muted sm:text-[10px] sm:tracking-wider">
               {t.label}
             </p>
             <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${t.bg} ${t.fg}`}>
               {t.icon}
             </span>
           </div>
-          <p className="mt-1.5 text-2xl font-black leading-none text-ink">{t.value}</p>
+          <p className="mt-1.5 text-xl font-black leading-none text-ink sm:text-2xl">{t.value}</p>
           {t.sub && <p className="mt-1 text-[11px] text-muted">{t.sub}</p>}
         </div>
       ))}

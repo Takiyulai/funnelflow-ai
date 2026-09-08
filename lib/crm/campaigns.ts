@@ -23,12 +23,42 @@ export type CampaignInput = {
   content?: string;
 };
 
-/** Public de destinataires : tous, par statut, par tag, ou sélection d'ids. */
+/** Public de destinataires : tous, par statut, par tag, par liste, ou sélection d'ids. */
 export type Audience =
   | { type: "all" }
   | { type: "status"; status: LeadStatus }
   | { type: "tag"; tagId: string }
+  | { type: "list"; listId: string }
   | { type: "ids"; ids: string[] };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEAD_STATUSES: readonly LeadStatus[] = ["nouveau", "contacte", "qualifie", "client", "perdu"];
+
+/** Validation serveur du ciblage reçu par les routes d'envoi. */
+export function parseAudience(value: unknown): Audience | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (input.type === "all") return { type: "all" };
+  if (
+    input.type === "status" &&
+    typeof input.status === "string" &&
+    (LEAD_STATUSES as readonly string[]).includes(input.status)
+  ) {
+    return { type: "status", status: input.status as LeadStatus };
+  }
+  if (input.type === "tag" && typeof input.tagId === "string" && UUID_RE.test(input.tagId)) {
+    return { type: "tag", tagId: input.tagId };
+  }
+  if (input.type === "list" && typeof input.listId === "string" && UUID_RE.test(input.listId)) {
+    return { type: "list", listId: input.listId };
+  }
+  if (input.type === "ids" && Array.isArray(input.ids)) {
+    const ids = input.ids.filter((id): id is string => typeof id === "string" && UUID_RE.test(id));
+    if (ids.length === 0 || ids.length !== input.ids.length || ids.length > 5000) return null;
+    return { type: "ids", ids: [...new Set(ids)] };
+  }
+  return null;
+}
 
 type Recipient = { id: string | null; email: string; name: string | null };
 
@@ -107,6 +137,38 @@ async function resolveRecipients(
   userId: string,
   audience: Audience,
 ): Promise<Recipient[]> {
+  // Une liste reçue du navigateur n'est jamais tenue pour acquise. Le serveur
+  // vérifie d'abord qu'elle appartient bien à l'utilisateur, puis ne lit que
+  // ses propres liaisons contact↔liste.
+  if (audience.type === "list") {
+    const { data: ownedList, error: listError } = await sb
+      .from("crm_lists")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("id", audience.listId)
+      .maybeSingle();
+    if (listError) throw new Error(listError.message);
+    if (!ownedList) throw new Error("list_not_found");
+
+    const { data: links, error: linkError } = await sb
+      .from("crm_contact_lists")
+      .select("contact_id")
+      .eq("user_id", userId)
+      .eq("list_id", ownedList.id);
+    if (linkError) throw new Error(linkError.message);
+    const ids = Array.from(new Set((links ?? []).map((link) => link.contact_id as string)));
+    if (ids.length === 0) return [];
+    const { data, error } = await sb
+      .from("leads")
+      .select("id, email, name")
+      .eq("user_id", userId)
+      .not("email", "is", null)
+      .is("unsubscribed_at", null)
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Recipient[]).filter((recipient) => Boolean(recipient.email));
+  }
+
   // 🆕 Ciblage par tag : résolu à part via une jointure sur crm_contact_tags
   // (nécessaire pour retrouver les ids de contacts portant ce tag avant de
   // filtrer la table leads).

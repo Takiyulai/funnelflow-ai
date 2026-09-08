@@ -77,6 +77,8 @@ type Props = {
   /** 🆕 Tags CRM, pour cibler l'audience d'une campagne par tag (ex. « inscrits
    *  webinaire X ») plutôt que seulement par statut ou par « tous ». */
   tags?: { id: string; name: string }[];
+  /** Listes CRM, disponibles comme audience au même titre que les tags. */
+  lists?: { id: string; name: string; contactsCount: number }[];
 };
 
 export function CampaignsClient({
@@ -85,6 +87,7 @@ export function CampaignsClient({
   resendReady,
   campaignStats = {},
   tags = [],
+  lists = [],
 }: Props) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -134,6 +137,9 @@ export function CampaignsClient({
     if (audience.startsWith("tag:")) {
       return { type: "tag" as const, tagId: audience.slice(4) };
     }
+    if (audience.startsWith("list:")) {
+      return { type: "list" as const, listId: audience.slice(5) };
+    }
     return { type: "status" as const, status: audience as LeadStatus };
   }
 
@@ -177,6 +183,8 @@ export function CampaignsClient({
         const map: Record<string, string> = {
           no_recipients: "Aucun destinataire pour ce ciblage.",
           subject_required: "Objet requis.",
+          list_not_found: "Cette liste n’existe plus ou n’est plus accessible.",
+          invalid_audience: "Le ciblage choisi n’est pas valide.",
           date_in_past: "La date d'envoi doit être dans le futur.",
           invalid_date: "Date invalide.",
           scheduledAt_required: "Choisis une date d'envoi.",
@@ -249,6 +257,8 @@ export function CampaignsClient({
           resend_not_configured: "Resend non configuré (RESEND_API_KEY manquante).",
           no_recipients: "Aucun destinataire pour ce ciblage.",
           subject_required: "Objet requis.",
+          list_not_found: "Cette liste n’existe plus ou n’est plus accessible.",
+          invalid_audience: "Le ciblage choisi n’est pas valide.",
         };
         alert(map[json.error] || json.error || "Envoi impossible.");
       }
@@ -258,15 +268,15 @@ export function CampaignsClient({
   }
 
   return (
-    <div className="animate-[fadeIn_0.4s_ease-out]">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-ink">Campagnes</h1>
+    <div className="min-w-0 max-w-full animate-[fadeIn_0.4s_ease-out]">
+      <div className="mb-6 flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-black text-ink sm:text-3xl">Campagnes</h1>
           <p className="mt-2 text-sm text-muted">
             Envoyez des emails à vos {contactsCount} contact{contactsCount > 1 ? "s" : ""} via Resend.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
+        <Button onClick={() => setCreating(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Nouvelle campagne
         </Button>
@@ -279,7 +289,9 @@ export function CampaignsClient({
         </div>
       )}
 
-      <Card className="p-0 overflow-hidden">
+      {/* Bureau : tableau dense. Mobile : cartes lisibles sans largeur minimale
+          cachée, donc sans déborder horizontalement comme l'ancien tableau. */}
+      <Card className="hidden overflow-hidden p-0 md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wider text-muted border-b border-line">
@@ -367,10 +379,77 @@ export function CampaignsClient({
         </table>
       </Card>
 
+      <div className="grid min-w-0 gap-3 md:hidden">
+        {initialCampaigns.length === 0 && (
+          <Card className="p-6 text-center text-sm text-muted">
+            Aucune campagne. Crée ta première campagne email.
+          </Card>
+        )}
+        {initialCampaigns.map((campaign) => {
+          const stats = campaignStats[campaign.id];
+          return (
+            <Card key={campaign.id} className="min-w-0 p-4">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="break-words font-bold text-ink">{campaign.name}</h2>
+                  <p className="mt-1 line-clamp-2 break-words text-sm text-muted">
+                    {campaign.subject || <em className="opacity-60">objet à définir</em>}
+                  </p>
+                </div>
+                <span
+                  className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{
+                    background: `${STATUS_COLOR[campaign.status]}1A`,
+                    color: STATUS_COLOR[campaign.status],
+                  }}
+                >
+                  {STATUS_LABEL[campaign.status]}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Stat label="Destinataires" value={String(campaign.recipients_count || "—")} />
+                <Stat
+                  label="Résultat"
+                  value={
+                    campaign.sent_count > 0 || campaign.failed_count > 0
+                      ? `${campaign.sent_count} envoyé${campaign.sent_count > 1 ? "s" : ""}`
+                      : "—"
+                  }
+                />
+                <div className="col-span-2">
+                  <Stat
+                    label="Date"
+                    value={
+                      campaign.status === "scheduled"
+                        ? fmtDate(campaign.scheduled_at)
+                        : fmtDate(campaign.sent_at)
+                    }
+                  />
+                </div>
+              </div>
+              {stats && campaign.sent_count > 0 && (
+                <p className="mt-3 text-xs text-muted">
+                  {stats.opens} ouvert{stats.opens > 1 ? "s" : ""} · {stats.clicks} clic
+                  {stats.clicks > 1 ? "s" : ""}
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2 border-t border-line/70 pt-3">
+                <Button variant="secondary" size="sm" onClick={() => setViewing(campaign)}>
+                  <Eye className="h-4 w-4" /> Voir
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => openEditor(campaign)}>
+                  <Pencil className="h-4 w-4" /> Modifier
+                </Button>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
       {/* Modal création */}
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setCreating(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-2xl bg-surface p-4 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-black text-ink">Nouvelle campagne</h2>
               <button type="button" onClick={() => setCreating(false)} className="text-muted hover:text-ink"><X className="h-5 w-5" /></button>
@@ -393,7 +472,7 @@ export function CampaignsClient({
       {/* Éditeur / envoi */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setEditing(null)}>
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90dvh] w-full min-w-0 max-w-2xl overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-black text-ink">{editing.name}</h2>
               <button type="button" onClick={() => setEditing(null)} className="text-muted hover:text-ink"><X className="h-5 w-5" /></button>
@@ -432,6 +511,15 @@ export function CampaignsClient({
                       {tags.map((t) => (
                         <option key={t.id} value={`tag:${t.id}`}>
                           Tag : {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {lists.length > 0 && (
+                    <optgroup label="Par liste">
+                      {lists.map((list) => (
+                        <option key={list.id} value={`list:${list.id}`}>
+                          Liste : {list.name} ({list.contactsCount})
                         </option>
                       ))}
                     </optgroup>
@@ -477,7 +565,7 @@ export function CampaignsClient({
                 </div>
               </div>
             </div>
-            <div className="mt-6 flex items-center justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
               <Button variant="secondary" onClick={save} disabled={busy}>
                 <Save className="h-4 w-4" /> Enregistrer
               </Button>

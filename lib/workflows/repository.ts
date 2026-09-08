@@ -83,6 +83,10 @@ function parseActionConfig(config: Record<string, unknown>): WorkflowActionConfi
       if (tags.length === 0) return null;
       return { kind: "add_tag", tags };
     }
+    case "add_to_list": {
+      const listId = typeof config.listId === "string" ? config.listId.trim() : "";
+      return listId ? { kind: "add_to_list", listId } : null;
+    }
     case "set_status": {
       const status = config.status;
       if (typeof status === "string" && (LEAD_STATUSES as readonly string[]).includes(status)) {
@@ -168,6 +172,10 @@ function parseConditionTest(raw: unknown): WorkflowConditionTest | null {
     case "has_tag":
       return typeof t.tagId === "string" && t.tagId.trim()
         ? { type: "has_tag", tagId: t.tagId.trim() }
+        : null;
+    case "in_list":
+      return typeof t.listId === "string" && t.listId.trim()
+        ? { type: "in_list", listId: t.listId.trim() }
         : null;
     case "status_is":
       return typeof t.status === "string" &&

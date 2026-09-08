@@ -136,6 +136,8 @@ export type CtaConfig = {
   icon?: CtaIcon;
   /** 🆕 Lot B4 : margins/paddings personnalisés */
   spacing?: CtaSpacing;
+  /** Position horizontale du bouton dans sa section. Absente = thème actuel. */
+  align?: "left" | "center" | "right";
    /** Message de réassurance affiché sous le formulaire popup (RGPD, sécurité, etc.). */
   popupReassurance?: string;
   /** 🆕 Chariow Niveau 2 : true si l'URL de redirection est un LIEN PRODUIT
@@ -483,6 +485,8 @@ export type FormFieldItem = {
   required?: boolean;
   options?: string[];
   width?: "full" | "half";
+  /** Indicatif proposé par défaut pour un champ téléphone. */
+  countryCode?: string;
 };
 
 /**

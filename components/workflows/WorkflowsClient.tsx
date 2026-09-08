@@ -11,6 +11,7 @@ import {
   Send,
   Plus,
   Tag,
+  ListPlus,
   Trash2,
   UserCheck,
   Zap,
@@ -83,6 +84,7 @@ type SequenceOption = {
   emails: { id: string; subject: string; position: number; content: string }[];
 };
 type TagOption = { id: string; name: string };
+type ListOption = { id: string; name: string };
 
 // 🆕 L'action « Envoyer un email » utilise désormais l'éditeur riche (HTML). Le
 // contenu peut venir d'une saisie manuelle plate, de l'IA, ou d'un email de
@@ -127,9 +129,15 @@ function firstActionProblem(actions: WorkflowActionConfig[], where = ""): string
         if (!a.tags || a.tags.filter((t) => t.trim()).length === 0)
           return `Une action « Ajouter un tag »${loc} n'a aucun tag.`;
         break;
+      case "add_to_list":
+        if (!a.listId)
+          return `Une action « Ajouter à une liste »${loc} n'a pas de liste choisie.`;
+        break;
       case "condition": {
         if (a.test.type === "has_tag" && !a.test.tagId)
           return `Une condition${loc} « a le tag » n'a pas de tag choisi.`;
+        if (a.test.type === "in_list" && !a.test.listId)
+          return `Une condition${loc} « appartient à la liste » n'a pas de liste choisie.`;
         const inThen = firstActionProblem(a.then, where ? `${where} → SI OUI` : "SI OUI");
         if (inThen) return inThen;
         const inElse = firstActionProblem(a.otherwise, where ? `${where} → SINON` : "SINON");
@@ -163,6 +171,7 @@ type Props = {
   funnels: FunnelOption[];
   sequences: SequenceOption[];
   tags: TagOption[];
+  lists: ListOption[];
 };
 
 type Draft = {
@@ -240,6 +249,7 @@ const ACTION_META: Record<
   { label: string; icon: typeof Tag }
 > = {
   add_tag: { label: "Ajouter un tag", icon: Tag },
+  add_to_list: { label: "Ajouter à une liste", icon: ListPlus },
   set_status: { label: "Changer le statut CRM", icon: UserCheck },
   enroll_in_sequence: { label: "Inscrire dans une séquence", icon: Send },
   notify_owner: { label: "Me notifier", icon: Bell },
@@ -254,6 +264,7 @@ const ACTION_META: Record<
 // 🆕 LOT 5 — Libellés des tests de condition.
 const CONDITION_TYPE_LABELS: Record<WorkflowConditionTest["type"], string> = {
   has_tag: "Le contact a le tag…",
+  in_list: "Le contact appartient à la liste…",
   status_is: "Le statut CRM est…",
   language_is: "La langue du contact est…",
   source_is: "La source du contact est…",
@@ -267,6 +278,7 @@ const CONDITION_TYPE_LABELS: Record<WorkflowConditionTest["type"], string> = {
 // garde l'interface simple et lisible pour les débutants).
 const BRANCH_ACTION_KINDS: WorkflowActionKind[] = [
   "add_tag",
+  "add_to_list",
   "set_status",
   "enroll_in_sequence",
   "send_email",
@@ -354,6 +366,8 @@ function defaultActionConfig(kind: WorkflowActionKind): WorkflowActionConfig {
   switch (kind) {
     case "add_tag":
       return { kind, tags: [] };
+    case "add_to_list":
+      return { kind, listId: "" };
     case "set_status":
       return { kind, status: "qualifie" };
     case "enroll_in_sequence":
@@ -385,6 +399,8 @@ function defaultConditionTest(
   switch (type) {
     case "has_tag":
       return { type, tagId: "" };
+    case "in_list":
+      return { type, listId: "" };
     case "status_is":
       return { type, status: "client" };
     case "language_is":
@@ -432,7 +448,7 @@ function triggerFromDraft(draft: Draft): WorkflowTriggerConfig {
   };
 }
 
-export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: Props) {
+export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags, lists }: Props) {
   const [workflows, setWorkflows] = useState<Workflow[]>(initialWorkflows);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
@@ -573,8 +589,8 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
         <div>
           <h1 className="text-3xl font-black text-ink">Workflows</h1>
           <p className="mt-2 text-sm text-muted">
-            Automatisez ce qui se passe quand un lead est capturé : tags, statut,
-            emails, relances et notifications.
+            Automatisez ce qui se passe quand un lead est capturé : listes, tags,
+            statut, emails, relances et notifications.
           </p>
         </div>
         {editingId === null && (
@@ -608,6 +624,7 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags }: 
             funnels={funnels}
             sequences={sequences}
             tags={tags}
+            lists={lists}
             saving={saving}
             error={error}
             isNew={editingId === "new"}
@@ -838,6 +855,7 @@ function WorkflowEditor({
   funnels,
   sequences,
   tags,
+  lists,
   saving,
   error,
   isNew,
@@ -853,6 +871,7 @@ function WorkflowEditor({
   funnels: FunnelOption[];
   sequences: SequenceOption[];
   tags: TagOption[];
+  lists: ListOption[];
   saving: boolean;
   error: string | null;
   isNew: boolean;
@@ -865,6 +884,7 @@ function WorkflowEditor({
 }) {
   const actionKinds: WorkflowActionKind[] = [
     "add_tag",
+    "add_to_list",
     "set_status",
     "enroll_in_sequence",
     "send_email",
@@ -1212,6 +1232,7 @@ function WorkflowEditor({
                   action={action}
                   sequences={sequences}
                   tags={tags}
+                  lists={lists}
                   baseOffsetMs={offsetMs}
                   onChange={(next) => onUpdateAction(i, next)}
                 />
@@ -1367,12 +1388,14 @@ function ActionConfigFields({
   action,
   sequences,
   tags,
+  lists,
   onChange,
   baseOffsetMs = 0,
 }: {
   action: WorkflowActionConfig;
   sequences: SequenceOption[];
   tags: TagOption[];
+  lists: ListOption[];
   onChange: (next: WorkflowActionConfig) => void;
   /** 🆕 Délai déjà accumulé jusqu'à ce nœud (aperçu chronologique). */
   baseOffsetMs?: number;
@@ -1429,6 +1452,23 @@ function ActionConfigFields({
             placeholder="Tags séparés par des virgules — ex. lead, ebook"
             className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
           />
+        )}
+
+        {action.kind === "add_to_list" && (
+          <select
+            value={action.listId}
+            onChange={(event) =>
+              onChange({ kind: "add_to_list", listId: event.target.value })
+            }
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="">— Choisir une liste —</option>
+            {lists.map((list) => (
+              <option key={list.id} value={list.id}>
+                {list.name}
+              </option>
+            ))}
+          </select>
         )}
 
         {action.kind === "set_status" && (
@@ -1688,6 +1728,7 @@ function ActionConfigFields({
             action={action}
             sequences={sequences}
             tags={tags}
+            lists={lists}
             onChange={onChange}
             baseOffsetMs={baseOffsetMs}
           />
@@ -1707,12 +1748,14 @@ function ConditionFields({
   action,
   sequences,
   tags,
+  lists,
   onChange,
   baseOffsetMs = 0,
 }: {
   action: ConditionAction;
   sequences: SequenceOption[];
   tags: TagOption[];
+  lists: ListOption[];
   onChange: (next: WorkflowActionConfig) => void;
   baseOffsetMs?: number;
 }) {
@@ -1755,6 +1798,20 @@ function ConditionFields({
             {tags.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {test.type === "in_list" && (
+          <select
+            value={test.listId}
+            onChange={(event) => setTest({ type: "in_list", listId: event.target.value })}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="">— Choisir une liste —</option>
+            {lists.map((list) => (
+              <option key={list.id} value={list.id}>
+                {list.name}
               </option>
             ))}
           </select>
@@ -1954,6 +2011,7 @@ function ConditionFields({
         actions={action.then}
         sequences={sequences}
         tags={tags}
+        lists={lists}
         baseOffsetMs={baseOffsetMs}
         onChange={(a) => setBranch("then", a)}
       />
@@ -1963,6 +2021,7 @@ function ConditionFields({
         actions={action.otherwise}
         sequences={sequences}
         tags={tags}
+        lists={lists}
         baseOffsetMs={baseOffsetMs}
         onChange={(a) => setBranch("otherwise", a)}
       />
@@ -1976,6 +2035,7 @@ function ConditionBranch({
   actions,
   sequences,
   tags,
+  lists,
   onChange,
   baseOffsetMs = 0,
 }: {
@@ -1984,6 +2044,7 @@ function ConditionBranch({
   actions: WorkflowActionConfig[];
   sequences: SequenceOption[];
   tags: TagOption[];
+  lists: ListOption[];
   onChange: (actions: WorkflowActionConfig[]) => void;
   /** 🆕 Délai déjà accumulé jusqu'à la condition qui contient cette branche. */
   baseOffsetMs?: number;
@@ -2034,6 +2095,7 @@ function ConditionBranch({
                 action={a}
                 sequences={sequences}
                 tags={tags}
+                lists={lists}
                 baseOffsetMs={offsetMs}
                 onChange={(next) => onChange(actions.map((x, j) => (j === i ? next : x)))}
               />

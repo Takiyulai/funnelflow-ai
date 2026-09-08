@@ -4333,3 +4333,23 @@
 [data-ff-text-align="right"] {
   text-align: right !important;
 }
+/* Positionnement CTA explicite. Sans attribut, le template conserve exactement
+   son comportement historique. L'élément devient un bloc à largeur de contenu
+   afin que les marges automatiques fonctionnent aussi dans un layout split. */
+[data-ff-template] [data-ff-cta][data-ff-cta-align] {
+  display: flex !important;
+  width: max-content;
+  max-width: 100%;
+}
+[data-ff-template] [data-ff-cta][data-ff-cta-align="left"] {
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+[data-ff-template] [data-ff-cta][data-ff-cta-align="center"] {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+[data-ff-template] [data-ff-cta][data-ff-cta-align="right"] {
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}

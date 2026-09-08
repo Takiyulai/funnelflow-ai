@@ -55,6 +55,7 @@ const inputSchema = z.object({
   section: sectionSchema,
   // Le prompt libre de l'utilisateur (« rends ça plus percutant », « raccourcis »…).
   instruction: z.string().max(800).optional(),
+  maxWords: z.number().int().min(30).max(300).default(100),
   language: z.enum(["fr", "en", "es"]).optional(),
 });
 
@@ -86,6 +87,85 @@ function normalizeCta(raw: unknown, fallback?: CtaConfig): CtaConfig | undefined
     };
   }
   return raw as CtaConfig;
+}
+
+function wordsOf(value: string | undefined): string[] {
+  return value?.trim() ? value.trim().split(/\s+/) : [];
+}
+
+/** Filet déterministe : même si le provider ignore le prompt, la réponse
+ * appliquée par l'éditeur ne peut jamais dépasser la limite choisie. */
+function limitSectionCopy(
+  section: z.infer<typeof aiOutputSchema>,
+  maxWords: number,
+): z.infer<typeof aiOutputSchema> {
+  const segments = [
+    wordsOf(section.eyebrow),
+    wordsOf(section.headline),
+    wordsOf(section.subheadline),
+    wordsOf(section.body),
+    ...(section.bullets ?? []).map(wordsOf),
+    wordsOf(section.cta?.label),
+  ];
+  const total = segments.reduce((sum, words) => sum + words.length, 0);
+  if (total <= maxWords) return section;
+
+  const active = segments.filter((words) => words.length > 0);
+  if (active.length >= maxWords) {
+    let slots = maxWords;
+    const limited = segments.map((words) =>
+      words.length > 0 && slots-- > 0 ? words[0] : undefined,
+    );
+    const bulletEnd = 4 + (section.bullets?.length ?? 0);
+    const bullets = limited
+      .slice(4, bulletEnd)
+      .filter((bullet): bullet is string => Boolean(bullet));
+    const ctaLabel = limited[bulletEnd];
+    return {
+      ...section,
+      eyebrow: limited[0],
+      headline: limited[1] || "Section",
+      subheadline: limited[2],
+      body: limited[3],
+      bullets: bullets.length > 0 ? bullets : undefined,
+      cta: section.cta && ctaLabel ? { ...section.cta, label: ctaLabel } : undefined,
+    };
+  }
+  const guaranteed = active.length;
+  let distributable = maxWords - guaranteed;
+  const limits = segments.map((words) => {
+    if (words.length === 0) return 0;
+    const proportional = Math.floor((words.length / total) * distributable);
+    return Math.min(words.length, 1 + proportional);
+  });
+  let assigned = limits.reduce((sum, limit) => sum + limit, 0);
+  while (assigned < maxWords) {
+    const index = segments.findIndex(
+      (words, candidate) => limits[candidate] < words.length,
+    );
+    if (index < 0) break;
+    limits[index] += 1;
+    assigned += 1;
+  }
+  const limited = segments.map((words, index) =>
+    words.slice(0, limits[index]).join(" ") || undefined,
+  );
+  const bulletStart = 4;
+  const bulletEnd = bulletStart + (section.bullets?.length ?? 0);
+  const bullets = limited
+    .slice(bulletStart, bulletEnd)
+    .filter((bullet): bullet is string => Boolean(bullet));
+  const ctaLabel = limited[bulletEnd];
+
+  return {
+    ...section,
+    eyebrow: limited[0],
+    headline: limited[1] || "Section",
+    subheadline: limited[2],
+    body: limited[3],
+    bullets: bullets.length > 0 ? bullets : undefined,
+    cta: section.cta && ctaLabel ? { ...section.cta, label: ctaLabel } : undefined,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,7 +229,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { brief: briefIn, section, instruction, language: langIn } = parsed.data;
+  const { brief: briefIn, section, instruction, maxWords, language: langIn } = parsed.data;
 
   // 🆕 Brief complet reconstruit avec des replis neutres : le moteur de prompt
   // attend un FunnelBrief, mais la régénération par prompt n'en a qu'un fragment.
@@ -187,6 +267,7 @@ export async function POST(request: Request) {
       brief,
       section: {
         type: section.type as FunnelSection["type"],
+        eyebrow: section.eyebrow,
         headline: section.headline,
         subheadline: section.subheadline,
         body: section.body,
@@ -194,6 +275,7 @@ export async function POST(request: Request) {
         cta: typeof section.cta === "object" ? section.cta : undefined,
       },
       instruction,
+      maxWords,
     });
 
     // 🆕 On passe par le MÊME helper que la génération de tunnel (callAI) :
@@ -204,7 +286,7 @@ export async function POST(request: Request) {
     const rawText = await callAI({
       systemMessage: SYSTEM_MESSAGE_FUNNEL,
       userPrompt: prompt,
-      maxTokens: 1500,
+      maxTokens: Math.min(900, Math.max(350, maxWords * 5)),
     });
 
     const aiRaw = stripJsonFences(rawText);
@@ -224,16 +306,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ section: regenerated, fallback: true });
     }
 
-    const fallbackCta = brief.primaryCta;
+    // Une régénération de copy ne doit pas inventer des champs ni multiplier
+    // les puces : on conserve la forme de la section sélectionnée.
+    const sameShape = {
+      ...aiParsed.data,
+      eyebrow: section.eyebrow !== undefined ? aiParsed.data.eyebrow : undefined,
+      subheadline:
+        section.subheadline !== undefined ? aiParsed.data.subheadline : undefined,
+      body: section.body !== undefined ? aiParsed.data.body : undefined,
+      bullets: section.bullets?.length
+        ? aiParsed.data.bullets?.slice(0, section.bullets.length)
+        : undefined,
+      cta: section.cta ? aiParsed.data.cta : undefined,
+    };
+    const limited = limitSectionCopy(sameShape, maxWords);
+    const currentCta = normalizeCta(section.cta);
+    const generatedCta = normalizeCta(limited.cta, brief.primaryCta);
+    // La régénération porte sur le copy : une action/destination CTA déjà
+    // configurée reste intacte. Seul son libellé peut être réécrit.
+    const resolvedCta = currentCta
+      ? { ...currentCta, ...(generatedCta?.label ? { label: generatedCta.label } : {}) }
+      : generatedCta;
     const regenerated: FunnelSection = {
       id: section.id ?? `${section.type}-regen`,
-      type: aiParsed.data.type as FunnelSection["type"],
-      eyebrow: aiParsed.data.eyebrow,
-      headline: aiParsed.data.headline,
-      subheadline: aiParsed.data.subheadline,
-      body: aiParsed.data.body,
-      bullets: aiParsed.data.bullets,
-      cta: normalizeCta(aiParsed.data.cta, fallbackCta),
+      type: section.type as FunnelSection["type"],
+      eyebrow: limited.eyebrow,
+      headline: limited.headline,
+      subheadline: limited.subheadline,
+      body: limited.body,
+      bullets: limited.bullets,
+      cta: resolvedCta,
       visible: true,
     };
 

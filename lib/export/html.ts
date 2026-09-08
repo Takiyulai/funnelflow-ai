@@ -64,6 +64,11 @@ import { createReadme } from "./readme";
 import { DEFAULT_REASSURANCE } from "@/lib/funnels/types";
 import { splitTextPair } from "@/lib/funnels/text";
 import { isFunnelHomePage, resolveCtaWithGlobal } from "@/lib/funnels/cta";
+import {
+  isPhoneField,
+  PHONE_DIAL_CODES,
+  phoneDialCodeFieldName,
+} from "@/lib/funnels/phone";
 
 // 🆕 RAW HTML — imports pour le rendu des sections clonées
 import { RAW_HTML_BODY_MARKER } from "@/lib/clone/section-mapper";
@@ -663,7 +668,8 @@ function renderCtaButton(
   } else {
     finalAttrs = `${baseAttrs} class="${cls}"`;
   }
-  return `<a${finalAttrs}${styleAttr}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
+  const alignAttr = cta.align ? ` data-ff-cta-align="${cta.align}"` : "";
+  return `<a${finalAttrs}${alignAttr}${styleAttr}>${escapeHtml(cta.label || "")}${iconHtml}</a>`;
 }
 
 // 🆕 Liens/CTA supplémentaires (canaux WhatsApp/Telegram/Instagram…). Rendus
@@ -837,10 +843,15 @@ const FF_FORM_SCRIPT = `<script>(function(){
       var el=els[i]; if(!el.name) continue;
       var n=el.name.toLowerCase();
       if(el.type==="checkbox"){ if(n.indexOf("consent")>-1||n.indexOf("rgpd")>-1){d.consent=el.checked;} else {d.metadata[el.name]=el.checked;} continue; }
+      if(n.slice(-10)==="__dialcode"){continue;}
       var v=el.value;
       if(n==="email"||el.type==="email"){d.email=v;}
       else if(!d.name&&(n==="name"||n==="nom"||n==="prenom"||n==="firstname"||n==="fullname")){d.name=v;}
-      else if(n==="phone"||n==="tel"||n==="telephone"||el.type==="tel"){d.phone=v;}
+      else if(n==="phone"||n==="tel"||n==="telephone"||n.indexOf("whatsapp")>-1||el.type==="tel"){
+        var dial=form.elements.namedItem(el.name+"__dialCode");
+        if(dial){var dc=String(dial.value||"").replace(/\D/g,"");var local=String(v||"").replace(/\D/g,"").replace(/^0+/,"");d.phone="+"+dc+local;}
+        else{d.phone=v;}
+      }
       else {d.metadata[el.name]=v;}
     }
     return d;
@@ -872,6 +883,8 @@ const FF_FORM_SCRIPT = `<script>(function(){
   function boot(){
     var forms=document.querySelectorAll("form.ff-form-fields");
     for(var i=0;i<forms.length;i++) bind(forms[i]);
+    var phoneInputs=document.querySelectorAll(".ff-phone-field input[type=tel]");
+    for(var p=0;p<phoneInputs.length;p++){phoneInputs[p].addEventListener("input",function(){this.value=this.value.replace(/\D/g,"");});}
     var ov=document.querySelector("[data-ff-popup-overlay]");
     if(ov){
       var openers=document.querySelectorAll("[data-ff-popup-open]");
@@ -2136,7 +2149,15 @@ function renderFormFields(
       const ph = escapeAttr(f.placeholder || "");
       const req = f.required ? " required" : "";
       let input = "";
-      if (f.type === "textarea") {
+      if (isPhoneField(f)) {
+        const dialName = escapeAttr(phoneDialCodeFieldName(f.name || `field_${idx}`));
+        const defaultDialCode = f.countryCode || "+33";
+        const dialOptions = PHONE_DIAL_CODES.map(
+          (entry) =>
+            `<option value="${escapeAttr(entry.code)}"${entry.code === defaultDialCode ? " selected" : ""}>${escapeHtml(entry.country)} ${escapeHtml(entry.code)}</option>`,
+        ).join("");
+        input = `<div class="ff-phone-field"><select class="ff-input ff-phone-code" name="${dialName}" aria-label="Indicatif du pays">${dialOptions}</select><input class="ff-input" type="tel" inputmode="numeric" pattern="[0-9]{5,15}" maxlength="15" id="${name}" name="${name}" placeholder="${ph || "Numéro de téléphone"}"${req} /></div>`;
+      } else if (f.type === "textarea") {
         input = `<textarea class="ff-input" id="${name}" name="${name}" placeholder="${ph}" rows="4"${req}></textarea>`;
       } else if (f.type === "select") {
         const opts = (f.options || [])

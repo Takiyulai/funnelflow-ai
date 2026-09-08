@@ -29,8 +29,9 @@ export async function PATCH(
     });
     return NextResponse.json({ ok: true, list });
   } catch (e) {
+    console.error("[api/crm/lists] modification de liste échouée", e);
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "update_failed" },
+      { ok: false, error: "update_failed" },
       { status: 500 },
     );
   }
@@ -49,8 +50,9 @@ export async function DELETE(
     await deleteContactList(sb, user.id, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
+    console.error("[api/crm/lists] suppression de liste échouée", e);
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "delete_failed" },
+      { ok: false, error: "delete_failed" },
       { status: 500 },
     );
   }

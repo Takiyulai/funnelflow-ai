@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
+import { addContactsToLists } from "@/lib/crm/lists";
 import { enrollContact } from "@/lib/crm/sequences";
 import { personalize, renderSequenceEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
 import { getActiveWorkflowsForEvent, getActiveWorkflowsWaitingOnEvent } from "./repository";
@@ -459,6 +460,20 @@ export async function executeActions(
           }
           break;
         }
+        case "add_to_list": {
+          // Le moteur utilise un client privilégié : la propriété de la liste
+          // doit donc être vérifiée explicitement avant de créer la liaison.
+          const { data: ownedList, error: listError } = await admin
+            .from("crm_lists")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("id", action.listId)
+            .maybeSingle();
+          if (listError) throw new Error(listError.message);
+          if (!ownedList) throw new Error("list_not_found");
+          await addContactsToLists(admin, userId, [lead.id], [ownedList.id]);
+          break;
+        }
         case "set_status": {
           const { error } = await admin
             .from("leads")
@@ -636,6 +651,24 @@ async function evaluateConditionTest(
           .eq("user_id", userId)
           .eq("contact_id", lead.id)
           .eq("tag_id", test.tagId)
+          .maybeSingle();
+        return Boolean(data);
+      }
+      case "in_list": {
+        if (!test.listId) return false;
+        const { data: ownedList, error: listError } = await admin
+          .from("crm_lists")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("id", test.listId)
+          .maybeSingle();
+        if (listError || !ownedList) return false;
+        const { data } = await admin
+          .from("crm_contact_lists")
+          .select("contact_id")
+          .eq("user_id", userId)
+          .eq("contact_id", lead.id)
+          .eq("list_id", ownedList.id)
           .maybeSingle();
         return Boolean(data);
       }

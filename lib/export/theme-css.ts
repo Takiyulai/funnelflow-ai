@@ -2186,6 +2186,25 @@ textarea.ff-input {
   border-color: var(--ff-accent);
   box-shadow: 0 0 0 3px var(--ff-accent-soft);
 }
+
+.ff-phone-field { display: flex; gap: 8px; min-width: 0; }
+.ff-phone-field .ff-phone-code {
+  flex: 0 0 132px;
+  width: 132px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.ff-phone-field .ff-input:not(.ff-phone-code) { flex: 1 1 auto; min-width: 0; }
+
+/* Position CTA choisie dans l'éditeur ; aucun attribut = rendu historique. */
+[data-ff-template] [data-ff-cta][data-ff-cta-align] {
+  display: flex !important;
+  width: max-content;
+  max-width: 100%;
+}
+[data-ff-template] [data-ff-cta][data-ff-cta-align="left"] { margin-left: 0 !important; margin-right: auto !important; }
+[data-ff-template] [data-ff-cta][data-ff-cta-align="center"] { margin-left: auto !important; margin-right: auto !important; }
+[data-ff-template] [data-ff-cta][data-ff-cta-align="right"] { margin-left: auto !important; margin-right: 0 !important; }
 .ff-checkbox {
   display: flex;
   align-items: center;

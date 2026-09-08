@@ -82,6 +82,7 @@ const TRIGGER_LABEL: Record<string, string> = {
 
 const ACTION_LABEL: Record<WorkflowActionConfig["kind"], string> = {
   add_tag: "Ajouter un tag",
+  add_to_list: "Ajouter à une liste",
   set_status: "Changer le statut",
   enroll_in_sequence: "Inscrire à une séquence",
   notify_owner: "Me notifier",
@@ -93,6 +94,7 @@ const ACTION_LABEL: Record<WorkflowActionConfig["kind"], string> = {
 
 const ACTION_ICON: Record<WorkflowActionConfig["kind"], typeof Tag> = {
   add_tag: Tag,
+  add_to_list: ListChecks,
   set_status: UserCheck,
   enroll_in_sequence: ListChecks,
   notify_owner: Bell,

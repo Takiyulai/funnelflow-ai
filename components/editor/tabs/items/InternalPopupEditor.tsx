@@ -146,8 +146,8 @@ export function InternalPopupEditor({
               >
                 <option value="text">Texte</option>
                 <option value="email">Email</option>
-                <option value="tel">Téléphone</option>
-                <option value="number">Nombre</option>
+                <option value="tel">Téléphone / WhatsApp</option>
+                <option value="number">Nombre (quantité)</option>
                 <option value="textarea">Zone texte</option>
                 <option value="checkbox">Case à cocher</option>
               </select>

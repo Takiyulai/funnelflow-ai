@@ -46,6 +46,12 @@ import {
   resolveNextDestination,
 } from "@/lib/funnels/nextDestination";
 import { persistIdentifiedContact } from "@/lib/tracking/contactIdentity";
+import { PhoneFieldControl } from "@/components/funnel/PhoneFieldControl";
+import {
+  combinePhoneNumber,
+  isPhoneField,
+  phoneDialCodeFieldName,
+} from "@/lib/funnels/phone";
 
 type Props = {
   cta: CtaConfig;
@@ -106,7 +112,7 @@ function classifyField(
     (n.includes("consent") || n.includes("rgpd") || n.includes("agree"))
   )
     return "consent";
-  if (t === "tel" || n.includes("phone") || n.includes("tel") || n.includes("mobile"))
+  if (isPhoneField(field))
     return "phone";
   if (
     n === "name" ||
@@ -297,7 +303,10 @@ function InternalPopup({
           name = value;
           break;
         case "phone":
-          phone = value;
+          phone = combinePhoneNumber(
+            formData.get(phoneDialCodeFieldName(f.name)),
+            raw,
+          );
           break;
         default:
           metadata[f.name] = value;
@@ -851,7 +860,15 @@ function PopupField({
           {field.required && <span style={{ color: "#ef4444" }}> *</span>}
         </label>
       )}
-      {field.type === "textarea" ? (
+      {isPhoneField(field) ? (
+        <PhoneFieldControl
+          field={field}
+          disabled={disabled}
+          inputClassName={inputClass}
+          inputStyle={inputStyle}
+          inputRef={inputRef}
+        />
+      ) : field.type === "textarea" ? (
         <textarea
           name={field.name}
           placeholder={field.placeholder}

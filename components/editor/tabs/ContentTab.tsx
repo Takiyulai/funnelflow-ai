@@ -152,7 +152,7 @@ function GenericTextFields({
   // Refs pour chaque champ texte qui supporte le surlignage
   const eyebrowRef = useRef<HTMLInputElement>(null);
   const headlineRef = useRef<HTMLInputElement>(null);
-  const subheadlineRef = useRef<HTMLInputElement>(null);
+  const subheadlineRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const updateBullet = (idx: number, value: string) => {
@@ -195,7 +195,7 @@ function GenericTextFields({
       <div>
         <div className="mb-1 flex items-center justify-between">
           <label className="block text-xs font-medium text-white/70">
-            Suréclat (eyebrow)
+            Texte au-dessus du titre (surtitre)
           </label>
           <TextColorButton
             fieldRef={eyebrowRef}
@@ -247,13 +247,13 @@ function GenericTextFields({
             onChange={(subheadline) => onChange({ subheadline })}
           />
         </div>
-        <input
+        <textarea
           ref={subheadlineRef}
-          type="text"
           value={section.subheadline || ""}
           onChange={(e) => onChange({ subheadline: e.target.value })}
-          placeholder="Sous-titre court"
-          className="w-full rounded-md border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-300/40 focus:outline-none"
+          placeholder="Sous-titre ou introduction courte"
+          rows={2}
+          className="w-full resize-y rounded-md border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-amber-300/40 focus:outline-none"
         />
       </div>
 

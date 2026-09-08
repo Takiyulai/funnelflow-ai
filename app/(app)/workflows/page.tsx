@@ -2,6 +2,7 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listWorkflows } from "@/lib/workflows/repository";
 import { listSequences } from "@/lib/crm/sequences";
+import { listContactLists } from "@/lib/crm/lists";
 import { WorkflowsClient } from "@/components/workflows/WorkflowsClient";
 import type { Workflow } from "@/lib/workflows/types";
 
@@ -17,6 +18,7 @@ type SequenceOption = {
   emails: { id: string; subject: string; position: number; content: string }[];
 };
 type TagOption = { id: string; name: string };
+type ListOption = { id: string; name: string };
 
 export default async function WorkflowsPage() {
   const sb = await createSupabaseServerClient();
@@ -28,6 +30,7 @@ export default async function WorkflowsPage() {
   let funnels: FunnelOption[] = [];
   let sequences: SequenceOption[] = [];
   let tags: TagOption[] = [];
+  let lists: ListOption[] = [];
 
   if (user) {
     workflows = await listWorkflows(sb, user.id).catch(() => [] as Workflow[]);
@@ -78,6 +81,10 @@ export default async function WorkflowsPage() {
       id: t.id as string,
       name: (t.name as string) ?? "Tag",
     }));
+    lists = (await listContactLists(sb, user.id).catch(() => [])).map((list) => ({
+      id: list.id,
+      name: list.name,
+    }));
   }
 
   return (
@@ -87,6 +94,7 @@ export default async function WorkflowsPage() {
         funnels={funnels}
         sequences={sequences}
         tags={tags}
+        lists={lists}
       />
     </AppShell>
   );

@@ -14,22 +14,37 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const contactIds = Array.isArray(body?.contactIds)
-    ? (body.contactIds as unknown[]).filter((v): v is string => typeof v === "string")
+    ? [...new Set((body.contactIds as unknown[]).filter((v): v is string => typeof v === "string"))]
     : [];
   const listIds = Array.isArray(body?.listIds)
-    ? (body.listIds as unknown[]).filter((v): v is string => typeof v === "string")
+    ? [...new Set((body.listIds as unknown[]).filter((v): v is string => typeof v === "string"))]
     : [];
 
   if (contactIds.length === 0 || listIds.length === 0) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
+  if (contactIds.length > 500 || listIds.length > 50 || contactIds.length * listIds.length > 5000) {
+    return NextResponse.json({ ok: false, error: "too_many_ids" }, { status: 400 });
+  }
 
   const action = body?.action === "remove" ? "remove" : "add";
 
   try {
-    // La RLS garantit qu'on ne touche que les lignes de l'appelant : un id de
-    // contact ou de liste appartenant à un autre compte est simplement ignoré
-    // par Postgres, il n'y a rien à revérifier ici.
+    // La RLS de la table de liaison filtre son `user_id`, mais ne prouve pas à
+    // elle seule la propriété des deux clés étrangères. On valide donc les
+    // contacts ET les listes avant toute création de liaison.
+    const [contactsResult, listsResult] = await Promise.all([
+      sb.from("leads").select("id").eq("user_id", user.id).in("id", contactIds),
+      sb.from("crm_lists").select("id").eq("user_id", user.id).in("id", listIds),
+    ]);
+    if (contactsResult.error || listsResult.error) throw new Error("ownership_check_failed");
+    if (
+      (contactsResult.data ?? []).length !== contactIds.length ||
+      (listsResult.data ?? []).length !== listIds.length
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+
     if (action === "remove") {
       await removeContactsFromLists(sb, user.id, contactIds, listIds);
     } else {
