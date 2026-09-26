@@ -38,20 +38,30 @@ export function sanitizeEmailRichHtml(value: string): string {
 }
 
 function align(value: EmailTextAlign): EmailTextAlign {
-  return value === "center" || value === "right" ? value : "left";
+  return value === "center" || value === "right" || value === "justify" ? value : "left";
+}
+
+export function isEmailRichTextEmpty(value: string): boolean {
+  return value
+    .replace(/<br\s*\/?>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .trim().length === 0;
 }
 
 function renderBlock(block: EmailBlock): string {
   switch (block.type) {
     case "heading": {
+      if (!block.content.text.trim()) return "";
       const size = clamp(block.style.fontSize, 14, 64);
       return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;text-align:${align(block.style.align)};color:${color(block.style.color, "#080e1a")};font-size:${size}px;line-height:${clamp(block.style.lineHeight, 1, 2)};font-weight:700;">${escapeHtml(block.content.text)}</td></tr>`;
     }
     case "richText":
+      if (isEmailRichTextEmpty(block.content.html)) return "";
       return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;text-align:${align(block.style.align)};color:${color(block.style.color, "#26303f")};font-size:${clamp(block.style.fontSize, 10, 36)}px;line-height:${clamp(block.style.lineHeight, 1, 2.5)};">${sanitizeEmailRichHtml(block.content.html)}</td></tr>`;
     case "image": {
       if (!block.content.src.trim()) {
-        return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;text-align:center;color:#7b8494;font-size:13px;">Image à ajouter</td></tr>`;
+        return "";
       }
       const image = `<img src="${safeUrl(block.content.src, "")}" alt="${escapeHtml(block.content.alt)}" width="${clamp(block.style.width, 10, 100)}%" style="display:inline-block;width:${clamp(block.style.width, 10, 100)}%;max-width:100%;height:auto;border:0;border-radius:${clamp(block.style.borderRadius, 0, 80)}px;" />`;
       const linked = block.content.href?.trim()
@@ -60,6 +70,7 @@ function renderBlock(block: EmailBlock): string {
       return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;text-align:${align(block.style.align)};">${linked}</td></tr>`;
     }
     case "button":
+      if (!block.content.text.trim() || !block.content.url.trim()) return "";
       return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;text-align:${align(block.style.align)};"><a href="${safeUrl(block.content.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:${color(block.style.background, "#c7a436")};color:${color(block.style.color, "#080e1a")};font-size:${clamp(block.style.fontSize, 10, 30)}px;font-weight:700;line-height:1.2;padding:14px 26px;border-radius:${clamp(block.style.borderRadius, 0, 40)}px;text-decoration:none;">${escapeHtml(block.content.text)}</a></td></tr>`;
     case "divider":
       return `<tr><td style="padding:${clamp(block.style.padding, 0, 64)}px;"><div style="margin:0 auto;width:${clamp(block.style.width, 10, 100)}%;border-top:${clamp(block.style.thickness, 1, 8)}px solid ${color(block.style.color, "#d8dde6")};font-size:0;line-height:0;">&nbsp;</div></td></tr>`;

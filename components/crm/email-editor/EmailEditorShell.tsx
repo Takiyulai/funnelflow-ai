@@ -33,6 +33,11 @@ import type {
   EmailDocument,
   EmailEditorRecord,
 } from "@/lib/email-editor/types";
+import {
+  customFieldsToPersonalization,
+  DEFAULT_EMAIL_PERSONALIZATION_FIELDS,
+  type EmailPersonalizationField,
+} from "@/lib/email-editor/personalization";
 import { EmailAIAssistant, type AISuggestion } from "./EmailAIAssistant";
 import { EmailBlockSidebar } from "./EmailBlockSidebar";
 import { EmailCanvas } from "./EmailCanvas";
@@ -88,6 +93,9 @@ export function EmailEditorShell({
   const [aiOpen, setAiOpen] = useState(startWithAI);
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
+  const [personalizationFields, setPersonalizationFields] = useState<EmailPersonalizationField[]>(
+    DEFAULT_EMAIL_PERSONALIZATION_FIELDS,
+  );
   const saveInFlight = useRef(false);
   const pendingSave = useRef(false);
 
@@ -98,6 +106,27 @@ export function EmailEditorShell({
   );
 
   const markDirty = useCallback(() => setSaveState("unsaved"), []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/crm/custom-fields", { signal: controller.signal })
+      .then(async (response) => {
+        const json = (await response.json().catch(() => ({}))) as {
+          ok?: boolean;
+          fields?: Array<{ field_key: string; label: string }>;
+        };
+        if (!response.ok || !json.ok || !Array.isArray(json.fields)) return;
+        setPersonalizationFields([
+          ...DEFAULT_EMAIL_PERSONALIZATION_FIELDS,
+          ...customFieldsToPersonalization(json.fields),
+        ]);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.warn("[email-editor] custom fields unavailable", error);
+      });
+    return () => controller.abort();
+  }, []);
 
   const commitDocument = useCallback(
     (nextDocument: EmailDocument) => {
@@ -154,7 +183,12 @@ export function EmailEditorShell({
 
   function addBlock(type: EmailBlockType) {
     const block = createEmailBlock(type);
-    commitDocument({ ...document, blocks: [...document.blocks, block] });
+    const blocks = [...document.blocks];
+    const selectedIndex = selectedId
+      ? blocks.findIndex((candidate) => candidate.id === selectedId)
+      : -1;
+    blocks.splice(selectedIndex >= 0 ? selectedIndex + 1 : blocks.length, 0, block);
+    commitDocument({ ...document, blocks });
     setSelectedId(block.id);
     setMobilePanel(type === "spacer" || type === "divider" ? null : "properties");
   }
@@ -274,6 +308,7 @@ export function EmailEditorShell({
       settings={document.settings}
       onBlockChange={replaceBlock}
       onSettingsChange={(settings) => commitDocument({ ...document, settings })}
+      personalizationFields={personalizationFields}
     />
   );
 
@@ -305,9 +340,9 @@ export function EmailEditorShell({
         <label className="flex min-w-0 items-center gap-2"><span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted">Préheader</span><input value={preheader} onChange={(event) => { setPreheader(event.target.value); markDirty(); }} className="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-[color:var(--ff-accent)]" placeholder="Aperçu dans la boîte de réception" /></label>
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[220px_minmax(0,1fr)_310px]">
+      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[220px_minmax(0,1fr)_310px]">
         <aside className="hidden min-h-0 overflow-y-auto border-r border-line bg-surface lg:block"><EmailBlockSidebar onAdd={addBlock} /></aside>
-        <main className="min-h-0 min-w-0 overflow-hidden"><EmailCanvas document={document} selectedId={selectedId} onSelect={setSelectedId} onMove={moveBlock} onDuplicate={duplicateBlock} onDelete={deleteBlock} /></main>
+        <main className="h-full min-h-0 min-w-0 overflow-hidden"><EmailCanvas document={document} selectedId={selectedId} onSelect={setSelectedId} onMove={moveBlock} onDuplicate={duplicateBlock} onDelete={deleteBlock} /></main>
         <aside className="hidden min-h-0 overflow-y-auto border-l border-line bg-surface lg:block">{rightPanel}</aside>
       </div>
 

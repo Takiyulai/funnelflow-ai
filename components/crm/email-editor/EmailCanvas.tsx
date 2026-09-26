@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
-import { sanitizeEmailRichHtml } from "@/lib/email-editor/compiler";
+import { isEmailRichTextEmpty, sanitizeEmailRichHtml } from "@/lib/email-editor/compiler";
 import type { EmailBlock, EmailDocument } from "@/lib/email-editor/types";
 
 function BlockContent({ block }: { block: EmailBlock }) {
@@ -22,7 +23,14 @@ function BlockContent({ block }: { block: EmailBlock }) {
         </div>
       );
     case "richText":
-      return (
+      return isEmailRichTextEmpty(block.content.html) ? (
+        <div
+          className="text-sm italic text-[#7b8494]"
+          style={{ padding: block.style.padding }}
+        >
+          Écrivez votre message ici…
+        </div>
+      ) : (
         <div
           style={{
             color: block.style.color,
@@ -106,9 +114,23 @@ export function EmailCanvas({
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = scrollAreaRef.current?.querySelector<HTMLElement>(
+        `[data-email-block-id="${CSS.escape(selectedId)}"]`,
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId]);
+
   return (
     <div
-      className="min-h-full overflow-auto bg-[#dfe3e9] p-4 sm:p-8"
+      ref={scrollAreaRef}
+      className="h-full min-h-0 overflow-y-auto overscroll-contain bg-[#dfe3e9] p-4 pb-28 sm:p-8 sm:pb-28"
       onClick={() => undefined}
     >
       <div
@@ -136,6 +158,7 @@ export function EmailCanvas({
             return (
               <div
                 key={block.id}
+                data-email-block-id={block.id}
                 role="button"
                 tabIndex={0}
                 onClick={(event) => {

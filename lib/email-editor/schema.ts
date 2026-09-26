@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EMAIL_DOCUMENT_VERSION } from "./types";
 
 const color = z.string().min(1).max(40);
-const align = z.enum(["left", "center", "right"]);
+const align = z.enum(["left", "center", "right", "justify"]);
 const id = z.string().min(1).max(120);
 
 const richText = z.object({

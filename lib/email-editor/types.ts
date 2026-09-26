@@ -1,6 +1,6 @@
 export const EMAIL_DOCUMENT_VERSION = 1 as const;
 
-export type EmailTextAlign = "left" | "center" | "right";
+export type EmailTextAlign = "left" | "center" | "right" | "justify";
 
 export type EmailDocumentSettings = {
   width: number;

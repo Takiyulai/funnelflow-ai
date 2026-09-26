@@ -7,7 +7,7 @@ import type { Campaign, CampaignSummary, LeadStatus } from "./types";
 import type { EmailDocument } from "@/lib/email-editor/types";
 import { compileEmailDocument } from "@/lib/email-editor/compiler";
 import { normalizeEmailDocument } from "@/lib/email-editor/document";
-import { personalize } from "./emailRender";
+import { personalize, type EmailRecipient } from "./emailRender";
 import { sendEmail } from "./email";
 import {
   wrapEmailLinksForTracking,
@@ -69,7 +69,24 @@ export function parseAudience(value: unknown): Audience | null {
   return null;
 }
 
-type Recipient = { id: string | null; email: string; name: string | null };
+type Recipient = EmailRecipient & { id: string | null };
+
+const RECIPIENT_COLS = "id, email, name, first_name, last_name, phone, custom_fields";
+
+function toRecipient(row: Record<string, unknown>): Recipient {
+  return {
+    id: typeof row.id === "string" ? row.id : null,
+    email: typeof row.email === "string" ? row.email : "",
+    name: typeof row.name === "string" ? row.name : null,
+    firstName: typeof row.first_name === "string" ? row.first_name : null,
+    lastName: typeof row.last_name === "string" ? row.last_name : null,
+    phone: typeof row.phone === "string" ? row.phone : null,
+    customFields:
+      row.custom_fields && typeof row.custom_fields === "object" && !Array.isArray(row.custom_fields)
+        ? (row.custom_fields as Record<string, unknown>)
+        : null,
+  };
+}
 
 export async function listCampaigns(
   sb: SupabaseClient,
@@ -175,13 +192,13 @@ async function resolveRecipients(
     if (ids.length === 0) return [];
     const { data, error } = await sb
       .from("leads")
-      .select("id, email, name")
+      .select(RECIPIENT_COLS)
       .eq("user_id", userId)
       .not("email", "is", null)
       .is("unsubscribed_at", null)
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return ((data ?? []) as Recipient[]).filter((recipient) => Boolean(recipient.email));
+    return ((data ?? []) as Record<string, unknown>[]).map(toRecipient).filter((recipient) => Boolean(recipient.email));
   }
 
   // 🆕 Ciblage par tag : résolu à part via une jointure sur crm_contact_tags
@@ -198,18 +215,18 @@ async function resolveRecipients(
     if (ids.length === 0) return [];
     const { data, error } = await sb
       .from("leads")
-      .select("id, email, name")
+      .select(RECIPIENT_COLS)
       .eq("user_id", userId)
       .not("email", "is", null)
       .is("unsubscribed_at", null) // 🆕 RGPD : jamais aux désinscrits
       .in("id", ids);
     if (error) throw new Error(error.message);
-    return ((data ?? []) as Recipient[]).filter((r) => !!r.email);
+    return ((data ?? []) as Record<string, unknown>[]).map(toRecipient).filter((r) => !!r.email);
   }
 
   let q = sb
     .from("leads")
-    .select("id, email, name")
+    .select(RECIPIENT_COLS)
     .eq("user_id", userId)
     .not("email", "is", null)
     .is("unsubscribed_at", null); // 🆕 RGPD : jamais aux désinscrits
@@ -219,7 +236,7 @@ async function resolveRecipients(
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Recipient[]).filter((r) => !!r.email);
+  return ((data ?? []) as Record<string, unknown>[]).map(toRecipient).filter((r) => !!r.email);
 }
 
 /**
@@ -240,10 +257,7 @@ function toHtmlBody(content: string): string {
 
 /** Enveloppe HTML basique + personnalisation simple ({{prenom}}, {{email}}). */
 function renderEmailHtml(content: string, r: Recipient): string {
-  const name = r.name || "";
-  const personalized = content
-    .replace(/\{\{\s*(prenom|name|nom)\s*\}\}/gi, name)
-    .replace(/\{\{\s*email\s*\}\}/gi, r.email);
+  const personalized = personalize(content, r);
   const body = toHtmlBody(personalized);
   return (
     `<!doctype html><html><head><meta charset="utf-8" /></head>` +
@@ -344,7 +358,7 @@ export async function sendCampaign(
     );
     const result = await sendEmail({
       to: r.email,
-      subject: campaign.subject,
+      subject: personalize(campaign.subject, r),
       html,
       from: sender.from,
       replyTo: sender.replyTo,
@@ -444,7 +458,7 @@ export async function scheduleCampaign(
     campaign_id: id,
     contact_id: r.id,
     recipient_email: r.email,
-    subject: campaign.subject,
+    subject: personalize(campaign.subject, r),
     content: renderCampaignHtml(campaign, r), // snapshot personnalisé
     scheduled_at: whenISO,
     status: "pending",

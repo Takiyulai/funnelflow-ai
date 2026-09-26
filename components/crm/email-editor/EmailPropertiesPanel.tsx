@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImagePlus, Loader2 } from "lucide-react";
+import { Braces, ImagePlus, Loader2 } from "lucide-react";
 import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
 import type { EmailBlock, EmailDocumentSettings, EmailTextAlign } from "@/lib/email-editor/types";
+import type { EmailPersonalizationField } from "@/lib/email-editor/personalization";
 
 const inputClass =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-[color:var(--ff-accent)]";
@@ -19,14 +20,55 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Alignment({ value, onChange }: { value: EmailTextAlign; onChange: (value: EmailTextAlign) => void }) {
   return (
-    <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-canvas p-1">
-      {(["left", "center", "right"] as const).map((option) => (
+    <div className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-canvas p-1 sm:grid-cols-4">
+      {(["left", "center", "right", "justify"] as const).map((option) => (
         <button key={option} type="button" onClick={() => onChange(option)} className={`rounded-md px-2 py-1.5 text-xs font-semibold ${value === option ? "bg-surface text-ink shadow-sm" : "text-muted"}`}>
-          {option === "left" ? "Gauche" : option === "center" ? "Centre" : "Droite"}
+          {option === "left"
+            ? "Gauche"
+            : option === "center"
+              ? "Centre"
+              : option === "right"
+                ? "Droite"
+                : "Justifié"}
         </button>
       ))}
     </div>
   );
+}
+
+function PersonalizationInsert({
+  fields,
+  onInsert,
+}: {
+  fields: EmailPersonalizationField[];
+  onInsert: (token: string) => void;
+}) {
+  return (
+    <details className="rounded-lg border border-line bg-canvas">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-bold text-ink">
+        <Braces size={15} className="text-[color:var(--ff-accent)]" />
+        Insérer une donnée du contact
+      </summary>
+      <div className="grid max-h-52 gap-1 overflow-y-auto border-t border-line p-2">
+        {fields.map((field) => (
+          <button
+            key={`${field.source}-${field.key}`}
+            type="button"
+            onClick={() => onInsert(field.token)}
+            className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs text-ink hover:bg-surface"
+          >
+            <span>{field.label}</span>
+            <code className="shrink-0 text-[10px] text-muted">{field.token}</code>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function appendToken(value: string, token: string): string {
+  if (!value) return token;
+  return `${value}${/\s$/.test(value) ? "" : " "}${token}`;
 }
 
 export function EmailPropertiesPanel({
@@ -34,11 +76,13 @@ export function EmailPropertiesPanel({
   settings,
   onBlockChange,
   onSettingsChange,
+  personalizationFields,
 }: {
   block: EmailBlock | null;
   settings: EmailDocumentSettings;
   onBlockChange: (block: EmailBlock) => void;
   onSettingsChange: (settings: EmailDocumentSettings) => void;
+  personalizationFields: EmailPersonalizationField[];
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -103,7 +147,12 @@ export function EmailPropertiesPanel({
 
       {block.type === "richText" && (
         <>
-          <EmailRichEditor value={block.content.html} onChange={(html) => onBlockChange({ ...block, content: { html } })} placeholder="Contenu du texte…" />
+          <EmailRichEditor
+            value={block.content.html}
+            onChange={(html) => onBlockChange({ ...block, content: { html } })}
+            placeholder="Contenu du texte…"
+            personalizationFields={personalizationFields}
+          />
           <Field label="Taille"><input type="number" min={10} max={36} className={inputClass} value={block.style.fontSize} onChange={(event) => onBlockChange({ ...block, style: { ...block.style, fontSize: Number(event.target.value) || 16 } })} /></Field>
           <Field label="Couleur"><input type="color" className={`${inputClass} h-10 p-1`} value={block.style.color} onChange={(event) => onBlockChange({ ...block, style: { ...block.style, color: event.target.value } })} /></Field>
           <Alignment value={block.style.align} onChange={(value) => onBlockChange({ ...block, style: { ...block.style, align: value } })} />
@@ -113,6 +162,7 @@ export function EmailPropertiesPanel({
       {block.type === "heading" && (
         <>
           <Field label="Titre"><textarea className={`${inputClass} min-h-24 resize-y`} value={block.content.text} onChange={(event) => onBlockChange({ ...block, content: { text: event.target.value } })} /></Field>
+          <PersonalizationInsert fields={personalizationFields} onInsert={(token) => onBlockChange({ ...block, content: { text: appendToken(block.content.text, token) } })} />
           <Field label="Taille"><input type="number" min={14} max={64} className={inputClass} value={block.style.fontSize} onChange={(event) => onBlockChange({ ...block, style: { ...block.style, fontSize: Number(event.target.value) || 30 } })} /></Field>
           <Field label="Couleur"><input type="color" className={`${inputClass} h-10 p-1`} value={block.style.color} onChange={(event) => onBlockChange({ ...block, style: { ...block.style, color: event.target.value } })} /></Field>
           <Alignment value={block.style.align} onChange={(value) => onBlockChange({ ...block, style: { ...block.style, align: value } })} />
@@ -138,6 +188,7 @@ export function EmailPropertiesPanel({
       {block.type === "button" && (
         <>
           <Field label="Texte"><input className={inputClass} value={block.content.text} onChange={(event) => onBlockChange({ ...block, content: { ...block.content, text: event.target.value } })} /></Field>
+          <PersonalizationInsert fields={personalizationFields} onInsert={(token) => onBlockChange({ ...block, content: { ...block.content, text: appendToken(block.content.text, token) } })} />
           <Field label="Lien"><input className={inputClass} value={block.content.url} onChange={(event) => onBlockChange({ ...block, content: { ...block.content, url: event.target.value } })} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fond"><input type="color" className={`${inputClass} h-10 p-1`} value={block.style.background} onChange={(event) => onBlockChange({ ...block, style: { ...block.style, background: event.target.value } })} /></Field>

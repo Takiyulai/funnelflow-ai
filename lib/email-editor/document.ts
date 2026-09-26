@@ -32,14 +32,14 @@ export function createEmailBlock(type: EmailBlockType): EmailBlock {
       return {
         id,
         type,
-        content: { text: "Votre titre" },
+        content: { text: "" },
         style: { color: "#080e1a", fontSize: 30, lineHeight: 1.2, align: "left", padding: 24 },
       };
     case "richText":
       return {
         id,
         type,
-        content: { html: "<p>Écrivez votre message ici…</p>" },
+        content: { html: "" },
         style: { color: "#26303f", fontSize: 16, lineHeight: 1.65, align: "left", padding: 24 },
       };
     case "image":
@@ -53,7 +53,7 @@ export function createEmailBlock(type: EmailBlockType): EmailBlock {
       return {
         id,
         type,
-        content: { text: "Passer à l’action", url: "https://" },
+        content: { text: "", url: "" },
         style: {
           background: "#c7a436",
           color: "#080e1a",
@@ -104,15 +104,35 @@ export function normalizeEmailDocument(value: unknown, fallbackHtml = ""): Email
     return legacyHtmlToDocument(fallbackHtml);
   }
   const defaults = createEmptyEmailDocument();
+  const blocks = candidate.blocks
+    .filter(
+      (block): block is EmailBlock =>
+        Boolean(block && typeof block === "object" && "id" in block && "type" in block),
+    )
+    .map((block) => {
+      // Les premières versions de l'éditeur enregistraient les libellés d'aide
+      // comme du vrai contenu. On les transforme en champs vides afin qu'ils
+      // restent des indications d'interface et ne partent jamais par email.
+      if (
+        block.type === "richText" &&
+        /^<p>(?:<span[^>]*>)?Écrivez votre message ici(?:…|\.\.\.)?(?:<\/span>)?<\/p>$/i.test(
+          block.content.html.trim(),
+        )
+      ) {
+        return { ...block, content: { html: "" } };
+      }
+      if (block.type === "heading" && block.content.text.trim() === "Votre titre") {
+        return { ...block, content: { text: "" } };
+      }
+      return block;
+    });
+
   return {
     ...defaults,
     ...candidate,
     version: EMAIL_DOCUMENT_VERSION,
     settings: { ...defaults.settings, ...(candidate.settings ?? {}) },
-    blocks: candidate.blocks.filter(
-      (block): block is EmailBlock =>
-        Boolean(block && typeof block === "object" && "id" in block && "type" in block),
-    ),
+    blocks,
   };
 }
 
