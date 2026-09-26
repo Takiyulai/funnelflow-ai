@@ -9,7 +9,7 @@ import { listContactLists } from "@/lib/crm/lists";
 import { resendConfigured } from "@/lib/crm/email";
 import { EmailsModule } from "@/components/crm/EmailsModule";
 import { getEmailStats, EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
-import type { Campaign, ContactListWithCount } from "@/lib/crm/types";
+import type { CampaignSummary, ContactListWithCount } from "@/lib/crm/types";
 
 type PublishedFunnelOpt = { id: string; name: string };
 
@@ -38,7 +38,7 @@ export default async function EmailsPage({
 
   // 🆕 Résilience : une coupure réseau ponctuelle vers Supabase (`fetch failed`)
   //    ne doit PAS crasher toute la route. On dégrade en état vide.
-  let campaigns: Campaign[] = [];
+  let campaigns: CampaignSummary[] = [];
   let contactsCount = 0;
   let publishedFunnels: PublishedFunnelOpt[] = [];
   // 🆕 Tags CRM, pour le ciblage d'audience par tag dans les campagnes.

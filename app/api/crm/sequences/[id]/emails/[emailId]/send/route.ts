@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSequenceEmail } from "@/lib/crm/sequences";
 import { sendEmail } from "@/lib/crm/email";
-import { renderSequenceEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
+import { renderStoredEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
 import { getFunnelMarketingSender } from "@/lib/email/userSender";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +44,7 @@ export async function POST(
       .maybeSingle();
     // 🆕 DESIGN — même gabarit (bannière de marque) que l'envoi réel.
     const brandName = await getFunnelBrandName(sb, (seq?.funnel_id as string | null) ?? null);
-    const html = renderSequenceEmailHtml(email.content, { email: parsed.data.to }, { brandName });
+    const html = renderStoredEmailHtml(email, { email: parsed.data.to }, { brandName });
     const sender = await getFunnelMarketingSender(
       user.id,
       (seq?.funnel_id as string | null) ?? null,

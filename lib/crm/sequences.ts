@@ -10,12 +10,12 @@ import type {
   SequenceWithEmails,
   SequenceInput,
 } from "./types";
-import { renderSequenceEmailHtml, getFunnelBrandName } from "./emailRender";
+import { renderStoredEmailHtml, getFunnelBrandName } from "./emailRender";
 
 const SEQ_COLS =
   "id, user_id, name, type, roles, context, language, funnel_id, status, created_at, updated_at";
 const SEQ_EMAIL_COLS =
-  "id, sequence_id, user_id, position, delay_days, delay_hours, send_at, subject, content, created_at, updated_at";
+  "id, sequence_id, user_id, position, delay_days, delay_hours, send_at, subject, preheader, content, editor_document, editor_version, created_at, updated_at";
 
 export async function listSequences(
   sb: SupabaseClient,
@@ -55,38 +55,95 @@ export async function getSequenceWithEmails(
   return { ...(seq as Sequence), emails: (emails ?? []) as SequenceEmail[] };
 }
 
-/** Réécrit l'ensemble des emails d'une séquence (delete + insert ordonné). */
-async function replaceEmails(
+function emailRow(
+  userId: string,
+  sequenceId: string,
+  email: SequenceInput["emails"][number],
+  position: number,
+) {
+  const sendAtMs = email.send_at ? new Date(email.send_at).getTime() : NaN;
+  return {
+    sequence_id: sequenceId,
+    user_id: userId,
+    position,
+    delay_days: Math.max(0, Math.round(email.delay_days) || 0),
+    delay_hours: Math.min(23, Math.max(0, Math.round(email.delay_hours ?? 0) || 0)),
+    send_at: Number.isFinite(sendAtMs) ? new Date(sendAtMs).toISOString() : null,
+    subject: email.subject ?? "",
+    preheader: email.preheader ?? "",
+    content: email.content ?? "",
+    editor_document: email.editor_document ?? null,
+    editor_version: email.editor_version ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/** Création initiale des emails enfants. */
+async function insertEmails(
   sb: SupabaseClient,
   userId: string,
   sequenceId: string,
   emails: SequenceInput["emails"],
 ): Promise<void> {
-  await sb
-    .from("crm_sequence_emails")
-    .delete()
-    .eq("user_id", userId)
-    .eq("sequence_id", sequenceId);
-
   if (emails.length === 0) return;
-  const rows = emails.map((e, i) => {
-    // 🆕 Date fixe : on ne conserve un send_at que s'il est parseable ; sinon
-    // null (mode relatif). Les délais restent stockés (fallback / affichage).
-    const sendAtMs = e.send_at ? new Date(e.send_at).getTime() : NaN;
-    const send_at = Number.isFinite(sendAtMs) ? new Date(sendAtMs).toISOString() : null;
-    return {
-      sequence_id: sequenceId,
-      user_id: userId,
-      position: i,
-      delay_days: Math.max(0, Math.round(e.delay_days) || 0),
-      delay_hours: Math.min(23, Math.max(0, Math.round(e.delay_hours ?? 0) || 0)),
-      send_at,
-      subject: e.subject ?? "",
-      content: e.content ?? "",
-    };
-  });
+  const rows = emails.map((email, index) => emailRow(userId, sequenceId, email, index));
   const { error } = await sb.from("crm_sequence_emails").insert(rows);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Synchronise sans recréer les enfants : les IDs reçus sont mis à jour, les
+ * nouveaux emails sont insérés et seuls les emails réellement retirés sont
+ * supprimés. L'identité d'un email reste donc stable durant toute sa vie.
+ */
+async function syncEmails(
+  sb: SupabaseClient,
+  userId: string,
+  sequenceId: string,
+  emails: SequenceInput["emails"],
+): Promise<void> {
+  const { data: existing, error: readError } = await sb
+    .from("crm_sequence_emails")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("sequence_id", sequenceId);
+  if (readError) throw new Error(readError.message);
+  const existingIds = new Set((existing ?? []).map((row) => row.id as string));
+  const keptIds = new Set<string>();
+  const toInsert: ReturnType<typeof emailRow>[] = [];
+
+  for (const [index, email] of emails.entries()) {
+    const row = emailRow(userId, sequenceId, email, index);
+    if (!email.id) {
+      toInsert.push(row);
+      continue;
+    }
+    if (!existingIds.has(email.id)) throw new Error("sequence_email_not_found");
+    keptIds.add(email.id);
+    const { error } = await sb
+      .from("crm_sequence_emails")
+      .update(row)
+      .eq("id", email.id)
+      .eq("user_id", userId)
+      .eq("sequence_id", sequenceId);
+    if (error) throw new Error(error.message);
+  }
+
+  if (toInsert.length > 0) {
+    const { error } = await sb.from("crm_sequence_emails").insert(toInsert);
+    if (error) throw new Error(error.message);
+  }
+
+  const removed = [...existingIds].filter((id) => !keptIds.has(id));
+  if (removed.length > 0) {
+    const { error } = await sb
+      .from("crm_sequence_emails")
+      .delete()
+      .eq("user_id", userId)
+      .eq("sequence_id", sequenceId)
+      .in("id", removed);
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function createSequence(
@@ -111,7 +168,7 @@ export async function createSequence(
   if (error) throw new Error(error.message);
 
   const seq = data as Sequence;
-  await replaceEmails(sb, userId, seq.id, input.emails);
+  await insertEmails(sb, userId, seq.id, input.emails);
   const full = await getSequenceWithEmails(sb, userId, seq.id);
   if (!full) throw new Error("sequence_reload_failed");
   return full;
@@ -139,7 +196,7 @@ export async function updateSequence(
     .eq("id", id);
   if (error) throw new Error(error.message);
 
-  await replaceEmails(sb, userId, id, input.emails);
+  await syncEmails(sb, userId, id, input.emails);
   const full = await getSequenceWithEmails(sb, userId, id);
   if (!full) throw new Error("sequence_not_found");
   return full;
@@ -174,6 +231,35 @@ export async function getSequenceEmail(
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as SequenceEmail) ?? null;
+}
+
+export async function updateSequenceEmail(
+  sb: SupabaseClient,
+  userId: string,
+  sequenceId: string,
+  emailId: string,
+  patch: Pick<
+    SequenceEmail,
+    "subject" | "content" | "editor_document" | "editor_version" | "preheader"
+  >,
+): Promise<SequenceEmail> {
+  const { data, error } = await sb
+    .from("crm_sequence_emails")
+    .update({
+      subject: patch.subject,
+      content: patch.content,
+      editor_document: patch.editor_document ?? null,
+      editor_version: patch.editor_version ?? null,
+      preheader: patch.preheader ?? "",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("sequence_id", sequenceId)
+    .eq("id", emailId)
+    .select(SEQ_EMAIL_COLS)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as SequenceEmail;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,7 +406,7 @@ export async function enrollContact(
         contact_id: contact.id,
         recipient_email: contact.email,
         subject: em.subject,
-        content: renderSequenceEmailHtml(em.content, recipient, { brandName }), // snapshot perso
+        content: renderStoredEmailHtml(em, recipient, { brandName }), // snapshot perso
         scheduled_at: new Date(scheduledMs).toISOString(),
         status: "pending",
       };

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Send, Save, AlertCircle, Eye, Pencil, Clock } from "lucide-react";
+import { Plus, X, Send, Save, AlertCircle, Eye, Pencil, Clock, FileText, Sparkles, Settings2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
-import type { Campaign, CampaignStatus, LeadStatus } from "@/lib/crm/types";
+import type { Campaign, CampaignStatus, CampaignSummary, LeadStatus } from "@/lib/crm/types";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -69,7 +68,7 @@ const AUDIENCES: { value: string; label: string }[] = [
 ];
 
 type Props = {
-  initialCampaigns: Campaign[];
+  initialCampaigns: CampaignSummary[];
   contactsCount: number;
   resendReady: boolean;
   /** 🆕 LOT 3 — Ouvertures/clics par campagne (messages distincts). */
@@ -92,6 +91,7 @@ export function CampaignsClient({
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [startMode, setStartMode] = useState<"blank" | "ai">("blank");
   const [editing, setEditing] = useState<Campaign | null>(null);
   const [viewing, setViewing] = useState<Campaign | null>(null);
   const [form, setForm] = useState({ subject: "", content: "" });
@@ -100,6 +100,14 @@ export function CampaignsClient({
   // 🆕 Mode d'envoi : maintenant ou programmé (date/heure).
   const [sendMode, setSendMode] = useState<"now" | "schedule">("now");
   const [scheduledAt, setScheduledAt] = useState<string>("");
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("campaign");
+    const campaign = requested ? initialCampaigns.find((item) => item.id === requested) : null;
+    if (campaign) void loadCampaign(campaign, "config");
+    // Le paramètre est uniquement un point d'entrée au retour de l'éditeur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function createCampaign() {
     if (!newName.trim() || busy) return;
@@ -114,7 +122,7 @@ export function CampaignsClient({
       if (res.ok && json.ok) {
         setCreating(false);
         setNewName("");
-        openEditor(json.campaign);
+        router.push(`/emails/campaigns/${json.campaign.id}/edit${startMode === "ai" ? "?start=ai" : ""}`);
         router.refresh();
       } else {
         alert(json.error || "Création impossible.");
@@ -124,9 +132,29 @@ export function CampaignsClient({
     }
   }
 
-  function openEditor(c: Campaign) {
-    setEditing(c);
-    setForm({ subject: c.subject, content: c.content });
+  function openEditor(c: CampaignSummary | Campaign) {
+    router.push(`/emails/campaigns/${c.id}/edit`);
+  }
+
+  async function loadCampaign(c: CampaignSummary | Campaign, target: "config" | "view") {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/crm/campaigns/${c.id}`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json.ok) throw new Error(json.error || "Chargement impossible");
+      const full = json.campaign as Campaign;
+      if (target === "view") {
+        setViewing(full);
+        return;
+      }
+      setEditing(full);
+      setForm({ subject: full.subject, content: full.content });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Chargement impossible");
+      return;
+    } finally {
+      setBusy(false);
+    }
     setAudience("all");
     setSendMode("now");
     setScheduledAt(defaultScheduleValue());
@@ -357,7 +385,7 @@ export function CampaignsClient({
                   <div className="flex items-center justify-end gap-1">
                     <button
                       type="button"
-                      onClick={() => setViewing(c)}
+                      onClick={() => void loadCampaign(c, "view")}
                       title="Voir le détail"
                       className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line hover:bg-canvas"
                     >
@@ -370,6 +398,14 @@ export function CampaignsClient({
                       className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line hover:bg-canvas"
                     >
                       <Pencil className="h-4 w-4 text-muted" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void loadCampaign(c, "config")}
+                      title="Configurer l’audience et l’envoi"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line hover:bg-canvas"
+                    >
+                      <Settings2 className="h-4 w-4 text-muted" />
                     </button>
                   </div>
                 </td>
@@ -434,11 +470,14 @@ export function CampaignsClient({
                 </p>
               )}
               <div className="mt-4 flex justify-end gap-2 border-t border-line/70 pt-3">
-                <Button variant="secondary" size="sm" onClick={() => setViewing(campaign)}>
+                <Button variant="secondary" size="sm" onClick={() => void loadCampaign(campaign, "view")}>
                   <Eye className="h-4 w-4" /> Voir
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => openEditor(campaign)}>
                   <Pencil className="h-4 w-4" /> Modifier
+                </Button>
+                <Button size="sm" onClick={() => void loadCampaign(campaign, "config")}>
+                  <Send className="h-4 w-4" /> Envoyer
                 </Button>
               </div>
             </Card>
@@ -461,6 +500,18 @@ export function CampaignsClient({
               onChange={(e) => setNewName(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D]"
             />
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => setStartMode("blank")} className={`rounded-xl border p-4 text-left transition ${startMode === "blank" ? "border-[color:var(--ff-accent)] bg-[color:var(--ff-accent-soft)]" : "border-line bg-canvas"}`}>
+                <FileText className="h-5 w-5 text-[color:var(--ff-accent)]" />
+                <div className="mt-2 text-sm font-black text-ink">Partir de zéro</div>
+                <div className="mt-1 text-xs text-muted">Commence avec un canvas vide.</div>
+              </button>
+              <button type="button" onClick={() => setStartMode("ai")} className={`rounded-xl border p-4 text-left transition ${startMode === "ai" ? "border-[color:var(--ff-accent)] bg-[color:var(--ff-accent-soft)]" : "border-line bg-canvas"}`}>
+                <Sparkles className="h-5 w-5 text-[color:var(--ff-accent)]" />
+                <div className="mt-2 text-sm font-black text-ink">Générer avec l’IA</div>
+                <div className="mt-1 text-xs text-muted">L’assistant s’ouvre dans l’éditeur.</div>
+              </button>
+            </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setCreating(false)} disabled={busy}>Annuler</Button>
               <Button onClick={createCampaign} disabled={busy || !newName.trim()}>Créer</Button>
@@ -469,7 +520,7 @@ export function CampaignsClient({
         </div>
       )}
 
-      {/* Éditeur / envoi */}
+      {/* Configuration de l'envoi — l'édition du contenu vit sur une page dédiée. */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setEditing(null)}>
           <div className="max-h-[90dvh] w-full min-w-0 max-w-2xl overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
@@ -488,14 +539,13 @@ export function CampaignsClient({
                   className="w-full px-3 py-2 rounded-lg border border-line text-sm focus:outline-none focus:border-[#08498D]"
                 />
               </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted">Contenu — variables {"{{prenom}}"}, {"{{email}}"} utilisables dans le texte</span>
-                <EmailRichEditor
-                  value={form.content}
-                  onChange={(html) => setForm({ ...form, content: html })}
-                  placeholder="Bonjour {{prenom}}, merci pour votre confiance…"
-                />
-              </label>
+              <div className="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-bold text-ink">Contenu de l’email</div>
+                  <p className="mt-1 text-xs text-muted">Le contenu se modifie dans l’espace d’édition plein écran.</p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => openEditor(editing)}><Pencil className="h-4 w-4" /> Ouvrir l’éditeur</Button>
+              </div>
               <label className="grid gap-1.5">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted">Destinataires</span>
                 <select
@@ -619,9 +669,11 @@ export function CampaignsClient({
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">Objet</div>
             <div className="mb-4 text-sm font-medium text-ink">{viewing.subject || "—"}</div>
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">Contenu</div>
-            <div
-              className="rounded-lg border border-line bg-[#FAFAFA] p-4 text-sm text-ink"
-              dangerouslySetInnerHTML={{ __html: viewing.content || "<em>Vide</em>" }}
+            <iframe
+              title={`Aperçu de ${viewing.name}`}
+              sandbox=""
+              srcDoc={viewing.content || "<!doctype html><html><body><em>Vide</em></body></html>"}
+              className="h-[420px] w-full rounded-lg border border-line bg-white"
             />
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setViewing(null)}>Fermer</Button>

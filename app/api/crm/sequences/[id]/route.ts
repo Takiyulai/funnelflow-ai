@@ -10,10 +10,12 @@ import {
   updateSequence,
   deleteSequence,
 } from "@/lib/crm/sequences";
+import { emailDocumentSchema } from "@/lib/email-editor/schema";
 
 export const dynamic = "force-dynamic";
 
 const emailSchema = z.object({
+  id: z.string().uuid().optional(),
   position: z.coerce.number().int().min(0).default(0),
   delay_days: z.coerce.number().int().min(0).max(365).default(0),
   // 🆕 Voir app/api/crm/sequences/route.ts — même piège de schéma qui retire
@@ -25,6 +27,9 @@ const emailSchema = z.object({
   send_at: z.string().datetime({ offset: true }).nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
+  preheader: z.string().max(500).nullish(),
+  editor_document: emailDocumentSchema.nullish(),
+  editor_version: z.coerce.number().int().min(1).nullish(),
 });
 
 const sequenceTypeEnum = z.enum([

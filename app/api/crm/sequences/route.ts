@@ -5,10 +5,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listSequences, createSequence } from "@/lib/crm/sequences";
+import { emailDocumentSchema } from "@/lib/email-editor/schema";
 
 export const dynamic = "force-dynamic";
 
 const emailSchema = z.object({
+  id: z.string().uuid().optional(),
   position: z.coerce.number().int().min(0).default(0),
   delay_days: z.coerce.number().int().min(0).max(365).default(0),
   // 🆕 Sans cette entrée, delay_hours est silencieusement retiré par ce schéma
@@ -24,6 +26,9 @@ const emailSchema = z.object({
   send_at: z.string().datetime({ offset: true }).nullish(),
   subject: z.string().default(""),
   content: z.string().default(""),
+  preheader: z.string().max(500).nullish(),
+  editor_document: emailDocumentSchema.nullish(),
+  editor_version: z.coerce.number().int().min(1).nullish(),
 });
 
 const sequenceTypeEnum = z.enum([

@@ -5,6 +5,7 @@
 // (envoi test). La planification d'envoi réelle est faite par le CRON (étape 6).
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Workflow, Sparkles, Plus, Trash2, ChevronUp, ChevronDown, AlertCircle, Loader2,
   Save, FilePlus2, UserPlus, SendHorizonal,
@@ -12,10 +13,10 @@ import {
 import { Card } from "@/components/ui/Card";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import { Button } from "@/components/ui/Button";
-import { EmailRichEditor } from "@/components/crm/EmailRichEditor";
 import { useCelebrate } from "@/components/ui/Celebration";
 import { hasMilestone } from "@/lib/ux/milestones";
 import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
+import type { EmailDocument } from "@/lib/email-editor/types";
 
 type PublishedFunnel = { id: string; name: string };
 type Lang = "fr" | "en" | "es";
@@ -23,7 +24,18 @@ type ContactLite = { id: string; email: string; name: string | null };
 /** Email édité : porte l'id quand la séquence est enregistrée (pour l'envoi test).
  *  🆕 sendAt : si non-null (ISO), l'email part à cette date/heure FIXE au lieu du
  *  délai relatif (delayDays/delayHours). */
-type EditableEmail = { id?: string; position: number; delayDays: number; delayHours: number; sendAt: string | null; subject: string; body: string };
+type EditableEmail = {
+  id?: string;
+  position: number;
+  delayDays: number;
+  delayHours: number;
+  sendAt: string | null;
+  subject: string;
+  body: string;
+  preheader?: string | null;
+  editorDocument?: EmailDocument | null;
+  editorVersion?: number | null;
+};
 
 // 🆕 ISO (UTC) ↔ valeur d'un <input type="datetime-local"> (heure locale).
 function isoToLocalInput(iso: string | null): string {
@@ -73,11 +85,6 @@ const LANG_OPTIONS: { value: Lang; label: string }[] = [
 const inputCls =
   "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:border-[#08498D]";
 
-function textToHtml(text: string): string {
-  if (/<[a-z][\s\S]*>/i.test(text)) return text;
-  return text.split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
-}
-
 export function SequencesClient({ publishedFunnels }: { publishedFunnels: PublishedFunnel[] }) {
   const { celebrate } = useCelebrate();
   // 🆕 LOT 1 : liste ORDONNÉE de rôles (remplace "type" unique + "nombre de
@@ -106,8 +113,6 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   const [contacts, setContacts] = useState<ContactLite[]>([]);
   const [enrollId, setEnrollId] = useState("");
   const [enrolling, setEnrolling] = useState(false);
-  // 🆕 Index de l'email en cours de régénération individuelle (null = aucun).
-  const [regenIdx, setRegenIdx] = useState<number | null>(null);
 
   const hasFunnels = publishedFunnels.length > 0;
   const reindex = (list: EditableEmail[]) => list.map((e, i) => ({ ...e, position: i }));
@@ -169,6 +174,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
         }
       })
       .catch(() => {});
+    const requested = new URLSearchParams(window.location.search).get("sequence");
+    if (requested) void loadSequence(requested);
   }, []);
 
   function resetForm() {
@@ -203,30 +210,6 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
     finally { setLoading(false); }
   }
 
-  // 🆕 Régénère UN SEUL email (celui qui ne convient pas) sans toucher aux
-  // autres. Réutilise la route de génération avec le rôle de cet email ; on ne
-  // remplace que l'objet + le corps (délais, position et id conservés).
-  async function regenerateEmail(i: number) {
-    if (regenIdx !== null || !emails) return;
-    const role = roles[i] ?? roles[roles.length - 1] ?? ({ id: "autre" } as SequenceRole);
-    setRegenIdx(i); setError(null); setNotice(null);
-    try {
-      const res = await fetch("/api/crm/sequences/generate", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roles: [role], context, language, funnelId: funnelId || undefined }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (handlePlanGate(res.status, json, (m) => setError(`${m.title}. ${m.description}`))) return;
-      if (!res.ok || !json.ok || !Array.isArray(json.emails) || json.emails.length === 0) {
-        setError(json.message || json.error || "Régénération impossible."); return;
-      }
-      const fresh = json.emails[0] as { subject: string; body: string };
-      updateEmail(i, { subject: fresh.subject, body: fresh.body });
-      setNotice(`Email ${i + 1} régénéré.`);
-    } catch { setError("Connexion impossible. Réessayez."); }
-    finally { setRegenIdx(null); }
-  }
-
   // 🆕 Rédaction MANUELLE : ouvre l'éditeur avec un email vide par type choisi,
   // sans appeler l'IA (pour qui veut écrire ses emails soi-même).
   function startManual() {
@@ -250,7 +233,18 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       type: roles[0]?.id ?? "autre",
       roles,
       context: context || null, language, funnel_id: funnelId || null,
-      emails: emails.map((e, i) => ({ position: i, delay_days: e.delayDays, delay_hours: e.delayHours, send_at: e.sendAt, subject: e.subject, content: e.body })),
+      emails: emails.map((e, i) => ({
+        id: e.id,
+        position: i,
+        delay_days: e.delayDays,
+        delay_hours: e.delayHours,
+        send_at: e.sendAt,
+        subject: e.subject,
+        content: e.body,
+        preheader: e.preheader ?? "",
+        editor_document: e.editorDocument ?? null,
+        editor_version: e.editorVersion ?? null,
+      })),
     };
     try {
       const res = await fetch(editingId ? `/api/crm/sequences/${editingId}` : "/api/crm/sequences", {
@@ -274,8 +268,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       const s = json.sequence;
       setEditingId(s.id);
       // On récupère les ids d'emails (nécessaires pour l'envoi test).
-      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string; preheader?: string | null; editor_document?: EmailDocument | null; editor_version?: number | null }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content, preheader: e.preheader, editorDocument: e.editor_document, editorVersion: e.editor_version })));
       setNotice("Séquence enregistrée.");
       // 🆕 Micro-victoire : 1re séquence créée = jalon (confettis), une seule fois.
       if (!hasMilestone("first_sequence")) {
@@ -306,8 +300,8 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
       setRoles(Array.isArray(s.roles) && s.roles.length > 0 ? s.roles : [{ id: s.type }]);
       setContext(s.context ?? "");
       setLanguage(s.language as Lang); setFunnelId(s.funnel_id ?? "");
-      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string }>)
-        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content })));
+      setEmails((s.emails as Array<{ id: string; delay_days: number; delay_hours?: number; send_at?: string | null; subject: string; content: string; preheader?: string | null; editor_document?: EmailDocument | null; editor_version?: number | null }>)
+        .map((e, i) => ({ id: e.id, position: i, delayDays: e.delay_days, delayHours: e.delay_hours ?? 0, sendAt: e.send_at ?? null, subject: e.subject, body: e.content, preheader: e.preheader, editorDocument: e.editor_document, editorVersion: e.editor_version })));
     } catch { setError("Connexion impossible."); }
   }
 
@@ -539,16 +533,18 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
 
           <div className="grid gap-4">
             {emails.map((em, i) => (
-              <div key={i} className="min-w-0 rounded-xl border border-line bg-surface p-3 sm:p-4">
+              <div key={em.id ?? `draft-${i}`} className="min-w-0 rounded-xl border border-line bg-surface p-3 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-xs font-bold text-ink">Email {i + 1}</span>
                   <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => regenerateEmail(i)} disabled={regenIdx !== null}
-                      title="Régénérer uniquement cet email avec l'IA"
-                      className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)] disabled:opacity-40">
-                      {regenIdx === i ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                      {regenIdx === i ? "…" : "Régénérer"}
-                    </button>
+                    {editingId && em.id && (
+                      <Link
+                        href={`/emails/sequences/${editingId}/emails/${em.id}/edit`}
+                        className="inline-flex items-center gap-1 rounded-md bg-[color:var(--ff-accent)] px-2.5 py-1.5 text-xs font-bold text-[#080e1a]"
+                      >
+                        Modifier
+                      </Link>
+                    )}
                     {em.id && (
                       <button type="button" onClick={() => testSend(em.id!)} title="Envoyer un test"
                         className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-ink hover:border-[color:var(--ff-accent)] hover:bg-[color:var(--ff-accent-soft)]">
@@ -616,9 +612,16 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
                   )}
                 </div>
 
-                <div className="mt-3 grid gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Corps</span>
-                  <EmailRichEditor value={textToHtml(em.body)} onChange={(html) => updateEmail(i, { body: html })} placeholder="Contenu de l'email…" />
+                <div className="mt-3 rounded-xl border border-line bg-canvas p-4">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted">Contenu</div>
+                  <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-ink">
+                    {em.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "Email vide"}
+                  </p>
+                  {!em.id && (
+                    <p className="mt-2 text-xs font-semibold text-amber-700">
+                      Enregistre la séquence pour ouvrir cet email dans l’éditeur complet.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

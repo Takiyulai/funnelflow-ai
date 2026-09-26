@@ -3,6 +3,7 @@
 // (lib/crm/*) et routes API (app/api/crm/*). Alignés sur db/crm-schema.sql.
 
 import type { Language } from "@/lib/funnels/types";
+import type { EmailDocument } from "@/lib/email-editor/types";
 
 /** Statut d'un contact (réutilise les statuts existants des leads). */
 export type LeadStatus = "nouveau" | "contacte" | "qualifie" | "client" | "perdu";
@@ -117,6 +118,10 @@ export type Campaign = {
   subject: string;
   /** Contenu HTML (rich text). */
   content: string;
+  /** Document canonique du nouvel éditeur. NULL pour les emails historiques. */
+  editor_document?: EmailDocument | null;
+  editor_version?: number | null;
+  preheader?: string | null;
   status: CampaignStatus;
   /** 🆕 Date d'envoi programmée (ISO) si status = "scheduled". */
   scheduled_at: string | null;
@@ -131,6 +136,12 @@ export type Campaign = {
   created_at: string;
   updated_at: string;
 };
+
+/** Données légères nécessaires à la liste : aucun HTML ni document volumineux. */
+export type CampaignSummary = Omit<
+  Campaign,
+  "content" | "editor_document" | "editor_version" | "preheader"
+>;
 
 export type EmailSendStatus = "pending" | "sent" | "failed";
 
@@ -286,6 +297,9 @@ export type SequenceEmail = {
   send_at?: string | null;
   subject: string;
   content: string;
+  editor_document?: EmailDocument | null;
+  editor_version?: number | null;
+  preheader?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -303,6 +317,8 @@ export type SequenceInput = {
   funnel_id?: string | null;
   status?: SequenceStatus;
   emails: Array<{
+    /** Présent lors d'une mise à jour afin de préserver l'identité de l'email. */
+    id?: string;
     position: number;
     delay_days: number;
     /** 🆕 Optionnel pour compat ascendante — défaut 0 côté service. */
@@ -311,5 +327,8 @@ export type SequenceInput = {
     send_at?: string | null;
     subject: string;
     content: string;
+    editor_document?: EmailDocument | null;
+    editor_version?: number | null;
+    preheader?: string | null;
   }>;
 };

@@ -4,6 +4,9 @@
 // rendu interne pour ne rien casser.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { EmailDocument } from "@/lib/email-editor/types";
+import { compileEmailDocument } from "@/lib/email-editor/compiler";
+import { normalizeEmailDocument } from "@/lib/email-editor/document";
 
 // 🆕 MODULE 3 — `firstName`/`lastName`/`phone`/`customFields` sont tous
 // optionnels et rétrocompatibles : un appelant qui ne passe que
@@ -222,6 +225,30 @@ export function renderSequenceEmailHtml(
     footer +
     `</div>` +
     `</body></html>`
+  );
+}
+
+/** Même compilateur pour la preview et l'envoi des emails structurés. */
+export function renderStoredEmailHtml(
+  stored: {
+    content: string;
+    editor_document?: EmailDocument | null;
+    preheader?: string | null;
+  },
+  recipient: EmailRecipient,
+  opts: EmailRenderOptions = {},
+): string {
+  if (!stored.editor_document) {
+    return renderSequenceEmailHtml(stored.content, recipient, opts);
+  }
+  const document = normalizeEmailDocument(stored.editor_document, stored.content);
+  return personalize(
+    compileEmailDocument(document, {
+      preheader: stored.preheader ?? "",
+      brandName: opts.brandName,
+      accentColor: opts.accentColor,
+    }),
+    recipient,
   );
 }
 

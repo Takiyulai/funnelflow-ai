@@ -16,7 +16,7 @@ import { SequencesClient } from "@/components/crm/SequencesClient";
 import { EmailStatsBand } from "@/components/crm/EmailStatsBand";
 import { SendingDomainPanel } from "@/components/crm/SendingDomainPanel";
 import { ContactListsPanel } from "@/components/crm/ContactListsPanel";
-import type { Campaign, ContactListWithCount } from "@/lib/crm/types";
+import type { CampaignSummary, ContactListWithCount } from "@/lib/crm/types";
 import { EMPTY_EMAIL_STATS, type EmailStats } from "@/lib/crm/emailStats";
 
 type Tab = "newsletter" | "sequences" | "expediteur" | "listes";
@@ -34,7 +34,7 @@ export function EmailsModule({
   initialLists = [],
   emailStats = EMPTY_EMAIL_STATS,
 }: {
-  initialCampaigns: Campaign[];
+  initialCampaigns: CampaignSummary[];
   contactsCount: number;
   resendReady: boolean;
   initialTab?: Tab;

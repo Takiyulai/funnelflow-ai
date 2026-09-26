@@ -3,7 +3,11 @@
 // réutilisable par les routes API et un futur webhook n8n.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Campaign, LeadStatus } from "./types";
+import type { Campaign, CampaignSummary, LeadStatus } from "./types";
+import type { EmailDocument } from "@/lib/email-editor/types";
+import { compileEmailDocument } from "@/lib/email-editor/compiler";
+import { normalizeEmailDocument } from "@/lib/email-editor/document";
+import { personalize } from "./emailRender";
 import { sendEmail } from "./email";
 import {
   wrapEmailLinksForTracking,
@@ -14,13 +18,18 @@ import { getUserMarketingSender } from "@/lib/email/userSender";
 import { getAccess } from "@/lib/billing/subscription";
 import { consumeQuota } from "@/lib/billing/usage";
 
-const COLS =
-  "id, user_id, name, subject, content, status, scheduled_at, segment_id, recipient_ids, recipients_count, sent_count, failed_count, sent_at, created_at, updated_at";
+const LIST_COLS =
+  "id, user_id, name, subject, status, scheduled_at, segment_id, recipient_ids, recipients_count, sent_count, failed_count, sent_at, created_at, updated_at";
+const DETAIL_COLS =
+  "id, user_id, name, subject, preheader, content, editor_document, editor_version, status, scheduled_at, segment_id, recipient_ids, recipients_count, sent_count, failed_count, sent_at, created_at, updated_at";
 
 export type CampaignInput = {
   name: string;
   subject?: string;
   content?: string;
+  preheader?: string;
+  editor_document?: EmailDocument | null;
+  editor_version?: number | null;
 };
 
 /** Public de destinataires : tous, par statut, par tag, par liste, ou sélection d'ids. */
@@ -65,14 +74,14 @@ type Recipient = { id: string | null; email: string; name: string | null };
 export async function listCampaigns(
   sb: SupabaseClient,
   userId: string,
-): Promise<Campaign[]> {
+): Promise<CampaignSummary[]> {
   const { data, error } = await sb
     .from("crm_campaigns")
-    .select(COLS)
+    .select(LIST_COLS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []) as Campaign[];
+  return (data ?? []) as CampaignSummary[];
 }
 
 export async function getCampaign(
@@ -82,7 +91,7 @@ export async function getCampaign(
 ): Promise<Campaign | null> {
   const { data, error } = await sb
     .from("crm_campaigns")
-    .select(COLS)
+    .select(DETAIL_COLS)
     .eq("user_id", userId)
     .eq("id", id)
     .maybeSingle();
@@ -102,9 +111,12 @@ export async function createCampaign(
       name: input.name.trim() || "Campagne sans nom",
       subject: input.subject ?? "",
       content: input.content ?? "",
+      preheader: input.preheader ?? "",
+      editor_document: input.editor_document ?? null,
+      editor_version: input.editor_version ?? null,
       status: "draft",
     })
-    .select(COLS)
+    .select(DETAIL_COLS)
     .single();
   if (error) throw new Error(error.message);
   return data as Campaign;
@@ -120,13 +132,16 @@ export async function updateCampaign(
   if (patch.name !== undefined) update.name = patch.name.trim() || "Campagne sans nom";
   if (patch.subject !== undefined) update.subject = patch.subject;
   if (patch.content !== undefined) update.content = patch.content;
+  if (patch.preheader !== undefined) update.preheader = patch.preheader;
+  if (patch.editor_document !== undefined) update.editor_document = patch.editor_document;
+  if (patch.editor_version !== undefined) update.editor_version = patch.editor_version;
 
   const { data, error } = await sb
     .from("crm_campaigns")
     .update(update)
     .eq("user_id", userId)
     .eq("id", id)
-    .select(COLS)
+    .select(DETAIL_COLS)
     .single();
   if (error) throw new Error(error.message);
   return data as Campaign;
@@ -238,6 +253,17 @@ function renderEmailHtml(content: string, r: Recipient): string {
   );
 }
 
+export function renderCampaignHtml(campaign: Campaign, recipient: Recipient): string {
+  if (campaign.editor_document) {
+    const document = normalizeEmailDocument(campaign.editor_document, campaign.content);
+    return personalize(
+      compileEmailDocument(document, { preheader: campaign.preheader ?? "" }),
+      recipient,
+    );
+  }
+  return renderEmailHtml(campaign.content, recipient);
+}
+
 /**
  * Envoie une campagne. Résout les destinataires, envoie via Resend, journalise
  * chaque envoi (crm_email_sends) et met à jour le statut + compteurs.
@@ -311,7 +337,7 @@ export async function sendCampaign(
     // tracking (sinon le proxy de clic réécrirait le lien de désinscription).
     const html = appendUnsubscribeFooter(
       appendOpenTrackingPixel(
-        wrapEmailLinksForTracking(renderEmailHtml(campaign.content, r), tracking),
+        wrapEmailLinksForTracking(renderCampaignHtml(campaign, r), tracking),
         tracking,
       ),
       r.id,
@@ -419,7 +445,7 @@ export async function scheduleCampaign(
     contact_id: r.id,
     recipient_email: r.email,
     subject: campaign.subject,
-    content: renderEmailHtml(campaign.content, r), // snapshot personnalisé
+    content: renderCampaignHtml(campaign, r), // snapshot personnalisé
     scheduled_at: whenISO,
     status: "pending",
   }));
