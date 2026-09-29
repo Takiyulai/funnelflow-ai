@@ -213,21 +213,28 @@ const translations = {
     // Pricing
     pricing: {
       tag: "Tarifs",
-      title: "Trois plans, une logique claire.",
-      desc: "Un tunnel conçu par un pro coûte des centaines à des milliers d'euros. Ici tu en génères autant que ton plan le permet",
+      title: "Quatre plans, une progression claire.",
+      desc: "Commence gratuitement, puis augmente tes capacités au rythme de ton activité.",
       popular: "Recommandé",
       guarantee: "Paiement sécurisé · Sans engagement · Annulation à tout moment",
       plans: [
         {
+          name: "Free",
+          price: "0€",
+          period: "",
+          desc: "Pour découvrir l'éditeur et construire une première base.",
+          features: ["1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts dans le CRM", "Publication non incluse"],
+          cta: "Commencer gratuitement",
+        },
+        {
           name: "Starter",
-          price: "29€",
+          price: "19€",
           period: "/mois",
           desc: "Pour lancer tes premiers tunnels et capturer tes leads",
           features: [
-            "5 tunnels générés par mois",
-            "Éditeur visuel et régénération par section",
-            "Publication en ligne en un clic",
-            "Capture des leads et CRM intégré",
+            "5 tunnels · 1 publié",
+            "5 générations et 20 régénérations IA / mois",
+            "500 contacts et 500 emails / mois",
             "Export systeme.io et HTML",
           ],
           cta: "Choisir Starter",
@@ -238,10 +245,9 @@ const translations = {
           period: "/mois",
           desc: "Pour automatiser tes relances et passer à l'échelle",
           features: [
-            "15 tunnels générés par mois",
-            "Éditeur visuel et régénération par section",
-            "Publication en ligne en un clic",
-            "Capture des leads et CRM intégré",
+            "25 tunnels · 10 publiés",
+            "30 générations et 200 régénérations IA / mois",
+            "5 000 contacts et 5 000 emails / mois",
             "Workflows et séquences email automatiques",
             "Email de livraison automatique",
             "Clonage et import de tunnels",
@@ -252,19 +258,17 @@ const translations = {
         },
         {
           name: "Agency",
-          price: "97€",
+          price: "129€",
           period: "/mois",
           desc: "Pour gérer plusieurs clients et industrialiser ta production",
           features: [
             "Tunnels illimités",
-            "Éditeur visuel et régénération par section",
-            "Publication en ligne en un clic",
+            "150 générations et 1 000 régénérations IA / mois",
+            "Publications, contacts et emails à grande échelle",
             "Capture des leads et CRM intégré",
             "Workflows et séquences email automatiques",
             "Email de livraison automatique",
             "Clonage et import de tunnels",
-            "Espaces clients séparés (bientôt disponible)",
-            "Branding personnalisable",
             "Export systeme.io et HTML",
             "Support dédié",
           ],
@@ -285,7 +289,7 @@ const translations = {
         { q: "Le rendu est-il pensé pour mobile ?", a: "Oui. Les tunnels sont structurés en mobile-first afin de rester lisibles et propres sur petit écran, qui représente aujourd'hui la majorité du trafic." },
         { q: "Puis-je utiliser AutoFunnel AI si je ne publie pas uniquement sur systeme.io ?", a: "Oui. systeme.io est notre plateforme prioritaire, mais l'export HTML / CSS est compatible avec la plupart des outils du marché : Webflow, WordPress, Carrd et autres." },
         { q: "La page existe-t-elle en français, anglais et espagnol ?", a: "L'interface est disponible en français, anglais et espagnol. Vous pouvez générer vos tunnels dans la langue qui correspond à votre marché." },
-        { q: "À qui s'adresse le plan Agency ?", a: "Aux freelances avancés et aux agences qui produisent des tunnels en volume pour plusieurs clients : tunnels et générations IA illimités, brief client structuré et options multi-plateforme étendues. Les espaces clients séparés arrivent bientôt." },
+        { q: "À qui s'adresse le plan Agency ?", a: "Aux freelances avancés et aux agences qui produisent des tunnels en volume : tunnels illimités, 150 générations complètes et 1 000 régénérations IA par mois, avec des options multi-plateforme étendues." },
         { q: "Combien de temps faut-il pour obtenir une première version exploitable ?", a: "En général, quelques minutes entre la saisie du brief et l'obtention d'une première version structurée. Le temps restant dépend des ajustements que vous souhaitez apporter avant publication." },
       ],
     },
@@ -448,22 +452,29 @@ const translations = {
 
     pricing: {
       tag: "Pricing",
-      title: "Three plans, one clear logic.",
-      desc: "No free plan. A direct offer, aligned with your level of usage.",
+      title: "Four plans, one clear progression.",
+      desc: "Start free, then grow your capacity with your business.",
       popular: "Recommended",
       guarantee: "Secure payment · No commitment · Cancel anytime",
       plans: [
         {
+          name: "Free",
+          price: "€0",
+          period: "",
+          desc: "Discover the editor and build your first foundation.",
+          features: ["1 funnel in editing", "3 lifetime AI generations", "10 lifetime AI regenerations", "50 CRM contacts", "Publishing not included"],
+          cta: "Start free",
+        },
+        {
           name: "Starter",
-          price: "$29",
+          price: "€19",
           period: "/mo",
           desc: "To launch your first funnels on systeme.io.",
           features: [
-            "Up to 5 funnels per month",
-            "systeme.io export",
-            "HTML / CSS export",
-            "Core templates",
-            "Email support",
+            "5 funnels · 1 published",
+            "5 generations and 20 AI regenerations / month",
+            "500 contacts and 500 emails / month",
+            "systeme.io and HTML export",
           ],
           cta: "Choose Starter",
         },
@@ -473,26 +484,24 @@ const translations = {
           period: "/mo",
           desc: "To build faster and go further.",
           features: [
-            "Up to 15 funnels per month",
-            "Priority systeme.io export",
-            "Multi-platform compatibility",
-            "Targeted section regeneration",
-            "Full use case library",
+            "25 funnels · 10 published",
+            "30 generations and 200 AI regenerations / month",
+            "5,000 contacts and 5,000 emails / month",
+            "Workflows and email sequences",
             "Priority support",
           ],
           cta: "Choose Pro",
         },
         {
           name: "Agency",
-          price: "$97",
+          price: "€129",
           period: "/mo",
           desc: "To handle multiple clients and scale production.",
           features: [
             "Unlimited funnels",
-            "systeme.io and multi-platform export",
-            "Separate client workspaces (coming soon)",
-            "Structured client brief",
-            "Custom branding",
+            "150 generations and 1,000 AI regenerations / month",
+            "High-volume publishing, contacts and emails",
+            "systeme.io and HTML export",
             "Dedicated support",
           ],
           cta: "Choose Agency",
@@ -511,7 +520,7 @@ const translations = {
         { q: "Is the rendering mobile-friendly?", a: "Yes. Funnels are structured mobile-first to remain clean and readable on small screens, which now drive most of the traffic." },
         { q: "Can I use AutoFunnel AI if I don't publish only on systeme.io?", a: "Yes. systeme.io is our priority platform, but the HTML / CSS export is compatible with most tools on the market: Webflow, WordPress, Carrd and others." },
         { q: "Is the page available in French, English and Spanish?", a: "The interface is available in French, English and Spanish. You can also generate funnels in the language that fits your market." },
-        { q: "Who is the Agency plan for?", a: "For advanced freelancers and agencies producing funnels at scale for multiple clients: unlimited funnels and AI generations, a structured client brief and extended multi-platform options. Separate client workspaces are coming soon." },
+        { q: "Who is the Agency plan for?", a: "For advanced freelancers and agencies producing funnels at scale: unlimited funnels, 150 full generations and 1,000 AI regenerations per month, plus extended multi-platform options." },
         { q: "How long does it take to get a usable first version?", a: "Usually a few minutes between submitting your brief and getting a structured first draft. The remaining time depends on the adjustments you want to make before publishing." },
       ],
     },
@@ -672,22 +681,29 @@ const translations = {
 
     pricing: {
       tag: "Precios",
-      title: "Tres planes, una lógica clara.",
-      desc: "Sin plan gratuito. Una oferta directa, alineada con tu nivel de uso.",
+      title: "Cuatro planes, una progresión clara.",
+      desc: "Empieza gratis y aumenta tus capacidades con tu actividad.",
       popular: "Recomendado",
       guarantee: "Pago seguro · Sin compromiso · Cancela cuando quieras",
       plans: [
         {
+          name: "Free",
+          price: "0€",
+          period: "",
+          desc: "Descubre el editor y crea una primera base.",
+          features: ["1 embudo en edición", "3 generaciones IA en total", "10 regeneraciones IA en total", "50 contactos en el CRM", "Publicación no incluida"],
+          cta: "Empezar gratis",
+        },
+        {
           name: "Starter",
-          price: "29€",
+          price: "19€",
           period: "/mes",
           desc: "Para lanzar tus primeros embudos en systeme.io.",
           features: [
-            "Hasta 3 embudos al mes",
-            "Exportación a systeme.io",
-            "Exportación HTML / CSS",
-            "Modelos básicos",
-            "Soporte por email",
+            "5 embudos · 1 publicado",
+            "5 generaciones y 20 regeneraciones IA / mes",
+            "500 contactos y 500 emails / mes",
+            "Exportación systeme.io y HTML",
           ],
           cta: "Elegir Starter",
         },
@@ -697,26 +713,24 @@ const translations = {
           period: "/mes",
           desc: "Para crear más rápido e ir más lejos.",
           features: [
-            "Hasta 15 embudos al mes",
-            "Exportación prioritaria a systeme.io",
-            "Compatibilidad multiplataforma",
-            "Regeneración dirigida por sección",
-            "Biblioteca completa de casos de uso",
+            "25 embudos · 10 publicados",
+            "30 generaciones y 200 regeneraciones IA / mes",
+            "5.000 contactos y 5.000 emails / mes",
+            "Workflows y secuencias de email",
             "Soporte prioritario",
           ],
           cta: "Elegir Pro",
         },
         {
           name: "Agency",
-          price: "97€",
+          price: "129€",
           period: "/mes",
           desc: "Para gestionar varios clientes e industrializar la producción.",
           features: [
             "Embudos ilimitados",
-            "Exportación a systeme.io y multiplataforma",
-            "Espacios de cliente separados (próximamente)",
-            "Brief de cliente estructurado",
-            "Branding personalizable",
+            "150 generaciones y 1.000 regeneraciones IA / mes",
+            "Publicaciones, contactos y emails a gran escala",
+            "Exportación systeme.io y HTML",
             "Soporte dedicado",
           ],
           cta: "Elegir Agency",
@@ -735,7 +749,7 @@ const translations = {
         { q: "¿El renderizado está pensado para móvil?", a: "Sí. Los embudos están estructurados en mobile-first para mantenerse legibles y limpios en pantallas pequeñas, donde hoy se concentra la mayor parte del tráfico." },
         { q: "¿Puedo usar AutoFunnel AI si no publico solo en systeme.io?", a: "Sí. systeme.io es nuestra plataforma prioritaria, pero la exportación HTML / CSS es compatible con la mayoría de herramientas: Webflow, WordPress, Carrd y otras." },
         { q: "¿La página está disponible en francés, inglés y español?", a: "La interfaz está disponible en francés, inglés y español. También puedes generar tus embudos en el idioma que mejor encaje con tu mercado." },
-        { q: "¿A quién va dirigido el plan Agency?", a: "A freelancers avanzados y agencias que producen embudos a gran escala para varios clientes: embudos y generaciones IA ilimitados, un brief estructurado y opciones multiplataforma ampliadas. Los espacios de cliente separados llegarán próximamente." },
+        { q: "¿A quién va dirigido el plan Agency?", a: "A freelancers avanzados y agencias que producen embudos a gran escala: embudos ilimitados, 150 generaciones completas y 1.000 regeneraciones IA al mes, con opciones multiplataforma ampliadas." },
         { q: "¿Cuánto se tarda en obtener una primera versión utilizable?", a: "Por lo general, unos minutos entre rellenar el brief y obtener una primera versión estructurada. El tiempo restante depende de los ajustes que quieras hacer antes de publicar." },
       ],
     },
@@ -762,8 +776,8 @@ const TEAM_ICONS = [Search, PenTool, Palette, Handshake];
 const FEATURE_GROUP_ICONS = [Wand2, Send, LineChart];
 const TEMPLATE_ICONS = [Mail, Download, Users, Briefcase, Layers];
 const ACCENT = ["#08498D", "#31845C", "#C7A436"];
-const PRICING_POPULAR = [false, true, false];
-const PRICING_COLORS = ["#08498D", "#31845C", "#C7A436"];
+const PRICING_POPULAR = [false, false, true, false];
+const PRICING_COLORS = ["#64748B", "#08498D", "#31845C", "#C7A436"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small UI atoms
@@ -1541,7 +1555,7 @@ export default function LandingPage() {
           </FadeInWhenVisible>
         </div>
 
-        <div className="mx-auto mt-12 max-w-5xl px-4 sm:px-6 lg:px-8 pricing-grid grid gap-5 items-stretch" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        <div className="pricing-grid mx-auto mt-12 grid max-w-7xl items-stretch gap-5 px-4 sm:grid-cols-2 sm:px-6 lg:px-8 xl:grid-cols-4">
           {t.pricing.plans.map((plan, i) => {
             const color = PRICING_COLORS[i];
             const popular = PRICING_POPULAR[i];
@@ -1570,7 +1584,7 @@ export default function LandingPage() {
                             </li>
                           ))}
                         </ul>
-                        <a href={`/signup?plan=${["starter", "pro", "agency"][i] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
+                        <a href={i === 0 ? "/signup" : `/signup?plan=${["starter", "pro", "agency"][i - 1] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold transition hover:opacity-90 active:scale-95" style={{ background: "#31845C", color: "#fff", fontSize: 13 }}>{plan.cta}</a>
                       </div>
                     </div>
                   ) : (
@@ -1591,7 +1605,7 @@ export default function LandingPage() {
                             </li>
                           ))}
                         </ul>
-                        <a href={`/signup?plan=${["starter", "pro", "agency"][i] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
+                        <a href={i === 0 ? "/signup" : `/signup?plan=${["starter", "pro", "agency"][i - 1] ?? "pro"}`} className="block w-full rounded-xl py-3 text-center ff-body font-bold text-white transition hover:opacity-90 active:scale-95" style={{ background: color, fontSize: 13 }}>{plan.cta}</a>
                       </div>
                     </div>
                   )}

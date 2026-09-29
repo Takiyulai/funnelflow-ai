@@ -77,7 +77,7 @@ export const WIZARD_DICT: Dict = {
   // Generation
   "gen.checking": { fr: "Vérification de la clé IA…", en: "Checking AI key…", es: "Verificando la clave IA…" },
   "gen.keyMissing": { fr: "Clé OpenAI absente, le mode démo sera utilisé", en: "OpenAI key missing, demo mode will be used", es: "Falta la clave OpenAI, se usará el modo demo" },
-  "gen.keyInvalid": { fr: "Clé OpenAI invalide. Vérifiez votre configuration", en: "Invalid OpenAI key. Check your configuration", es: "Clave OpenAI inválida. Comprueba tu configuración" },
+  "gen.keyInvalid": { fr: "Le service IA n'est pas disponible. Réessayez ou contactez l'administrateur", en: "The AI service is unavailable. Try again or contact the administrator", es: "El servicio de IA no está disponible. Vuelve a intentarlo o contacta al administrador" },
   "gen.keyOk": { fr: "Clé IA opérationnelle", en: "AI key working", es: "Clave IA operativa" },
 };
 

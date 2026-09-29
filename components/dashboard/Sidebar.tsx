@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, GitBranch, LayoutDashboard, LayoutGrid,
   PlusCircle, Upload, Users, LogOut, Mail, Moon, Sun, CreditCard, LifeBuoy,
-  ShieldCheck, MessageSquare, CalendarClock,
+  ShieldCheck, MessageSquare, CalendarClock, GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +29,7 @@ const NAV = [
   { href: "/import", label: "Import", icon: Upload },
   { href: "/workflows", label: "Workflows", icon: GitBranch },
   { href: "/paiements", label: "Paiements", icon: CreditCard },
+  { href: "/tutoriels", label: "Tutoriels", icon: GraduationCap },
 ];
 
 export function Sidebar({
@@ -51,6 +52,7 @@ export function Sidebar({
     planName: string | null;
     status: string;
     daysRemaining: number | null;
+    isFree: boolean;
   } | null>(null);
 
   // 🆕 MODULE 4 — Raccourci « Administration », visible UNIQUEMENT pour les
@@ -85,6 +87,7 @@ export function Sidebar({
             planName: d.planName ?? null,
             status: d.status,
             daysRemaining: typeof d.daysRemaining === "number" ? d.daysRemaining : null,
+            isFree: !!d.isFree,
           });
       })
       .catch(() => {});
@@ -314,6 +317,14 @@ export function Sidebar({
             const expired = days !== null && days <= 0;
             const soon = days !== null && days > 0 && days <= 5;
 
+            if (planInfo.isFree) {
+              return (
+                <p className="text-xs font-medium leading-relaxed text-white/70">
+                  Découverte gratuite · crédits IA limités
+                </p>
+              );
+            }
+
             if (!isActive || expired) {
               return (
                 <p
@@ -347,7 +358,9 @@ export function Sidebar({
             planInfo.daysRemaining !== null &&
             planInfo.daysRemaining <= 0
               ? "Renouveler mon abonnement"
-              : "Gérer mon abonnement"}
+              : planInfo?.isFree
+                ? "Découvrir les offres"
+                : "Gérer mon abonnement"}
           </Link>
         </div>
 

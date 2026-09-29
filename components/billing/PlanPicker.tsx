@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Loader2, KeyRound, Smartphone, CreditCard } from "lucide-react";
-import { PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
+import { FREE_PLAN, PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
 
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
@@ -212,7 +212,25 @@ export function PlanPicker({
       )}
 
       {/* ─── 1. Choix du plan ─── */}
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="flex flex-col rounded-2xl border border-line bg-surface p-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-emerald-600">{FREE_PLAN.name}</p>
+          <div className="mt-2 flex items-end gap-1">
+            <span className="text-4xl font-black text-ink">0€</span>
+            <span className="mb-1.5 text-sm text-muted">sans limite de durée</span>
+          </div>
+          <ul className="mt-5 flex-1 space-y-2.5">
+            {["1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
+              <li key={feature} className="flex items-start gap-2 text-sm text-ink">
+                <Check size={15} className="mt-0.5 shrink-0 text-emerald-500" />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 rounded-xl border border-line bg-canvas py-3 text-center text-sm font-bold text-muted">
+            Inclus avec ton compte
+          </div>
+        </div>
         {PLAN_ORDER.map((id) => {
           const plan = PLANS[id];
           const isCurrent = isActive && currentPlan === id;

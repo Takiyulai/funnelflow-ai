@@ -1,5 +1,7 @@
 "use client";
 
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
+
 // components/funnel/AbTestsPanel.tsx
 //
 // 🆕 MODULE 3 — Pilotage des tests A/B d'un tunnel.
@@ -135,11 +137,13 @@ function FieldRow({
   disabled: boolean;
 }) {
   const [suggesting, setSuggesting] = useState(false);
+  const { confirmAiUsage } = useAiUsageNotice();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const changed = value !== originalValue;
 
   async function suggest() {
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setSuggesting(true);
     setNote(null);
     try {

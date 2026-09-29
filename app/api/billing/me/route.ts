@@ -89,9 +89,10 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     planId,
-    planName: planId ? PLANS[planId].name : null,
+    planName: planId ? PLANS[planId].name : "Free",
     status,
     active,
+    isFree: !active && !planId,
     hasAccess: access.hasAccess,
     expiresAt,
     daysRemaining,

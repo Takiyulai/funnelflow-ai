@@ -6,6 +6,8 @@ import { listContacts } from "@/lib/crm/contacts";
 import { listTags } from "@/lib/crm/tags";
 import { listContactLists } from "@/lib/crm/lists";
 import { ContactsTable } from "@/components/crm/ContactsTable";
+import { Button } from "@/components/ui/Button";
+import { Share2 } from "lucide-react";
 import type { LeadStatus } from "@/lib/crm/types";
 import { guardApiAccess } from "@/lib/billing/apiGuard";
 import {
@@ -129,6 +131,15 @@ export default async function LeadsPage({
 
   return (
     <AppShell>
+      <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <h1 className="text-3xl font-black text-ink">CRM</h1>
+          <p className="mt-1 text-sm text-muted">Contacts, listes, tags et suivi commercial.</p>
+        </div>
+        <Button href="/leads/partage" variant="secondary">
+          <Share2 className="h-4 w-4" /> Partager le CRM
+        </Button>
+      </div>
       <div className="grid gap-4 md:grid-cols-4 mb-6">
         {[
           { label: "Total", value: totalAll },

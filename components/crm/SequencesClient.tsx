@@ -17,6 +17,7 @@ import { useCelebrate } from "@/components/ui/Celebration";
 import { hasMilestone } from "@/lib/ux/milestones";
 import type { SequenceType, SequenceRole, Sequence } from "@/lib/crm/types";
 import type { EmailDocument } from "@/lib/email-editor/types";
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
 type PublishedFunnel = { id: string; name: string };
 type Lang = "fr" | "en" | "es";
@@ -86,6 +87,7 @@ const inputCls =
   "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none focus:border-[#08498D]";
 
 export function SequencesClient({ publishedFunnels }: { publishedFunnels: PublishedFunnel[] }) {
+  const { confirmAiUsage } = useAiUsageNotice();
   const { celebrate } = useCelebrate();
   // 🆕 LOT 1 : liste ORDONNÉE de rôles (remplace "type" unique + "nombre de
   // mails" — 1 rôle ajouté = 1 mail généré, dans l'ordre de la liste).
@@ -186,6 +188,7 @@ export function SequencesClient({ publishedFunnels }: { publishedFunnels: Publis
   async function generate() {
     if (loading) return;
     if (roles.length === 0) { setError("Ajoute au moins un type de mail à la séquence."); return; }
+    if (!(await confirmAiUsage("ai_sequence_gen"))) return;
     setLoading(true); setError(null); setNotice(null);
     try {
       const res = await fetch("/api/crm/sequences/generate", {

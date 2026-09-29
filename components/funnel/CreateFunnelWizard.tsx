@@ -1,5 +1,7 @@
 "use client";
 
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, CheckCircle2,
@@ -650,6 +652,7 @@ function buildShowcaseSections(brief: FunnelBrief): FunnelSection[] {
 }
 
 export function CreateFunnelWizard() {
+  const { confirmAiUsage } = useAiUsageNotice();
   const [step, setStep] = useState(0);
   const [mobileTab, setMobileTab] = useState<"form" | "preview">("form");
   // 🆕 Sous-onglet actif + message de validation de l'étape « Ton offre » (levés
@@ -829,6 +832,7 @@ export function CreateFunnelWizard() {
   }
 
   async function generate() {
+    if (!(await confirmAiUsage("ai_funnel_gen"))) return;
     setIsGenerating(true);
     setSuccessMessage("");
     setErrorMessage("");
@@ -2510,7 +2514,7 @@ function GenerationStep({
           <AlertCircle size={14} className="mt-0.5 shrink-0" />}
         <div className="min-w-0 flex-1">
           <p className="font-bold">
-            {checkingHealth ? "Vérification de la clé IA..." : health?.ok ? "Clé IA opérationnelle" : "Diagnostic IA"}
+            {checkingHealth ? "Vérification du service IA..." : health?.ok ? "Service IA opérationnel" : "Diagnostic IA"}
           </p>
           <p className="mt-0.5 leading-relaxed">
             {checkingHealth ? "Patientez quelques secondes" : health?.message ?? "Cliquez pour vérifier"}

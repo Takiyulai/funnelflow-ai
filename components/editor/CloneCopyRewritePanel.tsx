@@ -29,6 +29,7 @@ import {
 } from "@/lib/clone/copy-rewrite";
 import type { Spot } from "@/lib/clone/raw-html-walker";
 import { handlePlanGate } from "@/lib/billing/planGate";
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
 const SUGGESTIONS = [
   "Adapte le copy à mon activité de coach business",
@@ -59,6 +60,7 @@ export function CloneCopyRewritePanel({
   language: "fr" | "en" | "es";
   onChange: (patch: Partial<FunnelSection>) => void;
 }) {
+  const { confirmAiUsage } = useAiUsageNotice();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,6 +94,7 @@ export function CloneCopyRewritePanel({
 
   async function run() {
     if (busy || items.length === 0) return;
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setBusy(true);
     setError(null);
     setProposal(null);

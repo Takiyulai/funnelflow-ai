@@ -82,6 +82,8 @@ export async function POST(request: Request) {
     user.id,
     "ai_sequence_gen",
     access.limits.aiSequenceGensPerMonth,
+    1,
+    access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!genQuota.ok) {
     return quotaExceededResponse(

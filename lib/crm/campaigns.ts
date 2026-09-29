@@ -302,6 +302,7 @@ export async function sendCampaign(
     "email_send",
     access.limits.monthlyEmailSends,
     recipients.length,
+    access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!emailQuota.ok) throw new Error("email_quota_exceeded");
 
@@ -440,6 +441,7 @@ export async function scheduleCampaign(
     "email_send",
     access.limits.monthlyEmailSends,
     recipients.length,
+    access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!emailQuota.ok) throw new Error("email_quota_exceeded");
 

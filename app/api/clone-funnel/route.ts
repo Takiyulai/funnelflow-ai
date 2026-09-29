@@ -65,6 +65,8 @@ export async function POST(request: Request) {
     guard.userId,
     "url_import",
     guard.access.limits.urlImportsPerMonth,
+    1,
+    guard.access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!importQuota.ok) {
     return quotaExceededResponse(

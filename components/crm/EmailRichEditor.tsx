@@ -116,21 +116,65 @@ export function EmailRichEditor({
     onChange(html);
   };
 
-  const restoreRangeOrMoveToEnd = () => {
+  const saveCurrentEditorRange = () => {
     const el = ref.current;
-    if (!el) return;
     const selection = window.getSelection();
-    if (!selection) return;
-    const range = savedRangeRef.current;
-    selection.removeAllRanges();
-    if (range && el.contains(range.commonAncestorContainer)) {
-      selection.addRange(range);
+    if (!el || !selection || selection.rangeCount === 0) {
+      savedRangeRef.current = null;
       return;
     }
-    const end = document.createRange();
-    end.selectNodeContents(el);
-    end.collapse(false);
-    selection.addRange(end);
+
+    try {
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      savedRangeRef.current =
+        container.isConnected && (container === el || el.contains(container))
+          ? range.cloneRange()
+          : null;
+    } catch {
+      savedRangeRef.current = null;
+    }
+  };
+
+  const createRangeAtEnd = (el: HTMLDivElement) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    return range;
+  };
+
+  const restoreRangeOrMoveToEnd = (): Range | null => {
+    const el = ref.current;
+    if (!el) return null;
+    const selection = window.getSelection();
+    if (!selection) return null;
+
+    let range = savedRangeRef.current;
+    try {
+      const container = range?.commonAncestorContainer;
+      if (
+        !range ||
+        !container?.isConnected ||
+        (container !== el && !el.contains(container))
+      ) {
+        range = createRangeAtEnd(el);
+      }
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return range;
+    } catch {
+      // Une sélection DOM peut devenir invalide après une actualisation React.
+      // On repart alors d'un curseur neuf à la fin du bloc, sans faire tomber
+      // l'ensemble de l'éditeur.
+      try {
+        range = createRangeAtEnd(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return range;
+      } catch {
+        return null;
+      }
+    }
   };
 
   const selectInsertedImage = (url: string) => {
@@ -163,8 +207,38 @@ export function EmailRichEditor({
     const el = ref.current;
     if (!el) return;
     el.focus();
-    restoreRangeOrMoveToEnd();
-    document.execCommand("insertText", false, token);
+    const range = restoreRangeOrMoveToEnd();
+    let inserted = false;
+
+    try {
+      inserted =
+        typeof document.execCommand === "function" &&
+        document.execCommand("insertText", false, token);
+    } catch {
+      inserted = false;
+    }
+
+    if (!inserted) {
+      try {
+        const targetRange = range ?? createRangeAtEnd(el);
+        targetRange.deleteContents();
+        const textNode = document.createTextNode(token);
+        targetRange.insertNode(textNode);
+        targetRange.setStartAfter(textNode);
+        targetRange.collapse(true);
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(targetRange);
+        }
+      } catch {
+        // Dernier recours sûr : la variable reste ajoutée au bloc même si le
+        // navigateur refuse toute restauration de sélection.
+        el.append(document.createTextNode(token));
+      }
+    }
+
+    saveCurrentEditorRange();
     setShowPersonalization(false);
     emit();
   };
@@ -263,8 +337,7 @@ export function EmailRichEditor({
     const el = ref.current;
     if (!el) return;
     el.focus();
-    const sel = window.getSelection();
-    savedRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+    saveCurrentEditorRange();
     fileInputRef.current?.click();
   };
 
@@ -294,11 +367,7 @@ export function EmailRichEditor({
       const el = ref.current;
       if (!el) return;
       el.focus();
-      const sel = window.getSelection();
-      if (savedRangeRef.current && sel) {
-        sel.removeAllRanges();
-        sel.addRange(savedRangeRef.current);
-      }
+      restoreRangeOrMoveToEnd();
       document.execCommand("insertImage", false, data.url);
       selectInsertedImage(data.url);
       emit();
@@ -475,14 +544,11 @@ export function EmailRichEditor({
             <button
               type="button"
               className={btn}
-              title="Insérer une donnée personnalisée"
+              title="Variables de substitution"
+              aria-label="Variables de substitution"
               onMouseDown={(event) => {
                 event.preventDefault();
-                const selection = window.getSelection();
-                savedRangeRef.current =
-                  selection && selection.rangeCount > 0
-                    ? selection.getRangeAt(0).cloneRange()
-                    : null;
+                saveCurrentEditorRange();
               }}
               onClick={() => setShowPersonalization((current) => !current)}
             >
@@ -491,7 +557,7 @@ export function EmailRichEditor({
             {showPersonalization && (
               <div className="absolute left-0 top-9 z-20 grid max-h-64 min-w-64 gap-1 overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-elevated">
                 <div className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
-                  Données du contact
+                  Variables de substitution
                 </div>
                 {personalizationFields.map((field) => (
                   <button

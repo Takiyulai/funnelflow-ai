@@ -68,6 +68,8 @@ export async function POST(request: Request) {
     user.id,
     "ai_copy_regen",
     access.limits.aiCopyRegensPerMonth,
+    1,
+    access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!genQuota.ok) {
     return quotaExceededResponse(

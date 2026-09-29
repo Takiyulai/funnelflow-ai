@@ -1,5 +1,7 @@
 "use client";
 
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
+
 import { useMemo, useState } from "react";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import {
@@ -1400,6 +1402,7 @@ function ActionConfigFields({
   /** 🆕 Délai déjà accumulé jusqu'à ce nœud (aperçu chronologique). */
   baseOffsetMs?: number;
 }) {
+  const { confirmAiUsage } = useAiUsageNotice();
   // 🆕 Génération IA du contenu de l'email d'action (« Envoyer un email »).
   const [genPrompt, setGenPrompt] = useState("");
   const [genLoading, setGenLoading] = useState(false);
@@ -1407,6 +1410,7 @@ function ActionConfigFields({
 
   async function generateWorkflowEmail() {
     if (action.kind !== "send_email" || genLoading) return;
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setGenLoading(true);
     setGenError(null);
     try {

@@ -90,12 +90,48 @@ export type Plan = {
   limits: PlanLimits;
 };
 
+/** Offre gratuite sans moyen de paiement. Elle reste hors de `PlanId` afin de
+ * ne jamais être envoyée aux intégrations Stripe, CinetPay ou Chariow. */
+export const FREE_PLAN = {
+  id: "free" as const,
+  name: "Free",
+  priceEur: 0,
+  priceXof: 0,
+  limits: {
+    funnels: 1,
+    publishedFunnels: 0,
+    urlImport: false,
+    urlImportsPerMonth: 0,
+    sectionRegeneration: true,
+    aiFunnelGensPerMonth: 3,
+    aiSequenceGensPerMonth: 0,
+    aiCopyRegensPerMonth: 10,
+    crm: true,
+    pageTimeTracking: false,
+    maxLeads: 50,
+    leadsExport: false,
+    campaigns: false,
+    monthlyEmailSends: 0,
+    workflows: false,
+    systemeExport: false,
+    htmlExport: false,
+    multiPlatform: false,
+    clientWorkspaces: 0,
+    customSendingDomain: false,
+    customDomains: 0,
+    paymentsInFunnels: false,
+    customCode: false,
+    platformFeePercent: 0,
+    prioritySupport: false,
+  } satisfies PlanLimits,
+};
+
 export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: "starter",
     name: "Starter",
-    priceEur: 29,
-    priceXof: 19000,
+    priceEur: 19,
+    priceXof: 12000,
     envPriceKey: "STRIPE_PRICE_STARTER",
     limits: {
       funnels: 5,
@@ -132,8 +168,8 @@ export const PLANS: Record<PlanId, Plan> = {
     priceXof: 39000,
     envPriceKey: "STRIPE_PRICE_PRO",
     limits: {
-      funnels: 15,
-      publishedFunnels: 5,
+      funnels: 25,
+      publishedFunnels: 10,
       urlImport: true,
       urlImportsPerMonth: 10,
       sectionRegeneration: true,
@@ -169,8 +205,8 @@ export const PLANS: Record<PlanId, Plan> = {
   agency: {
     id: "agency",
     name: "Agency",
-    priceEur: 97,
-    priceXof: 64000,
+    priceEur: 129,
+    priceXof: 85000,
     envPriceKey: "STRIPE_PRICE_AGENCY",
     limits: {
       funnels: Infinity,
@@ -180,7 +216,9 @@ export const PLANS: Record<PlanId, Plan> = {
       sectionRegeneration: true,
       aiFunnelGensPerMonth: 150,
       aiSequenceGensPerMonth: Infinity,
-      aiCopyRegensPerMonth: Infinity,
+      // Plafond volontairement élevé mais borné : protège les coûts API tout
+      // en laissant 5× plus de marge que le plan Pro.
+      aiCopyRegensPerMonth: 1000,
       crm: true,
       pageTimeTracking: true,
       maxLeads: Infinity,

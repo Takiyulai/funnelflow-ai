@@ -15,6 +15,7 @@ import { useState } from "react";
 import { Sparkles, Loader2, Check, X } from "lucide-react";
 import type { FunnelSection, Language, Funnel } from "@/lib/funnels/types";
 import { handlePlanGate } from "@/lib/billing/planGate";
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
 type ProposedSection = Pick<
   FunnelSection,
@@ -59,6 +60,7 @@ export function SectionRegenPanel({
   funnel: Funnel;
   onChange: (patch: Partial<FunnelSection>) => void;
 }) {
+  const { confirmAiUsage } = useAiUsageNotice();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [maxWords, setMaxWords] = useState(100);
@@ -68,6 +70,7 @@ export function SectionRegenPanel({
 
   async function regenerate() {
     if (busy) return;
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setBusy(true);
     setError(null);
     setProposal(null);

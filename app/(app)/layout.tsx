@@ -16,6 +16,7 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { AiUsageNoticeProvider } from "@/components/ai/AiUsageNoticeProvider";
 
 export const dynamic = "force-dynamic";
 
@@ -26,5 +27,5 @@ export default async function AppGroupLayout({ children }: { children: ReactNode
   } = await sb.auth.getUser();
   if (!user) redirect("/login");
 
-  return <>{children}</>;
+  return <AiUsageNoticeProvider>{children}</AiUsageNoticeProvider>;
 }

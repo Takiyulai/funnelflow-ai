@@ -20,7 +20,7 @@ export type AiHealth = {
 // Le health-check doit suivre l'abstraction : sinon il reste collé à OpenAI même
 // quand AI_PROVIDER bascule sur Anthropic ou Z.AI/GLM.
 type ProviderConfig = {
-  label: string; // nom affiché dans les messages
+  label: string; // nom interne, réservé aux journaux serveur
   key: string | undefined; // clé API à utiliser
   modelsUrl: string; // endpoint léger de validation (GET)
   authHeaders: (key: string) => Record<string, string>;
@@ -74,7 +74,7 @@ export async function checkAiHealth(): Promise<AiHealth> {
     return {
       ok: false,
       reason: "missing-key",
-      message: `Aucune clé ${label} détectée. Ajoutez la clé correspondante dans .env.local puis redémarrez le serveur`,
+      message: "Le service de génération IA n'est pas configuré. Contactez l'administrateur de la plateforme.",
     };
   }
 
@@ -84,7 +84,7 @@ export async function checkAiHealth(): Promise<AiHealth> {
     return {
       ok: false,
       reason: "header-error",
-      message: `La clé ${label} contient des caractères invalides (accents, guillemets typographiques ou espaces). Recopiez-la proprement.`,
+      message: "La configuration du service IA est invalide. Contactez l'administrateur de la plateforme.",
     };
   }
 
@@ -100,7 +100,7 @@ export async function checkAiHealth(): Promise<AiHealth> {
       return {
         ok: false,
         reason: "invalid-key",
-        message: `Clé ${label} refusée par l'API. Vérifiez qu'elle est active.`,
+        message: "Le service IA n'a pas pu être authentifié. Contactez l'administrateur de la plateforme.",
       };
     }
 
@@ -117,8 +117,8 @@ export async function checkAiHealth(): Promise<AiHealth> {
         ok: false,
         reason: insufficient ? "insufficient-quota" : "rate-limit",
         message: insufficient
-          ? `Quota ${label} épuisé. Ajoutez du crédit pour générer des tunnels`
-          : `Trop de requêtes vers ${label} en peu de temps. Réessayez dans une minute`,
+          ? "Le service IA est temporairement indisponible. Réessayez dans quelques instants."
+          : "Trop de demandes ont été lancées en même temps. Réessayez dans une minute.",
       };
     }
 
@@ -129,7 +129,7 @@ export async function checkAiHealth(): Promise<AiHealth> {
       return {
         ok: true,
         reason: "ok",
-        message: `Configuration ${label} acceptée (endpoint de validation non exposé, clé non rejetée).`,
+        message: "Service IA opérationnel, prêt pour la génération.",
       };
     }
 
@@ -137,14 +137,14 @@ export async function checkAiHealth(): Promise<AiHealth> {
       return {
         ok: false,
         reason: "unknown",
-        message: `Réponse inattendue de ${label} (${res.status}). Réessayez dans quelques instants`,
+        message: "Le service IA a renvoyé une réponse inattendue. Réessayez dans quelques instants.",
       };
     }
 
     return {
       ok: true,
       reason: "ok",
-      message: `Clé ${label} valide, prête pour la génération`,
+      message: "Service IA opérationnel, prêt pour la génération.",
     };
   } catch (error) {
     const isTimeout =
@@ -155,8 +155,8 @@ export async function checkAiHealth(): Promise<AiHealth> {
       ok: false,
       reason: "network-error",
       message: isTimeout
-        ? `${label} met trop de temps à répondre. Vérifiez votre connexion ou un éventuel pare-feu`
-        : `Impossible de joindre ${label}. Vérifiez votre connexion internet, antivirus ou pare-feu`,
+        ? "Le service IA met trop de temps à répondre. Réessayez dans quelques instants."
+        : "Impossible de joindre le service IA. Vérifiez votre connexion puis réessayez.",
     };
   }
 }

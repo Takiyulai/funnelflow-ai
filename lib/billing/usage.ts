@@ -26,6 +26,13 @@ function toRpcLimit(limit: number): number {
   return limit === Infinity ? -1 : Math.max(0, Math.floor(limit));
 }
 
+/** Le quota Free est « à vie ». On le range dans un bucket mensuel historique
+ * valide pour rester compatible avec les schémas qui bornent `period` à
+ * `YYYY-MM`, sans ajouter de migration. */
+function storagePeriod(period: string): string {
+  return period === "lifetime" ? "1970-01" : period;
+}
+
 /**
  * Consomme `amount` unités du quota `metric` pour l'utilisateur. ATOMIQUE :
  * n'incrémente que si le quota n'est pas dépassé. Retourne { ok, used, limit }.
@@ -37,6 +44,7 @@ export async function consumeQuota(
   metric: UsageMetric,
   limit: number,
   amount = 1,
+  period = currentPeriod(),
 ): Promise<ConsumeResult> {
   if (limit <= 0 && limit !== Infinity) {
     return { ok: false, used: 0, limit }; // quota nul = fonctionnalité non incluse
@@ -46,7 +54,7 @@ export async function consumeQuota(
     const { data, error } = await admin.rpc("consume_usage", {
       p_user: userId,
       p_metric: metric,
-      p_period: currentPeriod(),
+      p_period: storagePeriod(period),
       p_limit: toRpcLimit(limit),
       p_amount: amount,
     });
@@ -64,14 +72,18 @@ export async function consumeQuota(
 }
 
 /** Lecture seule de l'usage courant d'une métrique (pour affichage/pré-check). */
-export async function getUsage(userId: string, metric: UsageMetric): Promise<number> {
+export async function getUsage(
+  userId: string,
+  metric: UsageMetric,
+  period = currentPeriod(),
+): Promise<number> {
   const admin = getSupabaseAdmin();
   const { data } = await admin
     .from("usage_counters")
     .select("count")
     .eq("user_id", userId)
     .eq("metric", metric)
-    .eq("period", currentPeriod())
+    .eq("period", storagePeriod(period))
     .maybeSingle();
   return (data?.count as number | undefined) ?? 0;
 }

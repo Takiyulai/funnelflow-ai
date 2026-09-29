@@ -436,6 +436,8 @@ export async function POST(request: Request) {
     guard.userId,
     "ai_funnel_gen",
     guard.access.limits.aiFunnelGensPerMonth,
+    1,
+    guard.access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!genQuota.ok) {
     return quotaExceededResponse(

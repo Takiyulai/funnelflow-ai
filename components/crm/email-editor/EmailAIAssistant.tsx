@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
 import type { EmailBlock } from "@/lib/email-editor/types";
 import { sanitizeEmailRichHtml } from "@/lib/email-editor/compiler";
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
 export type AISuggestion = { subject: string; html: string; blockId: string | null };
 
@@ -29,6 +30,7 @@ export function EmailAIAssistant({
   onApply: (suggestion: AISuggestion) => void;
   onClose: () => void;
 }) {
+  const { confirmAiUsage } = useAiUsageNotice();
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const canRewrite = selectedBlock?.type === "richText" || selectedBlock?.type === "heading" || selectedBlock?.type === "button";
@@ -36,6 +38,7 @@ export function EmailAIAssistant({
   async function generate(scope: "email" | "block") {
     if (loading) return;
     if (scope === "block" && !canRewrite) return;
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setLoading(true);
     try {
       const instruction = scope === "block"

@@ -12,7 +12,7 @@
 //     la plateforme, avec les limites du plan souscrit.
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { PLANS, isPlanId, type PlanId, type PlanLimits } from "@/lib/billing/plans";
+import { FREE_PLAN, PLANS, isPlanId, type PlanId, type PlanLimits } from "@/lib/billing/plans";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
 import { isInternalTestAccount } from "@/lib/billing/internalTestAccounts";
 
@@ -40,37 +40,10 @@ export type Access = {
   /** Plan effectif (souscrit, ou Agency par défaut si gating off). */
   planId: PlanId | null;
   status: SubscriptionStatus;
-  /** Limites effectives à appliquer (tout à 0/false si aucun accès). */
+  /** Limites effectives à appliquer (plan Free si aucun abonnement payant). */
   limits: PlanLimits;
-};
-
-/** Limites « aucun accès » : tout verrouillé. */
-const NO_ACCESS: PlanLimits = {
-  funnels: 0,
-  publishedFunnels: 0,
-  urlImport: false,
-  urlImportsPerMonth: 0,
-  sectionRegeneration: false,
-  aiFunnelGensPerMonth: 0,
-  aiSequenceGensPerMonth: 0,
-  aiCopyRegensPerMonth: 0,
-  crm: false,
-  pageTimeTracking: false,
-  maxLeads: 0,
-  leadsExport: false,
-  campaigns: false,
-  monthlyEmailSends: 0,
-  workflows: false,
-  systemeExport: false,
-  htmlExport: false,
-  multiPlatform: false,
-  clientWorkspaces: 0,
-  customSendingDomain: false,
-  customDomains: 0,
-  paymentsInFunnels: false,
-  customCode: false,
-  platformFeePercent: 0,
-  prioritySupport: false,
+  /** Les quotas du plan Free sont comptés sur toute la vie du compte. */
+  quotaPeriod: "monthly" | "lifetime";
 };
 
 export function isBillingEnforced(): boolean {
@@ -151,6 +124,7 @@ export async function getAccess(
       planId: "agency",
       status: "active",
       limits: PLANS.agency.limits,
+      quotaPeriod: "monthly",
     };
   }
 
@@ -164,6 +138,7 @@ export async function getAccess(
       planId: "agency",
       status: "active",
       limits: PLANS.agency.limits,
+      quotaPeriod: "monthly",
     };
   }
 
@@ -179,6 +154,7 @@ export async function getAccess(
       planId,
       status,
       limits: PLANS[planId].limits,
+      quotaPeriod: "monthly",
     };
   }
 
@@ -190,6 +166,7 @@ export async function getAccess(
       planId: "starter",
       status,
       limits: PLANS.starter.limits,
+      quotaPeriod: "monthly",
     };
   }
 
@@ -206,6 +183,7 @@ export async function getAccess(
         planId: license.plan,
         status: "active",
         limits: PLANS[license.plan].limits,
+        quotaPeriod: "monthly",
       };
     }
   } catch (e) {
@@ -214,10 +192,11 @@ export async function getAccess(
 
   return {
     enforced: true,
-    hasAccess: false,
-    planId,
-    status,
-    limits: NO_ACCESS,
+    hasAccess: true,
+    planId: null,
+    status: "inactive",
+    limits: FREE_PLAN.limits,
+    quotaPeriod: "lifetime",
   };
 }
 

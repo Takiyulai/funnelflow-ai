@@ -59,6 +59,8 @@ export async function POST(request: Request) {
     guard.userId,
     "ai_copy_regen",
     guard.access.limits.aiCopyRegensPerMonth,
+    1,
+    guard.access.quotaPeriod === "lifetime" ? "lifetime" : undefined,
   );
   if (!quota.ok) {
     return quotaExceededResponse(

@@ -47,7 +47,7 @@ function PersonalizationInsert({
     <details className="rounded-lg border border-line bg-canvas">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-bold text-ink">
         <Braces size={15} className="text-[color:var(--ff-accent)]" />
-        Insérer une donnée du contact
+        Variables de substitution
       </summary>
       <div className="grid max-h-52 gap-1 overflow-y-auto border-t border-line p-2">
         {fields.map((field) => (

@@ -19,6 +19,7 @@ import type {
 import { handlePlanGate } from "@/lib/billing/planGate";
 import { extractHomeContext, isClonedSection } from "@/lib/clone/clone-context";
 import { mergeRegeneratedSections } from "@/lib/funnels/mergeRegeneratedSections";
+import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
 const SUGGESTIONS = [
   "Rends le copy plus percutant",
@@ -95,6 +96,7 @@ export function PageRegenPanel(props: Props) {
 }
 
 function PageRegenForm({ funnel, page, onApply }: Props) {
+  const { confirmAiUsage } = useAiUsageNotice();
   const isNewPage = isPageGenerationPlaceholder(page);
   const [open, setOpen] = useState(isNewPage);
   const [prompt, setPrompt] = useState("");
@@ -153,6 +155,7 @@ function PageRegenForm({ funnel, page, onApply }: Props) {
     // Ceinture : l'interface n'expose plus le bouton sur un clone, mais cette
     // fonction ne doit pas pouvoir s'exécuter par un autre chemin.
     if (hasClonedSection) return;
+    if (!(await confirmAiUsage("ai_copy_regen"))) return;
     setBusy(true);
     setError(null);
     setProposal(null);
