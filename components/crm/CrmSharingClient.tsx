@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Eye, Loader2, LockKeyhole, Share2, Trash2, Users } from "lucide-react";
+import { Eye, List, Loader2, LockKeyhole, Share2, Tag, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
@@ -260,6 +260,50 @@ export function CrmSharingClient() {
                 Les {snapshot.limit} contacts les plus récents sont affichés.
               </p>
             )}
+            <p className="mt-2 text-xs text-muted">
+              Le forfait du destinataire ne limite pas cette consultation en lecture seule.
+            </p>
+          </div>
+
+          <div className="grid gap-4 border-b border-line bg-canvas/40 p-5 lg:grid-cols-2">
+            <section className="rounded-xl border border-line bg-surface p-4" aria-labelledby="shared-lists-title">
+              <div className="mb-3 flex items-center gap-2">
+                <List className="h-4 w-4 text-gold-dark" />
+                <h3 id="shared-lists-title" className="text-sm font-black text-ink">
+                  Listes partagées ({snapshot.lists.length})
+                </h3>
+              </div>
+              {snapshot.lists.length ? (
+                <div className="space-y-2">
+                  {snapshot.lists.map((list) => (
+                    <div key={list.id} className="rounded-lg border border-line px-3 py-2.5">
+                      <Badge item={list} />
+                      {list.description && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted">{list.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted">Aucune liste créée dans ce CRM.</p>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-line bg-surface p-4" aria-labelledby="shared-tags-title">
+              <div className="mb-3 flex items-center gap-2">
+                <Tag className="h-4 w-4 text-gold-dark" />
+                <h3 id="shared-tags-title" className="text-sm font-black text-ink">
+                  Tags partagés ({snapshot.tags.length})
+                </h3>
+              </div>
+              {snapshot.tags.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {snapshot.tags.map((tag) => <Badge key={tag.id} item={tag} />)}
+                </div>
+              ) : (
+                <p className="text-xs text-muted">Aucun tag créé dans ce CRM.</p>
+              )}
+            </section>
           </div>
 
           <div className="overflow-x-auto">

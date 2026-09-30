@@ -1,20 +1,17 @@
 "use client";
 
-// 🆕 Choix de plan + MÉTHODE DE PAIEMENT :
-//   - Chariow (ACTIF) : paiement Mobile Money / carte, adapté à l'Afrique.
-//     L'achat se fait sur la boutique Chariow (produit de type Licence) →
-//     l'utilisateur reçoit une clé de licence → il l'active ici (ou le
-//     webhook Pulse l'active automatiquement via son email d'achat).
-//   - Stripe (MUET) : affiché grisé avec badge « Bientôt disponible ».
-// Les abonnés Stripe historiques gardent leur portail de gestion.
+// Choix de plan + paiement Chariow. Les intégrations historiques restent
+// disponibles côté serveur pour la compatibilité, mais ne sont plus proposées
+// comme moyens de souscription sur cette page.
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, KeyRound, Smartphone, CreditCard } from "lucide-react";
+import { Check, Loader2, KeyRound, Smartphone, Sparkles } from "lucide-react";
 import { FREE_PLAN, PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
 
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
   const lines: string[] = [];
+  lines.push("4 agents IA spécialisés sur chaque tunnel");
   lines.push(l.funnels === Infinity ? "Tunnels illimités" : `${l.funnels} tunnels`);
   lines.push(
     l.aiFunnelGensPerMonth === Infinity
@@ -41,9 +38,16 @@ function featureLines(plan: Plan): string[] {
         ? "Campagnes email illimitées"
         : `Campagnes email (${l.monthlyEmailSends.toLocaleString("fr-FR")}/mois)`,
     );
+  if (l.aiSequenceGensPerMonth > 0) {
+    lines.push(
+      l.aiSequenceGensPerMonth === Infinity
+        ? "Séquences d'emails IA illimitées"
+        : `${l.aiSequenceGensPerMonth} séquence${l.aiSequenceGensPerMonth > 1 ? "s" : ""} d'emails IA / mois`,
+    );
+  }
   if (l.workflows) lines.push("Automatisations (workflows)");
   if (l.multiPlatform) lines.push("Options multi-plateforme");
-  if (l.systemeExport) lines.push("Export systeme.io");
+  if (l.systemeExport) lines.push("Export systeme.io prêt en 1 clic");
   if (l.clientWorkspaces > 0) lines.push(`${l.clientWorkspaces} espaces clients`);
   if (l.customDomains === Infinity) lines.push("Domaines personnalisés illimités");
   else if (l.customDomains > 0) lines.push(`${l.customDomains} domaine personnalisé`);
@@ -142,37 +146,6 @@ export function PlanPicker({
     setBusy(null);
   }
 
-  // ── 🆕 Paiement Mobile Money via CinetPay (Bénin, XOF) ─────────────────
-  // Abonnement "manuel" : le paiement active une licence de 30 jours (pas de
-  // prélèvement récurrent automatique côté CinetPay) — l'utilisateur repaie
-  // lui-même à l'échéance, comme pour la licence Chariow.
-  const [cinetpayError, setCinetpayError] = useState<string | null>(null);
-
-  async function payWithCinetpay() {
-    setBusy("cinetpay");
-    setCinetpayError(null);
-    try {
-      const res = await fetch("/api/billing/cinetpay/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: planForPayment }),
-      });
-      const data = await res.json();
-      if (data?.ok && data.paymentUrl) {
-        window.location.href = data.paymentUrl as string;
-        return;
-      }
-      setCinetpayError(
-        data?.error === "cinetpay_not_configured"
-          ? "Le paiement Mobile Money n'est pas encore configuré. Réessaie plus tard."
-          : "Impossible d'initier le paiement. Réessaie.",
-      );
-    } catch {
-      setCinetpayError("Erreur réseau. Réessaie.");
-    }
-    setBusy(null);
-  }
-
   async function openPortal() {
     setBusy("portal");
     setError(null);
@@ -220,7 +193,7 @@ export function PlanPicker({
             <span className="mb-1.5 text-sm text-muted">sans limite de durée</span>
           </div>
           <ul className="mt-5 flex-1 space-y-2.5">
-            {["1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
+            {["4 agents IA spécialisés", "1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
               <li key={feature} className="flex items-start gap-2 text-sm text-ink">
                 <Check size={15} className="mt-0.5 shrink-0 text-emerald-500" />
                 <span>{feature}</span>
@@ -234,15 +207,29 @@ export function PlanPicker({
         {PLAN_ORDER.map((id) => {
           const plan = PLANS[id];
           const isCurrent = isActive && currentPlan === id;
-          const highlighted = selectedPlan ? selectedPlan === id : id === "pro";
+          const isRecommended = id === "pro";
+          const isSelected = selectedPlan === id;
           return (
             <div
               key={id}
-              className={`flex flex-col rounded-2xl border p-6 ${
-                highlighted ? "border-emerald-500 shadow-lg" : "border-line"
-              } bg-surface`}
+              className={`relative flex flex-col rounded-2xl border p-6 ${
+                isRecommended
+                  ? "border-[#C7A436] bg-[#C7A436]/[0.06] shadow-[0_16px_40px_rgba(199,164,54,0.16)] ring-2 ring-[#C7A436]/20"
+                  : isSelected
+                    ? "border-emerald-500 shadow-lg"
+                    : "border-line bg-surface"
+              }`}
             >
-              <p className="text-xs font-bold uppercase tracking-wider text-emerald-600">
+              {isRecommended && (
+                <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-[#C7A436] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#080E1A] shadow-sm">
+                  <Sparkles size={12} /> Recommandé pour débuter
+                </span>
+              )}
+              <p
+                className={`text-xs font-bold uppercase tracking-wider ${
+                  isRecommended ? "text-[#9A7919]" : "text-emerald-600"
+                }`}
+              >
                 {plan.name}
               </p>
               <div className="mt-2 flex items-end gap-1">
@@ -283,12 +270,16 @@ export function PlanPicker({
                         ?.scrollIntoView({ behavior: "smooth", block: "start" });
                     }}
                     className={`w-full rounded-xl py-3 text-sm font-bold transition disabled:opacity-50 ${
-                      selectedPlan === id
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                      isSelected
+                        ? isRecommended
+                          ? "bg-[#C7A436] text-[#080E1A] hover:bg-[#D6B94F]"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : isRecommended
+                          ? "border border-[#C7A436] text-[#9A7919] hover:bg-[#C7A436]/10"
+                          : "border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
                     }`}
                   >
-                    {selectedPlan === id ? "✓ Plan sélectionné" : `Choisir ${plan.name}`}
+                    {isSelected ? "✓ Plan sélectionné" : `Choisir ${plan.name}`}
                   </button>
                 )}
               </div>
@@ -297,26 +288,21 @@ export function PlanPicker({
         })}
       </div>
 
-      {/* ─── 2. Méthode de paiement ─── */}
+      {/* ─── 2. Paiement Chariow ─── */}
       <div id="payment-methods" className="mt-10 scroll-mt-24">
         <h2 className="text-lg font-black text-ink">
-          Méthode de paiement
+          Paiement avec Chariow
           {selectedPlan ? (
             <span className="ml-2 text-sm font-semibold text-emerald-600">
-              — plan {PLANS[planForPayment].name} (
-              {PLANS[planForPayment].priceEur}€/mois par carte, ou{" "}
-              {PLANS[planForPayment].priceXof.toLocaleString("fr-FR")} FCFA via
-              Mobile Money)
+              — plan {PLANS[planForPayment].name} · {PLANS[planForPayment].priceEur}€/mois
             </span>
           ) : null}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Choisis comment régler ton abonnement — le prix affiché dépend du
-          moyen de paiement choisi (€ par carte, FCFA en Mobile Money).
+          Règle par Mobile Money ou carte bancaire depuis la page de paiement sécurisée Chariow.
         </p>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {/* Chariow — ACTIF */}
+        <div className="mt-4 max-w-2xl">
           <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-ink">
@@ -385,66 +371,6 @@ export function PlanPicker({
                 </p>
               )}
             </div>
-          </div>
-
-          {/* 🆕 CinetPay — Mobile Money direct (Bénin, XOF) */}
-          <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-black text-ink">
-                <Smartphone size={17} className="text-emerald-600" />
-                Mobile Money (CinetPay)
-              </div>
-            </div>
-            <div className="mt-2 flex items-end gap-1">
-              <span className="text-2xl font-black text-ink">
-                {PLANS[planForPayment].priceXof.toLocaleString("fr-FR")}
-              </span>
-              <span className="mb-0.5 text-xs text-muted">FCFA</span>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Orange Money, MTN, Moov… au Bénin. Réglage unique qui débloque{" "}
-              <b className="text-ink">30 jours d&apos;accès</b> — pas de
-              prélèvement automatique : reviens ici renouveler à l&apos;échéance.
-            </p>
-            <button
-              type="button"
-              onClick={payWithCinetpay}
-              disabled={busy !== null}
-              className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {busy === "cinetpay" ? (
-                <Loader2 className="mx-auto animate-spin" size={16} />
-              ) : (
-                "Payer avec Mobile Money →"
-              )}
-            </button>
-            {cinetpayError && (
-              <p className="mt-2 text-xs font-semibold text-red-600">{cinetpayError}</p>
-            )}
-          </div>
-
-          {/* Stripe — MUET (bientôt) */}
-          <div className="relative rounded-2xl border border-line bg-surface p-5 opacity-60">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-black text-ink">
-                <CreditCard size={17} className="text-muted" />
-                Stripe
-              </div>
-              <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-600">
-                Bientôt disponible
-              </span>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Paiement par carte bancaire internationale (Visa, Mastercard) avec
-              renouvellement automatique. Cette option arrive très bientôt.
-            </p>
-            <button
-              type="button"
-              disabled
-              className="mt-4 w-full cursor-not-allowed rounded-xl border border-line bg-canvas py-3 text-sm font-bold text-muted"
-            >
-              Bientôt
-            </button>
           </div>
         </div>
       </div>

@@ -1,0 +1,26 @@
+{
+  "name": "autofunnelai-motion-design",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/patch-remotion-browser-timeout.mjs",
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts AutoFunnelAI-Premier-Tunnel renders/autofunnelai-premier-tunnel.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p --concurrency=25% --browser-executable=\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --timeout=300000 --log=error",
+    "render:frames": "remotion still src/index.ts AutoFunnelAI-Premier-Tunnel renders/preview.png --frame=675",
+    "audio": "node scripts/generate-audio.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.2.7",
+    "@remotion/cli": "4.0.528",
+    "lucide-react": "0.468.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.528"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.12",
+    "@types/react-dom": "19.0.4",
+    "typescript": "5.8.3"
+  }
+}

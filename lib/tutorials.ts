@@ -38,6 +38,21 @@ export function youtubeId(url: string): string | null {
   return null;
 }
 
+export function isTellaVideoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    return (
+      (hostname === "tella.tv" || hostname === "www.tella.tv") &&
+      parts[0] === "video" &&
+      Boolean(parts[1])
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function tutorialEmbedUrl(url: string): string | null {
   const yt = youtubeId(url);
   if (yt) return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}`;
@@ -46,6 +61,10 @@ export function tutorialEmbedUrl(url: string): string | null {
     if (parsed.hostname.includes("vimeo.com")) {
       const id = parsed.pathname.split("/").filter(Boolean).find((part) => /^\d+$/.test(part));
       if (id) return `https://player.vimeo.com/video/${id}`;
+    }
+    if (isTellaVideoUrl(url)) {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      return `https://www.tella.tv/video/${encodeURIComponent(parts[1])}/embed`;
     }
   } catch {
     return null;

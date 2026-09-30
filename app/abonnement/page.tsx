@@ -39,14 +39,18 @@ export default async function AbonnementPage({
   const cinetpayFailed =
     (Array.isArray(sp.cinetpay) ? sp.cinetpay[0] : sp.cinetpay) === "failed";
 
-  const statusLabel: Record<string, string> = {
+  const paidStatusLabel: Record<string, string> = {
     active: "Abonnement actif",
     trialing: "Période d'essai",
-    past_due: "Paiement en attente — régularise pour garder l'accès",
-    canceled: "Abonnement annulé",
-    inactive: "Aucun abonnement actif",
   };
   const status = license ? "active" : (profile?.status ?? "inactive");
+  const statusLabel = isActive
+    ? (paidStatusLabel[status] ?? "Abonnement actif")
+    : status === "past_due"
+      ? "Plan Free actif — paiement à régulariser"
+      : status === "canceled"
+        ? "Plan Free actif — abonnement payant annulé"
+        : "Plan Free actif";
 
   return (
     <AppShell>
@@ -54,7 +58,7 @@ export default async function AbonnementPage({
       <p className="mt-2 text-sm text-muted">
         {isActive
           ? "Gère ton plan ou change d'offre à tout moment."
-          : "Choisis un plan pour débloquer la génération de tunnels et l'ensemble de la plateforme."}
+          : "Ton compte bénéficie automatiquement du plan Free. Passe à une offre payante quand tu souhaites augmenter tes limites."}
       </p>
 
       {cinetpayFailed && (
@@ -68,10 +72,10 @@ export default async function AbonnementPage({
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-ink">
         <span
           className={`h-2 w-2 rounded-full ${
-            isActive ? "bg-emerald-500" : status === "past_due" ? "bg-amber-500" : "bg-gray-400"
+            status === "past_due" ? "bg-amber-500" : "bg-emerald-500"
           }`}
         />
-        {statusLabel[status] ?? status}
+        {statusLabel}
       </div>
 
       <div className="mt-8 max-w-5xl">

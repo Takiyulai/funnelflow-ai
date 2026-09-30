@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ExternalLink, Loader2, Play, Plus, Trash2, Video } from "lucide-react";
 import type { Tutorial } from "@/lib/tutorials";
-import { tutorialEmbedUrl, tutorialThumbnail } from "@/lib/tutorials";
+import { isTellaVideoUrl, tutorialEmbedUrl, tutorialThumbnail } from "@/lib/tutorials";
 
 type Draft = { title: string; description: string; videoUrl: string; thumbnailUrl: string; sortOrder: number };
 const EMPTY: Draft = { title: "", description: "", videoUrl: "", thumbnailUrl: "", sortOrder: 0 };
@@ -60,12 +60,12 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#C7A436]/15 text-[#9A7919]"><Plus size={19} /></span>
             <div>
               <h2 className="font-black text-ink">Ajouter un tutoriel</h2>
-              <p className="text-xs text-muted">YouTube et Vimeo sont intégrés. Une miniature YouTube est chargée automatiquement si aucune image n'est fournie.</p>
+              <p className="text-xs text-muted">YouTube, Vimeo et Tella sont intégrés. Une miniature YouTube est chargée automatiquement ; pour Tella, ajoute une image d'aperçu si tu le souhaites.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <input required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Titre du tutoriel" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
-            <input required type="url" value={draft.videoUrl} onChange={(event) => setDraft({ ...draft, videoUrl: event.target.value })} placeholder="Lien YouTube ou Vimeo" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
+            <input required type="url" value={draft.videoUrl} onChange={(event) => setDraft({ ...draft, videoUrl: event.target.value })} placeholder="Lien YouTube, Vimeo ou Tella" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Ce que l'utilisateur apprendra…" className="min-h-24 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436] md:col-span-2" />
             <input type="url" value={draft.thumbnailUrl} onChange={(event) => setDraft({ ...draft, thumbnailUrl: event.target.value })} placeholder="Image d'aperçu personnalisée (URL, facultatif)" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <input type="number" value={draft.sortOrder} onChange={(event) => setDraft({ ...draft, sortOrder: Number(event.target.value) })} aria-label="Ordre d'affichage" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
@@ -91,11 +91,16 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
             const embed = tutorialEmbedUrl(tutorial.videoUrl);
             const thumbnail = tutorialThumbnail(tutorial);
             const active = playing === tutorial.id && embed;
+            // Le lecteur Tella fournit nativement la miniature configurée dans
+            // Tella. On le charge donc paresseusement dès l'affichage quand
+            // aucune miniature personnalisée n'a été saisie, sans attendre le
+            // premier clic comme pour YouTube/Vimeo.
+            const showTellaPreview = !thumbnail && embed && isTellaVideoUrl(tutorial.videoUrl);
             return (
               <article key={tutorial.id} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
                 <div className="relative aspect-video bg-[#0D1628]">
-                  {active ? (
-                    <iframe src={embed} title={tutorial.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                  {active || showTellaPreview ? (
+                    <iframe src={embed} title={tutorial.title} loading="lazy" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                   ) : (
                     <button type="button" onClick={() => embed && setPlaying(tutorial.id)} className="group relative h-full w-full overflow-hidden" aria-label={`Lire ${tutorial.title}`}>
                       {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" /> : <Video size={42} className="absolute inset-0 m-auto text-white/35" />}
