@@ -2,13 +2,10 @@
 
 // app/abonnement/success/page.tsx
 //
-// 🆕 CinetPay — success_url (Point 2/8). L'utilisateur atterrit ici juste
-// après avoir payé sur l'interface CinetPay. L'ACTIVATION réelle de la
-// licence se fait de façon asynchrone via le webhook /api/webhooks/cinetpay
-// (re-check canonique côté serveur, cf. lib/billing/cinetpayLicense.ts) —
-// cette page ne fait donc AUCUNE activation elle-même : elle patiente
-// quelques secondes en sondant /api/billing/me, le temps que le webhook
-// (généralement quasi instantané) ait pu passer.
+// Page de retour commune aux paiements ponctuels. Elle n'active jamais un
+// plan dans le navigateur. Pour SasPay, elle demande au backend une
+// réconciliation canonique ; pour tous les providers, elle sonde ensuite le
+// droit effectif via /api/billing/me.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -17,7 +14,7 @@ import { AppShell } from "@/components/dashboard/AppShell";
 
 type Phase = "checking" | "active" | "pending";
 
-export default function CinetpaySuccessPage() {
+export default function PaymentSuccessPage() {
   const [phase, setPhase] = useState<Phase>("checking");
 
   useEffect(() => {
@@ -27,6 +24,15 @@ export default function CinetpaySuccessPage() {
 
     async function poll() {
       try {
+        const params = new URLSearchParams(window.location.search);
+        const provider = params.get("provider");
+        const paymentId = params.get("payment");
+        if (provider === "saspay" && paymentId) {
+          await fetch(
+            `/api/payments/saspay/status?paymentId=${encodeURIComponent(paymentId)}`,
+            { cache: "no-store" },
+          );
+        }
         const res = await fetch("/api/billing/me", { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
@@ -63,8 +69,8 @@ export default function CinetpaySuccessPage() {
               Vérification du paiement…
             </h1>
             <p className="mt-2 text-sm text-muted">
-              Ton paiement Mobile Money a bien été reçu par CinetPay. On
-              active ton accès — ça prend généralement quelques secondes.
+              Ton paiement est en cours de confirmation sécurisée. On active
+              ton accès dès que le prestataire le confirme côté serveur.
             </p>
           </>
         )}

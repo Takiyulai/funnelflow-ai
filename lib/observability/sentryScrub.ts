@@ -26,7 +26,7 @@ const SENSITIVE_KEY_PATTERN =
  * pour se fier à un filtrage partiel.
  */
 const SENSITIVE_ROUTE_PATTERN =
-  /\/api\/(chat|checkout|stripe\/webhook|cinetpay\/(notify|connect)|webhooks\/(chariow|cinetpay)|billing\/(portal|cinetpay\/init)|license\/validate|subscribe|connect\/onboard)/i;
+  /\/api\/(chat|checkout|stripe\/webhook|cinetpay\/(notify|connect)|webhooks\/(chariow|cinetpay|saspay)|payments\/saspay\/(checkout|status)|billing\/(portal|cinetpay\/init)|license\/validate|subscribe|connect\/onboard)/i;
 
 const EMAIL_PATTERN = /([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
 

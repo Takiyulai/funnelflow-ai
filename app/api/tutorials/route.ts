@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin/auth";
-import { tutorialFromRow } from "@/lib/tutorials";
+import { normalizeTutorialVideoUrl, tutorialFromRow } from "@/lib/tutorials";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +29,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const description = typeof body.description === "string" ? body.description.trim() : "";
-  const videoUrl = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";
+  const videoUrl = typeof body.videoUrl === "string" ? normalizeTutorialVideoUrl(body.videoUrl) : null;
   const thumbnailUrl = typeof body.thumbnailUrl === "string" && body.thumbnailUrl.trim() ? body.thumbnailUrl.trim() : null;
-  if (title.length < 2 || title.length > 160 || !/^https?:\/\//i.test(videoUrl)) {
-    return NextResponse.json({ ok: false, error: "invalid_input", message: "Titre ou URL vidéo invalide." }, { status: 400 });
+  if (title.length < 2 || title.length > 160 || !videoUrl) {
+    return NextResponse.json({ ok: false, error: "invalid_input", message: "Titre, URL ou code d'intégration vidéo invalide." }, { status: 400 });
   }
   const admin = getSupabaseAdmin();
   const { data, error } = await admin.from("tutorials").insert({

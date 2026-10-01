@@ -93,13 +93,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // On exécute le middleware partout SAUF : assets statiques, images et le
-  // webhook Stripe (corps brut sensible à la signature).
+  // webhooks Stripe/SasPay (corps brut sensible à la signature).
   //
   // 🆕 `tunnel/` n'est PLUS exclu : ces pages ont besoin de l'identifiant
   // visiteur pour l'A/B testing. La branche en tête de `middleware()` leur
   // évite tout le travail Supabase — le comportement pour ces requêtes reste
   // donc aussi léger qu'avant, à un cookie près.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/stripe/webhook|api/webhooks/saspay|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

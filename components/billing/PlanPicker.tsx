@@ -1,12 +1,13 @@
 "use client";
 
-// Choix de plan + paiement Chariow. Les intégrations historiques restent
-// disponibles côté serveur pour la compatibilité, mais ne sont plus proposées
-// comme moyens de souscription sur cette page.
+// Choix de plan + providers de paiement. Chariow conserve exactement son
+// parcours par lien/licence ; SasPay ajoute un checkout hébergé piloté par le
+// backend AutoFunnel AI.
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, KeyRound, Smartphone, Sparkles } from "lucide-react";
+import { Check, CreditCard, Loader2, KeyRound, Smartphone, Sparkles } from "lucide-react";
 import { FREE_PLAN, PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
+import { getChariowCheckoutUrl } from "@/lib/payments/providers/chariow";
 
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
@@ -53,17 +54,6 @@ function featureLines(plan: Plan): string[] {
   else if (l.customDomains > 0) lines.push(`${l.customDomains} domaine personnalisé`);
   if (l.prioritySupport) lines.push("Support prioritaire");
   return lines;
-}
-
-/** URL d'achat Chariow par plan (produits de type Licence sur la boutique). */
-function chariowPlanUrl(plan: PlanId): string | null {
-  const map: Record<PlanId, string | undefined> = {
-    starter: process.env.NEXT_PUBLIC_CHARIOW_URL_STARTER,
-    pro: process.env.NEXT_PUBLIC_CHARIOW_URL_PRO,
-    agency: process.env.NEXT_PUBLIC_CHARIOW_URL_AGENCY,
-  };
-  const url = map[plan]?.trim() || process.env.NEXT_PUBLIC_CHARIOW_STORE_URL?.trim();
-  return url || null;
 }
 
 export function PlanPicker({
@@ -163,8 +153,35 @@ export function PlanPicker({
     setBusy(null);
   }
 
+  async function startSasPayCheckout() {
+    setBusy("saspay");
+    setError(null);
+    try {
+      const res = await fetch("/api/payments/saspay/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: planForPayment }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl as string;
+        return;
+      }
+      const messages: Record<string, string> = {
+        saspay_not_configured: "SasPay n'est pas encore configuré sur cet environnement.",
+        checkout_creation_in_progress:
+          "Une session est déjà en cours de création. Réessaie dans quelques secondes.",
+        invalid_plan: "Le plan sélectionné n'est pas valide.",
+      };
+      setError(messages[data?.error as string] ?? "Le checkout SasPay est momentanément indisponible.");
+    } catch {
+      setError("Erreur réseau pendant l'ouverture de SasPay. Réessaie.");
+    }
+    setBusy(null);
+  }
+
   const planForPayment = selectedPlan ?? "pro";
-  const chariowUrl = chariowPlanUrl(planForPayment);
+  const chariowUrl = getChariowCheckoutUrl(planForPayment);
 
   return (
     <div>
@@ -288,10 +305,10 @@ export function PlanPicker({
         })}
       </div>
 
-      {/* ─── 2. Paiement Chariow ─── */}
+      {/* ─── 2. Providers de paiement ─── */}
       <div id="payment-methods" className="mt-10 scroll-mt-24">
         <h2 className="text-lg font-black text-ink">
-          Paiement avec Chariow
+          Choisis ton moyen de paiement
           {selectedPlan ? (
             <span className="ml-2 text-sm font-semibold text-emerald-600">
               — plan {PLANS[planForPayment].name} · {PLANS[planForPayment].priceEur}€/mois
@@ -299,10 +316,10 @@ export function PlanPicker({
           ) : null}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Règle par Mobile Money ou carte bancaire depuis la page de paiement sécurisée Chariow.
+          Le plan et le montant sont toujours vérifiés côté serveur avant l'ouverture du paiement.
         </p>
 
-        <div className="mt-4 max-w-2xl">
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-ink">
@@ -371,6 +388,47 @@ export function PlanPicker({
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-line bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-ink">
+                <CreditCard size={17} className="text-[#C7A436]" />
+                SasPay
+              </div>
+              <span className="rounded-full bg-[#C7A436]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#806512]">
+                Nouveau
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted">
+              Checkout sécurisé SasPay en XOF. Ce paiement active le plan{" "}
+              <b className="text-ink">{PLANS[planForPayment].name}</b> pendant
+              30 jours après confirmation serveur du paiement.
+            </p>
+            <div className="mt-4 rounded-xl border border-line bg-canvas px-3 py-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Montant contrôlé par AutoFunnel AI</span>
+                <span className="font-black text-ink">
+                  {PLANS[planForPayment].priceXof.toLocaleString("fr-FR")} F CFA
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={startSasPayCheckout}
+              disabled={busy !== null}
+              className="mt-4 flex w-full items-center justify-center rounded-xl bg-[#C7A436] py-3 text-sm font-bold text-[#080E1A] transition hover:bg-[#D6B94F] disabled:opacity-50"
+            >
+              {busy === "saspay" ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                "Payer avec SasPay →"
+              )}
+            </button>
+            <p className="mt-3 text-[11px] leading-relaxed text-muted">
+              Le retour sur cette page ne suffit jamais à activer le plan :
+              AutoFunnel AI attend la vérification SasPay et son webhook signé.
+            </p>
           </div>
         </div>
       </div>

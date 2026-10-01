@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { tutorialFromRow } from "@/lib/tutorials";
+import { normalizeTutorialVideoUrl, tutorialFromRow } from "@/lib/tutorials";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireAdminApi();
@@ -11,7 +11,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof body.title === "string") patch.title = body.title.trim().slice(0, 160);
   if (typeof body.description === "string") patch.description = body.description.trim().slice(0, 1200);
-  if (typeof body.videoUrl === "string" && /^https?:\/\//i.test(body.videoUrl)) patch.video_url = body.videoUrl.trim();
+  if (typeof body.videoUrl === "string") {
+    const videoUrl = normalizeTutorialVideoUrl(body.videoUrl);
+    if (!videoUrl) {
+      return NextResponse.json(
+        { ok: false, error: "invalid_input", message: "URL ou code d'intégration vidéo invalide." },
+        { status: 400 },
+      );
+    }
+    patch.video_url = videoUrl;
+  }
   if (body.thumbnailUrl === null || typeof body.thumbnailUrl === "string") patch.thumbnail_url = body.thumbnailUrl?.trim() || null;
   if (typeof body.sortOrder === "number") patch.sort_order = Math.trunc(body.sortOrder);
   if (typeof body.isPublished === "boolean") patch.is_published = body.isPublished;

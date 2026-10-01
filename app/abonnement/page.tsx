@@ -9,6 +9,7 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/billing/subscription";
 import { getActiveChariowLicense } from "@/lib/billing/chariow";
+import { getActiveBillingEntitlement } from "@/lib/billing/entitlements";
 import { PlanPicker } from "@/components/billing/PlanPicker";
 import { DeleteAccountSection } from "@/components/account/DeleteAccountSection";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
@@ -26,11 +27,15 @@ export default async function AbonnementPage({
   } = await sb.auth.getUser();
   if (!user) redirect("/login");
 
-  const profile = await getProfile(user.id);
-  // 🆕 Une licence Chariow active donne aussi accès (abonnement via Chariow).
-  const license = await getActiveChariowLicense(user.id);
+  const [profile, entitlement, license] = await Promise.all([
+    getProfile(user.id),
+    getActiveBillingEntitlement(user.id),
+    getActiveChariowLicense(user.id),
+  ]);
+  const profileActive =
+    profile?.status === "active" || profile?.status === "trialing";
   const isActive =
-    profile?.status === "active" || profile?.status === "trialing" || !!license;
+    profileActive || !!entitlement || !!license;
   const sp = await searchParams;
   const rawPlan = Array.isArray(sp.plan) ? sp.plan[0] : sp.plan;
   const initialPlan: PlanId | null = isPlanId(rawPlan) ? rawPlan : null;
@@ -43,7 +48,7 @@ export default async function AbonnementPage({
     active: "Abonnement actif",
     trialing: "Période d'essai",
   };
-  const status = license ? "active" : (profile?.status ?? "inactive");
+  const status = entitlement || license ? "active" : (profile?.status ?? "inactive");
   const statusLabel = isActive
     ? (paidStatusLabel[status] ?? "Abonnement actif")
     : status === "past_due"
@@ -80,7 +85,13 @@ export default async function AbonnementPage({
 
       <div className="mt-8 max-w-5xl">
         <PlanPicker
-          currentPlan={profile?.plan ?? null}
+          currentPlan={
+            (profileActive ? profile?.plan : null) ??
+            entitlement?.planId ??
+            license?.plan ??
+            profile?.plan ??
+            null
+          }
           isActive={isActive}
           hasCustomer={Boolean(profile?.stripe_customer_id)}
           initialPlan={initialPlan}

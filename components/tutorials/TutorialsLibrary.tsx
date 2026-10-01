@@ -15,6 +15,7 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  const draftEmbed = tutorialEmbedUrl(draft.videoUrl);
 
   async function load() {
     setLoading(true);
@@ -60,15 +61,37 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#C7A436]/15 text-[#9A7919]"><Plus size={19} /></span>
             <div>
               <h2 className="font-black text-ink">Ajouter un tutoriel</h2>
-              <p className="text-xs text-muted">YouTube, Vimeo et Tella sont intégrés. Une miniature YouTube est chargée automatiquement ; pour Tella, ajoute une image d'aperçu si tu le souhaites.</p>
+              <p className="text-xs text-muted">YouTube, Vimeo et Tella sont intégrés. Pour Tella, colle directement le lien d'intégration ou le code iframe fourni.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <input required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Titre du tutoriel" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
-            <input required type="url" value={draft.videoUrl} onChange={(event) => setDraft({ ...draft, videoUrl: event.target.value })} placeholder="Lien YouTube, Vimeo ou Tella" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
+            <input required type="text" value={draft.videoUrl} onChange={(event) => setDraft({ ...draft, videoUrl: event.target.value })} placeholder="Lien vidéo ou code iframe Tella" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Ce que l'utilisateur apprendra…" className="min-h-24 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436] md:col-span-2" />
             <input type="url" value={draft.thumbnailUrl} onChange={(event) => setDraft({ ...draft, thumbnailUrl: event.target.value })} placeholder="Image d'aperçu personnalisée (URL, facultatif)" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <input type="number" value={draft.sortOrder} onChange={(event) => setDraft({ ...draft, sortOrder: Number(event.target.value) })} aria-label="Ordre d'affichage" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
+            {draft.videoUrl.trim() && (
+              <div className="md:col-span-2">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Aperçu de la vidéo</p>
+                {draftEmbed ? (
+                  <div className="aspect-video max-w-2xl overflow-hidden rounded-xl border border-line bg-[#0D1628]">
+                    <iframe
+                      src={draftEmbed}
+                      title="Aperçu du tutoriel"
+                      loading="lazy"
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-amber-300/50 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    Ce lien ne permet pas encore d'afficher un lecteur intégré. Vérifie l'URL ou le code iframe copié.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           {error && <p className="mt-3 text-sm font-semibold text-red-600">{error}</p>}
           <button disabled={saving} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#C7A436] px-4 py-2.5 text-sm font-black text-[#080E1A] disabled:opacity-50">
@@ -100,7 +123,7 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
               <article key={tutorial.id} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
                 <div className="relative aspect-video bg-[#0D1628]">
                   {active || showTellaPreview ? (
-                    <iframe src={embed} title={tutorial.title} loading="lazy" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                    <iframe src={embed} title={tutorial.title} loading="lazy" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
                   ) : (
                     <button type="button" onClick={() => embed && setPlaying(tutorial.id)} className="group relative h-full w-full overflow-hidden" aria-label={`Lire ${tutorial.title}`}>
                       {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" /> : <Video size={42} className="absolute inset-0 m-auto text-white/35" />}
