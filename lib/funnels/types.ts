@@ -49,6 +49,17 @@ export type VideoSource = {
   posterUrl?: string;
 };
 
+/** Média additionnel d'une section. Les champs historiques `image` et
+ * `video` restent les médias principaux pour conserver le rendu existant. */
+export type SectionMedia = {
+  id: string;
+  kind: "image" | "video";
+  url: string;
+  alt?: string;
+  provider?: VideoSource["provider"];
+  posterUrl?: string;
+};
+
 export type FunnelSectionType =
   | "hero"
   | "about"
@@ -652,6 +663,8 @@ export type FunnelSection = {
   ctas?: CtaConfig[];
   image?: SectionImage;
   video?: VideoSource;
+  /** Galerie optionnelle de médias additionnels (rétrocompatible). */
+  medias?: SectionMedia[];
   bulletIcons?: IconName[];
   iconName?: IconName;
   iconSize?: IconSize;
@@ -1258,10 +1271,9 @@ export type FunnelBrief = {
    *  `brandColors` (au choix du template) au lieu de la palette par défaut
    *  du template. */
   brandColorsEnabled?: boolean;
-  /** 🆕 Couleurs de marque saisies par l'utilisateur (1 à 4 hex), appliquées
-   *  dans l'ordre à design.primaryColor / secondaryColor / accentColor /
-   *  accentColor2. Distinct de mainColor/secondaryColor (qui alimentent
-   *  l'étape "Ambiance"/Mood, non liée au branding). */
+  /** Couleurs de marque (1 à 4 hex), dans l'ordre affiché par le wizard :
+   *  boutons/accents, fond sombre, détails, accent spécial. Les deux champs
+   *  `mainColor`/`secondaryColor` restent le format historique de l'ambiance. */
   brandColors?: string[];
   logoUrl?: string;
   videoUrl?: string;

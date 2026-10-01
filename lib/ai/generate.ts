@@ -4348,6 +4348,10 @@ if (shouldInjectPricing) {
   // Si l'utilisateur a saisi un texte « à propos » mais que la page principale
   // n'a PAS de section "about", on en injecte une (remplie depuis aboutText).
   ensureAuthoritySection(finalFunnel, brief);
+  // Symétrique indispensable : une section « À propos » inventée par l'IA ou
+  // fournie par le template ne doit pas apparaître si l'utilisateur a laissé
+  // ce champ vide dans le wizard.
+  removeUnrequestedAuthoritySections(finalFunnel, brief);
 
   // ===== ÉTAPE 13 : 🆕 Ordre canonique des sections =====
   // L'IA renvoie parfois les sections dans un ordre incohérent (ex. témoignages
@@ -4421,7 +4425,7 @@ if (shouldInjectPricing) {
   // ===== ÉTAPE 21 : 🆕 Couleurs de MARQUE (branding choisi au template) =====
   // Si l'utilisateur a activé « Utiliser les couleurs de ma marque », le design
   // du tunnel prend SES couleurs (1 à 4, saisies au choix du template) :
-  // [0] primaryColor (foncé/titres/fonds), [1] secondaryColor (accent/boutons),
+  // [0] secondaryColor (accent/boutons), [1] primaryColor (foncé/titres/fonds),
   // [2] accentColor (détails), [3] accentColor2 (prix/éléments spéciaux).
   // Rétrocompat : à défaut de brief.brandColors, retombe sur mainColor/secondaryColor.
   if (brief.brandColorsEnabled) {
@@ -5591,6 +5595,25 @@ function ensureAuthoritySection(funnel: Funnel, brief: FunnelBrief): void {
   }
 }
 
+function removeUnrequestedAuthoritySections(
+  funnel: Funnel,
+  brief: FunnelBrief,
+): void {
+  if (brief.aboutText?.trim()) return;
+
+  if (Array.isArray(funnel.pages)) {
+    funnel.pages = funnel.pages.map((page) => ({
+      ...page,
+      sections: page.sections.filter((section) => section.type !== "about"),
+    }));
+    const home = funnel.pages.find((page) => page.isHome) ?? funnel.pages[0];
+    funnel.sections = home?.sections ?? [];
+    return;
+  }
+
+  funnel.sections = funnel.sections.filter((section) => section.type !== "about");
+}
+
 /**
  * Rang canonique d'une page de vente (plus petit = plus haut). Inspiré des
  * règles layout-design-tunnel, MAIS les témoignages sont placés volontairement
@@ -6448,6 +6471,25 @@ export async function generateFunnelWithAI(brief: FunnelBrief): Promise<Funnel> 
 
   // ===== ÉTAPE 5 : Harmonisation des CTA =====
   finalFunnel = harmonizeCTAsByFunnelKind(finalFunnel, brief);
+
+  // Parité avec le pipeline multi-pages : ne jamais inventer « À propos » et
+  // conserver la palette complète choisie dans le wizard.
+  removeUnrequestedAuthoritySections(finalFunnel, brief);
+  if (brief.brandColorsEnabled) {
+    const colors = brief.brandColors?.length
+      ? brief.brandColors
+      : [brief.secondaryColor, brief.mainColor].filter((color): color is string => !!color);
+    finalFunnel.design = {
+      ...finalFunnel.design,
+      ...(colors[0] ? { secondaryColor: colors[0] } : {}),
+      ...(colors[1] ? { primaryColor: colors[1] } : {}),
+      ...(colors[2] ? { accentColor: colors[2] } : {}),
+      ...(colors[3] ? { accentColor2: colors[3] } : {}),
+      brandColorsEnabled: true,
+    };
+  } else {
+    finalFunnel.design = { ...finalFunnel.design, brandColorsEnabled: false };
+  }
 
   return finalFunnel;
 }

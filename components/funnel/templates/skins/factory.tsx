@@ -364,13 +364,19 @@ function makeHero(t: SkinTokens) {
               )}
               {embed?.embedUrl ? (
                 <div style={{ aspectRatio: "16/9", background: "#000", position: "relative" }}>
-                  <iframe
-                    src={embed.embedUrl}
-                    title="Vidéo"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
-                  />
+                  {embed.kind === "file" ? (
+                    <video controls preload="metadata" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}>
+                      <source src={embed.embedUrl} />
+                    </video>
+                  ) : (
+                    <iframe
+                      src={embed.embedUrl}
+                      title="Vidéo"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+                    />
+                  )}
                 </div>
               ) : imageUrl ? (
                 <img

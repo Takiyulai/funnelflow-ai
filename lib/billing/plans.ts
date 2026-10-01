@@ -135,7 +135,7 @@ export const PLANS: Record<PlanId, Plan> = {
     envPriceKey: "STRIPE_PRICE_STARTER",
     limits: {
       funnels: 5,
-      publishedFunnels: 1,
+      publishedFunnels: 5,
       urlImport: true,
       urlImportsPerMonth: 3,
       sectionRegeneration: true,

@@ -6,7 +6,7 @@ euros (paiement par carte) ou en francs CFA (paiement Mobile Money via CinetPay)
 ## Les 3 formules
 
 ### Starter — 29 €/mois (19 000 F CFA)
-- Jusqu'à 5 tunnels (générés ou clonés), dont 1 tunnel publié à la fois
+- Jusqu'à 5 tunnels (générés ou clonés), tous les 5 publiables
 - 5 générations de tunnel par l'IA / mois
 - Import/clonage de tunnel depuis une URL : 3 / mois
 - CRM inclus : jusqu'à 500 contacts, export CSV

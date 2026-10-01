@@ -10,6 +10,7 @@ import type {
 } from "@/lib/funnels/types";
 import { getMedia, IDB_MEDIA_PREFIX } from "@/lib/store/mediaStore";
 import { splitTextPair } from "@/lib/funnels/text";
+import { SectionMediaGallery } from "@/components/funnel/SectionMediaGallery";
 
 /* ─── Couleurs de section (copie de la logique FunnelPreview) ──────────── */
 
@@ -146,6 +147,7 @@ export function SkinSection({
         style={{ maxWidth, margin: "0 auto", padding: "0 24px", zIndex: 1 }}
       >
         {children}
+        <SectionMediaGallery medias={section.medias} />
       </div>
     </section>
   );

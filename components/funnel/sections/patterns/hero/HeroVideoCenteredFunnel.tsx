@@ -18,7 +18,8 @@ type Props = {
 };
 
 export function HeroVideoCenteredFunnel({ section, mode = "public" }: Props) {
-  const embedUrl = section.video?.url ? getVideoEmbed(section.video.url).embedUrl : null;
+  const video = section.video?.url ? getVideoEmbed(section.video.url) : null;
+  const embedUrl = video?.embedUrl ?? null;
   const bullets = (Array.isArray(section.bullets) ? section.bullets : []).slice(0, 3);
 
   return (
@@ -70,13 +71,19 @@ export function HeroVideoCenteredFunnel({ section, mode = "public" }: Props) {
             }}
           >
             {embedUrl ? (
-              <iframe
-                src={embedUrl}
-                title="Vidéo"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
-              />
+              video?.kind === "file" ? (
+                <video controls preload="metadata" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}>
+                  <source src={embedUrl} />
+                </video>
+              ) : (
+                <iframe
+                  src={embedUrl}
+                  title="Vidéo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+                />
+              )
             ) : (
               <>
                 <div

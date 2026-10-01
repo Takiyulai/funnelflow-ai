@@ -9,6 +9,8 @@ export type VideoEmbed = {
   provider: "youtube" | "vimeo" | "url" | "unknown";
   // ID de la vidéo (utile pour le poster ou les analytics)
   id: string | null;
+  /** Une URL de fichier doit être rendue avec <video>, pas dans une iframe. */
+  kind: "iframe" | "file";
 };
 
 // Extrait l'ID YouTube depuis n'importe quel format d'URL connu
@@ -38,15 +40,19 @@ function extractVimeoId(u: URL): string | null {
 }
 
 export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
-  if (!rawUrl) return { embedUrl: null, provider: "unknown", id: null };
+  if (!rawUrl) return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
   const trimmed = rawUrl.trim();
-  if (!trimmed) return { embedUrl: null, provider: "unknown", id: null };
+  if (!trimmed) return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
 
   let u: URL;
   try {
     u = new URL(trimmed);
   } catch {
-    return { embedUrl: null, provider: "unknown", id: null };
+    return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
+  }
+
+  if (/\.(mp4|webm|mov|ogg|m4v|mkv)(\?.*)?$/i.test(u.pathname + u.search)) {
+    return { embedUrl: trimmed, provider: "url", id: null, kind: "file" };
   }
 
   if (u.hostname.includes("youtube.com") || u.hostname === "youtu.be") {
@@ -56,9 +62,10 @@ export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
         embedUrl: `https://www.youtube.com/embed/${id}`,
         provider: "youtube",
         id,
+        kind: "iframe",
       };
     }
-    return { embedUrl: null, provider: "youtube", id: null };
+    return { embedUrl: null, provider: "youtube", id: null, kind: "iframe" };
   }
 
   if (u.hostname.includes("vimeo.com") || u.hostname.includes("player.vimeo.com")) {
@@ -68,9 +75,10 @@ export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
         embedUrl: `https://player.vimeo.com/video/${id}`,
         provider: "vimeo",
         id,
+        kind: "iframe",
       };
     }
-    return { embedUrl: null, provider: "vimeo", id: null };
+    return { embedUrl: null, provider: "vimeo", id: null, kind: "iframe" };
   }
 
   // 🆕 Domaines « placeholder » à NE JAMAIS embarquer : l'IA invente parfois
@@ -82,13 +90,13 @@ export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
     /^(example\.(com|org|net)|test\.(com|org)|iana\.org|localhost)$/.test(host) ||
     host.endsWith(".example");
   if (isPlaceholderHost) {
-    return { embedUrl: null, provider: "unknown", id: null };
+    return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
   }
 
   // URL inconnue mais valide : on autorise un iframe direct uniquement en HTTPS.
   if (u.protocol === "https:") {
-    return { embedUrl: trimmed, provider: "url", id: null };
+    return { embedUrl: trimmed, provider: "url", id: null, kind: "iframe" };
   }
 
-  return { embedUrl: null, provider: "unknown", id: null };
+  return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
 }

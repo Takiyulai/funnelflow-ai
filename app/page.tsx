@@ -233,7 +233,7 @@ const translations = {
           desc: "Pour lancer, publier et commencer à vendre sans empiler les outils.",
           features: [
             "4 agents IA coordonnés par tunnel",
-            "5 tunnels · 1 publié",
+            "5 tunnels · 5 publiés",
             "5 générations + 20 régénérations IA / mois",
             "Email IA : 1 séquence complète / mois",
             "CRM intégré · 500 contacts · 500 emails / mois",
@@ -478,7 +478,7 @@ const translations = {
           desc: "Launch, publish and start selling without stacking tools.",
           features: [
             "4 coordinated AI agents per funnel",
-            "5 funnels · 1 published",
+            "5 funnels · 5 published",
             "5 generations + 20 AI regenerations / month",
             "AI email: 1 complete sequence / month",
             "Built-in CRM · 500 contacts · 500 emails / month",
@@ -715,7 +715,7 @@ const translations = {
           desc: "Para lanzar, publicar y empezar a vender sin acumular herramientas.",
           features: [
             "4 agentes IA coordinados por embudo",
-            "5 embudos · 1 publicado",
+            "5 embudos · 5 publicados",
             "5 generaciones + 20 regeneraciones IA / mes",
             "Email IA: 1 secuencia completa / mes",
             "CRM integrado · 500 contactos · 500 emails / mes",

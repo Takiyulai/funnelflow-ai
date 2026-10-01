@@ -19,6 +19,7 @@ import type {
   ImageAnimation,
   SectionImage,
   SectionBackground,
+  SectionMedia,
   VideoSource,
 } from "@/lib/funnels/types";
 import { compressImage, formatBytes } from "@/lib/images/compress";
@@ -34,6 +35,8 @@ type Props = {
 
 const MAX_INPUT_SIZE = 8 * 1024 * 1024;
 const MAX_BG_SIZE = 6 * 1024 * 1024;
+const MAX_MEDIA_SIZE = 15 * 1024 * 1024;
+const VIDEO_ACCEPT = "video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv";
 
 const SIZE_OPTIONS: { value: ImageSize; label: string; hint: string }[] = [
   { value: "sm", label: "S", hint: "320px" },
@@ -67,10 +70,15 @@ const BG_POSITION_OPTIONS: {
 
 export function MediaTab({ section, funnel, onChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [bgError, setBgError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [bgUploading, setBgUploading] = useState(false);
   const [lastSize, setLastSize] = useState<number | null>(null);
   const [lastBgSize, setLastBgSize] = useState<number | null>(null);
@@ -181,6 +189,68 @@ export function MediaTab({ section, funnel, onChange }: Props) {
         posterUrl: video?.posterUrl,
       },
     });
+  };
+
+  const uploadMediaFile = async (file: File, spot: string) => {
+    if (file.size > MAX_MEDIA_SIZE) {
+      throw new Error(`Fichier trop lourd (${formatBytes(file.size)}). Limite : 15 Mo.`);
+    }
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("spotId", spot);
+    formData.set("funnelId", funnel.meta?.tunnelGroupId || funnel.funnelName || "editor");
+    const response = await fetch("/api/media/upload", { method: "POST", body: formData });
+    const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!response.ok || !payload.url) {
+      throw new Error(payload.error || "L'envoi du média a échoué.");
+    }
+    return payload.url;
+  };
+
+  const handleVideoFile = async (file: File) => {
+    setMediaError(null);
+    if (!file.type.startsWith("video/")) {
+      setMediaError("Choisis une vidéo MP4, WebM, MOV ou MKV.");
+      return;
+    }
+    setVideoUploading(true);
+    try {
+      const url = await uploadMediaFile(file, `${section.id}-video`);
+      onChange({ video: { provider: "upload", url } });
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "L'envoi de la vidéo a échoué.");
+    } finally {
+      setVideoUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
+  const handleGalleryFiles = async (files: FileList) => {
+    setMediaError(null);
+    setGalleryUploading(true);
+    try {
+      const uploaded: SectionMedia[] = [];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+          throw new Error(`Format non pris en charge : ${file.name}`);
+        }
+        const kind: SectionMedia["kind"] = file.type.startsWith("video/") ? "video" : "image";
+        const url = await uploadMediaFile(file, `${section.id}-gallery-${uploaded.length + 1}`);
+        uploaded.push({
+          id: globalThis.crypto?.randomUUID?.() ?? `media-${Date.now()}-${uploaded.length}`,
+          kind,
+          url,
+          alt: file.name.replace(/\.[^.]+$/, ""),
+          ...(kind === "video" ? { provider: "upload" as const } : {}),
+        });
+      }
+      onChange({ medias: [...(section.medias ?? []), ...uploaded] });
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "L'envoi des médias a échoué.");
+    } finally {
+      setGalleryUploading(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
+    }
   };
 
   // ── Fond de section ────────────────────────────────────────────
@@ -470,8 +540,35 @@ export function MediaTab({ section, funnel, onChange }: Props) {
               >
                 URL directe
               </ModeBtn>
+              <ModeBtn
+                active={video?.provider === "upload"}
+                onClick={() => videoInputRef.current?.click()}
+              >
+                Fichier
+              </ModeBtn>
             </div>
           </Field>
+
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept={VIDEO_ACCEPT}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleVideoFile(file);
+            }}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            disabled={videoUploading}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-black/30 px-4 py-4 text-xs text-white/60 transition-colors hover:border-amber-300/40 hover:text-amber-300 disabled:opacity-50"
+          >
+            {videoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {videoUploading ? "Envoi de la vidéo…" : "Uploader une vidéo (max 15 Mo)"}
+          </button>
 
           <Field label="URL de la vidéo">
             <input
@@ -500,6 +597,67 @@ export function MediaTab({ section, funnel, onChange }: Props) {
             </button>
           )}
         </div>
+      </section>
+
+      <div className="border-t border-white/10" />
+
+      <section>
+        <div className="mb-2 flex items-center gap-2">
+          <Layers className="h-4 w-4 text-white/60" />
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white/70">
+            Médias supplémentaires
+          </h3>
+        </div>
+        <p className="mb-3 text-[11px] leading-relaxed text-white/45">
+          Ajoute plusieurs images et vidéos : elles seront disposées automatiquement dans une galerie responsive.
+        </p>
+        <input
+          ref={galleryInputRef}
+          type="file"
+          multiple
+          accept={`image/*,${VIDEO_ACCEPT}`}
+          onChange={(event) => {
+            if (event.target.files?.length) void handleGalleryFiles(event.target.files);
+          }}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={galleryUploading}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-black/30 px-4 py-5 text-xs text-white/60 transition-colors hover:border-amber-300/40 hover:text-amber-300 disabled:opacity-50"
+        >
+          {galleryUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {galleryUploading ? "Envoi des médias…" : "Ajouter des images ou vidéos"}
+        </button>
+        {(section.medias ?? []).length > 0 && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {(section.medias ?? []).map((media) => (
+              <div key={media.id} className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                {media.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={media.url} alt={media.alt ?? ""} className="h-full w-full object-cover" />
+                ) : (
+                  <video src={media.url} preload="metadata" className="h-full w-full object-cover" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onChange({ medias: (section.medias ?? []).filter((item) => item.id !== media.id) })}
+                  className="absolute right-1.5 top-1.5 rounded-md bg-black/75 p-1 text-white/80 hover:bg-rose-500/80"
+                  title="Retirer ce média"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {mediaError && (
+          <p className="mt-2 flex items-start gap-1 text-[11px] text-rose-300">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            {mediaError}
+          </p>
+        )}
       </section>
 
       <div className="border-t border-white/10" />

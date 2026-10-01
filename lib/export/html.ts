@@ -1208,6 +1208,28 @@ function splitBulletTitleDesc(
   return { title, description };
 }
 
+function renderSectionMediaGallery(medias: FunnelSection["medias"]): string {
+  const visible = (medias ?? []).filter((media) => isUsableMediaUrl(media.url));
+  if (visible.length === 0) return "";
+  const items = visible.map((media, index) => {
+    const delay = Math.min(index, 8) * 90;
+    const style = `animation-delay:${delay}ms`;
+    if (media.kind === "image") {
+      return `<figure class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><img src="${escapeAttr(media.url)}" alt="${escapeAttr(media.alt || "")}" loading="lazy" /></figure>`;
+    }
+    const parsed = parseVideoUrl(media.url);
+    if (!parsed) return "";
+    if (parsed.kind === "file") {
+      const poster = media.posterUrl ? ` poster="${escapeAttr(media.posterUrl)}"` : "";
+      return `<div class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><video controls preload="metadata"${poster}><source src="${escapeAttr(parsed.src)}" /></video></div>`;
+    }
+    return `<div class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><iframe src="${escapeAttr(parsed.src)}" title="${escapeAttr(media.alt || "Vidéo")}" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+  }).join("");
+  return items
+    ? `<div class="ff-section-inner"><div class="ff-section-media-gallery" data-ff-media-gallery="true">${items}</div></div>`
+    : "";
+}
+
 function renderBullets(section: FunnelSection): string {
   if (!section.bullets?.length) return "";
   const defaultIconName = section.iconName || "check";
@@ -2498,6 +2520,9 @@ function renderSection(
     section.image.mode !== "none" &&
     (isUsableMediaUrl(section.image.url) ||
       isUsableMediaUrl(materializeSectionImage(section.image, ctx.funnel)?.url));
+  const hasExtraMediaEarly = (section.medias ?? []).some((media) =>
+    isUsableMediaUrl(media.url),
+  );
 
   // 🆕 FIX PARITÉ SKINS (voir bloc de commentaires ci-dessus) : pour les
   // templates "factory" (bold-energy, lead-snap, story-sell, clean-light,
@@ -2508,7 +2533,7 @@ function renderSection(
   // makeUrgency ne gèrent pas d'image côté live) ; avec image, on retombe
   // sur le rendu générique existant (inchangé) pour ces deux-là.
   const skinTokens = getFactorySkinTokens(ctx.funnel);
-  if (!hasImageEarly && !hasVideoEarly) {
+  if (!hasImageEarly && !hasVideoEarly && !hasExtraMediaEarly) {
     if (skinTokens) {
       if (
         section.type === "cta" &&
@@ -2531,7 +2556,7 @@ function renderSection(
   // présente (seule la vidéo, non gérée par le skin, retombe sur le
   // générique) — avant ce fix, une section process/program avec image
   // perdait tout le fix de centrage/alignement du Head().
-  if (!hasVideoEarly && skinTokens) {
+  if (!hasVideoEarly && !hasExtraMediaEarly && skinTokens) {
     if (
       (section.type === "process" || section.type === "program") &&
       Array.isArray(section.bullets) &&
@@ -2591,6 +2616,7 @@ function renderSection(
     : "";
 
   const overlay = sectionOverlay(section);
+  const mediaGallery = renderSectionMediaGallery(section.medias);
 
   let inner = "";
   if (layout === "split" && hasImage && !hasVideo) {
@@ -2652,7 +2678,7 @@ function renderSection(
   // exportées. Miroir de FunnelPreview.tsx qui pose déjà data-ff-section
   // partout dans l'aperçu live.
   return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${sectionTextAlignAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
-${overlay}${inner}
+${overlay}${inner}${mediaGallery}
 </section>`;
 }
 

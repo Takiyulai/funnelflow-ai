@@ -64,6 +64,7 @@ import { RawHtmlCtaBridge } from "@/components/funnel/sections/RawHtmlCtaBridge"
 import { DayProgressButton } from "@/components/funnel/DayProgressButton";
 import { splitTextPair } from "@/lib/funnels/text";
 import { FunnelCtaContext } from "./FunnelCtaContext";
+import { SectionMediaGallery } from "./SectionMediaGallery";
 
 type PreviewMode = "desktop" | "mobile";
 type ForcedMode = PreviewMode | "raw";
@@ -1675,13 +1676,19 @@ function EvergreenPlayerBlock({
                   : embed.embedUrl;
               return (
                 <div className="relative aspect-video w-full bg-black">
-                  <iframe
-                    src={src}
-                    title="Webinaire (replay automatisé)"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 h-full w-full"
-                  />
+                  {embed.kind === "file" ? (
+                    <video controls preload="metadata" className="absolute inset-0 h-full w-full object-contain">
+                      <source src={src} />
+                    </video>
+                  ) : (
+                    <iframe
+                      src={src}
+                      title="Webinaire (replay automatisé)"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="absolute inset-0 h-full w-full"
+                    />
+                  )}
                 </div>
               );
             })()}
@@ -1914,6 +1921,8 @@ function HeroBlock({
             )}
           </>
         )}
+
+        <SectionMediaGallery medias={section.medias} />
 
         {extractTimers(section).map((timer) => (
           <TimerRenderer
@@ -2318,6 +2327,8 @@ function StandardSectionBlock({
           </>
         )}
 
+        <SectionMediaGallery medias={section.medias} />
+
         {extractTimers(section).map((timer) => (
           <TimerRenderer
             key={timer.id}
@@ -2692,13 +2703,19 @@ function VideoEmbedBlock({
       style={{ border: "1px solid var(--ff-border, rgba(0,0,0,0.08))" }}
     >
       <div className="relative aspect-video w-full bg-black">
-        <iframe
-          src={embed.embedUrl}
-          title="Vidéo"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          className="absolute inset-0 h-full w-full"
-        />
+        {embed.kind === "file" ? (
+          <video controls preload="metadata" className="absolute inset-0 h-full w-full object-contain">
+            <source src={embed.embedUrl} />
+          </video>
+        ) : (
+          <iframe
+            src={embed.embedUrl}
+            title="Vidéo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full"
+          />
+        )}
       </div>
     </div>
   );

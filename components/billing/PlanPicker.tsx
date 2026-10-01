@@ -13,7 +13,11 @@ function featureLines(plan: Plan): string[] {
   const l = plan.limits;
   const lines: string[] = [];
   lines.push("4 agents IA spécialisés sur chaque tunnel");
-  lines.push(l.funnels === Infinity ? "Tunnels illimités" : `${l.funnels} tunnels`);
+  lines.push(
+    l.funnels === Infinity
+      ? "Tunnels et publications illimités"
+      : `${l.funnels} tunnels · ${l.publishedFunnels} publié${l.publishedFunnels > 1 ? "s" : ""}`,
+  );
   lines.push(
     l.aiFunnelGensPerMonth === Infinity
       ? "Générations IA de tunnel illimitées"
@@ -28,9 +32,7 @@ function featureLines(plan: Plan): string[] {
         : `Régénération IA des sections & pages (${l.aiCopyRegensPerMonth}/mois)`,
     );
   }
-  // Édition avancée des pages (réorganisation par glisser-déposer, redirections
-  // auto) : incluse dès qu'un plan est actif.
-  lines.push("Gestion des pages : glisser-déposer + redirections auto");
+  lines.push("Parcours multi-pages et redirections automatiques");
   if (l.crm) lines.push("CRM leads & contacts");
   if (l.leadsExport) lines.push("Export CSV des leads");
   if (l.campaigns)
@@ -55,6 +57,12 @@ function featureLines(plan: Plan): string[] {
   if (l.prioritySupport) lines.push("Support prioritaire");
   return lines;
 }
+
+const PLAN_DESCRIPTIONS: Record<PlanId, string> = {
+  starter: "Pour lancer, publier et commencer à vendre sans empiler les outils.",
+  pro: "Le meilleur équilibre pour automatiser tes ventes et accélérer.",
+  agency: "Pour produire en volume et piloter plusieurs activités sans plafond.",
+};
 
 export function PlanPicker({
   currentPlan,
@@ -209,6 +217,9 @@ export function PlanPicker({
             <span className="text-4xl font-black text-ink">0€</span>
             <span className="mb-1.5 text-sm text-muted">sans limite de durée</span>
           </div>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            Pour tester toute la méthode et construire ton premier tunnel.
+          </p>
           <ul className="mt-5 flex-1 space-y-2.5">
             {["4 agents IA spécialisés", "1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
               <li key={feature} className="flex items-start gap-2 text-sm text-ink">
@@ -253,6 +264,9 @@ export function PlanPicker({
                 <span className="text-4xl font-black text-ink">{plan.priceEur}€</span>
                 <span className="mb-1.5 text-sm text-muted">/ mois</span>
               </div>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                {PLAN_DESCRIPTIONS[id]}
+              </p>
 
               <ul className="mt-5 flex-1 space-y-2.5">
                 {featureLines(plan).map((f, i) => (

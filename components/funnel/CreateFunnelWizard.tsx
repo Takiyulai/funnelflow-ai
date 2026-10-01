@@ -920,14 +920,22 @@ export function CreateFunnelWizard() {
       // l'utilisateur a explicitement activé « Utiliser les couleurs de ma
       // marque » (étape Template) — sinon le design retourné par l'IA (donc
       // l'identité par défaut du template) est conservé tel quel.
+      const brandPalette = generationBrief.brandColors ?? [];
       const enrichedFunnel = {
         ...data.funnel,
         design: {
           ...data.funnel.design,
           ...(generationBrief.brandColorsEnabled
             ? {
-                primaryColor: generationBrief.mainColor ?? data.funnel.design.primaryColor,
-                secondaryColor: generationBrief.secondaryColor ?? data.funnel.design.secondaryColor,
+                // Ordre exposé dans TemplateGalleryStep : boutons, fond sombre,
+                // détails, accent spécial. Ne jamais retomber sur les deux
+                // anciens champs quand la palette complète est disponible.
+                secondaryColor:
+                  brandPalette[0] ?? generationBrief.secondaryColor ?? data.funnel.design.secondaryColor,
+                primaryColor:
+                  brandPalette[1] ?? generationBrief.mainColor ?? data.funnel.design.primaryColor,
+                accentColor: brandPalette[2] ?? data.funnel.design.accentColor,
+                accentColor2: brandPalette[3] ?? data.funnel.design.accentColor2,
               }
             : {}),
           brandColorsEnabled: generationBrief.brandColorsEnabled === true,
@@ -1018,9 +1026,21 @@ export function CreateFunnelWizard() {
     emails: [],
     seo: { title: brief.offerName, description: brief.promise },
     design: {
-      primaryColor: brief.mainColor ?? "#080E1A",
-      secondaryColor: brief.secondaryColor ?? "#C7A436",
-      accentColor: "#31845C",
+      primaryColor:
+        brief.brandColorsEnabled && brief.brandColors?.[1]
+          ? brief.brandColors[1]
+          : brief.mainColor ?? "#080E1A",
+      secondaryColor:
+        brief.brandColorsEnabled && brief.brandColors?.[0]
+          ? brief.brandColors[0]
+          : brief.secondaryColor ?? "#C7A436",
+      accentColor:
+        brief.brandColorsEnabled && brief.brandColors?.[2]
+          ? brief.brandColors[2]
+          : "#31845C",
+      accentColor2:
+        brief.brandColorsEnabled ? brief.brandColors?.[3] : undefined,
+      brandColorsEnabled: brief.brandColorsEnabled === true,
       style: brief.designStyle,
     },
     defaultCta: brief.primaryCta,

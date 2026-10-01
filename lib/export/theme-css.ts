@@ -2205,6 +2205,34 @@ textarea.ff-input {
 [data-ff-template] [data-ff-cta][data-ff-cta-align="left"] { margin-left: 0 !important; margin-right: auto !important; }
 [data-ff-template] [data-ff-cta][data-ff-cta-align="center"] { margin-left: auto !important; margin-right: auto !important; }
 [data-ff-template] [data-ff-cta][data-ff-cta-align="right"] { margin-left: auto !important; margin-right: 0 !important; }
+.ff-section-media-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 20px;
+  margin-top: 28px;
+}
+.ff-section-media-item {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ff-border, rgba(255,255,255,.12));
+  border-radius: var(--ff-img-radius, 16px);
+  background: #000;
+}
+.ff-section-media-item :is(img, video, iframe) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+}
+@container (max-width: 560px) {
+  .ff-section-media-gallery { grid-template-columns: 1fr; gap: 14px; }
+}
+@media (max-width: 640px) {
+  .ff-section-media-gallery { grid-template-columns: 1fr; gap: 14px; }
+}
 .ff-checkbox {
   display: flex;
   align-items: center;
@@ -3575,6 +3603,16 @@ const THEMES_CSS = `
 .ff-page[data-ff-theme][data-ff-branded="true"] .ff-card-elevated {
   background: var(--ff-card-bg, var(--ff-surface)) !important;
   border-color: var(--ff-card-border, var(--ff-border)) !important;
+}
+.ff-page[data-ff-theme][data-ff-branded="true"] .ff-section:nth-of-type(3n + 2) .ff-eyebrow {
+  color: var(--ff-accent2, var(--ff-accent)) !important;
+  border-color: color-mix(in srgb, var(--ff-accent2, var(--ff-accent)) 45%, transparent) !important;
+}
+.ff-page[data-ff-theme][data-ff-branded="true"] .ff-section:nth-of-type(3n + 2) .ff-card:nth-child(even) {
+  border-color: color-mix(in srgb, var(--ff-accent2, var(--ff-accent)) 55%, transparent) !important;
+}
+.ff-page[data-ff-theme][data-ff-branded="true"] :is(.ff-price, .ff-pricing-price) {
+  color: var(--ff-accent3, var(--ff-accent2, var(--ff-accent))) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
