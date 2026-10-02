@@ -165,7 +165,7 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     priceEur: 59,
-    priceXof: 500,
+    priceXof: 1000,
     envPriceKey: "STRIPE_PRICE_PRO",
     limits: {
       funnels: 25,
