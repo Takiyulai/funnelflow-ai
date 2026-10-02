@@ -4002,25 +4002,10 @@
 [data-ff-template] .ff-footer { margin-bottom: 0 !important; }
 [data-ff-template] > *:last-child { margin-bottom: 0 !important; }
 
-/* ═══ 🆕 ANTI-BANDE VIDE SOUS LE FOOTER (correctif définitif) ═══
-   La chaîne « sticky footer » ci-dessus (.ff-fill-col + margin-top:auto) ne
-   fonctionne que si TOUS les maillons flex aboutissent : shell 100vh →
-   FunnelPreview → .ff-page → corps → footer. Elle casse dès qu'un conteneur
-   sort de cette chaîne — cadre mobile à hauteur fixe (640px), carte d'aperçu de
-   l'éditeur, page plus courte que l'écran, tunnel cloné sans footer standard…
-   et l'on voyait alors le fond du conteneur (blanc, #1a1a1a ou #0B0F14) sous
-   le footer.
-
-   Correctif indépendant de la chaîne flex : la teinte du footer « déborde »
-   vers le bas via un box-shadow. Un box-shadow est de l'encre pure — il
-   n'occupe AUCUNE place dans le flux et n'agrandit PAS la zone scrollable
-   (contrairement à un ::after en position absolue, qui rallongerait vraiment
-   la page). Quel que soit l'espace résiduel, il prend la couleur du footer.
-   Sans effet dès que la page remplit l'écran. */
-[data-ff-template] .ff-footer {
-  position: relative;
-  box-shadow: 0 50vh 0 50vh var(--ff-footer-bg, #0b0f14);
-}
+/* Le footer reste le dernier élément réel de la page. Une ancienne ombre de
+   50vh peignait artificiellement une grande zone vide sous celui-ci dans les
+   aperçus à défilement interne. La chaîne flex ci-dessus suffit désormais. */
+[data-ff-template] .ff-footer { position: relative; }
 
 /* ═══ 🆕 Flèche des CTA (skins) : glisse vers la droite au survol ═══ */
 .sk-cta-arrow {
@@ -4371,24 +4356,38 @@
 .ff-section-media-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  align-items: start;
   gap: 20px;
   margin-top: 28px;
 }
 .ff-section-media-item {
   position: relative;
-  aspect-ratio: 16 / 9;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--ff-border, rgba(255,255,255,.12));
   border-radius: var(--ff-img-radius, 16px);
   background: #000;
 }
-.ff-section-media-item :is(img, video, iframe) {
+.ff-section-media-item--video {
+  aspect-ratio: 16 / 9;
+}
+.ff-section-media-item--image {
+  background: var(--ff-surface, transparent);
+}
+.ff-section-media-item--video :is(video, iframe) {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
   object-fit: cover;
+}
+.ff-section-media-item--image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(72vh, 760px);
+  border: 0;
+  object-fit: contain;
 }
 @container (max-width: 560px) {
   .ff-section-media-gallery { grid-template-columns: 1fr; gap: 14px; }

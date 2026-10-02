@@ -1051,7 +1051,7 @@ export default function EditorPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(380px,38fr)_minmax(0,62fr)] min-w-0">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,32fr)_minmax(0,68fr)] min-w-0">
         <div
           className={`flex flex-col gap-4 min-w-0 ${
             mobileTab === "preview" ? "hidden lg:flex" : ""

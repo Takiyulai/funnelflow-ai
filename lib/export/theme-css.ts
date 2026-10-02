@@ -1752,13 +1752,7 @@ a.ff-brand-cta:hover {
   max-width: 100%;
   margin-top: 0;
   text-align: center;
-  /* 🆕 Anti-bande vide sous le footer : la teinte du footer déborde vers le bas
-     via un box-shadow (encre pure — n'occupe aucune place dans le flux et
-     n'agrandit pas la zone scrollable). Sur une page plus courte que l'écran,
-     ou collée dans une colonne systeme.io, l'espace résiduel prend la couleur
-     du footer au lieu du fond blanc de la page hôte. */
   position: relative;
-  box-shadow: 0 50vh 0 50vh var(--ff-footer-bg);
   border-top: 1px solid var(--ff-footer-border);
   border-radius: 0;
 }
@@ -2208,24 +2202,38 @@ textarea.ff-input {
 .ff-section-media-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  align-items: start;
   gap: 20px;
   margin-top: 28px;
 }
 .ff-section-media-item {
   position: relative;
-  aspect-ratio: 16 / 9;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--ff-border, rgba(255,255,255,.12));
   border-radius: var(--ff-img-radius, 16px);
   background: #000;
 }
-.ff-section-media-item :is(img, video, iframe) {
+.ff-section-media-item--video {
+  aspect-ratio: 16 / 9;
+}
+.ff-section-media-item--image {
+  background: var(--ff-surface, transparent);
+}
+.ff-section-media-item--video :is(video, iframe) {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
   object-fit: cover;
+}
+.ff-section-media-item--image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(72vh, 760px);
+  border: 0;
+  object-fit: contain;
 }
 @container (max-width: 560px) {
   .ff-section-media-gallery { grid-template-columns: 1fr; gap: 14px; }

@@ -161,8 +161,8 @@ export function Sidebar({
         //
         // `fixed` la sort du flux : elle occupe toujours exactement la hauteur
         // de la fenêtre, quoi qu'il arrive à droite. Le décalage du contenu est
-        // repris par `lg:pl-72` sur le conteneur principal (AppShell).
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 transform flex-col overflow-y-auto border-r border-white/5 px-4 py-5 text-white transition-transform lg:translate-x-0 ${
+        // repris par `lg:pl-60` sur le conteneur principal (AppShell).
+        className={`fixed inset-y-0 left-0 z-50 flex w-60 transform flex-col overflow-y-auto border-r border-white/5 px-3 py-4 text-white transition-transform lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         style={{ background: "#0D1628" }}

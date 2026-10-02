@@ -13,4 +13,12 @@ describe("getVideoEmbed", () => {
     expect(result.kind).toBe("iframe");
     expect(result.embedUrl).toBe("https://www.youtube.com/embed/abcdefghijk");
   });
+
+  it("reconnaît une URL vidéo Cloudinary même sans extension", () => {
+    const result = getVideoEmbed(
+      "https://res.cloudinary.com/demo/video/upload/f_auto,q_auto/autofunnel/uploads/video-id",
+    );
+    expect(result.kind).toBe("file");
+    expect(result.provider).toBe("url");
+  });
 });

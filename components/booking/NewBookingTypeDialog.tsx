@@ -354,7 +354,7 @@ export function NewBookingTypeDialog({
 
   return (
     // 🆕 CENTRAGE. `fixed inset-0` se cale sur le VIEWPORT, pas sur la zone de
-    // contenu : avec la sidebar fixe de 288 px (lg:pl-72 sur AppShell), le
+    // contenu : avec la sidebar fixe de 240 px (lg:pl-60 sur AppShell), le
     // popup apparaissait décalé vers la gauche — centré sur l'écran, donc
     // décentré par rapport à ce que l'utilisateur regarde. On reprend le même
     // décalage que le contenu.
@@ -368,7 +368,7 @@ export function NewBookingTypeDialog({
     // « Étape N sur 5 » se retrouvait à mi-hauteur, loin du regard.
     // On centre donc à toutes les tailles, avec une marge sur les quatre côtés.
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-4 lg:pl-72"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-4 lg:pl-60"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) {
           reset();

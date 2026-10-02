@@ -77,8 +77,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* 🆕 La sidebar est désormais `fixed` (hors du flux) : plus de colonne
           flex à sa gauche, plus de wrapper de fond à étirer, et surtout plus
           de bande vide sous le menu quand le contenu de droite est court.
-          Le décalage se fait par `lg:pl-72`, qui vaut exactement la largeur de
-          la sidebar (w-72). */}
+          Le décalage se fait par `lg:pl-60`, qui vaut exactement la largeur de
+          la sidebar (w-60). */}
       <Sidebar
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onToggleTheme={toggleTheme}
       />
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-60">
         {/* overflow-x-clip (et non hidden) : empêche le débordement horizontal
             SANS faire de <main> un conteneur de défilement — sinon les éléments
             `sticky top-0` (topbar de l'éditeur) collaient au bord du padding et

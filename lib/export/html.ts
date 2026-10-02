@@ -1215,15 +1215,15 @@ function renderSectionMediaGallery(medias: FunnelSection["medias"]): string {
     const delay = Math.min(index, 8) * 90;
     const style = `animation-delay:${delay}ms`;
     if (media.kind === "image") {
-      return `<figure class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><img src="${escapeAttr(media.url)}" alt="${escapeAttr(media.alt || "")}" loading="lazy" /></figure>`;
+      return `<figure class="ff-section-media-item ff-section-media-item--image ff-anim ff-anim-fade-up" style="${style}"><img src="${escapeAttr(media.url)}" alt="${escapeAttr(media.alt || "")}" loading="lazy" /></figure>`;
     }
     const parsed = parseVideoUrl(media.url);
     if (!parsed) return "";
     if (parsed.kind === "file") {
       const poster = media.posterUrl ? ` poster="${escapeAttr(media.posterUrl)}"` : "";
-      return `<div class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><video controls preload="metadata"${poster}><source src="${escapeAttr(parsed.src)}" /></video></div>`;
+      return `<div class="ff-section-media-item ff-section-media-item--video ff-anim ff-anim-fade-up" style="${style}"><video controls preload="metadata"${poster}><source src="${escapeAttr(parsed.src)}" /></video></div>`;
     }
-    return `<div class="ff-section-media-item ff-anim ff-anim-fade-up" style="${style}"><iframe src="${escapeAttr(parsed.src)}" title="${escapeAttr(media.alt || "Vidéo")}" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    return `<div class="ff-section-media-item ff-section-media-item--video ff-anim ff-anim-fade-up" style="${style}"><iframe src="${escapeAttr(parsed.src)}" title="${escapeAttr(media.alt || "Vidéo")}" loading="lazy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
   }).join("");
   return items
     ? `<div class="ff-section-inner"><div class="ff-section-media-gallery" data-ff-media-gallery="true">${items}</div></div>`

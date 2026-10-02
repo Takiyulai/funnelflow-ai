@@ -123,6 +123,51 @@ export function isCloudinaryConfigured(): boolean {
 }
 
 /**
+ * Paramètres signés pour un upload direct navigateur → Cloudinary.
+ *
+ * Les vidéos ne doivent pas transiter par une fonction Vercel : la plateforme
+ * coupe les corps de requête volumineux avant même que `/api/media/upload`
+ * puisse appliquer sa propre limite. Le secret reste ici, côté serveur ; le
+ * navigateur ne reçoit qu'une signature courte, limitée à un dossier et à un
+ * identifiant de contenu précis.
+ */
+export function createDirectUploadSignature(opts: {
+  folder: string;
+  publicId: string;
+}): {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  publicId: string;
+  signature: string;
+} {
+  ensureConfigured();
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME!;
+  const apiKey = process.env.CLOUDINARY_API_KEY!;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET!;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = `${CLOUDINARY_ROOT}/${opts.folder}`.replace(/\/+/g, "/");
+  const params = {
+    folder,
+    overwrite: "false",
+    public_id: opts.publicId,
+    timestamp,
+    unique_filename: "false",
+  };
+  const signature = cloudinary.utils.api_sign_request(params, apiSecret);
+
+  return {
+    cloudName,
+    apiKey,
+    timestamp,
+    folder,
+    publicId: opts.publicId,
+    signature,
+  };
+}
+
+/**
  * Empreinte du CONTENU d'un fichier.
  *
  * Sert d'identifiant Cloudinary : deux fichiers identiques produisent le même

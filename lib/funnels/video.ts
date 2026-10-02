@@ -51,7 +51,10 @@ export function getVideoEmbed(rawUrl?: string | null): VideoEmbed {
     return { embedUrl: null, provider: "unknown", id: null, kind: "iframe" };
   }
 
-  if (/\.(mp4|webm|mov|ogg|m4v|mkv)(\?.*)?$/i.test(u.pathname + u.search)) {
+  if (
+    /\.(mp4|webm|mov|ogg|m4v|mkv)(\?.*)?$/i.test(u.pathname + u.search) ||
+    (u.hostname === "res.cloudinary.com" && u.pathname.includes("/video/upload/"))
+  ) {
     return { embedUrl: trimmed, provider: "url", id: null, kind: "file" };
   }
 

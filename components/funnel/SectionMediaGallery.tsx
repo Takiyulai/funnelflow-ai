@@ -16,7 +16,7 @@ export function SectionMediaGallery({ medias }: { medias?: SectionMedia[] }) {
           return (
             <figure
               key={media.id}
-              className="ff-section-media-item"
+              className="ff-section-media-item ff-section-media-item--image"
               data-ff-anim="fade-up"
               style={{ animationDelay }}
             >
@@ -31,7 +31,7 @@ export function SectionMediaGallery({ medias }: { medias?: SectionMedia[] }) {
         return (
           <div
             key={media.id}
-            className="ff-section-media-item"
+            className="ff-section-media-item ff-section-media-item--video"
             data-ff-anim="fade-up"
             style={{ animationDelay }}
           >

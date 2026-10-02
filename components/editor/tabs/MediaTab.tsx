@@ -38,6 +38,14 @@ const MAX_BG_SIZE = 6 * 1024 * 1024;
 const MAX_MEDIA_SIZE = 15 * 1024 * 1024;
 const VIDEO_ACCEPT = "video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv";
 
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || /\.(mp4|webm|mov|mkv)$/i.test(file.name);
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|svg|avif|bmp|heic|heif)$/i.test(file.name);
+}
+
 const SIZE_OPTIONS: { value: ImageSize; label: string; hint: string }[] = [
   { value: "sm", label: "S", hint: "320px" },
   { value: "md", label: "M", hint: "480px" },
@@ -191,9 +199,73 @@ export function MediaTab({ section, funnel, onChange }: Props) {
     });
   };
 
+  const uploadVideoDirect = async (file: File, spot: string) => {
+    const fileBuffer = await file.arrayBuffer();
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", fileBuffer);
+    const publicId = Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32);
+    const funnelId = funnel.meta?.tunnelGroupId || funnel.funnelName || "editor";
+    const signatureResponse = await fetch("/api/media/upload-signature", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ funnelId, spotId: spot, publicId }),
+    });
+    const signature = (await signatureResponse.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      cloudName?: string;
+      apiKey?: string;
+      timestamp?: number;
+      folder?: string;
+      publicId?: string;
+      signature?: string;
+    };
+    if (
+      !signatureResponse.ok ||
+      !signature.cloudName ||
+      !signature.apiKey ||
+      !signature.timestamp ||
+      !signature.folder ||
+      !signature.publicId ||
+      !signature.signature
+    ) {
+      throw new Error(signature.error || "Impossible de préparer l'envoi de la vidéo.");
+    }
+
+    const directForm = new FormData();
+    directForm.set("file", file);
+    directForm.set("api_key", signature.apiKey);
+    directForm.set("timestamp", String(signature.timestamp));
+    directForm.set("signature", signature.signature);
+    directForm.set("folder", signature.folder);
+    directForm.set("public_id", signature.publicId);
+    directForm.set("overwrite", "false");
+    directForm.set("unique_filename", "false");
+
+    const cloudinaryResponse = await fetch(
+      `https://api.cloudinary.com/v1_1/${encodeURIComponent(signature.cloudName)}/video/upload`,
+      { method: "POST", body: directForm },
+    );
+    const uploaded = (await cloudinaryResponse.json().catch(() => ({}))) as {
+      secure_url?: string;
+      error?: { message?: string };
+    };
+    if (!cloudinaryResponse.ok || !uploaded.secure_url) {
+      throw new Error(uploaded.error?.message || "L'envoi de la vidéo a échoué.");
+    }
+    return uploaded.secure_url;
+  };
+
   const uploadMediaFile = async (file: File, spot: string) => {
     if (file.size > MAX_MEDIA_SIZE) {
       throw new Error(`Fichier trop lourd (${formatBytes(file.size)}). Limite : 15 Mo.`);
+    }
+    // Une vidéo ne transite pas par la fonction Vercel : son corps de requête
+    // peut dépasser la limite de la plateforme avant d'atteindre notre route.
+    if (isVideoFile(file)) {
+      return uploadVideoDirect(file, spot);
     }
     const formData = new FormData();
     formData.set("file", file);
@@ -209,7 +281,7 @@ export function MediaTab({ section, funnel, onChange }: Props) {
 
   const handleVideoFile = async (file: File) => {
     setMediaError(null);
-    if (!file.type.startsWith("video/")) {
+    if (!isVideoFile(file)) {
       setMediaError("Choisis une vidéo MP4, WebM, MOV ou MKV.");
       return;
     }
@@ -231,10 +303,10 @@ export function MediaTab({ section, funnel, onChange }: Props) {
     try {
       const uploaded: SectionMedia[] = [];
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+        if (!isImageFile(file) && !isVideoFile(file)) {
           throw new Error(`Format non pris en charge : ${file.name}`);
         }
-        const kind: SectionMedia["kind"] = file.type.startsWith("video/") ? "video" : "image";
+        const kind: SectionMedia["kind"] = isVideoFile(file) ? "video" : "image";
         const url = await uploadMediaFile(file, `${section.id}-gallery-${uploaded.length + 1}`);
         uploaded.push({
           id: globalThis.crypto?.randomUUID?.() ?? `media-${Date.now()}-${uploaded.length}`,
@@ -636,7 +708,7 @@ export function MediaTab({ section, funnel, onChange }: Props) {
               <div key={media.id} className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/40">
                 {media.kind === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={media.url} alt={media.alt ?? ""} className="h-full w-full object-cover" />
+                  <img src={media.url} alt={media.alt ?? ""} className="h-full w-full object-contain" />
                 ) : (
                   <video src={media.url} preload="metadata" className="h-full w-full object-cover" />
                 )}
