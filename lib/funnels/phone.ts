@@ -1,24 +1,24 @@
 import type { FormFieldItem } from "@/lib/funnels/types";
 
 export const PHONE_DIAL_CODES = [
-  { code: "+33", country: "France" },
-  { code: "+32", country: "Belgique" },
-  { code: "+41", country: "Suisse" },
-  { code: "+1", country: "Canada / USA" },
-  { code: "+237", country: "Cameroun" },
-  { code: "+225", country: "Côte d’Ivoire" },
-  { code: "+221", country: "Sénégal" },
-  { code: "+223", country: "Mali" },
-  { code: "+226", country: "Burkina Faso" },
-  { code: "+229", country: "Bénin" },
-  { code: "+228", country: "Togo" },
-  { code: "+224", country: "Guinée" },
-  { code: "+241", country: "Gabon" },
-  { code: "+242", country: "Congo" },
-  { code: "+243", country: "RDC" },
-  { code: "+212", country: "Maroc" },
-  { code: "+213", country: "Algérie" },
-  { code: "+216", country: "Tunisie" },
+  { code: "+33", country: "France", iso: "FR" },
+  { code: "+32", country: "Belgique", iso: "BE" },
+  { code: "+41", country: "Suisse", iso: "CH" },
+  { code: "+1", country: "Canada / USA", iso: "CA" },
+  { code: "+237", country: "Cameroun", iso: "CM" },
+  { code: "+225", country: "Côte d’Ivoire", iso: "CI" },
+  { code: "+221", country: "Sénégal", iso: "SN" },
+  { code: "+223", country: "Mali", iso: "ML" },
+  { code: "+226", country: "Burkina Faso", iso: "BF" },
+  { code: "+229", country: "Bénin", iso: "BJ" },
+  { code: "+228", country: "Togo", iso: "TG" },
+  { code: "+224", country: "Guinée", iso: "GN" },
+  { code: "+241", country: "Gabon", iso: "GA" },
+  { code: "+242", country: "Congo", iso: "CG" },
+  { code: "+243", country: "RDC", iso: "CD" },
+  { code: "+212", country: "Maroc", iso: "MA" },
+  { code: "+213", country: "Algérie", iso: "DZ" },
+  { code: "+216", country: "Tunisie", iso: "TN" },
 ] as const;
 
 export function phoneDialCodeFieldName(name: string): string {
@@ -46,4 +46,3 @@ export function combinePhoneNumber(
   const internationalLocal = localDigits.replace(/^0+/, "");
   return `+${dialDigits}${internationalLocal}`;
 }
-

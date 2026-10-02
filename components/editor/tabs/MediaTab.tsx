@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Loader2,
   Layers,
+  WandSparkles,
 } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import type {
@@ -23,6 +24,7 @@ import type {
   VideoSource,
 } from "@/lib/funnels/types";
 import { compressImage, formatBytes } from "@/lib/images/compress";
+import { removeImageEdgeBackground } from "@/lib/images/remove-background";
 import { materializeSectionImage } from "@/lib/funnels/resolveMedia";
 import { FrameEditor } from "@/components/editor/FrameEditor";
 
@@ -90,6 +92,8 @@ export function MediaTab({ section, funnel, onChange }: Props) {
   const [bgUploading, setBgUploading] = useState(false);
   const [lastSize, setLastSize] = useState<number | null>(null);
   const [lastBgSize, setLastBgSize] = useState<number | null>(null);
+  const [removingBackground, setRemovingBackground] = useState(false);
+  const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
 
   // ── Image principale — résolution mediaRef → url ──────────────
   // Si le wizard a posé section.image.mediaRef sans url, on matérialise
@@ -128,6 +132,56 @@ export function MediaTab({ section, funnel, onChange }: Props) {
     onChange({ image: { ...image, ...patch } });
   };
 
+  const removeVisibleBackground = async () => {
+    if (!image || !imageUrl) return;
+    setUploadError(null);
+    setBackgroundNotice(null);
+    setRemovingBackground(true);
+    try {
+      const result = await removeImageEdgeBackground(imageUrl);
+      const removedRatio = result.removedPixels / Math.max(1, result.totalPixels);
+      if (removedRatio < 0.002) {
+        updateImage({ transparentBg: true });
+        setBackgroundNotice(
+          "Aucun fond uni n'a été détecté sur les bords. L'image est peut-être déjà détourée.",
+        );
+        return;
+      }
+      onChange({
+        image: {
+          ...image,
+          url: result.dataUrl,
+          mediaRef: undefined,
+          transparentBg: true,
+          sourceHasAlpha: true,
+          backgroundRemoved: true,
+        },
+      });
+      setBackgroundNotice("Fond retiré : seul le mockup sera affiché.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Le fond de cette image n'a pas pu être retiré.",
+      );
+    } finally {
+      setRemovingBackground(false);
+    }
+  };
+
+  const handleTransparencyChange = (enabled: boolean) => {
+    if (!enabled) {
+      updateImage({ transparentBg: false });
+      setBackgroundNotice(null);
+      return;
+    }
+    if (image?.sourceHasAlpha || image?.backgroundRemoved) {
+      updateImage({ transparentBg: true });
+      return;
+    }
+    void removeVisibleBackground();
+  };
+
   const handleFile = async (file: File) => {
     setUploadError(null);
     if (!file.type.startsWith("image/")) {
@@ -157,6 +211,8 @@ export function MediaTab({ section, funnel, onChange }: Props) {
           url: result.dataUrl,
           alt: section.image?.alt ?? "",
           transparentBg: section.image?.transparentBg ?? autoTransparent,
+          sourceHasAlpha: autoTransparent,
+          backgroundRemoved: false,
           size: section.image?.size ?? "lg",
           customWidth: section.image?.customWidth,
           animation: section.image?.animation,
@@ -497,10 +553,32 @@ export function MediaTab({ section, funnel, onChange }: Props) {
 
             <CheckRow
               checked={transparentBg}
-              onChange={(v) => updateImage({ transparentBg: v })}
+              onChange={handleTransparencyChange}
               label="Fond transparent"
-              hint="Pour PNG détouré : retire le fond blanc et la bordure"
+              hint="Retire le cadre AutoFunnel et détoure automatiquement un fond uni intégré au fichier"
             />
+
+            {transparentBg && (
+              <button
+                type="button"
+                onClick={() => void removeVisibleBackground()}
+                disabled={removingBackground}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300/25 bg-amber-300/[0.06] px-3 py-2 text-[11px] font-medium text-amber-200 transition-colors hover:border-amber-300/50 hover:bg-amber-300/[0.1] disabled:cursor-wait disabled:opacity-60"
+              >
+                {removingBackground ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <WandSparkles className="h-3.5 w-3.5" />
+                )}
+                {removingBackground ? "Détourage en cours…" : "Détourer le fond visible"}
+              </button>
+            )}
+
+            {backgroundNotice && (
+              <p className="text-[11px] leading-relaxed text-emerald-300">
+                {backgroundNotice}
+              </p>
+            )}
 
             <Field label="Taille">
               <div className="flex flex-wrap gap-1.5">

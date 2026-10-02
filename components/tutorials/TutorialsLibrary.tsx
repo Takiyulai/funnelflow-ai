@@ -3,10 +3,15 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ExternalLink, Loader2, Play, Plus, Trash2, Video } from "lucide-react";
 import type { Tutorial } from "@/lib/tutorials";
-import { isTellaVideoUrl, tutorialEmbedUrl, tutorialThumbnail } from "@/lib/tutorials";
+import {
+  isTellaVideoUrl,
+  sortTutorialsOldestFirst,
+  tutorialEmbedUrl,
+  tutorialThumbnail,
+} from "@/lib/tutorials";
 
-type Draft = { title: string; description: string; videoUrl: string; thumbnailUrl: string; sortOrder: number };
-const EMPTY: Draft = { title: "", description: "", videoUrl: "", thumbnailUrl: "", sortOrder: 0 };
+type Draft = { title: string; description: string; videoUrl: string; thumbnailUrl: string };
+const EMPTY: Draft = { title: "", description: "", videoUrl: "", thumbnailUrl: "" };
 
 export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
   const [tutorials, setTutorials] = useState<Tutorial[]>([]);
@@ -21,7 +26,9 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
     setLoading(true);
     const response = await fetch("/api/tutorials", { cache: "no-store" }).catch(() => null);
     const data = response ? await response.json().catch(() => ({})) : {};
-    if (response?.ok && data?.ok) setTutorials(data.tutorials ?? []);
+    if (response?.ok && data?.ok) {
+      setTutorials(sortTutorialsOldestFirst(data.tutorials ?? []));
+    }
     else setError(data?.message ?? "Impossible de charger les tutoriels.");
     setLoading(false);
   }
@@ -68,8 +75,7 @@ export function TutorialsLibrary({ isAdmin }: { isAdmin: boolean }) {
             <input required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Titre du tutoriel" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <input required type="text" value={draft.videoUrl} onChange={(event) => setDraft({ ...draft, videoUrl: event.target.value })} placeholder="Lien vidéo ou code iframe Tella" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
             <textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Ce que l'utilisateur apprendra…" className="min-h-24 rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436] md:col-span-2" />
-            <input type="url" value={draft.thumbnailUrl} onChange={(event) => setDraft({ ...draft, thumbnailUrl: event.target.value })} placeholder="Image d'aperçu personnalisée (URL, facultatif)" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
-            <input type="number" value={draft.sortOrder} onChange={(event) => setDraft({ ...draft, sortOrder: Number(event.target.value) })} aria-label="Ordre d'affichage" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436]" />
+            <input type="url" value={draft.thumbnailUrl} onChange={(event) => setDraft({ ...draft, thumbnailUrl: event.target.value })} placeholder="Image d'aperçu personnalisée (URL, facultatif)" className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-[#C7A436] md:col-span-2" />
             {draft.videoUrl.trim() && (
               <div className="md:col-span-2">
                 <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Aperçu de la vidéo</p>

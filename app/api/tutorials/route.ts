@@ -14,8 +14,10 @@ export async function GET() {
   const { data, error } = await sb
     .from("tutorials")
     .select("id,title,description,video_url,thumbnail_url,sort_order,is_published,created_at")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
+    // Ordre produit : les premiers tutoriels ajoutés restent en tête.
+    // `id` stabilise l'ordre si deux lignes partagent le même timestamp.
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
   if (error) {
     console.error("[tutorials] list failed", error);
     return NextResponse.json({ ok: false, message: "Les tutoriels sont momentanément indisponibles." }, { status: 503 });

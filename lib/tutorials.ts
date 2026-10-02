@@ -22,6 +22,26 @@ export function tutorialFromRow(row: Record<string, unknown>): Tutorial {
   };
 }
 
+/** Ordre d'affichage officiel de la bibliothèque : première vidéo ajoutée,
+ * première affichée. Le tri défensif côté interface protège aussi contre une
+ * réponse mise en cache ou issue d'un ancien endpoint. */
+export function sortTutorialsOldestFirst(
+  tutorials: readonly Tutorial[],
+): Tutorial[] {
+  return [...tutorials].sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt);
+    const rightTime = Date.parse(right.createdAt);
+    const leftValid = Number.isFinite(leftTime);
+    const rightValid = Number.isFinite(rightTime);
+
+    if (leftValid && rightValid && leftTime !== rightTime) {
+      return leftTime - rightTime;
+    }
+    if (leftValid !== rightValid) return leftValid ? -1 : 1;
+    return left.id.localeCompare(right.id);
+  });
+}
+
 function decodeEmbedEntities(value: string): string {
   return value
     .replace(/&quot;|&#34;/gi, '"')

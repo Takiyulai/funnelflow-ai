@@ -222,6 +222,10 @@ export type SectionImage = {
   sourceUrl?: string;
   suggestionQuery?: string;
   transparentBg?: boolean;
+  /** Le fichier importé contenait déjà de vrais pixels transparents. */
+  sourceHasAlpha?: boolean;
+  /** Un fond uni connecté aux bords a été détouré dans l'éditeur. */
+  backgroundRemoved?: boolean;
   size?: ImageSize;
   customWidth?: number;
   animation?: ImageAnimation;

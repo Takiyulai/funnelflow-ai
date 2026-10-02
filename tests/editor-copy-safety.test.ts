@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { regenerateSectionPrompt } from "@/lib/ai/prompts";
 import { mergeRegeneratedSections } from "@/lib/funnels/mergeRegeneratedSections";
-import { combinePhoneNumber, isPhoneField } from "@/lib/funnels/phone";
+import {
+  combinePhoneNumber,
+  isPhoneField,
+  PHONE_DIAL_CODES,
+} from "@/lib/funnels/phone";
 import type { FunnelBrief, FunnelSection } from "@/lib/funnels/types";
 
 const brief: FunnelBrief = {
@@ -96,5 +100,10 @@ describe("champ téléphone rétrocompatible", () => {
 
   it("assemble l'indicatif et le numéro local", () => {
     expect(combinePhoneNumber("+237", "069 12-34-56")).toBe("+23769123456");
+  });
+
+  it("associe un pays ISO à chaque indicatif pour afficher un vrai drapeau", () => {
+    expect(PHONE_DIAL_CODES.every((entry) => entry.iso.length === 2)).toBe(true);
+    expect(PHONE_DIAL_CODES.find((entry) => entry.code === "+229")?.iso).toBe("BJ");
   });
 });

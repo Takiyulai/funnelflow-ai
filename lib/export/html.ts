@@ -885,6 +885,8 @@ const FF_FORM_SCRIPT = `<script>(function(){
     for(var i=0;i<forms.length;i++) bind(forms[i]);
     var phoneInputs=document.querySelectorAll(".ff-phone-field input[type=tel]");
     for(var p=0;p<phoneInputs.length;p++){phoneInputs[p].addEventListener("input",function(){this.value=this.value.replace(/\D/g,"");});}
+    var phoneCodes=document.querySelectorAll(".ff-phone-code");
+    for(var pc=0;pc<phoneCodes.length;pc++){phoneCodes[pc].addEventListener("change",function(){var o=this.options[this.selectedIndex];var img=this.parentNode.querySelector(".ff-phone-flag");if(img&&o){img.src=o.getAttribute("data-flag")||"";}});}
     var ov=document.querySelector("[data-ff-popup-overlay]");
     if(ov){
       var openers=document.querySelectorAll("[data-ff-popup-open]");
@@ -2208,11 +2210,14 @@ function renderFormFields(
       if (isPhoneField(f)) {
         const dialName = escapeAttr(phoneDialCodeFieldName(f.name || `field_${idx}`));
         const defaultDialCode = f.countryCode || "+33";
+        const defaultDialCountry =
+          PHONE_DIAL_CODES.find((entry) => entry.code === defaultDialCode) ??
+          PHONE_DIAL_CODES[0];
         const dialOptions = PHONE_DIAL_CODES.map(
           (entry) =>
-            `<option value="${escapeAttr(entry.code)}"${entry.code === defaultDialCode ? " selected" : ""}>${escapeHtml(entry.country)} ${escapeHtml(entry.code)}</option>`,
+            `<option value="${escapeAttr(entry.code)}" data-flag="https://flagcdn.com/w40/${escapeAttr(entry.iso.toLowerCase())}.png"${entry.code === defaultDialCode ? " selected" : ""}>${escapeHtml(entry.code)} · ${escapeHtml(entry.country)}</option>`,
         ).join("");
-        input = `<div class="ff-phone-field"><select class="ff-input ff-phone-code" name="${dialName}" aria-label="Indicatif du pays">${dialOptions}</select><input class="ff-input" type="tel" inputmode="numeric" pattern="[0-9]{5,15}" maxlength="15" id="${name}" name="${name}" placeholder="${ph || "Numéro de téléphone"}"${req} /></div>`;
+        input = `<div class="ff-phone-field"><div class="ff-phone-code-wrap"><img class="ff-phone-flag" src="https://flagcdn.com/w40/${escapeAttr(defaultDialCountry.iso.toLowerCase())}.png" alt="" width="20" height="14" /><select class="ff-input ff-phone-code" name="${dialName}" aria-label="Indicatif du pays">${dialOptions}</select></div><input class="ff-input" type="tel" inputmode="numeric" pattern="[0-9]{5,15}" maxlength="15" id="${name}" name="${name}" placeholder="${ph || "Numéro de téléphone"}"${req} /></div>`;
       } else if (f.type === "textarea") {
         input = `<textarea class="ff-input" id="${name}" name="${name}" placeholder="${ph}" rows="4"${req}></textarea>`;
       } else if (f.type === "select") {
