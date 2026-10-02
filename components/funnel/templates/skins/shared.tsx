@@ -99,6 +99,11 @@ export function SkinSection({
       : typeof bg?.overlay === "number"
         ? Math.min(100, Math.max(0, bg.overlay * 100))
         : 0;
+  const rawContentOffset = section.style?.contentOffsetY;
+  const contentOffsetY =
+    typeof rawContentOffset === "number" && Number.isFinite(rawContentOffset)
+    ? Math.max(-120, Math.min(120, rawContentOffset))
+    : 0;
 
   const bgStyle: React.CSSProperties = hasBgImage
     ? {
@@ -120,6 +125,7 @@ export function SkinSection({
       data-ff-skin="true"
       data-ff-text-align={section.style?.align || undefined}
       data-ff-has-bg-image={hasBgImage ? "true" : undefined}
+      data-ff-content-offset={contentOffsetY !== 0 ? "true" : undefined}
       className={`t1-sec relative ${className ?? ""}`}
       style={{
         ...(colors.bg ? { backgroundColor: colors.bg } : {}),
@@ -128,6 +134,9 @@ export function SkinSection({
           ? ({ ["--ff-accent" as string]: colors.accent } as React.CSSProperties)
           : {}),
         ...bgStyle,
+        ...(contentOffsetY !== 0
+          ? ({ ["--ff-content-offset-y" as string]: `${contentOffsetY}px` } as React.CSSProperties)
+          : {}),
         ...style,
       }}
     >

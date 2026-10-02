@@ -295,6 +295,31 @@
   transition-delay: var(--ff-anim-delay, 0ms);
 }
 
+/* Ajustement fin demandé dans l'éditeur. Le déplacement porte sur le contenu
+   interne uniquement : le fond et la hauteur de la section restent stables. */
+[data-ff-template] .ff-section[data-ff-content-offset="true"] > div.relative,
+[data-ff-template] .t1-sec[data-ff-content-offset="true"] > div.relative {
+  transform: translateY(var(--ff-content-offset-y, 0px));
+}
+
+/* Garde-fou commun à tous les patterns FAQ : l'introduction reste centrée et
+   occupe la largeur utile, tandis que questions et réponses restent à gauche. */
+[data-ff-template] [data-ff-section="faq"] [data-ff-faq-content="true"],
+[data-ff-template] [data-ff-section="faq"] [data-ff-faq-intro="true"] {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+/* Une vidéo est un bloc de démonstration pleine largeur : jamais une colonne
+   de split. Le texte la précède dans le flux sur desktop comme sur mobile. */
+[data-ff-template] .ff-section[data-ff-has-video="true"] > div.relative {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center;
+}
+
 /* Garde-fou SEO pour les skins historiques avant leur normalisation JS. */
 [data-ff-template] [data-reveal],
 [data-ff-template] [data-reveal].is-in {

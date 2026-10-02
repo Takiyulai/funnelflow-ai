@@ -1258,8 +1258,18 @@ function PreviewBody({
   // tout le tunnel partage le même design — le skin reçoit isSuccess/pageRole
   // pour le badge ✓ et le centrage. Jamais sur les tunnels clonés.
   const skin = !isClonedFunnel ? getTemplateSkin(templateId) : undefined;
+  const heroHasVideo = Boolean(
+    heroSection?.video?.url ||
+      heroSection?.medias?.some(
+        (media) => media.kind === "video" && media.url?.trim(),
+      ),
+  );
   const SkinHero =
-    skin && heroSection ? skin.sections[heroSection.type] : undefined;
+    skin &&
+    heroSection &&
+    (!heroHasVideo || heroSection.type === "hero")
+      ? skin.sections[heroSection.type]
+      : undefined;
 
   // 🆕 Anti-monotonie : variante de disposition par section « cartes », attribuée
   // de façon déterministe (seedée par le tunnel/page) et ordonnée (jamais deux
@@ -1330,7 +1340,17 @@ function PreviewBody({
         ))}
 
       {otherSections.map((section) => {
-        const SkinComp = skin ? skin.sections[section.type] : undefined;
+        // Les skins spécialisés historiques ne rendent pas tous le champ
+        // `video`. Dès qu'une section non-hero contient une vidéo, le rendu
+        // générique devient la source de vérité : texte puis lecteur vertical.
+        const sectionHasVideo = Boolean(
+          section.video?.url ||
+            section.medias?.some(
+              (media) => media.kind === "video" && media.url?.trim(),
+            ),
+        );
+        const SkinComp =
+          skin && !sectionHasVideo ? skin.sections[section.type] : undefined;
         if (SkinComp) {
           return (
             <SkinComp
@@ -1736,14 +1756,22 @@ function HeroBlock({
   const decoIcons = section.decorativeIcons;
   const edges = hasDecorativeAtEdge(decoIcons);
   const resolvedImage = resolveImageUrl(section.image, mediaLibrary);
+  const hasVideo = Boolean(
+    section.video?.url ||
+      section.medias?.some((media) => media.kind === "video" && media.url?.trim()),
+  );
   let layout = isSuccess
     ? "success-centered"
     : effectiveLayoutVariant(section, funnel);
-  // 🆕 RÈGLE ABSOLUE : image/vidéo + texte dans le héros → split automatique
-  // (empilé texte → image → CTA sur mobile via CSS).
+  // Une vidéo est toujours présentée sous le contenu textuel. Seule une image
+  // peut déclencher automatiquement le split desktop.
+  if (!isSuccess && hasVideo) {
+    layout = "centered";
+  }
   if (
     !isSuccess &&
-    (!!resolvedImage || !!section.video?.url) &&
+    !hasVideo &&
+    !!resolvedImage &&
     !!(section.headline || section.subheadline || section.body) &&
     layout !== "split-text-image" &&
     layout !== "split-image-text"
@@ -1760,6 +1788,8 @@ function HeroBlock({
       data-ff-section="hero"
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-has-video={hasVideo ? "true" : undefined}
+      data-ff-content-offset={section.style?.contentOffsetY ? "true" : undefined}
       data-ff-text-align={section.style?.align || undefined}
       data-ff-shadow-scope={shadowAttr}
       data-ff-page-role={pageRole ?? undefined}
@@ -1782,6 +1812,11 @@ function HeroBlock({
         // réglé → aucune règle ne s'applique, aucun tunnel existant ne bouge.
         ...frameVars(section.image?.frame, "img"),
         ...frameVars(section.style?.cardFrame, "card"),
+        ...(section.style?.contentOffsetY
+          ? ({
+              ["--ff-content-offset-y" as string]: `${Math.max(-120, Math.min(120, section.style.contentOffsetY))}px`,
+            } as React.CSSProperties)
+          : {}),
       }}
     >
       {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (
@@ -2114,7 +2149,11 @@ function StandardSectionBlock({
     ? section.bullets
     : [];
   const hasBullets = bulletsArr.length > 0;
-  const hasImg = !!resolvedImage || !!section.video?.url;
+  const hasVideo = Boolean(
+    section.video?.url ||
+      section.medias?.some((media) => media.kind === "video" && media.url?.trim()),
+  );
+  const hasImg = !!resolvedImage;
   const isTestimonialSection =
     section.type === "testimonials" || section.type === "proof";
   const hasExplicitSplit =
@@ -2129,9 +2168,8 @@ function StandardSectionBlock({
   if (!isSuccess && isTestimonialSection && hasImg && !hasExplicitSplit) {
     rawLayout = section.layoutVariant ?? "centered";
   }
-  // 🆕 RÈGLE ABSOLUE : image/vidéo + contenu textuel dans la MÊME section →
-  // layout SPLIT automatique (côte à côte). Sur mobile, le CSS empile
-  // texte → image → CTA. (Les pages de succès restent centrées.)
+  // Une vidéo n'est jamais traitée comme une image de split : texte d'abord,
+  // lecteur ensuite, quelle que soit une ancienne valeur layoutVariant.
   const hasText = !!(
     section.headline ||
     section.subheadline ||
@@ -2147,6 +2185,9 @@ function StandardSectionBlock({
     rawLayout !== "split-image-text"
   ) {
     rawLayout = "split-text-image";
+  }
+  if (!isSuccess && hasVideo) {
+    rawLayout = "centered";
   }
   const isSplit =
     rawLayout === "split-text-image" || rawLayout === "split-image-text";
@@ -2188,6 +2229,8 @@ function StandardSectionBlock({
       data-ff-section={section.type}
       data-ff-section-id={section.id}
       data-ff-layout={layout}
+      data-ff-has-video={hasVideo ? "true" : undefined}
+      data-ff-content-offset={section.style?.contentOffsetY ? "true" : undefined}
       data-ff-text-align={section.style?.align || undefined}
       data-ff-pattern={section.pattern || undefined}
       data-ff-split-mode={splitTextOnly ? "text" : undefined}
@@ -2211,6 +2254,11 @@ function StandardSectionBlock({
         // réglé → aucune règle ne s'applique, aucun tunnel existant ne bouge.
         ...frameVars(section.image?.frame, "img"),
         ...frameVars(section.style?.cardFrame, "card"),
+        ...(section.style?.contentOffsetY
+          ? ({
+              ["--ff-content-offset-y" as string]: `${Math.max(-120, Math.min(120, section.style.contentOffsetY))}px`,
+            } as React.CSSProperties)
+          : {}),
       }}
     >
       {bg.hasBackgroundImage && bg.overlayOpacity > 0 && (
@@ -2699,7 +2747,7 @@ function VideoEmbedBlock({
       data-ff-shadow={
         shadowSize && shadowSize !== "none" ? shadowSize : undefined
       }
-      className={`overflow-hidden rounded-lg ${compact ? "my-2" : "my-3"}`}
+      className={`w-full max-w-[900px] overflow-hidden rounded-lg ${compact ? "my-2" : "my-3"}`}
       style={{ border: "1px solid var(--ff-border, rgba(0,0,0,0.08))" }}
     >
       <div className="relative aspect-video w-full bg-black">

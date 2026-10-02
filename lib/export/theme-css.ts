@@ -239,6 +239,9 @@ const BASE_CSS = `
   position: relative;
   z-index: 1;
 }
+.ff-section[data-ff-content-offset="true"] > .ff-section-inner {
+  transform: translateY(var(--ff-content-offset-y, 0px));
+}
 .ff-layout-wide-banner .ff-section-inner {
   max-width: 1180px;
 }
@@ -1209,6 +1212,18 @@ details[open] .ff-faq-chevron { transform: rotate(180deg); }
   overflow-wrap: anywhere;
 }
 .ff-faq-a p { margin: 0; white-space: pre-line; }
+
+/* Les titres d'introduction FAQ restent centrés dans tous les templates ; les
+   questions et réponses conservent leur alignement de lecture à gauche. */
+.ff-section[data-ff-section="faq"] > .ff-section-inner > .ff-eyebrow,
+.ff-section[data-ff-section="faq"] > .ff-section-inner > .ff-headline,
+.ff-section[data-ff-section="faq"] > .ff-section-inner > .ff-subheadline,
+.ff-section[data-ff-section="faq"] > .ff-section-inner > .ff-body {
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
 
 /* 🆕 FIX COLLISION SECTION/GRILLE (voir commentaire sur div.ff-testimonials
    plus haut) — scopé à "div." pour ne pas matcher la <section ff-pricing>. */

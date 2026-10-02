@@ -120,7 +120,14 @@ function SectionShell({
   maxWidth?: number;
   children: React.ReactNode;
 }) {
-  return <div style={{ maxWidth, margin: "0 auto" }}>{children}</div>;
+  return (
+    <div
+      data-ff-faq-content="true"
+      style={{ maxWidth, margin: "0 auto", width: "100%" }}
+    >
+      {children}
+    </div>
+  );
 }
 
 // ── Pattern 1 : accordéon centré ──────────────────────────────────────────────
@@ -178,12 +185,12 @@ function FaqHubGridLinks({ section, faqs }: FaqPatternProps) {
   return (
     <SectionShell pattern="faq-hub-grid-links" maxWidth={980}>
       {section.headline && (
-        <div data-ff-anim="fade-up">
+        <div data-ff-faq-intro="true" data-ff-anim="fade-up" style={{ textAlign: "center" }}>
           <RichText as="h2" className="ff-headline" text={section.headline} />
         </div>
       )}
       {section.subheadline && (
-        <div data-ff-anim="fade-up" style={{ marginTop: 10 }}>
+        <div data-ff-faq-intro="true" data-ff-anim="fade-up" style={{ marginTop: 10, textAlign: "center" }}>
           <RichText as="p" className="ff-subheadline" text={section.subheadline} />
         </div>
       )}
@@ -201,7 +208,11 @@ function FaqGridIntro({ section, faqs }: FaqPatternProps) {
   const { open, toggle } = useOpenSet();
   return (
     <SectionShell pattern="faq-grid-intro" maxWidth={980}>
-      <div data-ff-anim="fade-up" style={{ maxWidth: 600 }}>
+      <div
+        data-ff-faq-intro="true"
+        data-ff-anim="fade-up"
+        style={{ maxWidth: 600, margin: "0 auto", textAlign: "center" }}
+      >
         {section.headline && <RichText as="h2" className="ff-headline" text={section.headline} />}
         {section.subheadline && (
           <div style={{ marginTop: 12 }}>

@@ -98,6 +98,26 @@ export function StyleTab({ section, onChange }: Props) {
   const shadow = style.shadow ?? {};
   const shadowSize: ShadowSize = shadow.size ?? "none";
   const shadowColor: string = shadow.color ?? "#000000";
+  const hasVideo = Boolean(
+    section.video?.url ||
+      section.medias?.some((media) => media.kind === "video" && media.url?.trim()),
+  );
+  const selectedLayout =
+    hasVideo &&
+    (section.layoutVariant === "split-text-image" ||
+      section.layoutVariant === "split-image-text")
+      ? "centered"
+      : section.layoutVariant ?? "centered";
+  const rawContentOffsetY = style.contentOffsetY;
+  const contentOffsetY = Math.max(
+    -120,
+    Math.min(
+      120,
+      typeof rawContentOffsetY === "number" && Number.isFinite(rawContentOffsetY)
+        ? rawContentOffsetY
+        : 0,
+    ),
+  );
 
   const updateAnim = (target: AnimationTarget, preset: AnimationPreset) => {
     onChange({ animations: { ...animations, [target]: preset } });
@@ -175,17 +195,29 @@ export function StyleTab({ section, onChange }: Props) {
       {/* Layout */}
       <Field
         label="Layout"
-        hint="« Texte | Image » et « Image | Texte » mettent les deux côte-à-côte sur desktop, empilés sur mobile."
+        hint={
+          hasVideo
+            ? "Cette section contient une vidéo : le texte reste au-dessus et la vidéo en dessous. Le split est réservé aux images."
+            : "« Texte | Image » et « Image | Texte » mettent les deux côte-à-côte sur desktop, empilés sur mobile."
+        }
       >
         <select
-          value={section.layoutVariant ?? "centered"}
+          value={selectedLayout}
           onChange={(e) =>
             onChange({ layoutVariant: e.target.value as SectionLayoutVariant })
           }
           className={selectClass}
         >
           {LAYOUTS.map((l) => (
-            <option key={l.value} value={l.value} className="bg-zinc-900">
+            <option
+              key={l.value}
+              value={l.value}
+              disabled={
+                hasVideo &&
+                (l.value === "split-text-image" || l.value === "split-image-text")
+              }
+              className="bg-zinc-900"
+            >
               {l.label}
             </option>
           ))}
@@ -234,6 +266,50 @@ export function StyleTab({ section, onChange }: Props) {
           >
             Aéré
           </ModeBtn>
+        </div>
+      </Field>
+
+      <Field
+        label="Ajustement vertical du contenu"
+        hint="Déplace tout le contenu de cette section vers le haut ou le bas, sans modifier les autres sections."
+      >
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={-120}
+              max={120}
+              step={4}
+              value={contentOffsetY}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                onChange({
+                  style: {
+                    ...style,
+                    contentOffsetY: next === 0 ? undefined : next,
+                  } as SectionStyle,
+                });
+              }}
+              className="min-w-0 flex-1 accent-amber-400"
+              aria-label="Ajustement vertical du contenu"
+            />
+            <span className="w-14 text-right text-xs tabular-nums text-white/70">
+              {contentOffsetY > 0 ? "+" : ""}{contentOffsetY}px
+            </span>
+          </div>
+          {contentOffsetY !== 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                onChange({
+                  style: { ...style, contentOffsetY: undefined } as SectionStyle,
+                })
+              }
+              className="text-[10px] text-white/45 underline hover:text-white/75"
+            >
+              Recentrer le contenu
+            </button>
+          )}
         </div>
       </Field>
 

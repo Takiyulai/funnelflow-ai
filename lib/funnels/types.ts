@@ -355,6 +355,9 @@ export type SectionStyle = {
   layout?: SectionLayout;
   colors?: SectionColors;
   userColorsOverride?: boolean;
+  /** Ajustement manuel du contenu de la section, en pixels (-120 a 120).
+   *  Optionnel pour conserver le rendu de tous les tunnels existants. */
+  contentOffsetY?: number;
   shadow?: {
     size?: "none" | "sm" | "md" | "lg" | "xl";
     color?: string;

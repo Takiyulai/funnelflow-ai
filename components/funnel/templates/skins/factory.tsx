@@ -249,6 +249,11 @@ function makeHero(t: SkinTokens) {
     const imageUrl =
       section.image && section.image.mode !== "none" ? section.image.url : undefined;
     const hasMedia = !!embed?.embedUrl || !!imageUrl || t.heroMedia === "book";
+    const hasAdditionalVideo = Boolean(
+      section.medias?.some(
+        (media) => media.kind === "video" && media.url?.trim(),
+      ),
+    );
     // 🆕 Une IMAGE réelle uploadée dans le hero force le layout split (texte |
     // image côte à côte), même sur un template « centered » — comportement
     // attendu (comme la section about). Les médias « book »/vidéo gardent le
@@ -258,7 +263,14 @@ function makeHero(t: SkinTokens) {
     // réellement que si un média est affiché. Sans média (ou sur les pages
     // de succès), on retombe sur une colonne unique → le CTA doit alors être
     // centré (et non hérité du style "split" en row/flex-start).
-    const isSplitLayout = split && hasMedia && !props.isSuccess;
+    // Une vidéo reste toujours sous le contenu textuel. Elle ne doit jamais
+    // hériter du split image du template, même si le heroVariant vaut "split".
+    const isSplitLayout =
+      split &&
+      hasMedia &&
+      !props.isSuccess &&
+      !embed?.embedUrl &&
+      !hasAdditionalVideo;
 
     // 🆕 Image à FOND TRANSPARENT (PNG détouré) : on NE l'enferme PAS dans le
     // cadre-carte (bordure + fond clair/veil), sinon un fond blanc/gris apparaît

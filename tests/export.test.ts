@@ -61,6 +61,33 @@ describe("Systeme.io HTML export", () => {
     expect(css).not.toMatch(/^\s*body\s*\{/m);
     expect(css).not.toMatch(/^\s*html\s*\{/m);
   });
+
+  it("keeps a video below its text even when an old split layout is stored", () => {
+    const videoFunnel = {
+      ...funnel,
+      sections: [
+        {
+          id: "video-demo",
+          type: "solution",
+          headline: "Démonstration",
+          body: "Le contenu précède toujours la vidéo.",
+          video: { url: "https://cdn.example.org/demo.mp4" },
+          layoutVariant: "split-text-image",
+          style: { contentOffsetY: 24 },
+          visible: true,
+        },
+      ],
+    } as unknown as typeof funnel;
+
+    const html = renderFunnelHtml(videoFunnel);
+    expect(html).toContain('data-ff-layout="centered"');
+    expect(html).toContain('data-ff-has-video="true"');
+    expect(html).toContain('data-ff-content-offset="true"');
+    expect(html).toContain("--ff-content-offset-y:24px");
+    expect(html.indexOf("Le contenu précède toujours la vidéo.")).toBeLessThan(
+      html.indexOf("<video"),
+    );
+  });
 });
 
 // createDemoFunnel ne produit qu'une section (hero). Pour vérifier que

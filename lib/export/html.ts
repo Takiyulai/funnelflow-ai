@@ -1125,6 +1125,14 @@ function buildSectionInlineStyle(section: FunnelSection): string {
   if (colors.ink) parts.push(`color:${colors.ink}`);
   if (colors.accent) parts.push(`--ff-accent:${colors.accent}`);
 
+  const rawContentOffset = section.style?.contentOffsetY;
+  if (typeof rawContentOffset === "number" && Number.isFinite(rawContentOffset)) {
+    const contentOffset = clamp(rawContentOffset, -120, 120);
+    if (contentOffset !== 0) {
+      parts.push(`--ff-content-offset-y:${contentOffset}px`);
+    }
+  }
+
   if (bg?.imageUrl) {
     parts.push(
       `background-image:url('${bg.imageUrl.replace(/'/g, "%27")}')`,
@@ -1135,6 +1143,22 @@ function buildSectionInlineStyle(section: FunnelSection): string {
   }
 
   return parts.join(";");
+}
+
+function sectionContentOffsetAttr(section: FunnelSection): string {
+  const raw = section.style?.contentOffsetY;
+  return typeof raw === "number" && Number.isFinite(raw) && clamp(raw, -120, 120) !== 0
+    ? ' data-ff-content-offset="true"'
+    : "";
+}
+
+function sectionContentOffsetStandaloneAttrs(section: FunnelSection): string {
+  const raw = section.style?.contentOffsetY;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return "";
+  const value = clamp(raw, -120, 120);
+  return value === 0
+    ? ""
+    : ` data-ff-content-offset="true" style="--ff-content-offset-y:${value}px"`;
 }
 
 function sectionOverlay(section: FunnelSection): string {
@@ -1965,6 +1989,16 @@ type SectionContext = {
 
 function resolveLayout(section: FunnelSection, ctx: SectionContext): string {
   if (ctx.isSuccess) return "centered";
+  // Une vidéo est toujours rendue sous le texte, même si un ancien tunnel a
+  // mémorisé une variante split lorsqu'elle était encore traitée comme image.
+  if (
+    isUsableMediaUrl(section.video?.url) ||
+    (section.medias ?? []).some(
+      (media) => media.kind === "video" && isUsableMediaUrl(media.url),
+    )
+  ) {
+    return "centered";
+  }
   const isTestimonialSection =
     section.type === "testimonials" || section.type === "proof";
   const hasExplicitSplit =
@@ -2378,7 +2412,7 @@ function renderSkinCtaFinalSection(
   ].join(";");
   const glowStyle = `background:radial-gradient(circle, color-mix(in srgb, ${t.accent} 30%, transparent), transparent 65%)`;
 
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-cta ff-layout-centered" data-ff-section="cta" data-ff-section-id="${escapeAttr(section.id)}" data-ff-custom-bg="true"${sectionTextAlignAttr(section)}>
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-cta ff-layout-centered" data-ff-section="cta" data-ff-section-id="${escapeAttr(section.id)}" data-ff-custom-bg="true"${sectionTextAlignAttr(section)}${sectionContentOffsetStandaloneAttrs(section)}>
   <div class="ff-section-inner">
     <div class="ff-skin-cta-final" style="${escapeAttr(boxStyle)}">
       <div class="ff-skin-cta-final__glow" aria-hidden="true" style="${escapeAttr(glowStyle)}"></div>
@@ -2456,7 +2490,7 @@ function renderSkinProcessSection(
   const inner = renderSkinTextAndCta(section, ctx, cardsHtml, mediaHtml || undefined);
   const layoutClass = mediaHtml ? "ff-layout-split" : "ff-layout-centered";
   const layoutAttr = mediaHtml ? "split" : "centered";
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ${layoutClass}" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layoutAttr}"${sectionTextAlignAttr(section)}>
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-${escapeAttr(section.type as string)} ${layoutClass}" data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layoutAttr}"${sectionTextAlignAttr(section)}${sectionContentOffsetStandaloneAttrs(section)}>
   <div class="ff-section-inner">${inner}</div>
 </section>`;
 }
@@ -2500,7 +2534,7 @@ function renderSkinUrgencySection(
     `padding:40px 28px`,
     `text-align:center`,
   ].join(";");
-  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-urgency ff-layout-centered" data-ff-section="urgency" data-ff-section-id="${escapeAttr(section.id)}"${sectionTextAlignAttr(section)}>
+  return `<section id="${escapeAttr(section.id)}" class="ff-section ff-urgency ff-layout-centered" data-ff-section="urgency" data-ff-section-id="${escapeAttr(section.id)}"${sectionTextAlignAttr(section)}${sectionContentOffsetStandaloneAttrs(section)}>
   <div class="ff-section-inner">
     <div style="${escapeAttr(panelStyle)}">
       ${titleHtml}${timerHtml}
@@ -2522,6 +2556,9 @@ function renderSection(
       isUsableMediaUrl(materializeSectionImage(section.image, ctx.funnel)?.url));
   const hasExtraMediaEarly = (section.medias ?? []).some((media) =>
     isUsableMediaUrl(media.url),
+  );
+  const hasAdditionalVideoEarly = (section.medias ?? []).some(
+    (media) => media.kind === "video" && isUsableMediaUrl(media.url),
   );
 
   // 🆕 FIX PARITÉ SKINS (voir bloc de commentaires ci-dessus) : pour les
@@ -2585,12 +2622,14 @@ function renderSection(
     !ctx.isSuccess &&
     hasImageEarly &&
     !hasVideoEarly &&
+    !hasAdditionalVideoEarly &&
     section.type === "hero" &&
     sectionHasSubstantialText(section);
 
   const layout = skinForcesSplit ? "split" : resolveLayout(section, ctx);
   const isHero = section.type === "hero" || isFirst;
-  const hasVideo = hasVideoEarly;
+  const hasVideo = hasVideoEarly || hasAdditionalVideoEarly;
+  const hasPrimaryVideo = hasVideoEarly;
   const hasImage = hasImageEarly;
 
   const shadow = buildShadowStyle(section.style);
@@ -2656,7 +2695,7 @@ function renderSection(
         ? `<div class="ff-split-media ff-split-cards">${cardsBlock}</div><div class="ff-split-text">${textBlock}</div>`
         : `<div class="ff-split-text">${textBlock}</div><div class="ff-split-media ff-split-cards">${cardsBlock}</div>`;
     inner = `<div class="ff-section-inner">${eyebrowTop}<div class="ff-split-grid">${order}</div></div>`;
-  } else if (hasVideo) {
+  } else if (hasPrimaryVideo) {
     const textBlock = renderSectionInnerContent(
       { ...section, image: undefined, video: undefined } as FunnelSection,
       ctx,
@@ -2677,7 +2716,7 @@ function renderSection(
   // etc.) → elles ne matchaient JAMAIS pour la quasi-totalité des sections
   // exportées. Miroir de FunnelPreview.tsx qui pose déjà data-ff-section
   // partout dans l'aperçu live.
-  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${sectionTextAlignAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
+  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${sectionTextAlignAttr(section)}${sectionContentOffsetAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
 ${overlay}${inner}${mediaGallery}
 </section>`;
 }
