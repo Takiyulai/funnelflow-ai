@@ -320,7 +320,7 @@ export default function RendezVousPage() {
     <AppShell>
       {/* 🆕 RESPONSIVE : padding réduit sous 640 px — `px-4` fixe rognait déjà
           32 px sur un écran de 360 px de large. */}
-      <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-8">
+      <div className="mx-auto w-full min-w-0 max-w-4xl py-4 sm:px-4 sm:py-8">
         {/* 🆕 Le header était `flex items-center justify-between` sans repli :
             sur mobile, le titre et le bouton se disputaient la même ligne et le
             bouton finissait tronqué. Il passe dessous sous 640 px. */}
@@ -574,10 +574,12 @@ export default function RendezVousPage() {
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-muted transition hover:text-ink"
+            className="mb-4 inline-flex w-full min-w-0 items-start gap-1.5 text-left text-xs font-semibold leading-relaxed text-muted transition hover:text-ink"
           >
-            <ArrowLeft size={13} />
-            Retour à mes rendez-vous — modification de « {active.name} »
+            <ArrowLeft size={13} className="mt-0.5 shrink-0" />
+            <span className="min-w-0 break-words">
+              Retour à mes rendez-vous — modification de « {active.name} »
+            </span>
           </button>
         )}
 

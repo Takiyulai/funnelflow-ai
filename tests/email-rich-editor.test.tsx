@@ -33,4 +33,44 @@ describe("variables de substitution dans l'éditeur d'email", () => {
 
     expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("Bonjour {{prenom}}"));
   });
+
+  it("n'émet qu'une version quand execCommand déclenche aussi l'événement input", () => {
+    const onChange = vi.fn();
+    const previousExecCommand = document.execCommand;
+    let editor: HTMLDivElement | null = null;
+
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: vi.fn((command: string) => {
+        if (!editor) return false;
+        if (command === "justifyLeft") {
+          editor.innerHTML = '<p style="text-align: left;">Bonjour</p>';
+          fireEvent.input(editor);
+          return true;
+        }
+        return false;
+      }),
+    });
+
+    try {
+      const rendered = render(
+        <EmailRichEditor value="<p>Bonjour</p>" onChange={onChange} />,
+      );
+      editor = rendered.container.querySelector<HTMLDivElement>("[contenteditable='true']");
+      if (!editor) throw new Error("éditeur introuvable");
+      onChange.mockClear();
+
+      fireEvent.click(screen.getByRole("button", { name: "Aligner à gauche" }));
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith(
+        expect.stringContaining("text-align: left"),
+      );
+    } finally {
+      Object.defineProperty(document, "execCommand", {
+        configurable: true,
+        value: previousExecCommand,
+      });
+    }
+  });
 });

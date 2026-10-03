@@ -3721,6 +3721,205 @@ const THEMES_CSS = `
 [data-ff-text-align="right"] { text-align: right !important; }
 `;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Couche de compatibilité systeme.io
+ *
+ * systeme.io encapsule le HTML personnalisé dans ses propres Section/Row et
+ * peut ignorer ou réécrire les container queries. Les règles critiques de
+ * mise en page sont donc répétées ici avec de simples media queries, une
+ * spécificité forte et des largeurs explicites. Cette couche ne s'active que
+ * sur le HTML exporté (data-ff-systeme), jamais dans le reste de l'application.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const SYSTEME_IO_COMPAT_CSS = `
+.ff-page[data-ff-systeme="true"] {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.ff-page[data-ff-systeme="true"] > .ff-section {
+  display: block !important;
+  float: none !important;
+  clear: both !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-section-inner {
+  width: 100% !important;
+  max-width: 1040px !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-split-text,
+.ff-page[data-ff-systeme="true"] .ff-split-media,
+.ff-page[data-ff-systeme="true"] .ff-image,
+.ff-page[data-ff-systeme="true"] .ff-image-wrap,
+.ff-page[data-ff-systeme="true"] .ff-video {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+.ff-page[data-ff-systeme="true"] :is(img, video, iframe) {
+  max-width: 100% !important;
+}
+
+.ff-page[data-ff-systeme="true"] .ff-list-card {
+  width: min(100%, 620px) !important;
+  max-width: 620px !important;
+  margin: 1.25rem auto 0 !important;
+  padding: 1.75rem 2rem !important;
+  border: 1px solid var(--ff-card-border, var(--ff-border)) !important;
+  border-radius: 1rem !important;
+  background: var(--ff-card-bg, var(--ff-surface)) !important;
+  box-shadow: var(--ff-card-shadow, 0 14px 30px -20px rgba(0, 0, 0, .38)) !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-list-card .ff-bullets {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.ff-page[data-ff-systeme="true"] .ff-stats-pattern {
+  width: 100% !important;
+  max-width: 1000px !important;
+  margin: 0 auto !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stats-head,
+.ff-page[data-ff-systeme="true"] .ff-stats-copy {
+  width: min(100%, 720px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  text-align: center !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stats-grid2,
+.ff-page[data-ff-systeme="true"] .ff-stats-bar {
+  display: grid !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  gap: 1.375rem !important;
+  margin-top: 2.5rem !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stat-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: .5rem !important;
+  min-width: 0 !important;
+  padding: 1.75rem 1.5rem !important;
+  text-align: center !important;
+  color: var(--ff-card-ink, var(--ff-ink)) !important;
+  background: var(--ff-card-bg, var(--ff-surface)) !important;
+  border: 1px solid var(--ff-card-border, var(--ff-border)) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .08) !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stat-value {
+  display: block !important;
+  color: var(--ff-accent) !important;
+  font-size: 2.625rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stat-label {
+  display: block !important;
+  color: var(--ff-card-ink, var(--ff-ink)) !important;
+  font-size: .90625rem !important;
+  line-height: 1.4 !important;
+  opacity: .78 !important;
+}
+.ff-page[data-ff-systeme="true"] .ff-stat-icon {
+  display: inline-flex !important;
+  width: 2.875rem !important;
+  height: 2.875rem !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  color: var(--ff-accent) !important;
+  background: var(--ff-accent-soft) !important;
+}
+
+@media (min-width: 760px) {
+  .ff-page[data-ff-systeme="true"] .ff-split-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 3rem !important;
+    width: 100% !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-split-text {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-split-media {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-height: 540px !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-split-media :is(.ff-image, .ff-image-wrap, img) {
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: 540px !important;
+    object-fit: contain !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-section[data-ff-has-video="true"] .ff-split-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    max-width: 820px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-section[data-ff-has-video="true"] .ff-split-text {
+    align-items: center !important;
+    text-align: center !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-section[data-ff-has-video="true"] .ff-split-text > * {
+    text-align: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-stats-grid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-stats-bar {
+    grid-template-columns: repeat(var(--ff-stat-count, 4), minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 759px) {
+  .ff-page[data-ff-systeme="true"] .ff-section {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-split-grid,
+  .ff-page[data-ff-systeme="true"] .ff-stats-grid2,
+  .ff-page[data-ff-systeme="true"] .ff-stats-bar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-split-text {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+  }
+  .ff-page[data-ff-systeme="true"] .ff-list-card {
+    padding: 1.25rem !important;
+  }
+}
+`;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. FULL DOC RESET
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3744,7 +3943,7 @@ let _cachedFullCss: string | null = null;
 
 export function getFunnelThemeCss(): string {
   if (_cachedFullCss === null) {
-    _cachedFullCss = `${BASE_CSS}\n${THEMES_CSS}\n${FULL_DOC_RESET}`;
+    _cachedFullCss = `${BASE_CSS}\n${THEMES_CSS}\n${SYSTEME_IO_COMPAT_CSS}\n${FULL_DOC_RESET}`;
   }
   return _cachedFullCss;
 }
@@ -3759,7 +3958,7 @@ let _cachedNoResetCss: string | null = null;
  */
 export function getFunnelThemeCssNoGlobalReset(): string {
   if (_cachedNoResetCss === null) {
-    _cachedNoResetCss = `${BASE_CSS}\n${THEMES_CSS}`;
+    _cachedNoResetCss = `${BASE_CSS}\n${THEMES_CSS}\n${SYSTEME_IO_COMPAT_CSS}`;
   }
   return _cachedNoResetCss;
 }
@@ -3789,7 +3988,7 @@ export function getScopedFunnelThemeCss(scopeClass: string): string {
     "hp-cta",
   ];
 
-  const base = `${BASE_CSS}\n${THEMES_CSS}`;
+  const base = `${BASE_CSS}\n${THEMES_CSS}\n${SYSTEME_IO_COMPAT_CSS}`;
 
   // 1. Scope toutes les règles .ff-page sous .<safe>.ff-page
   let scoped = base.replace(/\.ff-page/g, `.${safe}.ff-page`);

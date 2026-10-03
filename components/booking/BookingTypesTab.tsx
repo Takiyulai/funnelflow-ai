@@ -98,11 +98,11 @@ export function BookingTypesTab({
   }
 
   return (
-    <div className="grid gap-5">
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+    <div className="grid min-w-0 max-w-full gap-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">Lien public</h2>
-        <div className="mt-3 flex items-center gap-2">
-          <code className="flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-sm">
+        <div className="mt-3 flex min-w-0 items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-sm">
             {publicUrl}
           </code>
           <button
@@ -131,7 +131,7 @@ export function BookingTypesTab({
             désactiver est presque toujours le bon geste, supprimer est le
             dernier recours. */}
         {onDelete && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 border-t border-line pt-3">
             <button
               type="button"
               onClick={onDelete}
@@ -140,7 +140,7 @@ export function BookingTypesTab({
               <Trash2 size={13} />
               Supprimer ce type de RDV
             </button>
-            <span className="text-[11px] text-muted">
+            <span className="min-w-0 break-words text-[11px] leading-relaxed text-muted">
               Impossible s&apos;il reste des rendez-vous à venir — décoche
               « Réservations ouvertes » à la place.
             </span>
@@ -157,7 +157,7 @@ export function BookingTypesTab({
 
           Rattachée au TYPE de RDV et non au compte : un même utilisateur peut
           proposer « Appel découverte avec Dramane » et « Coaching avec Awa ». */}
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
           Qui anime ce rendez-vous
         </h2>
@@ -166,30 +166,30 @@ export function BookingTypesTab({
           réservation. Laissé vide, rien n&apos;est affiché et la page reste inchangée.
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1.5 text-xs opacity-80">
+        <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="grid min-w-0 gap-1.5 text-xs opacity-80">
             Nom affiché
             <input
               value={active.hostName ?? ""}
               onChange={(e) => onPatch({ hostName: e.target.value })}
               placeholder="Dramane D."
               maxLength={80}
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
+              className="min-w-0 w-full max-w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
             />
           </label>
 
-          <label className="grid gap-1.5 text-xs opacity-80">
+          <label className="grid min-w-0 gap-1.5 text-xs opacity-80">
             Rôle ou spécialité
             <input
               value={active.hostTitle ?? ""}
               onChange={(e) => onPatch({ hostTitle: e.target.value })}
               placeholder="Coach business"
               maxLength={120}
-              className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
+              className="min-w-0 w-full max-w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
             />
           </label>
 
-          <div className="grid gap-1.5 text-xs opacity-80 sm:col-span-2">
+          <div className="grid min-w-0 gap-1.5 text-xs opacity-80 sm:col-span-2">
             <span>Photo</span>
             <div className="flex flex-wrap items-center gap-3">
               {/* Vignette : ce que verra réellement le prospect, au même
@@ -271,7 +271,7 @@ export function BookingTypesTab({
             )}
           </div>
 
-          <label className="grid gap-1.5 text-xs opacity-80 sm:col-span-2">
+          <label className="grid min-w-0 gap-1.5 text-xs opacity-80 sm:col-span-2">
             Présentation courte
             <textarea
               value={active.hostBio ?? ""}
@@ -279,7 +279,7 @@ export function BookingTypesTab({
               placeholder="Deux ou trois phrases : ton parcours, ce que le prospect va retirer de l'échange."
               rows={3}
               maxLength={600}
-              className="resize-y rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
+              className="min-w-0 w-full max-w-full resize-y rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
             />
             <span className="opacity-50">{(active.hostBio ?? "").length} / 600</span>
           </label>
@@ -288,7 +288,7 @@ export function BookingTypesTab({
         {/* Aperçu fidèle au rendu public : une URL d'image invalide se voit ici
             plutôt qu'après publication, sur la page vue par les prospects. */}
         {active.hostName?.trim() && (
-          <div className="mt-4 flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="mt-4 flex min-w-0 items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
             {active.hostAvatarUrl?.trim() ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -323,7 +323,7 @@ export function BookingTypesTab({
           budget, du niveau ou d'un lien devait le demander après coup par
           email, donc perdre une partie des réponses et qualifier ses
           rendez-vous à la main. */}
-      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-line bg-surface p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
           Formulaire de réservation
         </h2>
@@ -349,7 +349,7 @@ export function BookingTypesTab({
       {/* 🆕 Couleur d'accent. La colonne `color` existait en base sans jamais
           être exploitée : le calendrier public s'affichait toujours en violet,
           quel que soit l'univers visuel du tunnel qui y menait. */}
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <section className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-5">
         <h2 className="text-sm font-bold uppercase tracking-wide opacity-60">
           Couleur du calendrier
         </h2>
@@ -359,7 +359,7 @@ export function BookingTypesTab({
           d&apos;univers en cliquant.
         </p>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2">
           {BOOKING_COLOR_PRESETS.map((preset) => {
             const selected = color === preset;
             return (
@@ -413,7 +413,7 @@ export function BookingTypesTab({
         )}
 
         {/* Aperçu : ce que verra le prospect. */}
-        <div className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="mt-4 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
           <span className="text-xs opacity-50">Aperçu</span>
           <span
             className="rounded-lg px-3 py-1.5 text-sm font-medium"

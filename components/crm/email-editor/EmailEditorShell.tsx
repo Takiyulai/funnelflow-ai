@@ -81,9 +81,18 @@ export function EmailEditorShell({
     () => normalizeEmailDocument(record.editor_document, record.content),
     [record.editor_document, record.content],
   );
-  const [history, setHistory] = useState<EmailDocument[]>([initialDocument]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const document = history[historyIndex];
+  // L'index et les entrées doivent évoluer dans UNE SEULE mise à jour.
+  // Un execCommand peut déclencher `input` de façon synchrone puis notre
+  // callback explicite : avec deux useState séparés, l'index avançait deux
+  // fois alors qu'une seule entrée était conservée, ce qui rendait le
+  // document courant `undefined` et faisait tomber toute la page.
+  const [timeline, setTimeline] = useState(() => ({
+    entries: [initialDocument],
+    index: 0,
+  }));
+  const history = timeline.entries;
+  const historyIndex = timeline.index;
+  const document = history[historyIndex] ?? history[history.length - 1] ?? initialDocument;
   const [selectedId, setSelectedId] = useState<string | null>(document.blocks[0]?.id ?? null);
   const [name, setName] = useState(record.name);
   const [subject, setSubject] = useState(record.subject ?? "");
@@ -131,11 +140,20 @@ export function EmailEditorShell({
   const commitDocument = useCallback(
     (nextDocument: EmailDocument) => {
       const edited = markEmailDocumentEdited(nextDocument);
-      setHistory((current) => [...current.slice(0, historyIndex + 1), edited].slice(-60));
-      setHistoryIndex((index) => Math.min(index + 1, 59));
+      setTimeline((current) => {
+        const safeIndex = Math.min(
+          Math.max(current.index, 0),
+          Math.max(current.entries.length - 1, 0),
+        );
+        const entries = [
+          ...current.entries.slice(0, safeIndex + 1),
+          edited,
+        ].slice(-60);
+        return { entries, index: entries.length - 1 };
+      });
       markDirty();
     },
-    [historyIndex, markDirty],
+    [markDirty],
   );
 
   const save = useCallback(async () => {
@@ -228,13 +246,19 @@ export function EmailEditorShell({
 
   function undo() {
     if (historyIndex <= 0) return;
-    setHistoryIndex(historyIndex - 1);
+    setTimeline((current) => ({
+      ...current,
+      index: Math.max(0, current.index - 1),
+    }));
     markDirty();
   }
 
   function redo() {
     if (historyIndex >= history.length - 1) return;
-    setHistoryIndex(historyIndex + 1);
+    setTimeline((current) => ({
+      ...current,
+      index: Math.min(current.entries.length - 1, current.index + 1),
+    }));
     markDirty();
   }
 
@@ -313,7 +337,7 @@ export function EmailEditorShell({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex min-w-0 flex-col bg-canvas text-ink">
+    <div className="fixed inset-0 z-50 flex min-w-0 max-w-[100vw] flex-col overflow-hidden bg-canvas text-ink">
       <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2 sm:px-4">
         <Link href={backHref} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line text-muted hover:text-ink" aria-label="Retour"><ArrowLeft size={18} /></Link>
         <div className="min-w-0 flex-1 sm:max-w-md">
@@ -354,7 +378,7 @@ export function EmailEditorShell({
 
       {mobilePanel && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/45 lg:hidden" onClick={() => setMobilePanel(null)}>
-          <div className="max-h-[82vh] w-full overflow-y-auto rounded-t-2xl bg-surface pb-20" onClick={(event) => event.stopPropagation()}>
+          <div className="max-h-[82dvh] min-w-0 w-full overflow-x-hidden overflow-y-auto rounded-t-2xl bg-surface pb-20" onClick={(event) => event.stopPropagation()}>
             <div className="sticky top-0 z-10 flex justify-end border-b border-line bg-surface p-2"><button type="button" onClick={() => setMobilePanel(null)} className="rounded-lg border border-line p-2 text-muted"><X size={16} /></button></div>
             {mobilePanel === "blocks" ? <EmailBlockSidebar onAdd={addBlock} /> : rightPanel}
           </div>

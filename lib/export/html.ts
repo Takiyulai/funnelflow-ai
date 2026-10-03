@@ -1176,49 +1176,47 @@ function sectionOverlay(section: FunnelSection): string {
 // ─────────────────────────────────────────────────────────────────────────────
 const BULLET_LAYOUT_SECTIONS = new Set([
   "benefits",
+  "benefit",
   "features",
-  "advantages",
-  "proof",
-  "trust",
+  "feature",
   "stats",
+  "numbers",
+  "metrics",
+  "kpi",
+  "solution",
+  "problem",
+  "process",
+  "program",
+  "qualification",
+  "steps",
+  "method",
+  "modules",
+  "curriculum",
+  "included",
+  "deliverables",
+  "bonus",
+  "about",
 ]);
 
 const BULLET_LIST_ONLY_SECTIONS = new Set([
   "hero",
+  "cta",
   "form",
-  "thankyou",
-  "delivery",
-  "confirmation",
+  "guarantee",
 ]);
 
 function splitBulletValueLabel(
   raw: string,
-): { value: string; label?: string } {
+): { value: string; label: string } | null {
   const t = (raw || "").trim();
   const pair = splitTextPair(t);
-  if (pair) {
-    return {
-      value: pair.first,
-      label: pair.second,
-    };
-  }
-  const nlIdx = t.indexOf("\n");
-  if (nlIdx > 0 && nlIdx < t.length - 1) {
-    return {
-      value: t.slice(0, nlIdx).trim(),
-      label: t.slice(nlIdx + 1).trim(),
-    };
-  }
-  return { value: t };
+  if (!pair || pair.first.length > 12) return null;
+  return { value: pair.first, label: pair.second };
 }
 
 function bulletsFitInlineStrip(bullets: string[]): boolean {
-  if (bullets.length < 2 || bullets.length > 4) return false;
-  return bullets.every((b) => {
-    const { value, label } = splitBulletValueLabel(b);
-    const main = label ? value : value;
-    return main.length > 0 && main.length <= 32;
-  });
+  if (bullets.length < 2 || bullets.length > 6) return false;
+  return bullets.every((b) => splitBulletValueLabel(b) !== null);
 }
 
 /** Sépare un bullet « Titre | Description » (ou —, –, ::). Mirroir de
@@ -1256,8 +1254,13 @@ function renderSectionMediaGallery(medias: FunnelSection["medias"]): string {
     : "";
 }
 
-function renderBullets(section: FunnelSection): string {
-  if (!section.bullets?.length) return "";
+function renderBullets(section: FunnelSection, isSuccess = false): string {
+  const entries = (section.bullets ?? [])
+    .map((bullet, index) => ({ bullet, index }))
+    .filter(({ bullet }) => typeof bullet === "string" && bullet.trim().length > 0);
+  if (entries.length === 0) return "";
+
+  const cleanBullets = entries.map(({ bullet }) => bullet);
   const defaultIconName = section.iconName || "check";
   const sectionType = String(section.type || "");
 
@@ -1268,11 +1271,13 @@ function renderBullets(section: FunnelSection): string {
   let mode: "list" | "grid" | "strip" = "list";
   // 🆕 B2 : bullets du HERO en bande « | » UNIQUEMENT si le calcul le permet
   // (≤4 puces, peu de mots / chiffres) ; sinon liste. Parité avec l'aperçu.
-  if (sectionType === "hero") {
-    mode = bulletsFitInlineStrip(section.bullets) ? "strip" : "list";
+  if (isSuccess) {
+    mode = "list";
+  } else if (sectionType === "hero") {
+    mode = bulletsFitInlineStrip(cleanBullets) ? "strip" : "list";
   } else if (isLayoutCompatible) {
-    if (bulletsFitInlineStrip(section.bullets)) mode = "strip";
-    else mode = "grid";
+    if (bulletsFitInlineStrip(cleanBullets)) mode = "strip";
+    else if (cleanBullets.length >= 2) mode = "grid";
   }
 
   const ulClasses = ["ff-bullets"];
@@ -1282,13 +1287,15 @@ function renderBullets(section: FunnelSection): string {
   // 🆕 B2 : puces numérotées (process/programme) — parité avec l'aperçu.
   const numbered = section.style?.numberedBullets === true;
 
-  const itemsHtml = section.bullets
-    .map((bullet, i) => {
-      const name = (section.bulletIcons?.[i] as string) ?? defaultIconName;
+  const itemsHtml = entries
+    .map(({ bullet, index }) => {
+      const name = (section.bulletIcons?.[index] as string) ?? defaultIconName;
       const svg = renderIconByName(name, 18);
 
       if (mode === "strip") {
-        const { value, label } = splitBulletValueLabel(bullet);
+        const split = splitBulletValueLabel(bullet);
+        const value = split?.value ?? bullet;
+        const label = split?.label ?? "";
         if (label) {
           return `<li><span class="ff-strip-value">${applyInlineHighlights(escapeHtml(value))}</span><span class="ff-strip-label">${applyInlineHighlights(escapeHtml(label))}</span></li>`;
         }
@@ -1296,7 +1303,7 @@ function renderBullets(section: FunnelSection): string {
       }
 
       const leading = numbered
-        ? `<span class="ff-bullet-num">${i + 1}</span>`
+        ? `<span class="ff-bullet-num">${index + 1}</span>`
         : `<span class="ff-bullet-ic">${svg}</span>`;
       // 🆕 Format « Titre | Description » → titre en gras + description (jamais
       // le « | » littéral). Parité avec l'aperçu (splitBulletTitleDescription).
@@ -1309,6 +1316,69 @@ function renderBullets(section: FunnelSection): string {
     .join("");
 
   return `<ul class="${ulClasses.join(" ")}" data-ff-bullets-mode="${mode}">${itemsHtml}</ul>`;
+}
+
+function isExportStatsPattern(section: FunnelSection): boolean {
+  return (
+    section.type === "proof" &&
+    typeof section.pattern === "string" &&
+    section.pattern.startsWith("stats-") &&
+    Array.isArray(section.bullets) &&
+    section.bullets.some((bullet) => typeof bullet === "string" && bullet.trim().length > 0)
+  );
+}
+
+function exportPatternForcesCentered(section: FunnelSection): boolean {
+  return (
+    section.type === "benefits" &&
+    typeof section.pattern === "string" &&
+    section.pattern.startsWith("benefits-") &&
+    Array.isArray(section.bullets) &&
+    section.bullets.some((bullet) => typeof bullet === "string" && bullet.trim().length > 0)
+  );
+}
+
+function renderStatsPattern(section: FunnelSection): string {
+  if (!isExportStatsPattern(section)) return "";
+
+  const items = (section.bullets ?? [])
+    .filter((raw): raw is string => typeof raw === "string" && raw.trim().length > 0)
+    .map((raw) => {
+      const pipe = raw.indexOf("|");
+      const value = pipe >= 0 ? raw.slice(0, pipe) : raw;
+      const label = pipe >= 0 ? raw.slice(pipe + 1) : "";
+      return { value: value.trim(), label: label.trim() };
+    });
+
+  const eyebrow = section.eyebrow
+    ? `<span class="ff-eyebrow ${animClass(animOf(section, "eyebrow", "fade-in"))}">${applyInlineHighlights(escapeHtml(section.eyebrow))}</span>`
+    : "";
+  const headline = section.headline
+    ? `<h2 class="ff-headline ${animClass(animOf(section, "headline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.headline))}</h2>`
+    : "";
+  const subheadline = section.subheadline
+    ? `<p class="ff-subheadline ${animClass(animOf(section, "subheadline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.subheadline))}</p>`
+    : "";
+  const body = section.body
+    ? `<p class="ff-body ${animClass(animOf(section, "body", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.body))}</p>`
+    : "";
+
+  const cards = items
+    .map(
+      ({ value, label }, index) =>
+        `<div class="ff-stat-card ${animClass("fade-up")}" style="animation-delay:${Math.min(index, 8) * 90}ms">` +
+        `${section.pattern === "stats-cards-4-percent-icons" ? '<span class="ff-stat-icon" aria-hidden="true">★</span>' : ""}` +
+        `<span class="ff-stat-value">${applyInlineHighlights(escapeHtml(value))}</span>` +
+        `${label ? `<span class="ff-stat-label">${applyInlineHighlights(escapeHtml(label))}</span>` : ""}` +
+        `</div>`,
+    )
+    .join("");
+
+  if (section.pattern === "stats-bar-horizontal-no-card") {
+    return `<div class="ff-stats-pattern ff-stats-pattern--bar"><div class="ff-stats-bar" style="--ff-stat-count:${Math.max(1, items.length)}">${cards}</div>${headline || body ? `<div class="ff-stats-copy">${headline}${body}</div>` : ""}</div>`;
+  }
+
+  return `<div class="ff-stats-pattern"><div class="ff-stats-head">${eyebrow}${headline}${subheadline}</div><div class="ff-stats-grid2">${cards}</div></div>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2091,25 +2161,26 @@ function renderSectionInnerContent(
   section: FunnelSection,
   ctx: SectionContext,
 ): string {
+  const statsPattern = renderStatsPattern(section);
   const heroIcon = renderSectionHeroIcon(section, ctx);
 
-  const eyebrow = section.eyebrow
+  const eyebrow = !statsPattern && section.eyebrow
     ? `<span class="ff-eyebrow ${animClass(animOf(section, "eyebrow", "fade-in"))}">${applyInlineHighlights(escapeHtml(section.eyebrow))}</span>`
     : "";
-  const headline = section.headline
+  const headline = !statsPattern && section.headline
     ? `<h2 class="ff-headline ${animClass(animOf(section, "headline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.headline))}</h2>`
     : "";
-  const subheadline = section.subheadline
+  const subheadline = !statsPattern && section.subheadline
     ? `<p class="ff-subheadline ${animClass(animOf(section, "subheadline", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.subheadline))}</p>`
     : "";
-  const body = section.body
+  const body = !statsPattern && section.body
     ? `<p class="ff-body ${animClass(animOf(section, "body", "fade-up"))}">${applyInlineHighlights(escapeHtml(section.body))}</p>`
     : "";
 
   const type = section.type as string;
   const hasItems = Array.isArray(section.items) && section.items.length > 0;
-  let specialized = "";
-  if (hasItems) {
+  let specialized = statsPattern;
+  if (!specialized && hasItems) {
     if (type === "pricing" || type === "offer") specialized = renderPricing(section, ctx.nav);
     else if (type === "bonus") specialized = renderBonus(section);
     else if (type === "testimonials" || type === "proof")
@@ -2137,8 +2208,20 @@ function renderSectionInnerContent(
     }
   }
 
-  const bullets =
-    !specialized && section.bullets?.length ? renderBullets(section) : "";
+  const bulletsHtml =
+    !specialized && section.bullets?.length
+      ? renderBullets(section, ctx.isSuccess)
+      : "";
+  const bulletsMode = /data-ff-bullets-mode="([^"]+)"/.exec(bulletsHtml)?.[1];
+  const wrapListInCard =
+    Boolean(bulletsHtml) &&
+    bulletsMode === "list" &&
+    (resolveLayout(section, ctx) === "centered" || exportPatternForcesCentered(section)) &&
+    !ctx.isSuccess &&
+    section.type !== "hero";
+  const bullets = wrapListInCard
+    ? `<div class="ff-list-card">${bulletsHtml}</div>`
+    : bulletsHtml;
 
   const formHtml =
     type === "form" ? renderFormFields(section, ctx) : "";
@@ -2623,7 +2706,6 @@ function renderSection(
   // texte (y compris titre) dans la colonne de gauche → forcer split ici
   // pour ces types désalignerait le titre au lieu de le corriger.
   const skinForcesSplit =
-    !!skinTokens &&
     !ctx.isSuccess &&
     hasImageEarly &&
     !hasVideoEarly &&
@@ -2631,7 +2713,19 @@ function renderSection(
     section.type === "hero" &&
     sectionHasSubstantialText(section);
 
-  const layout = skinForcesSplit ? "split" : resolveLayout(section, ctx);
+  const resolvedLayout = exportPatternForcesCentered(section)
+    ? "centered"
+    : skinForcesSplit
+      ? "split"
+      : resolveLayout(section, ctx);
+  const layout =
+    resolvedLayout === "split" &&
+    !hasImageEarly &&
+    !hasVideoEarly &&
+    sectionCardCount(section) > 0 &&
+    splitCardsBalanceExport(section) === "stacked"
+      ? "centered"
+      : resolvedLayout;
   const isHero = section.type === "hero" || isFirst;
   const hasVideo = hasVideoEarly || hasAdditionalVideoEarly;
   const hasPrimaryVideo = hasVideoEarly;
@@ -2693,7 +2787,7 @@ function renderSection(
       { ...section, eyebrow: undefined, bullets: undefined, image: undefined, video: undefined } as FunnelSection,
       ctx,
     );
-    const cardsBlock = renderBullets(section);
+    const cardsBlock = renderBullets(section, ctx.isSuccess);
     const variant = effectiveLayoutVariant(section, ctx.funnel);
     const order =
       variant === "split-image-text"
@@ -2721,7 +2815,10 @@ function renderSection(
   // etc.) → elles ne matchaient JAMAIS pour la quasi-totalité des sections
   // exportées. Miroir de FunnelPreview.tsx qui pose déjà data-ff-section
   // partout dans l'aperçu live.
-  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-layout="${layout}"${sectionTextAlignAttr(section)}${sectionContentOffsetAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
+  const patternAttr = section.pattern
+    ? ` data-ff-pattern="${escapeAttr(section.pattern)}"`
+    : "";
+  return `<section id="${escapeAttr(section.id)}" class="${classes.join(" ")}"${styleAttr} data-ff-section="${escapeAttr(section.type as string)}" data-ff-section-id="${escapeAttr(section.id)}" data-ff-layout="${layout}"${patternAttr}${sectionTextAlignAttr(section)}${sectionContentOffsetAttr(section)}${hasVideo ? ' data-ff-has-video="true"' : ""}>
 ${overlay}${inner}${mediaGallery}
 </section>`;
 }
@@ -3325,6 +3422,7 @@ ${clonedHeadHtml}
 ${rawHtmlExtraCss}
 <div class="ff-page"
      data-ff-export="true"
+     data-ff-systeme="true"
      ${dataAttrsHtml}${pageRoleAttr}${pageHomeAttr}${clonedFlagAttr}${styleAttr}>
 
 ${headerHtml}
@@ -3513,6 +3611,7 @@ ${scopedTheme}
 </style>
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
+     data-ff-systeme="true"
      ${dataAttrsHtml}${styleAttr}>
 ${sectionHtml}
 </div>
@@ -3568,6 +3667,7 @@ ${scopedTheme}
 </style>
 <div class="${scopeClass} ff-page"
      data-ff-export="true"
+     data-ff-systeme="true"
      ${dataAttrsHtml}${styleAttr}>
 
   <section id="lead-form" class="ff-section ff-form ff-layout-centered">

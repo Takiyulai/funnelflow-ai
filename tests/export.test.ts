@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { load } from "cheerio";
 import { createDemoFunnel } from "@/lib/ai/generate";
 import {
   createHtmlZipBase64,
@@ -87,6 +88,70 @@ describe("Systeme.io HTML export", () => {
     expect(html.indexOf("Le contenu précède toujours la vidéo.")).toBeLessThan(
       html.indexOf("<video"),
     );
+  });
+
+  it("keeps desktop media inside the right section and preserves pattern layouts", () => {
+    const regressionFunnel = {
+      ...funnel,
+      sections: [
+        {
+          id: "hero-layout",
+          type: "hero",
+          pattern: "hero-split-product-mockup",
+          headline: "Un hero réellement en deux colonnes",
+          body: "Le texte reste à gauche et le visuel à droite.",
+          image: { mode: "url", url: "https://cdn.example.org/book.png", alt: "Livre" },
+          visible: true,
+        },
+        {
+          id: "benefits-layout",
+          type: "benefits",
+          pattern: "benefits-cards-4-shadow-longtext",
+          headline: "Un bénéfice important",
+          bullets: ["Des pages de capture en quelques minutes"],
+          visible: true,
+        },
+        {
+          id: "video-layout",
+          type: "solution",
+          headline: "La démonstration",
+          video: { url: "https://cdn.example.org/demo.mp4" },
+          visible: true,
+        },
+        {
+          id: "stats-layout",
+          type: "proof",
+          pattern: "stats-cards-4-suffix-badge",
+          eyebrow: "Résultats concrets",
+          bullets: [
+            "< 5 MINUTES | pour générer un tunnel complet",
+            "x 3.4 | taux de conversion moyen constaté",
+            "1 CLIC | pour exporter vers systeme.io",
+            "0 € | compétence technique requise",
+          ],
+          visible: true,
+        },
+      ],
+    } as unknown as typeof funnel;
+
+    const html = renderFunnelHtml(regressionFunnel);
+    const $ = load(html);
+
+    expect($('.ff-page[data-ff-systeme="true"]').length).toBe(1);
+    expect($('#hero-layout[data-ff-layout="split"] .ff-split-grid').length).toBe(1);
+    expect($('#hero-layout img[src="https://cdn.example.org/book.png"]').length).toBe(1);
+    expect($("#hero-layout video").length).toBe(0);
+    expect($('#video-layout[data-ff-has-video="true"] video').length).toBe(1);
+    expect($("#benefits-layout .ff-list-card").length).toBe(1);
+    expect($('#stats-layout[data-ff-pattern="stats-cards-4-suffix-badge"] .ff-stat-card').length).toBe(4);
+    expect($("#stats-layout .ff-bullets").length).toBe(0);
+  });
+
+  it("includes a direct media-query fallback that systeme.io cannot collapse", () => {
+    const html = renderFunnelHtml(funnel);
+    expect(html).toContain('@media (min-width: 760px)');
+    expect(html).toContain('.ff-page[data-ff-systeme="true"] .ff-split-grid');
+    expect(html).toContain('grid-template-columns: repeat(2, minmax(0, 1fr)) !important');
   });
 });
 

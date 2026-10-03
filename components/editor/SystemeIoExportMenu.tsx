@@ -301,7 +301,7 @@ export function SystemeIoExportMenu({
         </button>
 
         {open && (
-          <div className="absolute right-0 top-9 z-50 w-80 rounded-lg border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+          <div className="fixed inset-x-3 bottom-3 z-[80] max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-2 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-9 sm:z-50 sm:w-80 sm:max-h-[calc(100dvh-4rem)]">
             <div className="mb-2 rounded-md bg-indigo-500/10 px-3 py-2 ring-1 ring-indigo-500/20">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-300/80">
                 Page sélectionnée

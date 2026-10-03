@@ -112,6 +112,11 @@ export function EmailRichEditor({
     const el = ref.current;
     if (!el) return;
     const html = el.innerHTML;
+    // Plusieurs navigateurs déclenchent `input` pendant execCommand. La
+    // commande appelle ensuite emit() elle-même pour les navigateurs qui ne
+    // le font pas. On ignore donc le second événement s'il ne porte aucun
+    // changement : une action utilisateur = une version dans l'historique.
+    if (html === lastEmitted.current) return;
     lastEmitted.current = html;
     onChange(html);
   };
@@ -555,7 +560,7 @@ export function EmailRichEditor({
               <Braces className="h-4 w-4" />
             </button>
             {showPersonalization && (
-              <div className="absolute left-0 top-9 z-20 grid max-h-64 min-w-64 gap-1 overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-elevated">
+              <div className="fixed inset-x-3 bottom-20 z-[80] grid max-h-[min(16rem,60dvh)] gap-1 overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-elevated sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-9 sm:min-w-64">
                 <div className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
                   Variables de substitution
                 </div>
