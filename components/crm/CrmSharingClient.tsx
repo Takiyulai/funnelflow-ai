@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Eye, List, Loader2, LockKeyhole, Share2, Tag, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -52,7 +52,7 @@ function Badge({ item }: { item: Label }) {
   );
 }
 
-export function CrmSharingClient() {
+export function CrmSharingClient({ initialOwnerId = null }: { initialOwnerId?: string | null }) {
   const [granted, setGranted] = useState<Share[]>([]);
   const [received, setReceived] = useState<Share[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +62,7 @@ export function CrmSharingClient() {
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const autoOpenedOwnerRef = useRef<string | null>(null);
 
   const loadShares = useCallback(async () => {
     setLoading(true);
@@ -119,7 +120,7 @@ export function CrmSharingClient() {
     await loadShares();
   }
 
-  async function viewSharedCrm(ownerId: string) {
+  const viewSharedCrm = useCallback(async (ownerId: string) => {
     setSelectedOwnerId(ownerId);
     setSnapshot(null);
     setSnapshotLoading(true);
@@ -136,7 +137,18 @@ export function CrmSharingClient() {
     } finally {
       setSnapshotLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (loading || snapshotLoading || received.length === 0) return;
+    const requestedOwner = initialOwnerId
+      ? received.find((share) => share.owner?.id === initialOwnerId)?.owner?.id
+      : null;
+
+    if (!requestedOwner || autoOpenedOwnerRef.current === requestedOwner) return;
+    autoOpenedOwnerRef.current = requestedOwner;
+    void viewSharedCrm(requestedOwner);
+  }, [initialOwnerId, loading, received, snapshotLoading, viewSharedCrm]);
 
   return (
     <div className="space-y-6">

@@ -5,14 +5,19 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function CrmSharingPage() {
+export default async function CrmSharingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ owner?: string }>;
+}) {
   const sb = await createSupabaseServerClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) redirect("/login");
+  const { owner } = await searchParams;
 
   return (
     <AppShell>
-      <CrmSharingClient />
+      <CrmSharingClient initialOwnerId={owner?.trim() || null} />
     </AppShell>
   );
 }

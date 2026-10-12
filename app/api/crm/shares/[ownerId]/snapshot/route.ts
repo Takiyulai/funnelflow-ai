@@ -15,7 +15,11 @@ export async function GET(
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const { ownerId } = await params;
-  const { data: share, error: shareError } = await sb
+  const admin = getSupabaseAdmin();
+  // Le service role ne sert qu'apres authentification et avec les deux cotes
+  // du partage dans le filtre. Un autre utilisateur ne peut donc pas choisir
+  // arbitrairement un ownerId pour lire son CRM.
+  const { data: share, error: shareError } = await admin
     .from("crm_data_shares")
     .select("id")
     .eq("owner_user_id", ownerId)
@@ -32,8 +36,6 @@ export async function GET(
   const limit = Number.isFinite(parsedLimit)
     ? Math.min(MAX_CONTACTS, Math.max(1, Math.trunc(parsedLimit)))
     : MAX_CONTACTS;
-  const admin = getSupabaseAdmin();
-
   // Projection volontairement stricte : aucun metadata, custom_fields, IP,
   // user-agent, contenu de tunnel/email, commande ou historique technique.
   const [ownerRes, contactsRes, listsRes, tagsRes] = await Promise.all([

@@ -25,10 +25,15 @@ async function requireUser() {
 }
 
 export async function GET() {
-  const { sb, user } = await requireUser();
+  const { user } = await requireUser();
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
-  const { data, error } = await sb
+  // Cette route a deja authentifie l'utilisateur. La lecture se fait avec le
+  // client serveur privilegie, mais reste explicitement bornee aux partages
+  // dont il est proprietaire ou destinataire. Cela evite qu'un probleme de
+  // propagation de session/RLS masque silencieusement un partage valide.
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin
     .from("crm_data_shares")
     .select("id,owner_user_id,grantee_user_id,permission,created_at")
     .or(`owner_user_id.eq.${user.id},grantee_user_id.eq.${user.id}`)
@@ -44,7 +49,6 @@ export async function GET() {
 
   const rows = (data ?? []) as ShareRow[];
   const userIds = [...new Set(rows.flatMap((row) => [row.owner_user_id, row.grantee_user_id]))];
-  const admin = getSupabaseAdmin();
   const { data: profiles, error: profilesError } = userIds.length
     ? await admin.from("users").select("id,email,full_name").in("id", userIds)
     : { data: [], error: null };
@@ -74,7 +78,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { sb, user } = await requireUser();
+  const { user } = await requireUser();
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => null);
@@ -107,7 +111,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { error } = await sb.from("crm_data_shares").insert({
+  const { error } = await admin.from("crm_data_shares").insert({
     owner_user_id: user.id,
     grantee_user_id: grantee.id,
     permission: "read_only",
@@ -131,7 +135,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { sb, user } = await requireUser();
+  const { user } = await requireUser();
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const shareId = new URL(request.url).searchParams.get("id")?.trim();
@@ -139,7 +143,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "share_id_required" }, { status: 400 });
   }
 
-  const { error } = await sb
+  const { error } = await getSupabaseAdmin()
     .from("crm_data_shares")
     .delete()
     .eq("id", shareId)

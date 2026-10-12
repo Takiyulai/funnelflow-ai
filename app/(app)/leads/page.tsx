@@ -7,9 +7,10 @@ import { listTags } from "@/lib/crm/tags";
 import { listContactLists } from "@/lib/crm/lists";
 import { ContactsTable } from "@/components/crm/ContactsTable";
 import { Button } from "@/components/ui/Button";
-import { Share2 } from "lucide-react";
+import { Eye, Share2, Users } from "lucide-react";
 import type { LeadStatus } from "@/lib/crm/types";
 import { guardApiAccess } from "@/lib/billing/apiGuard";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildPublishedPageRoleLookup,
   getPublishedPageRole,
@@ -26,6 +27,17 @@ type SearchParams = Promise<{
   /** 🆕 Filtre par liste de contacts (provenance d'un lot importé). */
   list?: string;
 }>;
+
+type ReceivedShareRow = {
+  id: string;
+  owner_user_id: string;
+};
+
+type SharedOwner = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
 
 type PageTimeSessionRow = {
   contact_id: string | null;
@@ -54,7 +66,7 @@ export default async function LeadsPage({
   const status = (sp.status as LeadStatus | undefined) || undefined;
   const funnelFilter = sp.funnel || undefined;
 
-  const [{ contacts, total }, tags, lists, funnelsRes, kpiQueries, pageTimeGuard] = await Promise.all([
+  const [{ contacts, total }, tags, lists, funnelsRes, kpiQueries, pageTimeGuard, receivedSharesRes] = await Promise.all([
     listContacts(sb, user.id, {
       search: sp.q || undefined,
       tagId: sp.tag || undefined,
@@ -73,7 +85,37 @@ export default async function LeadsPage({
       sb.from("leads").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "client"),
     ]),
     guardApiAccess(),
+    sb
+      .from("crm_data_shares")
+      .select("id,owner_user_id")
+      .eq("grantee_user_id", user.id)
+      .eq("permission", "read_only")
+      .order("created_at", { ascending: false }),
   ]);
+
+  if (receivedSharesRes.error) {
+    console.error("[leads] chargement des CRM partages impossible", receivedSharesRes.error);
+  }
+
+  const receivedShares = (receivedSharesRes.data ?? []) as ReceivedShareRow[];
+  const ownerIds = [...new Set(receivedShares.map((share) => share.owner_user_id))];
+  const { data: sharedOwnersData, error: sharedOwnersError } = ownerIds.length
+    ? await getSupabaseAdmin()
+        .from("users")
+        .select("id,email,full_name")
+        .in("id", ownerIds)
+    : { data: [], error: null };
+
+  if (sharedOwnersError) {
+    console.error("[leads] profils des CRM partages indisponibles", sharedOwnersError);
+  }
+
+  const sharedOwnersById = new Map(
+    ((sharedOwnersData ?? []) as SharedOwner[]).map((owner) => [owner.id, owner]),
+  );
+  const receivedCrms = receivedShares
+    .map((share) => ({ ...share, owner: sharedOwnersById.get(share.owner_user_id) }))
+    .filter((share): share is ReceivedShareRow & { owner: SharedOwner } => Boolean(share.owner));
 
   const funnels = (funnelsRes.data ?? []) as { id: string; name: string }[];
   const [totalAll, nouveaux, qualifies, clients] = kpiQueries.map((r) => r.count ?? 0);
@@ -137,9 +179,41 @@ export default async function LeadsPage({
           <p className="mt-1 text-sm text-muted">Contacts, listes, tags et suivi commercial.</p>
         </div>
         <Button href="/leads/partage" variant="secondary">
-          <Share2 className="h-4 w-4" /> Partager le CRM
+          <Share2 className="h-4 w-4" /> Partages CRM
         </Button>
       </div>
+
+      {receivedCrms.length > 0 && (
+        <Card className="mb-6 border-emerald-300 bg-emerald-50/70 p-4 dark:border-emerald-800 dark:bg-emerald-950/20">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+              <Users className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-black text-ink">
+                {receivedCrms.length === 1
+                  ? "Un CRM a été partagé avec vous"
+                  : `${receivedCrms.length} CRM ont été partagés avec vous`}
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Consultez les contacts, listes et tags autorisés en lecture seule.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {receivedCrms.map(({ id, owner }) => (
+                  <Button
+                    key={id}
+                    href={`/leads/partage?owner=${encodeURIComponent(owner.id)}`}
+                    size="sm"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Ouvrir le CRM de {owner.full_name?.trim() || owner.email}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
         {[
           { label: "Total", value: totalAll },
