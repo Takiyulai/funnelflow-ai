@@ -58,7 +58,7 @@ export default function TermsPage() {
 
       <h2>4. Abonnements et paiement</h2>
       <ul>
-        <li>Les plans payants sont facturés de façon récurrente (mensuelle) via notre prestataire de paiement Stripe, ou activés via une licence Chariow selon le mode de souscription choisi.</li>
+        <li>Les plans payants sont réglés via notre prestataire SasPay pour la période indiquée au moment de la souscription. Le renouvellement et la durée d'accès sont confirmés avant le paiement.</li>
         <li>Les prix affichés sont ceux en vigueur au moment de la souscription et peuvent évoluer ; toute augmentation vous sera communiquée à l'avance et ne s'appliquera qu'à la période de facturation suivante.</li>
         <li>Vous pouvez résilier votre abonnement à tout moment depuis votre espace de facturation ; l'accès reste actif jusqu'à la fin de la période déjà payée. Sauf disposition légale contraire applicable dans votre juridiction, les sommes déjà versées ne sont pas remboursables au prorata.</li>
         <li>Un abonnement impayé ou une carte refusée peut entraîner la suspension de l'accès aux fonctionnalités payantes jusqu'à régularisation.</li>

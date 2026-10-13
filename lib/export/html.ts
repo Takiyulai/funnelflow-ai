@@ -2298,7 +2298,7 @@ function renderFormFields(
           PHONE_DIAL_CODES[0];
         const dialOptions = PHONE_DIAL_CODES.map(
           (entry) =>
-            `<option value="${escapeAttr(entry.code)}" data-flag="https://flagcdn.com/w40/${escapeAttr(entry.iso.toLowerCase())}.png"${entry.code === defaultDialCode ? " selected" : ""}>${escapeHtml(entry.code)} · ${escapeHtml(entry.country)}</option>`,
+            `<option value="${escapeAttr(entry.code)}" data-flag="https://flagcdn.com/w40/${escapeAttr(entry.iso.toLowerCase())}.png"${entry.iso === defaultDialCountry.iso && entry.code === defaultDialCountry.code ? " selected" : ""}>${escapeHtml(entry.code)} · ${escapeHtml(entry.country)}</option>`,
         ).join("");
         input = `<div class="ff-phone-field"><div class="ff-phone-code-wrap"><img class="ff-phone-flag" src="https://flagcdn.com/w40/${escapeAttr(defaultDialCountry.iso.toLowerCase())}.png" alt="" width="20" height="14" /><select class="ff-input ff-phone-code" name="${dialName}" aria-label="Indicatif du pays">${dialOptions}</select></div><input class="ff-input" type="tel" inputmode="numeric" pattern="[0-9]{5,15}" maxlength="15" id="${name}" name="${name}" placeholder="${ph || "Numéro de téléphone"}"${req} /></div>`;
       } else if (f.type === "textarea") {

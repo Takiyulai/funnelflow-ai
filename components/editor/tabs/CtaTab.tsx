@@ -359,7 +359,7 @@ export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Pr
               <Field
                 label="URL de destination"
                 required
-                hint="Lien produit Chariow, page de paiement systeme.io, Calendly, Stripe Checkout, etc."
+                hint="Page de paiement, lien systeme.io, Calendly, Stripe Checkout, etc."
               >
                 <input
                   type="url"
@@ -370,25 +370,6 @@ export function CtaTab({ section, funnel, pageId, onChange, onFunnelChange }: Pr
                 />
               </Field>
 
-              {/* 🆕 Chariow Niveau 2 : lien produit Chariow */}
-              <label className="flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
-                <div>
-                  <div className="text-xs font-medium text-white">
-                    💳 Lien produit Chariow
-                  </div>
-                  <div className="mt-0.5 text-[10px] leading-relaxed text-white/50">
-                    Cochez si l'URL ci-dessus est votre page produit Chariow.
-                    Chariow encaisse ET livre le produit : AutoFunnel n'enverra
-                    donc pas d'email de livraison en double.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={cta.chariow === true}
-                  onChange={(e) => updateCta({ chariow: e.target.checked || undefined })}
-                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-300"
-                />
-              </label>
               <Field label="Ouverture">
                 <div className="flex gap-1.5">
                   <ModeBtn

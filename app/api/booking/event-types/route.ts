@@ -211,7 +211,9 @@ export async function POST(req: Request) {
   if (b.paymentRequired && b.paymentUrl) {
     extraCols.payment_required = true;
     extraCols.payment_url = b.paymentUrl.trim();
-    extraCols.payment_provider = "chariow";
+    // Le frontend ne propose plus de fournisseur imposé pour les rendez-vous.
+    // Le créateur peut conserver n'importe quel lien de paiement externe.
+    extraCols.payment_provider = "external";
     if (typeof b.priceAmount === "number") extraCols.price_amount = b.priceAmount;
     if (b.currency) extraCols.currency = b.currency.toUpperCase();
   }

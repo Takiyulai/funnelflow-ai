@@ -1,13 +1,10 @@
 "use client";
 
-// Choix de plan + providers de paiement. Chariow conserve exactement son
-// parcours par lien/licence ; SasPay ajoute un checkout hébergé piloté par le
-// backend AutoFunnel AI.
+// Choix de plan + checkout SasPay piloté par le backend AutoFunnel AI.
 
-import { useEffect, useState } from "react";
-import { Check, CreditCard, Loader2, KeyRound, Smartphone, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Check, CreditCard, Loader2, Sparkles } from "lucide-react";
 import { FREE_PLAN, PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
-import { getChariowCheckoutUrl } from "@/lib/payments/providers/chariow";
 
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
@@ -79,71 +76,6 @@ export function PlanPicker({
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(initialPlan ?? null);
 
-  // ── Activation par clé de licence Chariow ──────────────────────────────
-  const [licenseKey, setLicenseKey] = useState("");
-  const [licenseMsg, setLicenseMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [licenseStatus, setLicenseStatus] = useState<{
-    active: boolean;
-    plan: string | null;
-    expiresAt: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/license/validate")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (alive && d?.ok) {
-          setLicenseStatus({ active: d.active, plan: d.plan, expiresAt: d.expiresAt });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  async function activateLicense() {
-    const key = licenseKey.trim();
-    if (!key) return;
-    setBusy("license");
-    setLicenseMsg(null);
-    try {
-      const res = await fetch("/api/license/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey: key }),
-      });
-      const d = await res.json();
-      if (d?.ok) {
-        setLicenseMsg({ ok: true, text: "✓ Licence activée ! Ton accès est débloqué." });
-        setLicenseStatus({ active: true, plan: d.plan, expiresAt: d.expiresAt });
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 1200);
-      } else {
-        const reasons: Record<string, string> = {
-          expired: "Cette licence a expiré. Renouvelle ton abonnement sur la boutique.",
-          revoked: "Cette licence a été révoquée. Contacte le support.",
-          invalid: "Clé de licence introuvable. Vérifie la clé reçue par email après ton achat.",
-        };
-        setLicenseMsg({
-          ok: false,
-          text:
-            d?.error === "limit_reached"
-              ? "Cette licence a atteint son nombre maximum d'activations. Contacte le support."
-              : reasons[d?.status as string] ??
-                (d?.error === "chariow_not_configured"
-                  ? "Le paiement Chariow n'est pas encore configuré. Réessaie plus tard."
-                  : "Activation impossible. Vérifie ta clé."),
-        });
-      }
-    } catch {
-      setLicenseMsg({ ok: false, text: "Erreur réseau. Réessaie." });
-    }
-    setBusy(null);
-  }
-
   async function openPortal() {
     setBusy("portal");
     setError(null);
@@ -189,23 +121,12 @@ export function PlanPicker({
   }
 
   const planForPayment = selectedPlan ?? "pro";
-  const chariowUrl = getChariowCheckoutUrl(planForPayment);
 
   return (
     <div>
       {error && (
         <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
-        </div>
-      )}
-
-      {licenseStatus?.active && (
-        <div className="mb-4 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          ✓ Licence Chariow active
-          {licenseStatus.plan ? ` — plan ${licenseStatus.plan}` : ""}
-          {licenseStatus.expiresAt
-            ? ` (jusqu'au ${new Date(licenseStatus.expiresAt).toLocaleDateString("fr-FR")})`
-            : ""}
         </div>
       )}
 
@@ -319,7 +240,7 @@ export function PlanPicker({
         })}
       </div>
 
-      {/* ─── 2. Providers de paiement ─── */}
+      {/* ─── 2. Paiement ─── */}
       <div id="payment-methods" className="mt-10 scroll-mt-24">
         <h2 className="text-lg font-black text-ink">
           Choisis ton moyen de paiement
@@ -333,85 +254,15 @@ export function PlanPicker({
           Le plan et le montant sont toujours vérifiés côté serveur avant l'ouverture du paiement.
         </p>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border-2 border-emerald-500 bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-black text-ink">
-                <Smartphone size={17} className="text-emerald-600" />
-                Chariow
-              </div>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                Recommandé
-              </span>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Mobile Money (Orange, MTN, Wave, Moov…), cartes bancaires et
-              moyens de paiement africains. Après l'achat, tu reçois une{" "}
-              <b className="text-ink">clé de licence par email</b> — ton accès
-              s'active automatiquement (ou saisis la clé ci-dessous).
-            </p>
-            {chariowUrl ? (
-              <a
-                href={chariowUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 block w-full rounded-xl bg-emerald-600 py-3 text-center text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Payer avec Chariow →
-              </a>
-            ) : (
-              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-center text-xs font-semibold text-amber-800">
-                Boutique en cours de configuration — réessaie bientôt.
-              </div>
-            )}
-
-            {/* Activation par clé de licence */}
-            <div className="mt-4 rounded-xl border border-line bg-canvas p-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
-                <KeyRound size={13} className="text-emerald-600" />
-                J'ai déjà une clé de licence
-              </div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
-                  placeholder="ABCD-1234-EFGH-5678"
-                  className="focus-ring min-h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70"
-                />
-                <button
-                  type="button"
-                  onClick={activateLicense}
-                  disabled={busy !== null || !licenseKey.trim()}
-                  className="shrink-0 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {busy === "license" ? (
-                    <Loader2 className="animate-spin" size={15} />
-                  ) : (
-                    "Activer"
-                  )}
-                </button>
-              </div>
-              {licenseMsg && (
-                <p
-                  className={`mt-2 text-xs font-semibold ${
-                    licenseMsg.ok ? "text-emerald-700" : "text-red-600"
-                  }`}
-                >
-                  {licenseMsg.text}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-line bg-surface p-5">
+        <div className="mt-4 max-w-2xl">
+          <div className="rounded-2xl border-2 border-[#C7A436] bg-surface p-5 shadow-[0_14px_36px_rgba(199,164,54,0.12)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-ink">
                 <CreditCard size={17} className="text-[#C7A436]" />
                 SasPay
               </div>
               <span className="rounded-full bg-[#C7A436]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#806512]">
-                Nouveau
+                Paiement sécurisé
               </span>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted">

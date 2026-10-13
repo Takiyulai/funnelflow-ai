@@ -33,7 +33,6 @@ import {
   Plus,
   Trash2,
   CalendarDays,
-  ExternalLink,
   Upload,
   UserRound,
   // 🆕 Une icône par préréglage — voir PRESET_ICONS plus bas.
@@ -771,19 +770,14 @@ export function NewBookingTypeDialog({
 
             {paid && (
               <>
-                {/* 🆕 ONBOARDING CHARIOW.
-                    L'ordre des trois étapes n'est pas cosmétique : c'est le
-                    redirect_url du produit qui fait que seuls les payeurs
-                    atteignent le calendrier. Sans lui, le client paie et
-                    n'arrive jamais sur la page de réservation. */}
                 <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3">
                   <p className="text-xs font-bold text-ink">
                     Comment ça marche : le participant paie d&apos;abord
                   </p>
                   <ol className="mt-2 grid gap-1.5 text-[11px] leading-relaxed text-ink">
                     <li>
-                      <strong>1.</strong> Dans Chariow, crée un produit de type{" "}
-                      <strong>Service</strong> au prix de ton rendez-vous.
+                      <strong>1.</strong> Crée un lien de paiement auprès de ton
+                      prestataire au prix de ton rendez-vous.
                     </li>
                     <li>
                       <strong>2.</strong> Dans les réglages de ce produit, mets{" "}
@@ -798,17 +792,9 @@ export function NewBookingTypeDialog({
                   </ol>
                   <p className="mt-2 text-[10px] leading-relaxed text-muted">
                     Le lien de réservation te sera donné juste après la création
-                    du type — reviens compléter l&apos;étape 2 dans Chariow à ce
-                    moment-là.
+                    du type — reviens ensuite configurer l&apos;URL de redirection
+                    chez ton prestataire de paiement.
                   </p>
-                  <a
-                    href="https://chariow.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-violet-500 underline underline-offset-2"
-                  >
-                    Ouvrir Chariow <ExternalLink size={11} />
-                  </a>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
@@ -847,13 +833,13 @@ export function NewBookingTypeDialog({
 
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    Lien du produit Chariow *
+                    Lien de paiement externe *
                   </label>
                   <input
                     type="url"
                     value={paymentUrl}
                     onChange={(e) => setPaymentUrl(e.target.value)}
-                    placeholder="https://ton-store.mychariow.shop/prd_xxxxx"
+                    placeholder="https://paiement.exemple.com/mon-offre"
                     className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-violet-500/50"
                   />
                   {!paymentReady && (
@@ -865,8 +851,8 @@ export function NewBookingTypeDialog({
 
                 <p className="rounded-lg border border-line bg-canvas p-2.5 text-[10px] leading-relaxed text-muted">
                   Le prix ci-dessus sert à <strong>l&apos;affichage</strong>. Le
-                  montant réellement encaissé est celui de ton produit Chariow :
-                  si tu changes l&apos;un, pense à changer l&apos;autre.
+                  montant réellement encaissé est celui configuré chez ton
+                  prestataire : si tu changes l&apos;un, pense à changer l&apos;autre.
                 </p>
               </>
             )}

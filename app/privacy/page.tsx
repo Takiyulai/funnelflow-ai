@@ -107,7 +107,7 @@ export default function PrivacyPage() {
         <li><strong>Resend</strong> — envoi des emails transactionnels (confirmation, livraison d'achat) et des campagnes email que vous créez pour vos leads.</li>
         <li><strong>Stripe</strong> — traitement des paiements par carte bancaire (abonnement à la plateforme et achats de vos clients).</li>
         <li><strong>CinetPay</strong> — traitement des paiements mobile money pour les créateurs qui l'activent.</li>
-        <li><strong>Chariow</strong> — gestion des licences et de certains achats plateforme.</li>
+        <li><strong>SasPay</strong> — traitement et confirmation des paiements liés aux abonnements de la plateforme.</li>
         <li><strong>Sentry</strong> — supervision technique et diagnostic des erreurs applicatives ; configuré pour filtrer automatiquement les identifiants, jetons d'authentification, cookies et emails complets avant tout envoi.</li>
         <li><strong>Google</strong> — authentification via Google OAuth, à votre initiative.</li>
       </ul>

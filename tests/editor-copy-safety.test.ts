@@ -106,4 +106,12 @@ describe("champ téléphone rétrocompatible", () => {
     expect(PHONE_DIAL_CODES.every((entry) => entry.iso.length === 2)).toBe(true);
     expect(PHONE_DIAL_CODES.find((entry) => entry.code === "+229")?.iso).toBe("BJ");
   });
+
+  it("propose les indicatifs de tous les pays et les principaux territoires", () => {
+    expect(new Set(PHONE_DIAL_CODES.map((entry) => entry.iso)).size).toBeGreaterThanOrEqual(195);
+    expect(PHONE_DIAL_CODES.some((entry) => entry.iso === "JP" && entry.code === "+81")).toBe(true);
+    expect(PHONE_DIAL_CODES.some((entry) => entry.iso === "BR" && entry.code === "+55")).toBe(true);
+    expect(PHONE_DIAL_CODES.some((entry) => entry.iso === "NG" && entry.code === "+234")).toBe(true);
+    expect(PHONE_DIAL_CODES.some((entry) => entry.iso === "AU" && entry.code === "+61")).toBe(true);
+  });
 });

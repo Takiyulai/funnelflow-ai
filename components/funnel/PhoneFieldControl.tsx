@@ -22,10 +22,17 @@ export function PhoneFieldControl({
   inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const defaultCode = field.countryCode || "+33";
-  const [selectedCode, setSelectedCode] = useState(defaultCode);
-  const selectedCountry =
-    PHONE_DIAL_CODES.find((entry) => entry.code === selectedCode) ??
+  const defaultCountry =
+    PHONE_DIAL_CODES.find((entry) => entry.code === defaultCode) ??
     PHONE_DIAL_CODES[0];
+  const countryId = (iso: string, code: string) => `${iso}:${code}`;
+  const [selectedCountryId, setSelectedCountryId] = useState(
+    countryId(defaultCountry.iso, defaultCountry.code),
+  );
+  const selectedCountry =
+    PHONE_DIAL_CODES.find(
+      (entry) => countryId(entry.iso, entry.code) === selectedCountryId,
+    ) ?? defaultCountry;
   const selectedFlagUrl = flagUrl(selectedCountry.iso, 40);
   return (
     <div className="grid min-w-0 grid-cols-[132px_minmax(0,1fr)] gap-2 max-[420px]:grid-cols-[116px_minmax(0,1fr)]">
@@ -42,20 +49,27 @@ export function PhoneFieldControl({
           />
         )}
         <select
-          name={phoneDialCodeFieldName(field.name)}
-          value={selectedCode}
-          onChange={(event) => setSelectedCode(event.target.value)}
+          value={selectedCountryId}
+          onChange={(event) => setSelectedCountryId(event.target.value)}
           disabled={disabled}
           aria-label="Indicatif du pays"
           className={`${inputClassName} min-w-0 pl-10 pr-2`}
           style={inputStyle}
         >
           {PHONE_DIAL_CODES.map((entry) => (
-            <option key={`${entry.country}-${entry.code}`} value={entry.code}>
+            <option
+              key={`${entry.iso}-${entry.code}`}
+              value={countryId(entry.iso, entry.code)}
+            >
               {entry.code} · {entry.country}
             </option>
           ))}
         </select>
+        <input
+          type="hidden"
+          name={phoneDialCodeFieldName(field.name)}
+          value={selectedCountry.code}
+        />
       </div>
       <input
         ref={inputRef}
