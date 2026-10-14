@@ -1,10 +1,14 @@
 "use client";
 
-// Choix de plan + checkout SasPay piloté par le backend AutoFunnel AI.
+// Choix de plan + deux parcours de paiement présentés sans exposer les noms
+// des prestataires. SasPay reste prioritaire pour l'Afrique ; Chariow sert de
+// solution secondaire pour les cartes internationales.
 
 import { useState } from "react";
-import { Check, CreditCard, Loader2, Sparkles } from "lucide-react";
+import { Check, CreditCard, Globe2, KeyRound, Loader2, Smartphone, Sparkles } from "lucide-react";
 import { FREE_PLAN, PLAN_ORDER, PLANS, type Plan, type PlanId } from "@/lib/billing/plans";
+import type { PaymentRegion } from "@/lib/geo/paymentRegion";
+import { getChariowCheckoutUrl } from "@/lib/payments/providers/chariow";
 
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
@@ -66,15 +70,56 @@ export function PlanPicker({
   isActive,
   hasCustomer,
   initialPlan,
+  initialPaymentRegion,
 }: {
   currentPlan: PlanId | null;
   isActive: boolean;
   hasCustomer: boolean;
   initialPlan?: PlanId | null;
+  initialPaymentRegion?: PaymentRegion | null;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(initialPlan ?? null);
+  const [licenseKey, setLicenseKey] = useState("");
+  const [licenseMsg, setLicenseMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function activateInternationalPurchase() {
+    const key = licenseKey.trim();
+    if (!key) return;
+    setBusy("license");
+    setLicenseMsg(null);
+    try {
+      const res = await fetch("/api/license/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: key }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        setLicenseMsg({ ok: true, text: "Accès activé. Redirection en cours…" });
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 900);
+        return;
+      }
+      const reasons: Record<string, string> = {
+        expired: "Ce code d'activation a expiré.",
+        revoked: "Ce code d'activation a été révoqué. Contacte le support.",
+        invalid: "Code introuvable. Vérifie le message reçu après ton paiement.",
+      };
+      setLicenseMsg({
+        ok: false,
+        text:
+          data?.error === "limit_reached"
+            ? "Ce code a atteint sa limite d'activation. Contacte le support."
+            : reasons[data?.status as string] ?? "Activation impossible pour le moment.",
+      });
+    } catch {
+      setLicenseMsg({ ok: false, text: "Erreur réseau. Réessaie." });
+    }
+    setBusy(null);
+  }
 
   async function openPortal() {
     setBusy("portal");
@@ -108,19 +153,22 @@ export function PlanPicker({
         return;
       }
       const messages: Record<string, string> = {
-        saspay_not_configured: "SasPay n'est pas encore configuré sur cet environnement.",
+        saspay_not_configured: "Le paiement mobile n'est pas encore disponible sur cet environnement.",
         checkout_creation_in_progress:
           "Une session est déjà en cours de création. Réessaie dans quelques secondes.",
         invalid_plan: "Le plan sélectionné n'est pas valide.",
       };
-      setError(messages[data?.error as string] ?? "Le checkout SasPay est momentanément indisponible.");
+      setError(messages[data?.error as string] ?? "Le paiement est momentanément indisponible.");
     } catch {
-      setError("Erreur réseau pendant l'ouverture de SasPay. Réessaie.");
+      setError("Erreur réseau pendant l'ouverture du paiement. Réessaie.");
     }
     setBusy(null);
   }
 
   const planForPayment = selectedPlan ?? "pro";
+  const internationalCheckoutUrl = getChariowCheckoutUrl(planForPayment);
+  const recommendedRegion = initialPaymentRegion ?? "africa";
+  const africaRecommended = recommendedRegion === "africa";
 
   return (
     <div>
@@ -251,24 +299,29 @@ export function PlanPicker({
           ) : null}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Le plan et le montant sont toujours vérifiés côté serveur avant l'ouverture du paiement.
+          Choisis simplement la zone depuis laquelle tu souhaites payer.
         </p>
 
-        <div className="mt-4 max-w-2xl">
-          <div className="rounded-2xl border-2 border-[#C7A436] bg-surface p-5 shadow-[0_14px_36px_rgba(199,164,54,0.12)]">
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className={`rounded-2xl bg-surface p-5 ${
+            africaRecommended
+              ? "border-2 border-[#C7A436] shadow-[0_14px_36px_rgba(199,164,54,0.12)]"
+              : "border border-line"
+          }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-ink">
-                <CreditCard size={17} className="text-[#C7A436]" />
-                SasPay
+                <Smartphone size={17} className="text-[#C7A436]" />
+                Paiement depuis l'Afrique
               </div>
-              <span className="rounded-full bg-[#C7A436]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#806512]">
-                Paiement sécurisé
-              </span>
+              {africaRecommended && (
+                <span className="rounded-full bg-[#C7A436]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#806512]">
+                  Recommandé pour toi
+                </span>
+              )}
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Checkout sécurisé SasPay en XOF. Ce paiement active le plan{" "}
-              <b className="text-ink">{PLANS[planForPayment].name}</b> pendant
-              30 jours après confirmation serveur du paiement.
+              Mobile Money et carte bancaire. Paiement sécurisé en F CFA avec
+              activation automatique du plan après confirmation.
             </p>
             <div className="mt-4 rounded-xl border border-line bg-canvas px-3 py-3 text-sm">
               <div className="flex items-center justify-between">
@@ -287,13 +340,87 @@ export function PlanPicker({
               {busy === "saspay" ? (
                 <Loader2 className="animate-spin" size={16} />
               ) : (
-                "Payer avec SasPay →"
+                "Payer depuis l'Afrique →"
               )}
             </button>
             <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              Le retour sur cette page ne suffit jamais à activer le plan :
-              AutoFunnel AI attend la vérification SasPay et son webhook signé.
+              Ton accès est activé uniquement après confirmation sécurisée du paiement.
             </p>
+          </div>
+
+          <div className={`rounded-2xl bg-surface p-5 ${
+            !africaRecommended
+              ? "border-2 border-[#C7A436] shadow-[0_14px_36px_rgba(199,164,54,0.12)]"
+              : "border border-line"
+          }`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-black text-ink">
+                <Globe2 size={17} className="text-[#C7A436]" />
+                Paiement international
+              </div>
+              {!africaRecommended && (
+                <span className="rounded-full bg-[#C7A436]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#806512]">
+                  Recommandé pour toi
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted">
+              Idéal pour payer par carte bancaire depuis l'Europe, l'Amérique
+              ou une autre région hors d'Afrique.
+            </p>
+            <div className="mt-4 rounded-xl border border-line bg-canvas px-3 py-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Montant du plan {PLANS[planForPayment].name}</span>
+                <span className="font-black text-ink">
+                  {PLANS[planForPayment].priceEur} € / mois
+                </span>
+              </div>
+            </div>
+            {internationalCheckoutUrl ? (
+              <a
+                href={internationalCheckoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex w-full items-center justify-center rounded-xl border border-[#C7A436] py-3 text-sm font-bold text-ink transition hover:bg-[#C7A436]/10"
+              >
+                <CreditCard size={16} className="mr-2" />
+                Payer depuis l'international →
+              </a>
+            ) : (
+              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-center text-xs font-semibold text-amber-800">
+                Le paiement international est temporairement indisponible.
+              </div>
+            )}
+
+            <details className="mt-4 rounded-xl border border-line bg-canvas p-3">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-bold text-ink">
+                <KeyRound size={13} className="text-[#C7A436]" />
+                J'ai déjà payé et reçu un code d'activation
+              </summary>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={licenseKey}
+                  onChange={(event) => setLicenseKey(event.target.value)}
+                  placeholder="Code reçu après le paiement"
+                  aria-label="Code d'activation"
+                  className="focus-ring min-h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70"
+                />
+                <button
+                  type="button"
+                  onClick={activateInternationalPurchase}
+                  disabled={busy !== null || !licenseKey.trim()}
+                  className="min-h-10 shrink-0 rounded-lg bg-[#C7A436] px-4 text-sm font-bold text-[#080E1A] transition hover:bg-[#D6B94F] disabled:opacity-50"
+                >
+                  {busy === "license" ? <Loader2 className="mx-auto animate-spin" size={15} /> : "Activer"}
+                </button>
+              </div>
+              {licenseMsg && (
+                <p className={`mt-2 text-xs font-semibold ${licenseMsg.ok ? "text-emerald-700" : "text-red-600"}`}>
+                  {licenseMsg.text}
+                </p>
+              )}
+            </details>
           </div>
         </div>
       </div>

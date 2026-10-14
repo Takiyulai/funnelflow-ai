@@ -5,6 +5,7 @@
 // d'accès de (app) redirige justement ici).
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/billing/subscription";
@@ -13,6 +14,7 @@ import { getActiveBillingEntitlement } from "@/lib/billing/entitlements";
 import { PlanPicker } from "@/components/billing/PlanPicker";
 import { DeleteAccountSection } from "@/components/account/DeleteAccountSection";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
+import { paymentRegionFromCountry } from "@/lib/geo/paymentRegion";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,11 @@ export default async function AbonnementPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sb = await createSupabaseServerClient();
+  const requestHeaders = await headers();
+  const initialPaymentRegion = paymentRegionFromCountry(
+    requestHeaders.get("x-vercel-ip-country") ??
+      requestHeaders.get("cf-ipcountry"),
+  );
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -95,6 +102,7 @@ export default async function AbonnementPage({
           isActive={isActive}
           hasCustomer={Boolean(profile?.stripe_customer_id)}
           initialPlan={initialPlan}
+          initialPaymentRegion={initialPaymentRegion}
         />
       </div>
 
