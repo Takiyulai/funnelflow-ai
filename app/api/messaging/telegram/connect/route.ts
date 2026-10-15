@@ -14,16 +14,9 @@ import {
   deleteWebhook,
   TelegramError,
 } from "@/lib/messaging/telegram";
+import { resolvePublicAppUrl } from "@/lib/platform/publicAppUrl";
 
 export const dynamic = "force-dynamic";
-
-function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ||
-    process.env.APP_URL?.replace(/\/+$/, "") ||
-    ""
-  );
-}
 
 export async function POST(req: Request) {
   const sb = await createSupabaseServerClient();
@@ -43,7 +36,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const base = appUrl();
+  const base = resolvePublicAppUrl(req.url);
   if (!base) {
     // Sans URL publique, Telegram n'a aucune adresse où livrer les messages.
     // On le dit franchement plutôt que d'enregistrer un canal inutilisable.
@@ -52,7 +45,7 @@ export async function POST(req: Request) {
         ok: false,
         error: "missing_app_url",
         message:
-          "NEXT_PUBLIC_APP_URL n'est pas configurée côté serveur : Telegram n'aurait aucune adresse où livrer les messages.",
+          "Impossible de déterminer l'adresse publique de la plateforme pour recevoir les messages Telegram.",
       },
       { status: 500 },
     );

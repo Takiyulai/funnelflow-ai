@@ -10,7 +10,7 @@
 // modèles restent 100 % côté serveur).
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Loader2, Sparkles, Smile } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Sparkles, Smile, UserRound } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ⚙️ POSITION / APPARENCE — ajuste ici librement.
@@ -51,6 +51,10 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [leadCaptured, setLeadCaptured] = useState(false);
+  const [leadForm, setLeadForm] = useState({ firstName: "", email: "", consent: false });
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -67,6 +71,52 @@ export function ChatWidget() {
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  useEffect(() => {
+    try {
+      setLeadCaptured(sessionStorage.getItem("autofunnel-chat-lead") === "captured");
+    } catch {
+      // Le stockage de session peut être désactivé : le formulaire reste alors visible.
+    }
+  }, []);
+
+  async function captureLead(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (leadLoading || !leadForm.firstName.trim() || !leadForm.email.trim() || !leadForm.consent) {
+      return;
+    }
+    setLeadLoading(true);
+    setLeadError(null);
+    try {
+      const formData = new FormData(event.currentTarget);
+      const response = await fetch("/api/chat/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...leadForm,
+          website: String(formData.get("website") ?? ""),
+        }),
+      });
+      if (!response.ok) {
+        setLeadError(
+          response.status === 429
+            ? "Trop de tentatives. Réessaie dans quelques instants."
+            : "Impossible d'enregistrer tes coordonnées pour le moment.",
+        );
+        return;
+      }
+      setLeadCaptured(true);
+      try {
+        sessionStorage.setItem("autofunnel-chat-lead", "captured");
+      } catch {
+        // La capture serveur a réussi : l'indisponibilité du storage n'est pas bloquante.
+      }
+    } catch {
+      setLeadError("Connexion impossible. Vérifie ta connexion puis réessaie.");
+    } finally {
+      setLeadLoading(false);
+    }
+  }
 
   // 🆕 Insère un emoji à la position du curseur dans le champ de saisie.
   function insertEmoji(emoji: string) {
@@ -165,8 +215,87 @@ export function ChatWidget() {
             </button>
           </div>
 
-          {/* Messages */}
-          <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-canvas p-3">
+          {!leadCaptured ? (
+            <form onSubmit={captureLead} className="flex flex-1 flex-col overflow-y-auto bg-canvas p-4">
+              <div className="mx-auto my-auto w-full max-w-sm rounded-2xl border border-line bg-white p-5 shadow-sm">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-gold/15 text-gold-dark">
+                  <UserRound size={20} />
+                </span>
+                <h3 className="mt-4 text-lg font-black text-ink">Avant de commencer</h3>
+                <p className="mt-1 text-sm leading-relaxed text-muted">
+                  Indique tes coordonnées pour discuter avec l’assistant et recevoir une aide adaptée.
+                </p>
+                <label className="mt-4 block text-xs font-bold text-ink">
+                  Prénom
+                  <input
+                    autoComplete="given-name"
+                    value={leadForm.firstName}
+                    onChange={(event) =>
+                      setLeadForm((current) => ({ ...current, firstName: event.target.value }))
+                    }
+                    maxLength={80}
+                    required
+                    className="mt-1.5 w-full rounded-lg border border-line bg-canvas px-3 py-2.5 text-sm font-normal outline-none focus:border-gold"
+                    placeholder="Ton prénom"
+                  />
+                </label>
+                <label className="mt-3 block text-xs font-bold text-ink">
+                  Email
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    value={leadForm.email}
+                    onChange={(event) =>
+                      setLeadForm((current) => ({ ...current, email: event.target.value }))
+                    }
+                    maxLength={320}
+                    required
+                    className="mt-1.5 w-full rounded-lg border border-line bg-canvas px-3 py-2.5 text-sm font-normal outline-none focus:border-gold"
+                    placeholder="toi@exemple.com"
+                  />
+                </label>
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-muted">
+                  <input
+                    type="checkbox"
+                    checked={leadForm.consent}
+                    onChange={(event) =>
+                      setLeadForm((current) => ({ ...current, consent: event.target.checked }))
+                    }
+                    required
+                    className="mt-0.5 h-4 w-4 rounded border-line accent-[#C7A436]"
+                  />
+                  J’accepte qu’AutoFunnel AI utilise ces informations pour répondre à ma demande et me recontacter.
+                </label>
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  className="hidden"
+                />
+                {leadError && <p className="mt-3 text-xs font-semibold text-red-600">{leadError}</p>}
+                <button
+                  type="submit"
+                  disabled={
+                    leadLoading ||
+                    !leadForm.firstName.trim() ||
+                    !leadForm.email.trim() ||
+                    !leadForm.consent
+                  }
+                  className="mt-4 flex w-full items-center justify-center rounded-xl bg-gold px-4 py-3 text-sm font-black text-zinc-950 transition hover:opacity-90 disabled:opacity-40"
+                >
+                  {leadLoading ? <Loader2 size={17} className="animate-spin" /> : "Démarrer la discussion"}
+                </button>
+                <p className="mt-3 text-center text-[10px] text-muted">
+                  Tes coordonnées ne sont jamais affichées publiquement.
+                </p>
+              </div>
+            </form>
+          ) : (
+            <>
+              {/* Messages */}
+              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-canvas p-3">
             {/* Message d'accueil (toujours affiché) */}
             <Bubble role="assistant" content={WIDGET_CONFIG.greeting} />
             {messages.map((m, i) => (
@@ -201,10 +330,10 @@ export function ChatWidget() {
                 </div>
               </div>
             )}
-          </div>
+              </div>
 
-          {/* Saisie */}
-          <div className="relative border-t border-line bg-white p-2.5">
+              {/* Saisie */}
+              <div className="relative border-t border-line bg-white p-2.5">
             {/* 🆕 Picker d'emojis */}
             {showEmoji && (
               <div className="absolute bottom-full left-2 right-2 mb-1 grid grid-cols-8 gap-0.5 rounded-xl border border-line bg-white p-2 shadow-xl">
@@ -253,7 +382,9 @@ export function ChatWidget() {
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

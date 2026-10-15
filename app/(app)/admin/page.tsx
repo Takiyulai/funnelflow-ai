@@ -3,8 +3,7 @@
 // `requireAdminPage` (lib/admin/auth.ts) — un utilisateur non-admin est
 // redirigé côté SERVEUR avant tout rendu, jamais un simple masquage client.
 //
-// 🆕 Deux onglets horizontaux : « Utilisateurs » (interface existante,
-// inchangée) et « Clés API » (consommation et solde par fournisseur).
+// Trois onglets : utilisateurs, prospects capturés par le chatbot et clés API.
 import { AppShell } from "@/components/dashboard/AppShell";
 import { requireAdminPage } from "@/lib/admin/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -12,6 +11,9 @@ import { listAdminUsers } from "@/lib/admin/users";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
 import { AdminTabs } from "@/components/admin/AdminTabs";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { listAdminChatbotLeads } from "@/lib/admin/chatbotLeads";
+import { AdminChatbotLeadsTable } from "@/components/admin/AdminChatbotLeadsTable";
+import type { AdminTabId } from "@/components/admin/AdminTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +25,14 @@ export default async function AdminPage({
   await requireAdminPage(); // 🔒 redirige les non-admins — ne rien faire d'autre avant cet appel.
 
   const { tab } = await searchParams;
-  const initialTab = tab === "keys" ? "keys" : "users";
+  const initialTab: AdminTabId =
+    tab === "keys" || tab === "chatbot-leads" ? tab : "users";
 
   const admin = getSupabaseAdmin();
-  const { users, total } = await listAdminUsers(admin, { limit: 50, offset: 0 });
+  const [{ users, total }, chatbotLeads] = await Promise.all([
+    listAdminUsers(admin, { limit: 50, offset: 0 }),
+    listAdminChatbotLeads(admin),
+  ]);
 
   return (
     <AppShell>
@@ -38,6 +44,12 @@ export default async function AdminPage({
       <AdminTabs
         initialTab={initialTab}
         usersPanel={<AdminUsersTable initialUsers={users} initialTotal={total} />}
+        chatbotLeadsPanel={
+          <AdminChatbotLeadsTable
+            leads={chatbotLeads.leads}
+            total={chatbotLeads.total}
+          />
+        }
       />
     </AppShell>
   );

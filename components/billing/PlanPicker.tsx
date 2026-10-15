@@ -13,7 +13,7 @@ import { getChariowCheckoutUrl } from "@/lib/payments/providers/chariow";
 function featureLines(plan: Plan): string[] {
   const l = plan.limits;
   const lines: string[] = [];
-  lines.push("4 agents IA spécialisés sur chaque tunnel");
+  lines.push("4 expertises réunies (stratégie, textes, design et suivi)");
   lines.push(
     l.funnels === Infinity
       ? "Tunnels et publications illimités"
@@ -21,16 +21,16 @@ function featureLines(plan: Plan): string[] {
   );
   lines.push(
     l.aiFunnelGensPerMonth === Infinity
-      ? "Générations IA de tunnel illimitées"
-      : `${l.aiFunnelGensPerMonth} générations IA de tunnel / mois`,
+      ? "Créations complètes illimitées (tunnel construit de A à Z)"
+      : `${l.aiFunnelGensPerMonth} créations complètes / mois (tunnel construit de A à Z)`,
   );
   if (l.urlImport) lines.push("Import / clonage par URL");
   if (l.sectionRegeneration) {
     // 🆕 La régénération IA couvre désormais les sections ET les pages entières.
     lines.push(
       l.aiCopyRegensPerMonth === Infinity
-        ? "Régénération IA des sections & pages (illimitée)"
-        : `Régénération IA des sections & pages (${l.aiCopyRegensPerMonth}/mois)`,
+        ? "Retouches de contenu illimitées (sections et pages)"
+        : `${l.aiCopyRegensPerMonth} retouches de contenu / mois (section ou page)`,
     );
   }
   lines.push("Parcours multi-pages et redirections automatiques");
@@ -45,8 +45,8 @@ function featureLines(plan: Plan): string[] {
   if (l.aiSequenceGensPerMonth > 0) {
     lines.push(
       l.aiSequenceGensPerMonth === Infinity
-        ? "Séquences d'emails IA illimitées"
-        : `${l.aiSequenceGensPerMonth} séquence${l.aiSequenceGensPerMonth > 1 ? "s" : ""} d'emails IA / mois`,
+        ? "Séquences d'emails prêtes à l'envoi illimitées"
+        : `${l.aiSequenceGensPerMonth} séquence${l.aiSequenceGensPerMonth > 1 ? "s" : ""} d'emails prête${l.aiSequenceGensPerMonth > 1 ? "s" : ""} à l'envoi / mois`,
     );
   }
   if (l.workflows) lines.push("Automatisations (workflows)");
@@ -190,7 +190,7 @@ export function PlanPicker({
             Pour tester toute la méthode et construire ton premier tunnel.
           </p>
           <ul className="mt-5 flex-1 space-y-2.5">
-            {["4 agents IA spécialisés", "1 tunnel en édition", "3 générations IA au total", "10 régénérations IA au total", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
+            {["4 expertises réunies (stratégie, textes, design et suivi)", "1 tunnel en édition", "3 créations complètes au total (tunnel construit de A à Z)", "10 retouches de contenu au total (section ou page)", "50 contacts en lecture CRM", "Aucune publication incluse"].map((feature) => (
               <li key={feature} className="flex items-start gap-2 text-sm text-ink">
                 <Check size={15} className="mt-0.5 shrink-0 text-emerald-500" />
                 <span>{feature}</span>

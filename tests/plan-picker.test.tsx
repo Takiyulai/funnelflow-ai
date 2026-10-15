@@ -32,11 +32,11 @@ describe("page d'abonnement", () => {
     expect(screen.getAllByText("Recommandé pour toi")).toHaveLength(1);
     expect(screen.queryByText(/SasPay/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Chariow/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("4 agents IA spécialisés sur chaque tunnel")).toHaveLength(3);
+    expect(screen.getAllByText("4 expertises réunies (stratégie, textes, design et suivi)")).toHaveLength(4);
     expect(screen.getAllByText("Export systeme.io prêt en 1 clic")).toHaveLength(3);
-    expect(screen.getByText("1 séquence d'emails IA / mois")).toBeInTheDocument();
-    expect(screen.getByText("10 séquences d'emails IA / mois")).toBeInTheDocument();
-    expect(screen.getByText("Séquences d'emails IA illimitées")).toBeInTheDocument();
+    expect(screen.getByText("1 séquence d'emails prête à l'envoi / mois")).toBeInTheDocument();
+    expect(screen.getByText("10 séquences d'emails prêtes à l'envoi / mois")).toBeInTheDocument();
+    expect(screen.getByText("Séquences d'emails prêtes à l'envoi illimitées")).toBeInTheDocument();
     expect(screen.queryByText(/CinetPay/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Stripe$/i)).not.toBeInTheDocument();
   });

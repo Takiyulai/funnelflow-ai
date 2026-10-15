@@ -1,36 +1,40 @@
 "use client";
 
 // components/admin/AdminTabs.tsx
-// 🆕 Deux onglets horizontaux pour le dashboard admin :
+// Trois onglets horizontaux pour le dashboard admin :
 //   1. Utilisateurs — l'interface de gestion existante, inchangée.
-//   2. Clés API     — consommation et solde de chaque fournisseur.
+//   2. Prospects chatbot — coordonnées volontairement soumises sur la landing.
+//   3. Clés API — consommation et solde de chaque fournisseur.
 //
 // L'onglet actif est reflété dans l'URL (?tab=) : un rafraîchissement ou un
 // lien partagé retombe sur le bon onglet. Le panneau « Clés API » n'est monté
 // (et n'interroge donc les fournisseurs) que lorsqu'il est réellement ouvert.
 
 import { useState } from "react";
-import { KeyRound, Users2 } from "lucide-react";
+import { KeyRound, MessageCircle, Users2 } from "lucide-react";
 import { AdminApiKeysPanel } from "@/components/admin/AdminApiKeysPanel";
 
-type TabId = "users" | "keys";
+export type AdminTabId = "users" | "chatbot-leads" | "keys";
 
-const TABS: { id: TabId; label: string; icon: typeof Users2 }[] = [
+const TABS: { id: AdminTabId; label: string; icon: typeof Users2 }[] = [
   { id: "users", label: "Utilisateurs", icon: Users2 },
+  { id: "chatbot-leads", label: "Prospects chatbot", icon: MessageCircle },
   { id: "keys", label: "Clés API", icon: KeyRound },
 ];
 
 export function AdminTabs({
   initialTab = "users",
   usersPanel,
+  chatbotLeadsPanel,
 }: {
-  initialTab?: TabId;
+  initialTab?: AdminTabId;
   /** Interface de gestion des utilisateurs, rendue côté serveur puis passée ici. */
   usersPanel: React.ReactNode;
+  chatbotLeadsPanel: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<TabId>(initialTab);
+  const [tab, setTab] = useState<AdminTabId>(initialTab);
 
-  const select = (next: TabId) => {
+  const select = (next: AdminTabId) => {
     setTab(next);
     // Historique sans rechargement : l'onglet survit à un F5.
     if (typeof window !== "undefined") {
@@ -73,6 +77,7 @@ export function AdminTabs({
       {/* L'onglet Utilisateurs reste monté : on évite de perdre sa recherche et
           sa pagination en naviguant vers les clés API et retour. */}
       <div hidden={tab !== "users"}>{usersPanel}</div>
+      <div hidden={tab !== "chatbot-leads"}>{chatbotLeadsPanel}</div>
       {tab === "keys" && <AdminApiKeysPanel />}
     </div>
   );
