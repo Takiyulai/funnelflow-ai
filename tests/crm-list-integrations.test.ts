@@ -3,6 +3,9 @@ import { parseAudience } from "@/lib/crm/campaigns";
 import { workflowInputSchema } from "@/lib/workflows/validate";
 
 const LIST_ID = "2a38ad38-bdb5-4a54-a06b-40659c0bc93c";
+const TAG_ID = "7f22de5c-060f-47c8-82b6-36a13e1bb79b";
+const SEQUENCE_ID = "a127d865-ff84-45ef-b104-e267547db05d";
+const EMAIL_ID = "72db15d1-a896-4f49-8c05-a1853f3c2b51";
 
 describe("ciblage email par liste", () => {
   it("accepte une liste CRM identifiée par un UUID", () => {
@@ -49,5 +52,47 @@ describe("listes dans les workflows", () => {
       kind: "condition",
       test: { type: "in_list", listId: LIST_ID },
     });
+  });
+
+  it("conserve le déclencheur d'inscription à une liste", () => {
+    const parsed = workflowInputSchema.parse({
+      ...base,
+      trigger: { event: "list.subscribed", listId: LIST_ID },
+      actions: [{ kind: "remove_from_list", listId: LIST_ID }],
+    });
+    expect(parsed.trigger).toMatchObject({ event: "list.subscribed", listId: LIST_ID });
+    expect(parsed.actions[0]).toEqual({ kind: "remove_from_list", listId: LIST_ID });
+  });
+
+  it("conserve le déclencheur d'ouverture d'un email précis", () => {
+    const parsed = workflowInputSchema.parse({
+      ...base,
+      trigger: {
+        event: "email.opened",
+        sequenceId: SEQUENCE_ID,
+        sequenceEmailId: EMAIL_ID,
+      },
+      actions: [{ kind: "remove_tag", tagId: TAG_ID }],
+    });
+    expect(parsed.trigger).toMatchObject({
+      event: "email.opened",
+      sequenceId: SEQUENCE_ID,
+      sequenceEmailId: EMAIL_ID,
+    });
+    expect(parsed.actions[0]).toEqual({ kind: "remove_tag", tagId: TAG_ID });
+  });
+
+  it("valide les ajustements positifs et négatifs du score", () => {
+    const parsed = workflowInputSchema.parse({
+      ...base,
+      actions: [
+        { kind: "increase_score", points: 25 },
+        { kind: "decrease_score", points: 5 },
+      ],
+    });
+    expect(parsed.actions).toEqual([
+      { kind: "increase_score", points: 25 },
+      { kind: "decrease_score", points: 5 },
+    ]);
   });
 });

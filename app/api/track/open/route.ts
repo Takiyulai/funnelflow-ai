@@ -4,6 +4,7 @@
 // (best-effort : aucune erreur de tracking ne casse l'affichage de l'email).
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { runWorkflowsForEvent } from "@/lib/workflows/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
       if (Number.isFinite(sentMs) && Date.now() - sentMs < 10_000) {
         return gifResponse(); // préchargement automatique → pas un vrai « open »
       }
-      await admin.from("email_events").insert({
+      const { error: eventError } = await admin.from("email_events").insert({
         user_id: userId,
         kind: "open",
         source_type: sourceType,
@@ -74,6 +75,26 @@ export async function GET(request: Request) {
         message_id: messageId,
         contact_id: contactId,
       });
+      if (!eventError && contactId) {
+        const { data: lead } = await admin
+          .from("leads")
+          .select("id, email, name")
+          .eq("id", contactId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (lead) {
+          await runWorkflowsForEvent(admin, userId, {
+            event: "email.opened",
+            lead: {
+              id: lead.id as string,
+              email: lead.email as string,
+              name: lead.name as string | null,
+            },
+            sequenceId,
+            sequenceEmailId,
+          });
+        }
+      }
     } catch {
       // best-effort : table absente ou erreur DB → l'image part quand même
     }

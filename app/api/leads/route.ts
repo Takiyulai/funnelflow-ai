@@ -422,6 +422,17 @@ export async function POST(request: Request) {
       }
       if (ownedListIds.length > 0) {
         await addContactsToLists(admin, funnel.user_id, [lead.id], ownedListIds);
+        for (const listId of ownedListIds) {
+          await runWorkflowsForEvent(admin, funnel.user_id, {
+            event: "list.subscribed",
+            lead: {
+              id: lead.id,
+              email: payload.email.toLowerCase().trim(),
+              name: payload.name?.trim() || null,
+            },
+            listId,
+          });
+        }
       }
     } catch (listErr) {
       console.warn("[api/leads] assignation aux listes échouée (non bloquant):", listErr);

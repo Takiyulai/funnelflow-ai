@@ -50,8 +50,24 @@ const baseActionSchemas = [
     tags: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
   }),
   z.object({
+    kind: z.literal("remove_tag"),
+    tagId: z.string().uuid(),
+  }),
+  z.object({
     kind: z.literal("add_to_list"),
     listId: z.string().uuid(),
+  }),
+  z.object({
+    kind: z.literal("remove_from_list"),
+    listId: z.string().uuid(),
+  }),
+  z.object({
+    kind: z.literal("increase_score"),
+    points: z.number().int().min(1).max(1000),
+  }),
+  z.object({
+    kind: z.literal("decrease_score"),
+    points: z.number().int().min(1).max(1000),
   }),
   z.object({
     kind: z.literal("set_status"),
@@ -117,6 +133,7 @@ function conditionDepth(action: unknown, depth = 0): number {
 // 🆕 LOT 2 — Événements déclencheurs étendus.
 const triggerEventEnum = z.enum([
   "lead.created",
+  "list.subscribed",
   "tag.added",
   "status.changed",
   "purchase.completed",
@@ -127,6 +144,7 @@ const triggerEventEnum = z.enum([
   "appointment.booked",
   "time.elapsed",
   "time.before_event",
+  "email.opened",
   "email.link_clicked",
   "page.visited",
 ]);
@@ -140,6 +158,7 @@ export const workflowInputSchema = z.object({
       // Filtres optionnels (selon l'événement) ; un filtre absent = « tous ».
       funnelId: z.string().uuid().nullable().optional(),
       tagId: z.string().uuid().nullable().optional(),
+      listId: z.string().uuid().nullable().optional(),
       status: z
         .enum(["nouveau", "contacte", "qualifie", "client", "perdu"])
         .nullable()
@@ -147,6 +166,8 @@ export const workflowInputSchema = z.object({
       // 🆕 LOT 2
       pageSlug: z.string().trim().max(160).nullable().optional(),
       linkLabel: z.string().trim().max(500).nullable().optional(),
+      sequenceId: z.string().uuid().nullable().optional(),
+      sequenceEmailId: z.string().uuid().nullable().optional(),
       afterEvent: triggerEventEnum.nullable().optional(),
       delayDays: z.number().int().min(0).max(365).optional(),
       delayHours: z.number().int().min(0).max(23).optional(),
@@ -239,9 +260,12 @@ export function parseWorkflowInput(body: unknown): WorkflowInput {
       event: parsed.trigger.event,
       funnelId: parsed.trigger.funnelId ?? null,
       tagId: parsed.trigger.tagId ?? null,
+      listId: parsed.trigger.listId ?? null,
       status: parsed.trigger.status ?? null,
       pageSlug: parsed.trigger.pageSlug ?? null,
       linkLabel: parsed.trigger.linkLabel ?? null,
+      sequenceId: parsed.trigger.sequenceId ?? null,
+      sequenceEmailId: parsed.trigger.sequenceEmailId ?? null,
       afterEvent: parsed.trigger.afterEvent ?? null,
       delayDays: parsed.trigger.delayDays ?? 0,
       delayHours: parsed.trigger.delayHours ?? 0,

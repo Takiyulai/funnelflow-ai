@@ -9,8 +9,12 @@
 // dépendance ni planificateur supplémentaire.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getOrCreateTagsByName, assignTagsToContacts } from "@/lib/crm/tags";
-import { addContactsToLists } from "@/lib/crm/lists";
+import {
+  getOrCreateTagsByName,
+  assignTagsToContacts,
+  removeTagsFromContacts,
+} from "@/lib/crm/tags";
+import { addContactsToLists, removeContactsFromLists } from "@/lib/crm/lists";
 import { enrollContact } from "@/lib/crm/sequences";
 import { personalize, renderSequenceEmailHtml, getFunnelBrandName } from "@/lib/crm/emailRender";
 import { getActiveWorkflowsForEvent, getActiveWorkflowsWaitingOnEvent } from "./repository";
@@ -58,12 +62,17 @@ export type WorkflowEventContext = {
   funnelId?: string | null;
   /** tag.added : tag qui vient d'être ajouté. */
   tagId?: string | null;
+  /** list.subscribed : liste à laquelle le contact vient d'être inscrit. */
+  listId?: string | null;
   /** status.changed : nouveau statut du lead. */
   status?: LeadStatus | null;
   /** 🆕 page.visited : slug de la page visitée. */
   pageSlug?: string | null;
   /** 🆕 email.link_clicked : URL du lien cliqué. */
   linkLabel?: string | null;
+  /** email.opened : séquence et email précis, quand ils sont connus. */
+  sequenceId?: string | null;
+  sequenceEmailId?: string | null;
 };
 
 /** Le filtre du trigger correspond-il au contexte de l'événement ?
@@ -83,6 +92,8 @@ function triggerFilterMatches(
       return !trigger.funnelId || trigger.funnelId === ctx.funnelId;
     case "tag.added":
       return !trigger.tagId || trigger.tagId === ctx.tagId;
+    case "list.subscribed":
+      return !trigger.listId || trigger.listId === ctx.listId;
     case "status.changed":
       return !trigger.status || trigger.status === ctx.status;
     case "page.visited":
@@ -92,6 +103,11 @@ function triggerFilterMatches(
       );
     case "email.link_clicked":
       return !trigger.linkLabel || trigger.linkLabel === ctx.linkLabel;
+    case "email.opened":
+      return (
+        (!trigger.sequenceId || trigger.sequenceId === ctx.sequenceId) &&
+        (!trigger.sequenceEmailId || trigger.sequenceEmailId === ctx.sequenceEmailId)
+      );
     // 🆕 time.elapsed ne se déclenche JAMAIS directement sur un événement —
     // voir la planification différée plus bas dans runWorkflowsForEvent.
     case "time.elapsed":
@@ -460,6 +476,18 @@ export async function executeActions(
           }
           break;
         }
+        case "remove_tag": {
+          const { data: ownedTag, error: tagError } = await admin
+            .from("crm_tags")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("id", action.tagId)
+            .maybeSingle();
+          if (tagError) throw new Error(tagError.message);
+          if (!ownedTag) throw new Error("tag_not_found");
+          await removeTagsFromContacts(admin, userId, [lead.id], [ownedTag.id]);
+          break;
+        }
         case "add_to_list": {
           // Le moteur utilise un client privilégié : la propriété de la liste
           // doit donc être vérifiée explicitement avant de créer la liaison.
@@ -472,6 +500,29 @@ export async function executeActions(
           if (listError) throw new Error(listError.message);
           if (!ownedList) throw new Error("list_not_found");
           await addContactsToLists(admin, userId, [lead.id], [ownedList.id]);
+          break;
+        }
+        case "remove_from_list": {
+          const { data: ownedList, error: listError } = await admin
+            .from("crm_lists")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("id", action.listId)
+            .maybeSingle();
+          if (listError) throw new Error(listError.message);
+          if (!ownedList) throw new Error("list_not_found");
+          await removeContactsFromLists(admin, userId, [lead.id], [ownedList.id]);
+          break;
+        }
+        case "increase_score":
+        case "decrease_score": {
+          const delta = action.kind === "increase_score" ? action.points : -action.points;
+          const { error } = await admin.rpc("adjust_lead_score", {
+            p_user_id: userId,
+            p_lead_id: lead.id,
+            p_delta: delta,
+          });
+          if (error) throw new Error(error.message);
           break;
         }
         case "set_status": {

@@ -2,7 +2,7 @@
 
 import { useAiUsageNotice } from "@/components/ai/AiUsageNoticeProvider";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { handlePlanGate } from "@/lib/billing/planGate";
 import {
   Bell,
@@ -14,6 +14,10 @@ import {
   Plus,
   Tag,
   ListPlus,
+  ListMinus,
+  TrendingUp,
+  TrendingDown,
+  X,
   Trash2,
   UserCheck,
   Zap,
@@ -131,9 +135,22 @@ function firstActionProblem(actions: WorkflowActionConfig[], where = ""): string
         if (!a.tags || a.tags.filter((t) => t.trim()).length === 0)
           return `Une action « Ajouter un tag »${loc} n'a aucun tag.`;
         break;
+      case "remove_tag":
+        if (!a.tagId)
+          return `Une action « Retirer un tag »${loc} n'a pas de tag choisi.`;
+        break;
       case "add_to_list":
         if (!a.listId)
           return `Une action « Ajouter à une liste »${loc} n'a pas de liste choisie.`;
+        break;
+      case "remove_from_list":
+        if (!a.listId)
+          return `Une action « Désinscrire d’une liste »${loc} n'a pas de liste choisie.`;
+        break;
+      case "increase_score":
+      case "decrease_score":
+        if (!Number.isFinite(a.points) || a.points <= 0)
+          return `Une action de score${loc} doit contenir au moins 1 point.`;
         break;
       case "condition": {
         if (a.test.type === "has_tag" && !a.test.tagId)
@@ -182,6 +199,9 @@ type Draft = {
   triggerEvent: WorkflowTriggerEvent;
   funnelId: string | null;
   tagId: string | null;
+  listId: string | null;
+  sequenceId: string | null;
+  sequenceEmailId: string | null;
   triggerStatus: LeadStatus | null;
   // 🆕 LOT 2
   pageSlug: string;
@@ -194,6 +214,7 @@ type Draft = {
 
 const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
   "lead.created": "Nouveau lead capturé",
+  "list.subscribed": "Contact inscrit à une liste",
   "tag.added": "Tag ajouté à un contact",
   "status.changed": "Statut CRM modifié",
   "purchase.completed": "Achat / paiement réussi",
@@ -204,6 +225,7 @@ const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
   "appointment.booked": "RDV réservé",
   "time.elapsed": "Délai écoulé après un autre événement",
   "time.before_event": "Avant un événement daté (ex. webinaire live)",
+  "email.opened": "Email ouvert",
   "email.link_clicked": "Lien cliqué dans un email",
   "page.visited": "Page visitée",
 };
@@ -215,12 +237,14 @@ const TRIGGER_LABELS: Record<WorkflowTriggerEvent, string> = {
 // le jour où la présence live est trackée.
 const TRIGGER_EVENTS: WorkflowTriggerEvent[] = [
   "lead.created",
+  "list.subscribed",
   "tag.added",
   "status.changed",
   "purchase.completed",
   "webinar.registered",
   "application.submitted",
   "appointment.booked",
+  "email.opened",
   "email.link_clicked",
   "page.visited",
   "time.elapsed",
@@ -251,7 +275,11 @@ const ACTION_META: Record<
   { label: string; icon: typeof Tag }
 > = {
   add_tag: { label: "Ajouter un tag", icon: Tag },
+  remove_tag: { label: "Retirer un tag", icon: Tag },
   add_to_list: { label: "Ajouter à une liste", icon: ListPlus },
+  remove_from_list: { label: "Désinscrire d’une liste", icon: ListMinus },
+  increase_score: { label: "Ajouter au score du lead", icon: TrendingUp },
+  decrease_score: { label: "Retirer du score du lead", icon: TrendingDown },
   set_status: { label: "Changer le statut CRM", icon: UserCheck },
   enroll_in_sequence: { label: "Inscrire dans une séquence", icon: Send },
   notify_owner: { label: "Me notifier", icon: Bell },
@@ -266,7 +294,7 @@ const ACTION_META: Record<
 // 🆕 LOT 5 — Libellés des tests de condition.
 const CONDITION_TYPE_LABELS: Record<WorkflowConditionTest["type"], string> = {
   has_tag: "Le contact a le tag…",
-  in_list: "Le contact appartient à la liste…",
+  in_list: "Le contact est inscrit à la liste…",
   status_is: "Le statut CRM est…",
   language_is: "La langue du contact est…",
   source_is: "La source du contact est…",
@@ -280,7 +308,11 @@ const CONDITION_TYPE_LABELS: Record<WorkflowConditionTest["type"], string> = {
 // garde l'interface simple et lisible pour les débutants).
 const BRANCH_ACTION_KINDS: WorkflowActionKind[] = [
   "add_tag",
+  "remove_tag",
   "add_to_list",
+  "remove_from_list",
+  "increase_score",
+  "decrease_score",
   "set_status",
   "enroll_in_sequence",
   "send_email",
@@ -310,6 +342,9 @@ function emptyDraft(): Draft {
     triggerEvent: "lead.created",
     funnelId: null,
     tagId: null,
+    listId: null,
+    sequenceId: null,
+    sequenceEmailId: null,
     triggerStatus: null,
     pageSlug: "",
     linkLabel: "",
@@ -326,12 +361,16 @@ function describeTrigger(draft: Draft): string {
   switch (draft.triggerEvent) {
     case "tag.added":
       return `Un tag${draft.tagId ? " précis" : ""} est ajouté à un contact.`;
+    case "list.subscribed":
+      return `Un contact est inscrit à ${draft.listId ? "la liste choisie" : "une liste CRM"}.`;
     case "status.changed":
       return `Le statut CRM d’un lead ${draft.triggerStatus ? "passe à la valeur choisie" : "change"}.`;
     case "page.visited":
       return `Un contact identifié visite ${draft.pageSlug.trim() ? `la page « ${draft.pageSlug.trim()} »` : "une page"} sur ${draft.funnelId ? "ce tunnel" : "vos tunnels"}.`;
     case "email.link_clicked":
       return `Un contact clique sur ${draft.linkLabel.trim() ? "ce lien précis" : "un lien"} dans un email envoyé.`;
+    case "email.opened":
+      return `Un contact ouvre ${draft.sequenceEmailId ? "l’email choisi" : draft.sequenceId ? "un email de la séquence choisie" : "un email envoyé"}.`;
     case "time.elapsed": {
       const delay = [draft.delayDays ? `${draft.delayDays}j` : null, draft.delayHours ? `${draft.delayHours}h` : null]
         .filter(Boolean)
@@ -368,8 +407,15 @@ function defaultActionConfig(kind: WorkflowActionKind): WorkflowActionConfig {
   switch (kind) {
     case "add_tag":
       return { kind, tags: [] };
+    case "remove_tag":
+      return { kind, tagId: "" };
     case "add_to_list":
       return { kind, listId: "" };
+    case "remove_from_list":
+      return { kind, listId: "" };
+    case "increase_score":
+    case "decrease_score":
+      return { kind, points: 10 };
     case "set_status":
       return { kind, status: "qualifie" };
     case "enroll_in_sequence":
@@ -440,10 +486,14 @@ function triggerFromDraft(draft: Draft): WorkflowTriggerConfig {
         ? draft.funnelId
         : null,
     tagId: draft.triggerEvent === "tag.added" ? draft.tagId : null,
+    listId: draft.triggerEvent === "list.subscribed" ? draft.listId : null,
     status: draft.triggerEvent === "status.changed" ? draft.triggerStatus : null,
     pageSlug: draft.triggerEvent === "page.visited" ? draft.pageSlug.trim() || null : null,
     linkLabel:
       draft.triggerEvent === "email.link_clicked" ? draft.linkLabel.trim() || null : null,
+    sequenceId: draft.triggerEvent === "email.opened" ? draft.sequenceId : null,
+    sequenceEmailId:
+      draft.triggerEvent === "email.opened" ? draft.sequenceEmailId : null,
     afterEvent: draft.triggerEvent === "time.elapsed" ? draft.afterEvent : null,
     delayDays: isTimed ? draft.delayDays : undefined,
     delayHours: isTimed ? draft.delayHours : undefined,
@@ -470,6 +520,9 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags, li
       triggerEvent: wf.trigger.event,
       funnelId: wf.trigger.funnelId ?? null,
       tagId: wf.trigger.tagId ?? null,
+      listId: wf.trigger.listId ?? null,
+      sequenceId: wf.trigger.sequenceId ?? null,
+      sequenceEmailId: wf.trigger.sequenceEmailId ?? null,
       triggerStatus: wf.trigger.status ?? null,
       pageSlug: wf.trigger.pageSlug ?? "",
       linkLabel: wf.trigger.linkLabel ?? "",
@@ -607,6 +660,8 @@ export function WorkflowsClient({ initialWorkflows, funnels, sequences, tags, li
           workflows={workflows}
           funnels={funnels}
           tags={tags}
+          lists={lists}
+          sequences={sequences}
           onEdit={openEdit}
           onDelete={remove}
           onNew={openNew}
@@ -664,6 +719,8 @@ function WorkflowList({
   workflows,
   funnels,
   tags,
+  lists,
+  sequences,
   onEdit,
   onDelete,
   onNew,
@@ -671,6 +728,8 @@ function WorkflowList({
   workflows: Workflow[];
   funnels: FunnelOption[];
   tags: TagOption[];
+  lists: ListOption[];
+  sequences: SequenceOption[];
   onEdit: (wf: Workflow) => void;
   onDelete: (id: string) => void;
   onNew: () => void;
@@ -705,16 +764,30 @@ function WorkflowList({
     id ? funnels.find((f) => f.id === id)?.name ?? "Tunnel supprimé" : "Tous les tunnels";
   const tagName = (id: string | null | undefined) =>
     id ? tags.find((t) => t.id === id)?.name ?? "Tag supprimé" : "tout tag";
+  const listName = (id: string | null | undefined) =>
+    id ? lists.find((l) => l.id === id)?.name ?? "Liste supprimée" : "toute liste";
+  const sequenceName = (id: string | null | undefined) =>
+    id ? sequences.find((s) => s.id === id)?.name ?? "Séquence supprimée" : "tout email";
 
   const triggerSummary = (wf: Workflow): string => {
     const label = TRIGGER_LABELS[wf.trigger.event];
     if (wf.trigger.event === "tag.added") return `${label} · ${tagName(wf.trigger.tagId)}`;
+    if (wf.trigger.event === "list.subscribed")
+      return `${label} · ${listName(wf.trigger.listId)}`;
     if (wf.trigger.event === "status.changed")
       return `${label} · ${wf.trigger.status ? STATUS_LABELS[wf.trigger.status] : "tout statut"}`;
     if (wf.trigger.event === "page.visited")
       return `${label} · ${wf.trigger.pageSlug || "toute page"} · ${funnelName(wf.trigger.funnelId)}`;
     if (wf.trigger.event === "email.link_clicked")
       return `${label} · ${wf.trigger.linkLabel || "tout lien"}`;
+    if (wf.trigger.event === "email.opened") {
+      const sequence = sequenceName(wf.trigger.sequenceId);
+      if (!wf.trigger.sequenceEmailId) return `${label} · ${sequence}`;
+      const email = sequences
+        .find((s) => s.id === wf.trigger.sequenceId)
+        ?.emails.find((e) => e.id === wf.trigger.sequenceEmailId);
+      return `${label} · ${email?.subject || "Email supprimé"} · ${sequence}`;
+    }
     if (wf.trigger.event === "time.elapsed") {
       const d = wf.trigger.delayDays ?? 0;
       const h = wf.trigger.delayHours ?? 0;
@@ -884,9 +957,14 @@ function WorkflowEditor({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const [actionPickerOpen, setActionPickerOpen] = useState(false);
   const actionKinds: WorkflowActionKind[] = [
     "add_tag",
+    "remove_tag",
     "add_to_list",
+    "remove_from_list",
+    "increase_score",
+    "decrease_score",
     "set_status",
     "enroll_in_sequence",
     "send_email",
@@ -1159,6 +1237,64 @@ function WorkflowEditor({
           </label>
         )}
 
+        {draft.triggerEvent === "list.subscribed" && (
+          <label className="block">
+            <span className="text-xs font-bold uppercase text-muted">Liste déclencheuse</span>
+            <select
+              value={draft.listId ?? ""}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, listId: e.target.value || null }))
+              }
+              className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+            >
+              <option value="">N’importe quelle liste</option>
+              {lists.map((list) => (
+                <option key={list.id} value={list.id}>{list.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {draft.triggerEvent === "email.opened" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">Séquence (optionnel)</span>
+              <select
+                value={draft.sequenceId ?? ""}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    sequenceId: e.target.value || null,
+                    sequenceEmailId: null,
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+              >
+                <option value="">Tous les emails envoyés</option>
+                {sequences.map((sequence) => (
+                  <option key={sequence.id} value={sequence.id}>{sequence.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase text-muted">Email précis (optionnel)</span>
+              <select
+                value={draft.sequenceEmailId ?? ""}
+                disabled={!draft.sequenceId}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, sequenceEmailId: e.target.value || null }))
+                }
+                className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring disabled:opacity-50"
+              >
+                <option value="">N’importe quel email de la séquence</option>
+                {(sequences.find((s) => s.id === draft.sequenceId)?.emails ?? []).map((email) => (
+                  <option key={email.id} value={email.id}>{email.subject}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
         {draft.triggerEvent === "status.changed" && (
           <label className="block">
             <span className="text-xs font-bold uppercase text-muted">
@@ -1249,34 +1385,36 @@ function WorkflowEditor({
           )}
 
           {/* Nœud d'ajout d'action */}
-          <div className="flex min-w-0 gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={() => setActionPickerOpen(true)}
+            className="group flex min-w-0 w-full gap-3 rounded-lg text-left focus-ring sm:gap-4"
+            aria-label="Ajouter une action"
+          >
             <div className="flex flex-col items-center">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-dashed border-line text-muted">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-dashed border-line text-muted transition group-hover:border-accent group-hover:text-accent-ink">
                 <Plus size={16} />
               </div>
             </div>
-            <div className="min-w-0 flex-1 pb-1">
-              <p className="mb-2 text-xs font-bold text-muted">Ajouter une action</p>
-              <div className="flex flex-wrap gap-2">
-                {actionKinds.map((kind) => {
-                  const Meta = ACTION_META[kind];
-                  const Icon = Meta.icon;
-                  return (
-                    <button
-                      key={kind}
-                      type="button"
-                      onClick={() => onAddAction(kind)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-bold text-ink hover:border-navy/40 hover:bg-canvas"
-                    >
-                      <Plus size={13} /> <Icon size={13} /> {Meta.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="min-w-0 flex-1 pb-1 pt-2">
+              <p className="text-xs font-bold text-muted transition group-hover:text-ink">
+                Ajouter une action
+              </p>
             </div>
-          </div>
+          </button>
         </div>
       </div>
+
+      {actionPickerOpen && (
+        <ActionPickerModal
+          kinds={actionKinds}
+          onClose={() => setActionPickerOpen(false)}
+          onSelect={(kind) => {
+            onAddAction(kind);
+            setActionPickerOpen(false);
+          }}
+        />
+      )}
 
       {error && (
         <p className="mt-4 rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-sm text-red">
@@ -1291,6 +1429,121 @@ function WorkflowEditor({
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
           Annuler
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sélecteur d'action — les choix restent masqués jusqu'au clic sur le nœud +.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ActionPickerModal({
+  kinds,
+  onClose,
+  onSelect,
+}: {
+  kinds: WorkflowActionKind[];
+  onClose: () => void;
+  onSelect: (kind: WorkflowActionKind) => void;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const groups: Array<{ label: string; kinds: WorkflowActionKind[] }> = [
+    {
+      label: "Organisation du CRM",
+      kinds: [
+        "add_tag",
+        "remove_tag",
+        "add_to_list",
+        "remove_from_list",
+        "set_status",
+        "increase_score",
+        "decrease_score",
+      ],
+    },
+    {
+      label: "Communication",
+      kinds: ["enroll_in_sequence", "send_email", "notify_owner"],
+    },
+    {
+      label: "Parcours et logique",
+      kinds: ["wait", "wait_until", "condition"],
+    },
+  ];
+  const available = new Set(kinds);
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-3 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workflow-action-picker-title"
+        className="max-h-[min(86dvh,720px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 id="workflow-action-picker-title" className="text-lg font-black text-ink">
+              Choisir une action
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              L’action sera ajoutée à la suite du workflow et pourra être configurée juste après.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-muted hover:text-ink"
+            aria-label="Fermer"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-5">
+          {groups.map((group) => {
+            const groupKinds = group.kinds.filter((kind) => available.has(kind));
+            if (groupKinds.length === 0) return null;
+            return (
+              <section key={group.label}>
+                <h4 className="text-[11px] font-black uppercase tracking-wider text-muted">
+                  {group.label}
+                </h4>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {groupKinds.map((kind) => {
+                    const Meta = ACTION_META[kind];
+                    const Icon = Meta.icon;
+                    return (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => onSelect(kind)}
+                        className="flex items-center gap-3 rounded-xl border border-line bg-canvas px-3 py-3 text-left text-sm font-bold text-ink transition hover:border-accent hover:bg-accent-soft"
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface text-accent-ink">
+                          <Icon size={17} />
+                        </span>
+                        {Meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1458,6 +1711,19 @@ function ActionConfigFields({
           />
         )}
 
+        {action.kind === "remove_tag" && (
+          <select
+            value={action.tagId}
+            onChange={(e) => onChange({ kind: "remove_tag", tagId: e.target.value })}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="">— Choisir le tag à retirer —</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+        )}
+
         {action.kind === "add_to_list" && (
           <select
             value={action.listId}
@@ -1473,6 +1739,42 @@ function ActionConfigFields({
               </option>
             ))}
           </select>
+        )}
+
+        {action.kind === "remove_from_list" && (
+          <select
+            value={action.listId}
+            onChange={(e) =>
+              onChange({ kind: "remove_from_list", listId: e.target.value })
+            }
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+          >
+            <option value="">— Choisir la liste —</option>
+            {lists.map((list) => (
+              <option key={list.id} value={list.id}>{list.name}</option>
+            ))}
+          </select>
+        )}
+
+        {(action.kind === "increase_score" || action.kind === "decrease_score") && (
+          <label className="flex flex-wrap items-center gap-2 text-sm text-ink">
+            <span>{action.kind === "increase_score" ? "Ajouter" : "Retirer"}</span>
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              value={action.points}
+              onChange={(e) =>
+                onChange({
+                  kind: action.kind,
+                  points: Math.min(1000, Math.max(1, Number(e.target.value) || 1)),
+                })
+              }
+              className="w-24 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus-ring"
+              aria-label="Nombre de points"
+            />
+            <span>point{action.points > 1 ? "s" : ""} au score du lead.</span>
+          </label>
         )}
 
         {action.kind === "set_status" && (
@@ -2053,6 +2355,7 @@ function ConditionBranch({
   /** 🆕 Délai déjà accumulé jusqu'à la condition qui contient cette branche. */
   baseOffsetMs?: number;
 }) {
+  const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const toneCls =
     tone === "green"
       ? "border-green/40 bg-green/5 text-green"
@@ -2108,21 +2411,24 @@ function ConditionBranch({
         })}
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {BRANCH_ACTION_KINDS.map((kind) => {
-          const Meta = ACTION_META[kind];
-          return (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => onChange([...actions, defaultActionConfig(kind)])}
-              className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink hover:border-navy/40"
-            >
-              <Plus size={11} /> {Meta.label}
-            </button>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        onClick={() => setBranchPickerOpen(true)}
+        className="mt-2 inline-flex items-center gap-1 rounded-md border border-dashed border-line bg-surface px-2 py-1 text-[11px] font-bold text-ink hover:border-accent"
+      >
+        <Plus size={11} /> Ajouter une action
+      </button>
+
+      {branchPickerOpen && (
+        <ActionPickerModal
+          kinds={BRANCH_ACTION_KINDS}
+          onClose={() => setBranchPickerOpen(false)}
+          onSelect={(kind) => {
+            onChange([...actions, defaultActionConfig(kind)]);
+            setBranchPickerOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

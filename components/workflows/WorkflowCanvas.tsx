@@ -45,6 +45,9 @@ import {
   CalendarClock,
   GitBranch,
   ListChecks,
+  ListMinus,
+  TrendingUp,
+  TrendingDown,
   CircleDot,
   Merge,
 } from "lucide-react";
@@ -66,6 +69,7 @@ import {
 
 const TRIGGER_LABEL: Record<string, string> = {
   "lead.created": "Un lead est capturé",
+  "list.subscribed": "Inscription à une liste",
   "tag.added": "Un tag est ajouté",
   "status.changed": "Le statut change",
   "purchase.completed": "Un paiement est confirmé",
@@ -76,13 +80,18 @@ const TRIGGER_LABEL: Record<string, string> = {
   "appointment.booked": "Un rendez-vous est réservé",
   "time.elapsed": "Après un délai",
   "time.before_event": "Avant une date fixe",
+  "email.opened": "Un email est ouvert",
   "email.link_clicked": "Un lien d'email est cliqué",
   "page.visited": "Une page est revisitée",
 };
 
 const ACTION_LABEL: Record<WorkflowActionConfig["kind"], string> = {
   add_tag: "Ajouter un tag",
+  remove_tag: "Retirer un tag",
   add_to_list: "Ajouter à une liste",
+  remove_from_list: "Désinscrire d’une liste",
+  increase_score: "Ajouter au score",
+  decrease_score: "Retirer du score",
   set_status: "Changer le statut",
   enroll_in_sequence: "Inscrire à une séquence",
   notify_owner: "Me notifier",
@@ -94,7 +103,11 @@ const ACTION_LABEL: Record<WorkflowActionConfig["kind"], string> = {
 
 const ACTION_ICON: Record<WorkflowActionConfig["kind"], typeof Tag> = {
   add_tag: Tag,
+  remove_tag: Tag,
   add_to_list: ListChecks,
+  remove_from_list: ListMinus,
+  increase_score: TrendingUp,
+  decrease_score: TrendingDown,
   set_status: UserCheck,
   enroll_in_sequence: ListChecks,
   notify_owner: Bell,

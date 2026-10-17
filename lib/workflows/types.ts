@@ -37,9 +37,12 @@ export type WorkflowStatus = "draft" | "active" | "paused";
  *                           dans le passé (inscription trop tardive), rien n'est
  *                           planifié — évite un rappel envoyé après le live.
  *  - email.link_clicked   : 🆕 LOT 2 — un lien a été cliqué dans un email envoyé.
+ *  - email.opened         : un email envoyé a été ouvert par un contact.
+ *  - list.subscribed      : un contact a été ajouté à une liste CRM.
  *  - page.visited         : 🆕 LOT 2 — un contact déjà identifié revisite une page. */
 export type WorkflowTriggerEvent =
   | "lead.created"
+  | "list.subscribed"
   | "tag.added"
   | "status.changed"
   | "purchase.completed"
@@ -50,11 +53,13 @@ export type WorkflowTriggerEvent =
   | "appointment.booked"
   | "time.elapsed"
   | "time.before_event"
+  | "email.opened"
   | "email.link_clicked"
   | "page.visited";
 
 export const WORKFLOW_TRIGGER_EVENTS: readonly WorkflowTriggerEvent[] = [
   "lead.created",
+  "list.subscribed",
   "tag.added",
   "status.changed",
   "purchase.completed",
@@ -65,6 +70,7 @@ export const WORKFLOW_TRIGGER_EVENTS: readonly WorkflowTriggerEvent[] = [
   "appointment.booked",
   "time.elapsed",
   "time.before_event",
+  "email.opened",
   "email.link_clicked",
   "page.visited",
 ] as const;
@@ -72,6 +78,7 @@ export const WORKFLOW_TRIGGER_EVENTS: readonly WorkflowTriggerEvent[] = [
 /** Événements sur lesquels un déclencheur `time.elapsed` peut se greffer. */
 export const TIME_ELAPSED_BASE_EVENTS: readonly WorkflowTriggerEvent[] = [
   "lead.created",
+  "list.subscribed",
   "tag.added",
   "status.changed",
   "purchase.completed",
@@ -80,6 +87,9 @@ export const TIME_ELAPSED_BASE_EVENTS: readonly WorkflowTriggerEvent[] = [
   "webinar.absent",
   "application.submitted",
   "appointment.booked",
+  "email.opened",
+  "email.link_clicked",
+  "page.visited",
 ] as const;
 
 /** Types d'étape stockés dans workflow_steps.type. */
@@ -90,7 +100,11 @@ export type WorkflowStepType = "trigger" | "action";
  *  (embranchement si/alors, purement logique — AUCUN appel IA). */
 export type WorkflowActionKind =
   | "add_tag"
+  | "remove_tag"
   | "add_to_list"
+  | "remove_from_list"
+  | "increase_score"
+  | "decrease_score"
   | "set_status"
   | "enroll_in_sequence"
   | "notify_owner"
@@ -112,7 +126,11 @@ export const LEAD_STATUSES: readonly LeadStatus[] = [
 
 export const WORKFLOW_ACTION_KINDS: readonly WorkflowActionKind[] = [
   "add_tag",
+  "remove_tag",
   "add_to_list",
+  "remove_from_list",
+  "increase_score",
+  "decrease_score",
   "set_status",
   "enroll_in_sequence",
   "notify_owner",
@@ -179,12 +197,17 @@ export type WorkflowTriggerConfig = {
   funnelId?: string | null;
   /** tag.added : null/absent = n'importe quel tag. */
   tagId?: string | null;
+  /** list.subscribed : null/absent = n'importe quelle liste CRM. */
+  listId?: string | null;
   /** status.changed : null/absent = n'importe quel statut cible. */
   status?: LeadStatus | null;
   /** 🆕 page.visited : slug de page précis. null/absent = n'importe quelle page du tunnel. */
   pageSlug?: string | null;
   /** 🆕 email.link_clicked : URL du lien à surveiller. null/absent = n'importe quel lien. */
   linkLabel?: string | null;
+  /** email.opened : séquence/email optionnels. Absents = n'importe quel email. */
+  sequenceId?: string | null;
+  sequenceEmailId?: string | null;
   /** 🆕 time.elapsed : événement de référence à partir duquel compter le délai. */
   afterEvent?: WorkflowTriggerEvent | null;
   /** 🆕 time.elapsed : délai en jours (cumulé avec delayHours). */
@@ -207,7 +230,11 @@ export type WorkflowTriggerConfig = {
 
 export type WorkflowActionConfig =
   | { kind: "add_tag"; tags: string[] }
+  | { kind: "remove_tag"; tagId: string }
   | { kind: "add_to_list"; listId: string }
+  | { kind: "remove_from_list"; listId: string }
+  | { kind: "increase_score"; points: number }
+  | { kind: "decrease_score"; points: number }
   | { kind: "set_status"; status: LeadStatus }
   | { kind: "enroll_in_sequence"; sequenceId: string }
   | { kind: "notify_owner"; subject?: string; message?: string }

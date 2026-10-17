@@ -42,6 +42,8 @@ export type RunStep = {
  */
 const ENTRY_EVENTS: ReadonlySet<string> = new Set<WorkflowTriggerEvent>([
   "lead.created",
+  "list.subscribed",
+  "email.opened",
   "webinar.registered",
   "application.submitted",
   "appointment.booked",
@@ -162,8 +164,16 @@ export function describeAction(a: WorkflowActionConfig): string {
       return `attente jusqu'au ${a.dateTime}`;
     case "add_tag":
       return `tags : ${a.tags.join(", ")}`;
+    case "remove_tag":
+      return "retrait d'un tag";
     case "add_to_list":
       return "ajout à une liste CRM";
+    case "remove_from_list":
+      return "retrait d'une liste CRM";
+    case "increase_score":
+      return `score +${a.points}`;
+    case "decrease_score":
+      return `score -${a.points}`;
     case "set_status":
       return `statut → ${a.status}`;
     case "enroll_in_sequence":

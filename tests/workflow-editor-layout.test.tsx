@@ -13,7 +13,7 @@ vi.mock("@/components/crm/EmailRichEditor", () => ({ EmailRichEditor: () => null
 vi.mock("@/components/workflows/WorkflowRunsPanel", () => ({ WorkflowRunsPanel: () => null }));
 
 function openEditor() {
-  render(<WorkflowsClient initialWorkflows={[]} funnels={[]} sequences={[]} tags={[]} />);
+  render(<WorkflowsClient initialWorkflows={[]} funnels={[]} sequences={[]} tags={[]} lists={[]} />);
   fireEvent.click(screen.getAllByRole("button", { name: /Créer un workflow/ })[0]);
   const preview = screen.getByRole("complementary", { name: "Aperçu du workflow" });
   return { preview, layout: preview.parentElement! };
@@ -32,6 +32,7 @@ describe("aperçu workflow côte à côte sur ordinateur", () => {
 
   it("actualise immédiatement le graphe pendant l'ajout d'une action", () => {
     openEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter une action" }));
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un tag" }));
     const workflow = JSON.parse(screen.getByTestId("canvas").textContent!);
     expect(workflow.actions).toHaveLength(1);

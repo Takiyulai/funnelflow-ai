@@ -3,7 +3,9 @@
 // Calqué sur /api/crm/tags/assign : même contrat ({ contactIds, listIds, action }).
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { addContactsToLists, removeContactsFromLists } from "@/lib/crm/lists";
+import { runWorkflowsForEvent } from "@/lib/workflows/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +50,57 @@ export async function POST(request: Request) {
     if (action === "remove") {
       await removeContactsFromLists(sb, user.id, contactIds, listIds);
     } else {
+      // Repère les inscriptions réellement nouvelles avant l'upsert
+      // idempotent. Une réassignation identique ne doit pas redéclencher les
+      // automatisations « Contact inscrit à une liste ».
+      const { data: existingLinks, error: existingError } = await sb
+        .from("crm_contact_lists")
+        .select("contact_id, list_id")
+        .eq("user_id", user.id)
+        .in("contact_id", contactIds)
+        .in("list_id", listIds);
+      if (existingError) throw new Error(existingError.message);
+      const existing = new Set(
+        (existingLinks ?? []).map((row) => `${row.contact_id}:${row.list_id}`),
+      );
       await addContactsToLists(sb, user.id, contactIds, listIds);
+
+      try {
+        const admin = getSupabaseAdmin();
+        const { data: leads } = await admin
+          .from("leads")
+          .select("id, email, name")
+          .eq("user_id", user.id)
+          .in("id", contactIds);
+        const leadById = new Map((leads ?? []).map((lead) => [lead.id as string, lead]));
+        const events = contactIds.flatMap((contactId) =>
+          listIds
+            .filter((listId) => !existing.has(`${contactId}:${listId}`))
+            .map((listId) => ({ contactId, listId })),
+        );
+
+        // Concurrence bornée : les imports en lot ne doivent pas ouvrir des
+        // centaines de requêtes Supabase simultanées.
+        for (let i = 0; i < events.length; i += 10) {
+          await Promise.all(
+            events.slice(i, i + 10).map(async ({ contactId, listId }) => {
+              const lead = leadById.get(contactId);
+              if (!lead) return;
+              await runWorkflowsForEvent(admin, user.id, {
+                event: "list.subscribed",
+                lead: {
+                  id: lead.id as string,
+                  email: lead.email as string,
+                  name: lead.name as string | null,
+                },
+                listId,
+              });
+            }),
+          );
+        }
+      } catch (workflowError) {
+        console.warn("[crm/lists/assign] workflow non bloquant :", workflowError);
+      }
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

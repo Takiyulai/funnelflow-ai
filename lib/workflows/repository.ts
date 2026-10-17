@@ -49,6 +49,10 @@ function parseTriggerConfig(config: Record<string, unknown>): WorkflowTriggerCon
     typeof config.tagId === "string" && config.tagId.trim()
       ? (config.tagId as string)
       : null;
+  const listId =
+    typeof config.listId === "string" && config.listId.trim()
+      ? (config.listId as string)
+      : null;
   const status =
     typeof config.status === "string" &&
     (LEAD_STATUSES as readonly string[]).includes(config.status)
@@ -63,12 +67,36 @@ function parseTriggerConfig(config: Record<string, unknown>): WorkflowTriggerCon
     typeof config.linkLabel === "string" && config.linkLabel.trim()
       ? (config.linkLabel as string)
       : null;
+  const sequenceId =
+    typeof config.sequenceId === "string" && config.sequenceId.trim()
+      ? (config.sequenceId as string)
+      : null;
+  const sequenceEmailId =
+    typeof config.sequenceEmailId === "string" && config.sequenceEmailId.trim()
+      ? (config.sequenceEmailId as string)
+      : null;
   const afterEvent = isTriggerEvent(config.afterEvent) ? config.afterEvent : null;
   const delayDaysNum = Number(config.delayDays);
   const delayDays = Number.isFinite(delayDaysNum) && delayDaysNum > 0 ? Math.min(Math.round(delayDaysNum), 365) : 0;
   const delayHoursNum = Number(config.delayHours);
   const delayHours = Number.isFinite(delayHoursNum) && delayHoursNum > 0 ? Math.min(Math.round(delayHoursNum), 23) : 0;
-  return { event, funnelId, tagId, status, pageSlug, linkLabel, afterEvent, delayDays, delayHours };
+  return {
+    event,
+    funnelId,
+    tagId,
+    listId,
+    status,
+    pageSlug,
+    linkLabel,
+    sequenceId,
+    sequenceEmailId,
+    afterEvent,
+    delayDays,
+    delayHours,
+    ...(typeof config.allowReentry === "boolean"
+      ? { allowReentry: config.allowReentry }
+      : {}),
+  };
 }
 
 function parseActionConfig(config: Record<string, unknown>): WorkflowActionConfig | null {
@@ -83,9 +111,22 @@ function parseActionConfig(config: Record<string, unknown>): WorkflowActionConfi
       if (tags.length === 0) return null;
       return { kind: "add_tag", tags };
     }
+    case "remove_tag": {
+      const tagId = typeof config.tagId === "string" ? config.tagId.trim() : "";
+      return tagId ? { kind: "remove_tag", tagId } : null;
+    }
     case "add_to_list": {
       const listId = typeof config.listId === "string" ? config.listId.trim() : "";
       return listId ? { kind: "add_to_list", listId } : null;
+    }
+    case "remove_from_list": {
+      const listId = typeof config.listId === "string" ? config.listId.trim() : "";
+      return listId ? { kind: "remove_from_list", listId } : null;
+    }
+    case "increase_score":
+    case "decrease_score": {
+      const points = Math.min(1000, Math.round(Number(config.points)));
+      return Number.isFinite(points) && points > 0 ? { kind, points } : null;
     }
     case "set_status": {
       const status = config.status;
@@ -389,13 +430,19 @@ function buildStepRows(
       event: input.trigger.event ?? "lead.created",
       funnelId: input.trigger.funnelId ?? null,
       tagId: input.trigger.tagId ?? null,
+      listId: input.trigger.listId ?? null,
       status: input.trigger.status ?? null,
       // 🆕 LOT 2
       pageSlug: input.trigger.pageSlug ?? null,
       linkLabel: input.trigger.linkLabel ?? null,
+      sequenceId: input.trigger.sequenceId ?? null,
+      sequenceEmailId: input.trigger.sequenceEmailId ?? null,
       afterEvent: input.trigger.afterEvent ?? null,
       delayDays: input.trigger.delayDays ?? 0,
       delayHours: input.trigger.delayHours ?? 0,
+      ...(typeof input.trigger.allowReentry === "boolean"
+        ? { allowReentry: input.trigger.allowReentry }
+        : {}),
     },
   });
   // Positions 1..n : actions (on ignore les actions invalides).
